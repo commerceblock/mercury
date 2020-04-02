@@ -1,36 +1,71 @@
 # Statechain protocol for P2PKH and DLCs
 
-This document describes the background, use and operation of CommerceBlock's version of a **statechain** system to transfer ownership of Bitcoin (or Elements based) *unspent transaction outputs* (UTXOs) between parties without performing a on-chain transaction. The ability to perform this transfer without requiring the confirmation (mining) of on-chain transactions has several advantages in a variety of different applications:
+This document describes the specification and operation of the Mercury **statechain** [1] system to tranfer ownership of Bitcoin (or Elements based) *unspent transaction outputs* (UTXOs) between parties without performing on-chain transactions. The ability to perform this transfer without requiring the confirmation (mining) of on-chain transactions has several advantages in a variety of different applications:
 
-* Transfer of ownership can be faster (instant) and free (no on-chain transaction fee). 
+* Transfer of ownership can be faster (instant) and neglibile cost (no on-chain transaction fee). 
 * Transfer of ownership can be more private (transfers are only recorded on the statechain). 
-* It is possible to transfer the ownership of one part of a multisig UTXO, for example one position in a discreet log contract (DLC) without the cooperation of the counterparty.  
+* It is possible to transfer the ownership of one public key of a multisig UTXO, for example one position in a discreet log contract (DLC) without the cooperation of the counterparty.  
 
-This functionality requires a trusted third party - refered to as the *statechain entity* of *SE* - which is operated by a service provider, and can generate fee income. Crucially, however, the SE never has custody of the UTXOs, which minimises regulatory requirements and trust. 
+This functionality requires a trusted third party - refered to as the *statechain entity* of *SE* - which is operated by a service provider, and can generate fee income. Crucially, however, the SE never has custody of the UTXOs, which minimises regulatory requirements and trust. The SE can be formed of a single party, or can be a *federation* of separate entities impliemented via multiple key shares, each of which need to agree on the signature generation (see *Federated statchain entities*). 
 
 ## UTXO Types
 
-A UTXO is the fundamental object that defines value and ownership in a cryptocurrency such as Bitcoin. A UTXO is identified by a transaction ID (TxID) and output index number (n) and has two properties: 1. A value (in BTC) and 2. Spending conditions (defined in Script). The spending conditions
-can be arbitrarily complex (within the limits of the consensus rules), but is most commonly defined by a single public key (or public key hash) and can only be spent by transaction signed with the corresponding public key. This is known as a pay-to-public-key-hash output (P2(W)PKH). Other more complex spending conditions include multisig outputs (where spending transactions need to be signed by `m` public keys where `n <= m` are specified in the spending conditions) and time-locked and hash-locked outputs (inlcuding HTLCs as untilised by the Lightning Network and DLCs). 
+A UTXO is the fundamental object that defines value and ownership in a cryptocurrency such as Bitcoin. A UTXO is identified by a transaction ID (`TxID`) and output index number (`n`) and has two properties: 1. A value (in BTC) and 2. Spending conditions (defined in Script). The spending conditions can be arbitrarily complex (within the limits of the consensus rules), but is most commonly defined by a single public key (or public key hash) and can only be spent by transaction signed with the corresponding public key. This is known as a pay-to-public-key-hash output (P2(W)PKH). Other more complex spending conditions include multisig outputs (where spending transactions need to be signed by `m` public keys where `n >= m` are specified in the spending conditions) and time-locked and hash-locked outputs (inlcuding HTLCs as untilised by the Lightning Network and DLCs). 
 
-DLCs and LN transaction outputs use timelocked spending conditions to a single public key, or spendable at any time to a 2-of-2 multisignature (i.e. both counterparties agree). The statechain model decribed here can be used to transfer the ability to sign a single public key spending condition or one part of a 2-of-2 multisig, allowing for the trade and novation of DLC positions. 
+The statechain model decribed here can be used to transfer the ability to sign a single public key spending condition or one part of a 2-of-2 multisig, allowing for the transfer (novation) of DLC counterparty positions. 
 
 ## The statechain
 
-The function of this system is that it enables control of a UTXO to be transferred between two parties (who don't trust each other) via the SE without an on-chain transaction. The SE only needs to be trusted to operate the protocol (and crucially not store any information about previous key shares) and the transfer of ownership is completely secure, even if the SE was to get compromised or hacked. At any time the SE can prove (in zero knowledge) that they have the key share for the current owner (and only to the current owner). There is trust required in the SE that they are not double-spending the output, however they would need to collude with a current owner in order to attempt to do this. But a new owner (i.e. the buyer of the UTXO) has no guarantee that this hasn't happened (i.e. that the the current owner and SE have conspired to pass ownership to two or more buyers). To prevent this, the new owner requires a proof that their ownership is *unique*: this is achieved via the *statechain*. 
+The function of the system is that it enables control of a UTXO to be transferred between two parties (who don't trust each other) via the SE without an on-chain transaction. The SE only needs to be trusted to operate the protocol (and crucially not store any information about previous key shares) and then transfer of ownership is completely secure, even if the SE was to later get compromised or hacked. At any time the SE can prove that they have the key share for the current owner (and only to the current owner). Additional trust would be required in the SE that they are not double-spending the output, however they would need to collude with a current owner in order to attempt to do this. But a new owner (i.e. the buyer of the UTXO) requires a guarantee that this hasn't happened (i.e. that the the current owner and SE have conspired to pass ownership to two or more buyers). To guarantee this, the new owner requires a proof that their ownership is *unique*: this is achieved via the *statechain*. 
 
-The statechain is a data structure that is used to prove that the ownership of each UTXO is unique. This proof is verified by the new owner, and is updated via the SE. The statechain contains the transaction history of each UTXO managed by the SE (which is a requirement to prove uniqueness). The uniquness of the statechain for a specific SE is guaranteed via the Mainstay protocol that utilise Bitcoin's global state. 
+The statechain is a data structure that is used to prove that the ownership of each UTXO is unique. This proof is verified by the new owner, and is updated via the SE. The statechain contains the transaction history of each UTXO managed by the SE (which is a requirement to prove uniqueness). The uniquness of the statechain for a specific SE is guaranteed via the Mainstay protocol that utilise Bitcoin's global state (resulting in a verifiable *proof of publication* for each ownership change). 
 
 ## P2PKH output transfer
 
-The lifecycle of a P2PKH depost into the statechain is summarised as follows:
+The simplest function of a statechain system is to enable the transfer the ownership of individual UTXOs controlled by a single public key from one party to another without an on-chain (Bitcoin) transaction. The SE facilitates this change of ownership, but has no way to seize, confiscate or freeze the output. This is achieved via the SE controling a *share* of the UTXO key combined with a system of *backup* transactions which can be used to claim the value of the UTXO by the current owner in the case the SE does not cooperate. The backup transactions are cooperatively signed by the owners and the SE at the point of transfer, and consist of a *kickoff* transaction (which initiates the timelocks) which can be spent by a second transaction with a relative time-lock (using the `nSequence` field) paying to an owner generated address [2]. Each new owner is given the same kick-off transaction and a second signed transaction (paying to the new owner address) with a lower `nSequence` number than the previous owner (allowing them to claim the output of the kickoff transaction before any previous owner). 
+
+<br><br>
+<p align="center">
+<img src="images/fig1.png" align="middle" width="500" vspace="20">
+</p>
+
+<p align="center">
+  <b>Fig. 1</b>: Schematic of confirmed funding transaction, and off-chain signed kick-off transaction and backup transactions for a sequence of 4 owners. 
+</p>
+<br><br>
+
+As each previous owner will posses a signed copy of the kickoff transaction, any of these old owners can broadcast it to initiate the backup process, forcing the close of the UTXO and presenting a DoS risk (even though they will not be able to steal the funds). To provide an incentive against this, an anyone-can-spend (OP_TRUE) ouput can be added to the kickoff transaction (with a dust limit amount) and zero miner fee: this means that for an owner (current or old) to broadcast (and confirm) the kickoff transaction, they must at the same time send a second transaction that spends the anyone-can-spend output and that has sufficient fee to pay for both transactions (via Child Pays For Parent - CPFP). 
+
+<br><br>
+<p align="center">
+<img src="images/fig2.png" align="middle" width="500" vspace="20">
+</p>
+
+<p align="center">
+  <b>Fig. 1</b>: Schematic of the kick-off transaction requiring an additional CPFP spending transaction paying fees. 
+</p>
+<br><br>
+
+The decrementing relative timelock backup mechanism limits the number of tranfers that can be made within a reasonable lock-out time. This limitation can be substantially improved using an 'invalidation tree' structure of sequential transactions as described in [2]. 
+
+The lifecycle of a P2PKH depost into the statechain, transfer and withdrawal is summarised as follows:
 
 1. The depositor (Owner 1) initiates a UTXO statechain with the SE by paying BTC to a P2PKH address where Owner 1 and the SE share the private key reuqired to spend the UTXO. 
 2. Owner 1 and the SE cooperatively sign a transaction spending the UTXO to an address controlled by Owner 1 which can be broadcast after a lockout recovery time (nLocktime) in case the SE stops cooperating. 
-3. Owner 1 can verifiably transfer ownership of the UTXO to a new party (Owner 2) via a key update procedure that refreshes the private key share of SE that invalidates the Owner 1 private key and activates the Owner 2 private key share. 
-4. Owner 2 and the SE cooperatively sign a transaction spending the UTXO to an address controlled by Owner 2 which can be broadcast after a lockout recovery time (nLocktime) that is 6 blocks sooner than the previous recovery transaction. 
+3. Owner 1 can verifiably transfer ownership of the UTXO to a new party (Owner 2) via a key update procedure that refreshes the private key share of SE that invalidates the Owner 1 private key and *activates* the Owner 2 private key share. 
+4. Owner 2 and the SE cooperatively sign a backup *kickoff* transaction spending the UTXO to an address controlled by Owner 2 which can be broadcast after a lockout recovery time (nLocktime) that is 6 blocks sooner than the previous recovery transaction. 
 5. This transfer can be repeated multiple times to new owners are requires (up until the most recent recovery locktime is reached). 
 6. At any time the most recent owner and SE can cooperate to sign a transaction spending the UTXO to an address of the most recent owner's choice (withdrawal). 
+
+<br><br>
+<p align="center">
+<img src="images/fig3.png" align="middle" width="400" vspace="20">
+</p>
+
+<p align="center">
+  <b>Fig. 1</b>: Illustration of the deposit into a UTXO, transfer to a sequence of 6 new owners and withdrawal. 
+</p>
+<br><br>
 
 As described above, double-spending of the UTXO (by a corrupt SE) is prevented by a proof-of-uniqueness from the Mainstay protocol. Each transfer of the UTXO between owners is recorded on the SE statechain. 
 
@@ -54,6 +89,16 @@ An owner wants to deposit an amount of BTC into the platform, and they request t
 8. Owner 1 then signs and broadcasts the deposit transaction `Tx0`. Once the transaction is confirmed, the deposit is completed. 
 9. The SE then adds the UTXO outpoint with `O1` to the *statechain* which is then attested to Bitcoin via the Mainstay protocol. 
 
+<br><br>
+<p align="center">
+<img src="images/fig4.png" align="middle" width="600" vspace="20">
+</p>
+
+<p align="center">
+  <b>Fig. 1</b>: Deposit protocol. 
+</p>
+<br><br>
+
 This deposit protocol is designed so that no funds are lost if either party becomes uncooperative at any stage. The deposit is only paid to the shared public key once the backup transaction is signed. 
 
 ### Transfer
@@ -66,14 +111,24 @@ Owner 1 wishes to transfer the value of the deposit `A` to a new owner (Owner 2)
 4. Owner 2 then multiplies this received value by the modular inverse of `o2` (`o2_inv`) and then sends this value (`x*s1*o2_inv`), to Owner 1.
 5. Owner 1 then multiplies this received value by the key share `o1` and sends the resulting value (`x*s1*o2_inv*o1`) to the SE.
 6. The SE then multiplies this received value by the modular inverse of the temporary nonce (`x_inv`) to obtain `x*s1*o2_inv*o1*x_inv`. This cancels the blinding nonce `x` to give `s1*o2_inv*o1`. This value, when multiplied by the new owner key share `o2` equals the original shared private key `s1*o1`. 
-7. The SE then sets this value equal to `s2 = s1*o2_inv*o1` and deletes `s1`. `s2` and `o2` are now the key shares of `P` and can be used to colaboritively sign. So long as the SE deletes `s1`, the old owner key share (`o1`) is of no use in deriving or co-signing with the full shared private key, and is invalidated. 
+7. The SE then sets this value equal to `s2 = s1*o2_inv*o1` and deletes `s1`. `s2` and `o2` are now the key shares of `P` and can be used to colaboritively sign. So long as the SE delets `s1`, the old owner key share (`o1`) is of no use in deriving or co-signing with the full shared private key, and is invalidated. 
 8. The shared public key `P` remains unchanged, but the corresponding private key (which no individual party ever has knowledge of or can derive) can only be determined from the key shares of the SE and Owner 2 (i.e. `P = s2*o2.G`).
 9. Owner 2 then calculates their backup public key (`B2 = b2.G`) and sends it to the SE.
 10. The SE creates a backup transaction (`Tx2`) that pays the output of `Tx0` to the address corresponding to `B2` , with `nLockTime` set to a block height `h0 - c0`, where `c0`, is a confirmation time sufficient to guarantee that `Tx2` can be confirmed in the blockchain before `Tx1` ( therefore making Tx1 invalid).
 11. Owner 2 and the SE then cooperate to sign `Tx2` with shared key (`P`) using the MPC ECDSA protocol, which Owner 2 then saves. 
 12. The SE then adds the UTXO outpoint with `O1` to the *statechain* which is then attested to Bitcoin via the Mainstay protocol. 
 
-The principle of the logic of the key transfer is that the two separate key shares are updated, but the full shared private key (which no-one knows) remains the same. The new owner chooses a new secret value for their private key share, and this (along with the private key share of the previous owner) is utilised by the SE to update their share. The use of the nonce (`x`) prevents any of the participants from determining any information about each others secret keys. In this way Owner 2 cannot determine `s1` from  `x*s1`, Owner 1 cannot determine `s1` or `o2` from `x*s1*o2_inv` and the SE cannot determine `o1` or `o2` from `x*s1*o2_inv*o1`. 
+<br><br>
+<p align="center">
+<img src="images/fig5.png" align="middle" width="800" vspace="20">
+</p>
+
+<p align="center">
+  <b>Fig. 1</b>: Ownership transfer protocol. 
+</p>
+<br><br>
+
+The principle of the logic of the key transfer is that the two separate key shares are updated, but the full shared private key (which no-one knows) remains the same. The new owner chooses a new secret value for their private key share, and this (along with the private key share of the previous owner) is utilised by the SE to update their share. The use of the nonce (`x`) prevents any of the participants from determining any information about each others secret keys. In this way Owner 2 cannot determine `o1` from  `x*o1`, and the SE cannot determine `o1` or `o2` from `x*o2_inv*o1`. 
 
 This transfer protocol can be repeated to transfer the ownership to new owners. Each time the SE key share `sX` is updated, the previous key shares become invalid and are of no use even if the current key share is subsequently revealed. The speed of the transfer is limited only by the communication channel latency and the execution time of the computations. Near instantaneous transfers are dependent on all the participants being on-line simultaneously and being responsive.
 
@@ -131,3 +186,6 @@ This can then be repeated to transfer the DLC position to each new owner.
 ### DLC closure
 
 Once the oracle publishes the signature at the expiration of the DLC, making one of the CETs valid (`i`) - one of the counterparties submit their valid transaction (OR they can cooperate the sign a separate transaction that pays directly to each party's wallet address - this would also require the cooperation of the SE for the current Owner to sign their part of the opening/deposit transaction). If a CET is broadcast (and confirmed), the SE and the current owner can then cooperate to 'withdraw' the output from the CET (or if the SE is not-responsive, then the current owner can the correspodning backup transaction `Tx(i)` to claim the CET output). 
+
+[1] https://github.com/RubenSomsen/rubensomsen.github.io/blob/master/img/statechains.pdf
+[2] https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6124062/
