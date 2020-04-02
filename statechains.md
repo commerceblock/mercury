@@ -26,7 +26,7 @@ The simplest function of a statechain system is to enable the transfer the owner
 
 <br><br>
 <p align="center">
-<img src="images/fig1_sc.png" align="middle" width="500" vspace="20">
+<img src="images/fig1.png" align="middle" width="500" vspace="20">
 </p>
 
 <p align="center">
@@ -38,7 +38,7 @@ As each previous owner will posses a signed copy of the kickoff transaction, any
 
 <br><br>
 <p align="center">
-<img src="images/fig2_sc.png" align="middle" width="500" vspace="20">
+<img src="images/fig2.png" align="middle" width="500" vspace="20">
 </p>
 
 <p align="center">
@@ -59,7 +59,7 @@ The lifecycle of a P2PKH depost into the statechain, transfer and withdrawal is 
 
 <br><br>
 <p align="center">
-<img src="images/fig3_sc.png" align="middle" width="400" vspace="20">
+<img src="images/fig3.png" align="middle" width="400" vspace="20">
 </p>
 
 <p align="center">
@@ -91,7 +91,7 @@ An owner wants to deposit an amount of BTC into the platform, and they request t
 
 <br><br>
 <p align="center">
-<img src="images/fig4_sc.png" align="middle" width="525" vspace="20">
+<img src="images/fig4.png" align="middle" width="525" vspace="20">
 </p>
 
 <p align="center">
@@ -120,7 +120,7 @@ Owner 1 wishes to transfer the value of the deposit `A` to a new owner (Owner 2)
 
 <br><br>
 <p align="center">
-<img src="images/fig5_sc.png" align="middle" width="700" vspace="20">
+<img src="images/fig5.png" align="middle" width="700" vspace="20">
 </p>
 
 <p align="center">
