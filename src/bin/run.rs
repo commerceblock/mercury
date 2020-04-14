@@ -21,16 +21,14 @@ fn main() {
             env::set_var("RUST_BACKTRACE", "1");
             // Init env logger with value set from config
             env_logger::init();
-            info!("Hello, world!");
 
             // begin listener daemon here
             let _ = mercury::state_entity::run(config);
             // if let Err(e) = mercury::state_entity::run(config) {
-                // error!("daemon failure: {}", e);
+            //     error!("daemon failure: {}", e);
             // }
         }
         Err(e) => {
-
             env::set_var("RUST_LOG", "error");
             env_logger::init();
             error!("config failure: {}", e);

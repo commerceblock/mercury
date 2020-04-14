@@ -23,6 +23,14 @@ pub struct StateEntity {
     pub states: [State]
 }
 
+/// state entity interface
+pub trait StateEntityInterface {
+   /// statechain despoit
+   fn deposit() -> String;
+   /// statchain transfer
+   fn transfer() -> String;
+}
+
 
 /// Run state entity main method
 pub fn run(_config: Config) -> Result<(),()> {

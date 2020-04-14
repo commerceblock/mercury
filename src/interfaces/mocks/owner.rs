@@ -3,7 +3,7 @@
 //! MockOwner interface and implementations -  users of the state entity
 
 
-use crate::interfaces::protocols::ProtocolStateChain;
+use crate::state_entity::StateEntityInterface;
 
 /// Rpc implementation of Owner
 pub struct MockOwner {
@@ -17,7 +17,7 @@ impl MockOwner {
         MockOwner{id: 1}
     }
 }
-impl ProtocolStateChain for MockOwner {
+impl StateEntityInterface for MockOwner {
     // deposit protocol
     fn deposit() -> String {
         return String::from("deposit")
