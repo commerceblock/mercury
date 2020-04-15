@@ -56,6 +56,15 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_deposit() {
+        spawn_server();
+        let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
+        let resp = state_entity::deposit::deposit(&client_shim);
+        println!("{} {}",resp.0,resp.1);
+        assert!(resp.0 == String::from("deposit"));
+    }
+
 
     fn spawn_server() {
         // Rocket server is blocking, so we spawn a new thread.

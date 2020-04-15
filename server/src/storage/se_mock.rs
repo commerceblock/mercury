@@ -1,6 +1,7 @@
 //! Mock Storage
 //!
-//! Mock Storage interface and implementation for State Entity. This should be implemented in DB.
+//! Mock Storage interface and implementation for State Entity. This should be implemented in DB
+//! when we have decided on a storage method.
 
 use std::fmt;
 
