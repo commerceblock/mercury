@@ -31,7 +31,7 @@ impl fmt::Display for StateChain {
 
 
 
-/// Rpc implementation of Owner
+/// Mock storage struct acts as a DB of state chains for testing
 pub struct MockStorage {
     /// stateChain instances
     state_chains: Vec<StateChain>

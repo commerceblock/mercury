@@ -512,29 +512,3 @@ fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
         key: pk
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use bitcoin::hashes::sha256d;
-    use curv::arithmetic::traits::Converter;
-    use curv::BigInt;
-
-    #[test]
-    fn test_message_conv() {
-        let message: [u8; 32] = [
-            1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0,
-        ];
-
-        // 14abf5ed107ff58bf844ee7f447bec317c276b00905c09a45434f8848599597e
-        let hash = sha256d::Hash::from_slice(&message);
-
-        // 7e59998584f83454a4095c90006b277c31ec7b447fee44f88bf57f10edf5ab14
-        let ser = hash.le_hex_string();
-
-        // 57149727877124134702546803488322951680010683936655914236113461592936003513108
-        let b: BigInt = BigInt::from_hex(&ser);
-
-        println!("({},{},{})", hash, ser, b.to_hex());
-    }
-}

@@ -1,16 +1,16 @@
-# Gotham Client
-![Gotham Client](../misc/client-icon.png)
+# Mercury Client
 
 ## Introduction
-Gotham client is a bitcoin minimalist decentralized wallet CLI app.
+Mercury client is a bitcoin minimalist decentralized wallet CLI app with a client side
+state chain implementation.
 
 ## Requirement
-Gotham server is required to interact with the client, for instruction on how to run it see [here](../gotham-server/README.md).
+Mercury server is required to interact with the client, for instruction on how to run it see [here](../server/README.md).
 
 ## Installation
 ```bash
 git clone https://github.com/KZen-networks/gotham-city.git
-cd gotham-city/gotham-client
+cd mercury/client
 cargo build --release
 ```
 
@@ -41,7 +41,7 @@ SUBCOMMANDS:
 ./target/release/cli create-wallet
 ```
 
-* Output: 
+* Output:
 ```text
 (id: f1025e8f-36c3-4220-8749-ac29d5f17974) Generating master key...
 (id: f1025e8f-36c3-4220-8749-ac29d5f17974) Master key gen completed
@@ -79,7 +79,7 @@ SUBCOMMANDS:
 ./target/release/cli wallet -a
 ```
 
-* Output: 
+* Output:
 ```text
 Network: [testnet], Address: [tb1quxl4c4cyl3586s7tuql7tqqsv233sumxz0588a]
 ```
@@ -89,7 +89,7 @@ Network: [testnet], Address: [tb1quxl4c4cyl3586s7tuql7tqqsv233sumxz0588a]
 ./target/release/cli wallet -b
 ```
 
-* Output: 
+* Output:
 ```text
 Network: [testnet], Balance: [balance: 1100000, pending: 0]
 ```
@@ -99,7 +99,7 @@ Network: [testnet], Balance: [balance: 1100000, pending: 0]
 ./target/release/cli wallet -u
 ```
 
-* Output: 
+* Output:
 ```text
 Network: [testnet], Unspent tx hashes: [
 bc32ff53c1b9f71d7a6a5e3f5ec7bc8d20afe50214110a0718c9004be33d57d6
@@ -112,12 +112,12 @@ bc32ff53c1b9f71d7a6a5e3f5ec7bc8d20afe50214110a0718c9004be33d57d6
 ./target/release/cli wallet send -t [ADDRESS] -a [BTC_AMOUNT]
 ```
 
-* Example: 
+* Example:
 ```bash
 ./target/release/cli wallet send -t tb1quxl4c4cyl3586s7tuql7tqqsv233sumxz0588a -a 0.0001
 ```
 
-* Output: 
+* Output:
 ```text
 Network: [testnet], Sent 0.0001 BTC to address tb1quxl4c4cyl3586s7tuql7tqqsv233sumxz0588a. Transaction ID: 44545bf81fc8aebcde855c2e33a5f83a17a93f76164330e1ee9e366e8e039444
 ```
@@ -130,7 +130,7 @@ https://www.blocktrail.com/tBTC/tx/44545bf81fc8aebcde855c2e33a5f83a17a93f7616433
 ./target/release/cli wallet -o
 ```
 
-* Output: 
+* Output:
 ```text
 Rotating secret shares
 key rotation complete, (Took: PT1.087591809S)
@@ -144,7 +144,7 @@ Backup has 3 phases: (1) creating the backup, encrypted on a seperate file, (2) 
 ./target/release/cli wallet -s
 ```
 
-* Output: 
+* Output:
 ```text
 Backup private share pending (it can take some time)...
 Backup key saved in escrow (Took: PT20.828933102S)
@@ -155,7 +155,7 @@ Backup key saved in escrow (Took: PT20.828933102S)
 ./target/release/cli wallet -c
 ```
 
-* Output: 
+* Output:
 ```text
 verify encrypted backup (it can take some time)...
 backup verified 🍻
@@ -167,10 +167,9 @@ backup verified 🍻
 ./target/release/cli wallet -r
 ```
 
-* Output: 
+* Output:
 ```text
 backup recovery in process 📲 (it can take some time)...
 Recovery Completed Successfully ❤️
  Backup recovered 💾(Took: PT0.405034789S)
 ```
-
