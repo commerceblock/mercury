@@ -464,7 +464,7 @@ impl Wallet {
         response
     }
 
-    fn get_all_addresses(&self) -> Vec<bitcoin::Address> {
+    pub fn get_all_addresses(&self) -> Vec<bitcoin::Address> {
         let init = 0;
         let last_pos = self.last_derived_pos;
 
@@ -497,7 +497,7 @@ impl Wallet {
         self.network.parse::<Network>().unwrap()
     }
 
-    fn to_bitcoin_address(mk: &MasterKey2, network: Network) -> bitcoin::Address {
+    pub fn to_bitcoin_address(mk: &MasterKey2, network: Network) -> bitcoin::Address {
         bitcoin::Address::p2wpkh(
             &to_bitcoin_public_key(mk.public.q.get_element()),
             network
@@ -506,7 +506,7 @@ impl Wallet {
 }
 
 // type conversion
-fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
+pub fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
     bitcoin::util::key::PublicKey {
         compressed: true,
         key: pk

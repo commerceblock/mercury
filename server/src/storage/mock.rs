@@ -1,7 +1,7 @@
 //! Mock Storage
 //!
-//! Mock Storage interface and implementation for State Entity. This should be implemented in DB
-//! when we have decided on a storage method.
+//! Mock Storage interface and implementation for building and testing State Entity.
+//! This should be implemented in DBv when we have decided on a storage method.
 
 use std::fmt;
 
@@ -28,8 +28,6 @@ impl fmt::Display for StateChain {
         write!(f, "Id: {} \nchain: {:?}", self.id, self.chain)
     }
 }
-
-
 
 
 /// Mock storage struct acts as a DB of state chains for testing

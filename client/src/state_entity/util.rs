@@ -100,8 +100,6 @@ mod tests {
     use bitcoin::secp256k1::{Secp256k1, Message};
     use bitcoin::hashes::sha256d;
 
-    use crate::util::generate_keypair;
-
     #[test]
     fn transaction() {
         let secp = Secp256k1::new();

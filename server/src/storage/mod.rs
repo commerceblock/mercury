@@ -9,4 +9,4 @@
 
 pub mod aws;
 pub mod db;
-pub mod se_mock;
+pub mod mock;
