@@ -93,7 +93,7 @@ pub fn build_tx_1(mut txk_input: TxIn, b_address: &Address, amount: &Amount) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json;
+    // use serde_json;
 
     use bitcoin::OutPoint;
     use bitcoin::blockdata::script::Script;
@@ -116,7 +116,7 @@ mod tests {
         ];
         let amount = Amount::ONE_BTC;
         let tx_0 = build_tx_0(&inputs, &addr, &amount).unwrap();
-        println!("{}", serde_json::to_string_pretty(&tx_0).unwrap());
+        // println!("{}", serde_json::to_string_pretty(&tx_0).unwrap());
 
         // Compute sighash
         let sighash = tx_0.signature_hash(0, &addr.script_pubkey(), amount.as_sat() as u32);
@@ -127,10 +127,10 @@ mod tests {
         println!("signature: {:?}", signature);
 
         let tx_k = build_tx_k(tx_0.input.get(0).unwrap(), &addr, &amount).unwrap();
-        println!("{}", serde_json::to_string_pretty(&tx_k).unwrap());
+        // println!("{}", serde_json::to_string_pretty(&tx_k).unwrap());
 
-        let tx_1 = build_tx_1(tx_k.input.get(0).unwrap().clone(), &addr, &amount).unwrap();
-        println!("{}", serde_json::to_string_pretty(&tx_1).unwrap());
+        let _tx_1 = build_tx_1(tx_k.input.get(0).unwrap().clone(), &addr, &amount).unwrap();
+        // println!("{}", serde_json::to_string_pretty(&tx_1).unwrap());
     }
 
     #[test]

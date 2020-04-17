@@ -7,6 +7,7 @@
 // version 3 of the License, or (at your option) any later version.
 //
 
+use bitcoin::Address;
 use bitcoin;
 use bitcoin::consensus::encode::serialize;
 use bitcoin::network::constants::Network;
@@ -339,6 +340,52 @@ impl Wallet {
         let txid = electrum.broadcast_transaction(raw_tx_hex.clone());
 
         txid.unwrap()
+    }
+
+    /// sign tx input with key corresponding to given addr
+    pub fn sign_tx_input(&mut self, client_shim: &ClientShim, tx: &mut bitcoin::Transaction, input_index: usize, addr: &Address, amount: u64) {
+        let address_derivation;
+        match self.addresses_derivation_map.get(&addr.to_string()) {
+            None => panic!("No key found in wallet for address"),
+            Some(derivation) => {
+                address_derivation = derivation;
+            },
+        }
+
+        let mk = &address_derivation.mk;
+        let pk = mk.public.q.get_element();
+
+        let comp = SighashComponents::new(&tx);
+        let sig_hash = comp.sighash_all(
+            &tx.input[input_index],
+            &bitcoin::Address::p2pkh(
+                &to_bitcoin_public_key(pk),
+                self.get_bitcoin_network()).script_pubkey(),
+            amount,
+        );
+
+        let signature = ecdsa::sign(
+            client_shim,
+            BigInt::from_hex(&hex::encode(&sig_hash[..])),
+            &mk,
+            BigInt::from(0),
+            BigInt::from(address_derivation.pos),
+            &self.private_share.id,
+        ).unwrap();
+
+        let mut v = BigInt::to_vec(&signature.r);
+        v.extend(BigInt::to_vec(&signature.s));
+
+        let mut sig_vec = Signature::from_compact(&v[..])
+            .unwrap()
+            .serialize_der()
+            .to_vec();
+        sig_vec.push(01);
+
+        let pk_vec = pk.serialize().to_vec();
+
+        tx.input[0].witness = vec![sig_vec, pk_vec];
+
     }
 
     pub fn get_new_bitcoin_address(&mut self) -> bitcoin::Address {

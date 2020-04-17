@@ -11,6 +11,7 @@ serde_derive = "1.0"
 time-test = "0.2.1"
 log = "0.4"
 time = "*"
+bitcoin = "0.20.0"
 
 [dependencies.server]
 path = "../server"

@@ -2,7 +2,7 @@
 //!
 //! State Entity implementation
 
-use bitcoin::OutPoint;
+use bitcoin::hashes::sha256d;
 use kms::ecdsa::two_party::MasterKey1;
 use super::super::Result;
 use rocket_contrib::json::Json;
@@ -39,7 +39,8 @@ pub struct StateEntity {
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize,Debug)]
 pub struct DepositMessage1 {
-    outpoint: OutPoint,
+    txid: String,
+    vout: u32,
     backup_pubkey: String,
     proof_pubkey: String
 }
