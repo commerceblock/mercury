@@ -19,6 +19,7 @@ pub const NETWORK: bitcoin::network::constants::Network = Network::Regtest;
 #[allow(dead_code)]
 pub const RBF: u32 = 0xffffffff - 2;
 const DUSTLIMIT: u64 = 100;
+const FEE: u64 = 1000;
 
 /// generate bitcoin::util::key key pair
 pub fn generate_keypair() -> (util::key::PrivateKey, util::key::PublicKey) {
@@ -41,7 +42,7 @@ pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &Address, amount: &Amount) -> R
                 output: vec![
                     TxOut {
                         script_pubkey: p_address.script_pubkey(),
-                        value: amount.as_sat(),
+                        value: amount.as_sat()-FEE,
                     }
                 ],
                 lock_time: 0,
@@ -60,7 +61,7 @@ pub fn build_tx_k(funding_tx_in: &TxIn, p_address: &Address, amount: &Amount) ->
                 output: vec![
                     TxOut {
                         script_pubkey: p_address.script_pubkey(),
-                        value: amount.as_sat()-DUSTLIMIT,
+                        value: amount.as_sat()-DUSTLIMIT-FEE,
                     },
                     TxOut {
                         script_pubkey: script,
@@ -81,7 +82,7 @@ pub fn build_tx_1(mut txk_input: TxIn, b_address: &Address, amount: &Amount) -> 
                 output: vec![
                     TxOut {
                         script_pubkey: b_address.script_pubkey(),
-                        value: amount.as_sat(),
+                        value: amount.as_sat()-FEE,
                     }
                 ],
                 lock_time: 0,

@@ -8,7 +8,7 @@
 //
 use super::types::PrivateShare;
 use super::super::utilities::requests;
-use super::super::wallet;
+use super::super::wallet::wallet;
 use super::super::ClientShim;
 use curv::cryptographic_primitives::twoparty::coin_flip_optimal_rounds;
 use kms::ecdsa::two_party::MasterKey2;

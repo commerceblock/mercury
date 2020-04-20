@@ -1,5 +1,5 @@
-// Gotham-city 
-// 
+// Gotham-city
+//
 // Copyright 2018 by Kzen Networks (kzencorp.com)
 // Gotham city is free software: you can redistribute
 // it and/or modify it under the terms of the GNU General Public
@@ -9,7 +9,7 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::wallet::Wallet;
+    use super::super::wallet::wallet::Wallet;
 
     const TEST_WALLET_FILENAME: &str = "test-assets/wallet.data";
 

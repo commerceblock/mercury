@@ -4,7 +4,7 @@ mod tests {
     extern crate client_lib;
     extern crate bitcoin;
 
-    use client_lib::wallet::Wallet;
+    use client_lib::wallet::wallet::Wallet;
     use client_lib::*;
     use server_lib::server;
 

@@ -13,7 +13,7 @@ use clap::App;
 
 use client_lib::ClientShim;
 use client_lib::escrow;
-use client_lib::wallet;
+use client_lib::wallet::wallet;
 use std::time::Instant;
 use floating_duration::TimeFormat;
 

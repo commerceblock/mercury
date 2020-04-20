@@ -16,7 +16,7 @@ use crate::ClientShim;
 use crate::state_entity::util::{ build_tx_0, build_tx_k, build_tx_1};
 
 use super::super::utilities::requests;
-use super::super::wallet::Wallet;
+use super::super::wallet::wallet::Wallet;
 use hex;
 
 

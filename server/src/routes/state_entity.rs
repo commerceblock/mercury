@@ -2,12 +2,10 @@
 //!
 //! State Entity implementation
 
-use bitcoin::hashes::sha256d;
 use kms::ecdsa::two_party::MasterKey1;
 use super::super::Result;
 use rocket_contrib::json::Json;
 use rocket::State;
-use curv::elliptic::curves::secp256_k1::Secp256k1Scalar;
 
 use crate::storage::mock::{ StateChain, MockStorage };
 use crate::routes::ecdsa::EcdsaStruct;
