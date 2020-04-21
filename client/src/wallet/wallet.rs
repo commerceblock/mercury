@@ -1,51 +1,24 @@
-// Gotham-city
-//
-// 2P-ECDSA wallet functionality.
+//! Wallet
+//!
+//! Basic Bitcoin wallet functionality. Full key owned by this wallet.
 
-use bitcoin::Address;
-use bitcoin;
-use bitcoin::consensus::encode::serialize;
-use bitcoin::network::constants::Network;
+use crate::mocks::mock_electrum::MockElectrum;
+use crate::wallet::shared_wallet::SharedWallet;
+use crate::ClientShim;
+
+use bitcoin::Network;
+use bitcoin::util::bip32::{ ExtendedPubKey, ExtendedPrivKey, ChildNumber };
+use bitcoin::util::key::{ PublicKey, PrivateKey };
 use bitcoin::util::bip143::SighashComponents;
-use bitcoin::{TxIn, TxOut};
-use bitcoin::hashes::{sha256d, hex::FromHex};
-use bitcoin::secp256k1::Signature;
-use curv::elliptic::curves::traits::ECPoint;
-use curv::{BigInt, GE};
-use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
-use kms::ecdsa::two_party::MasterKey2;
-use kms::ecdsa::two_party::*;
-use serde_json;
-use std::fs;
+use bitcoin::secp256k1::{ All, Secp256k1, Message };
+
+// use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
 use uuid::Uuid;
-
-use centipede::juggling::proof_system::{Helgamalsegmented, Proof};
-use centipede::juggling::segmentation::Msegmentation;
-use kms::chain_code::two_party::party2::ChainCode2;
-
-use super::super::ecdsa;
-use super::super::ecdsa::types::PrivateShare;
-use super::super::escrow;
-use super::super::utilities::requests;
-use super::super::ClientShim;
-use curv::arithmetic::traits::Converter;
-use hex;
-use itertools::Itertools;
 use std::collections::HashMap;
 use std::str::FromStr;
 
-// TODO: move that to a config file and double check electrum server addresses
-const ELECTRUM_HOST: &str = "ec2-34-219-15-143.us-west-2.compute.amazonaws.com:60001";
-//const ELECTRUM_HOST: &str = "testnetnode.arihanc.com:51001";
-const WALLET_FILENAME: &str = "wallet/wallet.data";
-const BACKUP_FILENAME: &str = "wallet/backup.data";
-
-#[derive(Serialize, Deserialize)]
-pub struct SignSecondMsgRequest {
-    pub message: BigInt,
-    pub party_two_sign_message: party2::SignMessage,
-    pub pos_child_key: u32,
-}
+// TODO: move that to a config file and point to CommerceBlock's electrum server addresses
+// const ELECTRUM_HOST: &str = "ec2-34-219-15-143.us-west-2.compute.amazonaws.com:60001";
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct GetBalanceResponse {
@@ -69,426 +42,143 @@ pub struct GetWalletBalanceResponse {
     pub unconfirmed: u64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone)]
 pub struct AddressDerivation {
     pub pos: u32,
-    pub mk: MasterKey2,
+    pub private_key: PrivateKey,
+    pub public_key: PublicKey,
+}
+impl AddressDerivation {
+    pub fn new(pos: u32, private_key: PrivateKey, public_key: PublicKey) -> Self {
+        AddressDerivation { pos, private_key, public_key }
+    }
 }
 
-#[derive(Serialize, Deserialize)]
+/// Standard Bitcoin Wallet
 pub struct Wallet {
     pub id: String,
     pub network: String,
-    pub private_share: PrivateShare,
+    secp: Secp256k1<All>,
+    // pub electrumx_client: ElectrumxClient,
+    pub electrumx_client: MockElectrum,
+    pub client_shim: ClientShim,
+    pub master_priv_key: ExtendedPrivKey,
+    pub master_pub_key: ExtendedPubKey,
     pub last_derived_pos: u32,
     pub addresses_derivation_map: HashMap<String, AddressDerivation>,
+    pub shared_wallets: Vec<SharedWallet> // vector of wallets co-owned with state entities
 }
 
 impl Wallet {
-    pub fn new(client_shim: &ClientShim, net: &String) -> Wallet {
-        let id = Uuid::new_v4().to_string();
-        let private_share = ecdsa::get_master_key(client_shim);
-        let last_derived_pos = 0;
-        let addresses_derivation_map = HashMap::new();
-        let network = net.clone();
-
+    pub fn new(seed: &[u8], network: &String, client_shim: ClientShim) -> Wallet {
+        let secp = Secp256k1::new();
+        let master_priv_key = ExtendedPrivKey::new_master(network.parse::<Network>().unwrap(), seed).unwrap();
+        let master_pub_key = ExtendedPubKey::from_private(&secp, &master_priv_key);
         Wallet {
-            id,
-            network,
-            private_share,
-            last_derived_pos,
-            addresses_derivation_map,
-        }
-    }
-
-    pub fn rotate(self, client_shim: &ClientShim) -> Self {
-        ecdsa::rotate_master_key(self, client_shim)
-    }
-
-    pub fn backup(&self, escrow_service: escrow::Escrow) {
-        let g: GE = ECPoint::generator();
-        let y = escrow_service.get_public_key();
-        let (segments, encryptions) = self.private_share.master_key.private.to_encrypted_segment(
-            &escrow::SEGMENT_SIZE,
-            escrow::NUM_SEGMENTS,
-            &y,
-            &g,
-        );
-
-        let proof = Proof::prove(&segments, &encryptions, &g, &y, &escrow::SEGMENT_SIZE);
-
-        let client_backup_json = serde_json::to_string(&(
-            encryptions,
-            proof,
-            self.private_share.master_key.public.clone(),
-            self.private_share.master_key.chain_code.clone(),
-            self.private_share.id.clone(),
-        ))
-        .unwrap();
-
-        fs::write(BACKUP_FILENAME, client_backup_json).expect("Unable to save client backup!");
-
-        debug!("(wallet id: {}) Backup wallet with escrow", self.id);
-    }
-
-    pub fn verify_backup(&self, escrow_service: escrow::Escrow) {
-        let g: GE = ECPoint::generator();
-        let y = escrow_service.get_public_key();
-
-        let data = fs::read_to_string(BACKUP_FILENAME).expect("Unable to load client backup!");
-        let (encryptions, proof, client_public, _, _): (
-            Helgamalsegmented,
-            Proof,
-            Party2Public,
-            ChainCode2,
-            String,
-        ) = serde_json::from_str(&data).unwrap();
-        let verify = proof.verify(
-            &encryptions,
-            &g,
-            &y,
-            &client_public.p2,
-            &escrow::SEGMENT_SIZE,
-        );
-        match verify {
-            Ok(_x) => println!("backup verified 🍻"),
-            Err(_e) => println!("Backup was not verified correctly 😲"),
-        }
-    }
-
-    pub fn recover_and_save_share(
-        escrow_service: escrow::Escrow,
-        net: &String,
-        client_shim: &ClientShim,
-    ) -> Wallet {
-        let g: GE = ECPoint::generator();
-        let y_priv = escrow_service.get_private_key();
-
-        let data = fs::read_to_string(BACKUP_FILENAME).expect("Unable to load client backup!");
-
-        let (encryptions, _proof, public_data, chain_code2, key_id): (
-            Helgamalsegmented,
-            Proof,
-            Party2Public,
-            BigInt,
-            String,
-        ) = serde_json::from_str(&data).unwrap();
-
-        let sk = Msegmentation::decrypt(&encryptions, &g, &y_priv, &escrow::SEGMENT_SIZE);
-
-        let client_master_key_recovered =
-            MasterKey2::recover_master_key(sk.unwrap(), public_data, chain_code2);
-        let pos_old: u32 = requests::post(client_shim, &format!("ecdsa/{}/recover", key_id)).unwrap();
-
-        let pos_old = if pos_old < 10 { 10 } else { pos_old };
-        //TODO: temporary, server will keep updated pos, to do so we need to send update to server for every get_new_address
-
-        let id = Uuid::new_v4().to_string();
-        let addresses_derivation_map = HashMap::new(); //TODO: add a fucntion to recreate
-        let network = net.clone();
-
-        let new_wallet = Wallet {
-            id,
-            network,
-            private_share: PrivateShare {
-                master_key: client_master_key_recovered,
-                id: key_id,
-            },
-            last_derived_pos: pos_old,
-            addresses_derivation_map,
-        };
-
-        new_wallet.save();
-        println!("Recovery Completed Successfully ❤️");
-
-        new_wallet
-    }
-
-    pub fn save_to(&self, filepath: &str) {
-        let wallet_json = serde_json::to_string(self).unwrap();
-
-        fs::write(filepath, wallet_json).expect("Unable to save wallet!");
-
-        debug!("(wallet id: {}) Saved wallet to disk", self.id);
-    }
-
-    pub fn save(&self) {
-        self.save_to(WALLET_FILENAME)
-    }
-
-    pub fn load_from(filepath: &str) -> Wallet {
-        let data = fs::read_to_string(filepath).expect("Unable to load wallet!");
-
-        let wallet: Wallet = serde_json::from_str(&data).unwrap();
-
-        debug!("(wallet id: {}) Loaded wallet to memory", wallet.id);
-
-        wallet
-    }
-
-    pub fn load() -> Wallet {
-        Wallet::load_from(WALLET_FILENAME)
-    }
-
-    pub fn send(
-        &mut self,
-        to_address: String,
-        amount_btc: f32,
-        client_shim: &ClientShim,
-    ) -> String {
-        let selected = self.select_tx_in(amount_btc);
-        if selected.is_empty() {
-            panic!("Not enough fund");
-        }
-
-        let to_btc_adress = bitcoin::Address::from_str(&to_address).unwrap();
-
-        let txs_in: Vec<TxIn> = selected
-            .clone()
-            .into_iter()
-            .map(|s| bitcoin::TxIn {
-                previous_output: bitcoin::OutPoint {
-                    txid: sha256d::Hash::from_hex(&s.tx_hash).unwrap(),
-                    vout: s.tx_pos as u32,
-                },
-                script_sig: bitcoin::Script::default(),
-                sequence: 0xFFFFFFFF,
-                witness: Vec::default(),
-            })
-            .collect();
-
-        let fees = 10_000;
-
-        let amount_satoshi = (amount_btc * 100_000_000 as f32) as u64;
-
-        let change_address = self.get_new_bitcoin_address();
-
-        let total_selected = selected
-            .clone()
-            .into_iter()
-            .fold(0, |sum, val| sum + val.value) as u64;
-
-        let txs_out = vec![
-            TxOut {
-                value: amount_satoshi,
-                script_pubkey: to_btc_adress.script_pubkey(),
-            },
-            TxOut {
-                value: total_selected - amount_satoshi - fees,
-                script_pubkey: change_address.script_pubkey(),
-            },
-        ];
-
-        let transaction = bitcoin::Transaction {
-            version: 0,
-            lock_time: 0,
-            input: txs_in,
-            output: txs_out,
-        };
-
-        let mut signed_transaction = transaction.clone();
-
-        for i in 0..transaction.input.len() {
-            let address_derivation = self
-                .addresses_derivation_map
-                .get(&selected[i].address)
-                .unwrap();
-
-            let mk = &address_derivation.mk;
-            let pk = mk.public.q.get_element();
-
-            let comp = SighashComponents::new(&transaction);
-            let sig_hash = comp.sighash_all(
-                &transaction.input[i],
-                &bitcoin::Address::p2pkh(
-                    &to_bitcoin_public_key(pk),
-                    self.get_bitcoin_network()).script_pubkey(),
-                (selected[i].value as u32).into(),
-            );
-
-            let signature = ecdsa::sign(
-                client_shim,
-                BigInt::from_hex(&hex::encode(&sig_hash[..])),
-                &mk,
-                BigInt::from(0),
-                BigInt::from(address_derivation.pos),
-                &self.private_share.id,
-            ).unwrap();
-
-            let mut v = BigInt::to_vec(&signature.r);
-            v.extend(BigInt::to_vec(&signature.s));
-
-            let mut sig_vec = Signature::from_compact(&v[..])
-                .unwrap()
-                .serialize_der()
-                .to_vec();
-            sig_vec.push(01);
-
-            let pk_vec = pk.serialize().to_vec();
-
-            signed_transaction.input[i].witness = vec![sig_vec, pk_vec];
-        }
-
-        let mut electrum = ElectrumxClient::new(ELECTRUM_HOST).unwrap();
-
-        let raw_tx_hex = hex::encode(serialize(&signed_transaction));
-        let txid = electrum.broadcast_transaction(raw_tx_hex.clone());
-
-        txid.unwrap()
-    }
-
-    /// sign tx input with key corresponding to given addr
-    pub fn sign_tx_input(&mut self, client_shim: &ClientShim, tx: &mut bitcoin::Transaction, input_index: usize, addr: &Address, amount: u64) {
-        let address_derivation;
-        match self.addresses_derivation_map.get(&addr.to_string()) {
-            None => panic!("No key found in wallet for address"),
-            Some(derivation) => {
-                address_derivation = derivation;
-            },
-        }
-
-        let mk = &address_derivation.mk;
-        let pk = mk.public.q.get_element();
-
-        let comp = SighashComponents::new(&tx);
-        let sig_hash = comp.sighash_all(
-            &tx.input[input_index],
-            &bitcoin::Address::p2pkh(
-                &to_bitcoin_public_key(pk),
-                self.get_bitcoin_network()).script_pubkey(),
-            amount,
-        );
-
-        let signature = ecdsa::sign(
+            id: Uuid::new_v4().to_string(),
+            network: network.to_string(),
+            secp,
+            electrumx_client: MockElectrum::new(),
             client_shim,
-            BigInt::from_hex(&hex::encode(&sig_hash[..])),
-            &mk,
-            BigInt::from(0),
-            BigInt::from(address_derivation.pos),
-            &self.private_share.id,
-        ).unwrap();
-
-        let mut v = BigInt::to_vec(&signature.r);
-        v.extend(BigInt::to_vec(&signature.s));
-
-        let mut sig_vec = Signature::from_compact(&v[..])
-            .unwrap()
-            .serialize_der()
-            .to_vec();
-        sig_vec.push(01);
-
-        let pk_vec = pk.serialize().to_vec();
-
-        tx.input[0].witness = vec![sig_vec, pk_vec];
-
+            master_priv_key,
+            master_pub_key,
+            last_derived_pos: 0,
+            addresses_derivation_map: HashMap::new(),
+            shared_wallets: vec!()
+        }
     }
 
+    pub fn gen_shared_wallet(&mut self) -> &SharedWallet {
+        self.shared_wallets.push(SharedWallet::new(&self.client_shim, &self.network));
+        self.shared_wallets.last().unwrap()
+    }
+
+    // TODO: make serializable so wallet can be stored
+
+    // pub fn save_to(&self, filepath: &str) {
+    //     let wallet_json = serde_json::to_string(self).unwrap();
+    //     fs::write(filepath, wallet_json).expect("Unable to save wallet!");
+    //     debug!("(wallet id: {}) Saved wallet to disk", self.id);
+    // }
+    // pub fn save(&self) {
+    //     self.save_to(WALLET_FILENAME)
+    // }
+    // pub fn load_from(filepath: &str) -> SharedWallet {
+    //     let data = fs::read_to_string(filepath).expect("Unable to load wallet!");
+    //     let wallet: SharedWallet = serde_json::from_str(&data).unwrap();
+    //     debug!("(wallet id: {}) Loaded wallet to memory", wallet.id);
+    //     wallet
+    // }
+    // pub fn load() -> SharedWallet {
+    //     SharedWallet::load_from(WALLET_FILENAME)
+    // }
+
+    /// generate new address
     pub fn get_new_bitcoin_address(&mut self) -> bitcoin::Address {
-        let (pos, mk) = Self::derive_new_key(&self.private_share, self.last_derived_pos);
-        let pk = mk.public.q.get_element();
-        let address = bitcoin::Address::p2wpkh(
-            &to_bitcoin_public_key(pk),
-            self.get_bitcoin_network()
-        );
+        let new_ext_priv_key = self.derive_new_key().unwrap();
+        let new_ext_pub_key = ExtendedPubKey::from_private(&self.secp, &new_ext_priv_key);
+
+        let address = self.to_p2wpkh_address(&new_ext_pub_key.public_key);
+        self.last_derived_pos += 1;
 
         self.addresses_derivation_map
-            .insert(address.to_string(), AddressDerivation { mk, pos });
-
-        self.last_derived_pos = pos;
+            .insert(address.to_string(),
+                AddressDerivation::new(self.last_derived_pos, new_ext_priv_key.private_key, new_ext_pub_key.public_key));
 
         address
     }
 
-    pub fn derived(&mut self) {
-        for i in 0..self.last_derived_pos {
-            let (pos, mk) = Self::derive_new_key(&self.private_share, i);
+    /// Derive new child key from master extended key
+    fn derive_new_key(&mut self) -> Result<ExtendedPrivKey, bitcoin::util::bip32::Error> {
+        self.master_priv_key.ckd_priv(&self.secp, ChildNumber::from_hardened_idx(self.last_derived_pos).unwrap())
+    }
 
-            let address =
-                bitcoin::Address::p2wpkh(
-                    &to_bitcoin_public_key(mk.public.q.get_element()),
-                    self.get_bitcoin_network()
-                );
+    /// Sign inputs with given addresses derived by this wallet. input_indices, addresses and amoumts lists
+    /// must be in order of appearance in TxIn[] list
+    pub fn sign_tx(
+        &mut self,
+        transaction: &bitcoin::Transaction,
+        input_indices: Vec<usize>,
+        addresses: Vec<bitcoin::Address>,
+        amounts: Vec<bitcoin::Amount>
+    ) -> bitcoin::Transaction {
 
-            self.addresses_derivation_map
-                .insert(address.to_string(), AddressDerivation { mk, pos });
+        let mut signed_transaction = transaction.clone();
+        for (iter, input_index) in input_indices.iter().enumerate() {
+
+            // get key corresponding to address
+            let address = addresses.get(iter).unwrap();
+            let address_derivation = self
+                .addresses_derivation_map
+                .get(&address.to_string())
+                .unwrap();
+            let pk = address_derivation.public_key.key;
+            let sk = address_derivation.private_key.key;
+
+            let comp = SighashComponents::new(&transaction);
+            let sig_hash = comp.sighash_all(
+                &transaction.input[*input_index],
+                &bitcoin::Address::p2pkh(
+                    &to_bitcoin_public_key(pk),
+                    self.get_bitcoin_network()).script_pubkey(),
+                amounts.get(iter).unwrap().as_sat()
+            );
+
+            let msg = Message::from_slice(&sig_hash).unwrap();
+            let signature = self.secp.sign(&msg, &sk).serialize_der();
+
+            let mut with_hashtype = signature.to_vec();
+            with_hashtype.push(1);
+            signed_transaction.input[*input_index].witness.clear();
+            signed_transaction.input[*input_index].witness.push(with_hashtype);
+            signed_transaction.input[*input_index].witness.push(pk.serialize().to_vec());
         }
+        return signed_transaction
     }
 
-    pub fn get_balance(&mut self) -> GetWalletBalanceResponse {
-        let mut aggregated_balance = GetWalletBalanceResponse {
-            confirmed: 0,
-            unconfirmed: 0,
-        };
-
-        for b in self.get_all_addresses_balance() {
-            aggregated_balance.unconfirmed += b.unconfirmed;
-            aggregated_balance.confirmed += b.confirmed;
-        }
-
-        aggregated_balance
-    }
-
-    // TODO: handle fees
-    pub fn select_tx_in(&self, amount_btc: f32) -> Vec<GetListUnspentResponse> {
-        // greedy selection
-        let list_unspent: Vec<GetListUnspentResponse> = self
-            .get_all_addresses_balance()
-            .into_iter()
-//            .filter(|b| b.confirmed > 0)
-            .map(|a| self.list_unspent_for_addresss(a.address.to_string()))
-            .flatten()
-            .sorted_by(|a, b| a.value.partial_cmp(&b.value).unwrap())
-            .into_iter()
-            .collect();
-
-        let mut remaining: i64 = amount_btc as i64 * 100_000_000;
-        let mut selected: Vec<GetListUnspentResponse> = Vec::new();
-
-        for unspent in list_unspent {
-            selected.push(unspent.clone());
-            remaining -= unspent.value as i64;
-
-            if remaining < 0 {
-                break;
-            }
-        }
-
-        selected
-    }
-
-    pub fn list_unspent(&self) -> Vec<GetListUnspentResponse> {
-        let response: Vec<GetListUnspentResponse> = self
-            .get_all_addresses()
-            .into_iter()
-            .map(|a| self.list_unspent_for_addresss(a.to_string()))
-            .flatten()
-            .collect();
-
-        response
-    }
-
-    /* PRIVATE */
-    fn list_unspent_for_addresss(&self, address: String) -> Vec<GetListUnspentResponse> {
-        let mut client = ElectrumxClient::new(ELECTRUM_HOST).unwrap();
-
-        let resp = client.get_list_unspent(&address).unwrap();
-
-        resp.into_iter()
-            .map(|u| GetListUnspentResponse {
-                value: u.value,
-                height: u.height,
-                tx_hash: u.tx_hash,
-                tx_pos: u.tx_pos,
-                address: address.clone(),
-            })
-            .collect()
-    }
-
-    fn get_address_balance(address: &bitcoin::Address) -> GetBalanceResponse {
-        let mut client = ElectrumxClient::new(ELECTRUM_HOST).unwrap();
-
-        let resp = client.get_balance(&address.to_string()).unwrap();
-
+    /// return alance of address
+    fn get_address_balance(&self, address: &bitcoin::Address) -> GetBalanceResponse {
+        let resp = self.electrumx_client.get_balance(&address.to_string()).unwrap();
         GetBalanceResponse {
             confirmed: resp.confirmed,
             unconfirmed: resp.unconfirmed,
@@ -500,50 +190,72 @@ impl Wallet {
         let response: Vec<GetBalanceResponse> = self
             .get_all_addresses()
             .into_iter()
-            .map(|a| Self::get_address_balance(&a))
+            .map(|a| self.get_address_balance(&a))
             .collect();
-
         response
     }
-
+    /// Return all addresses derived by this wallet.
     pub fn get_all_addresses(&self) -> Vec<bitcoin::Address> {
-        let init = 0;
-        let last_pos = self.last_derived_pos;
-
-        let mut response: Vec<bitcoin::Address> = Vec::new();
-
-        for n in init..=last_pos {
-            let mk = self
-                .private_share
-                .master_key
-                .get_child(vec![BigInt::from(0), BigInt::from(n)]);
-            let bitcoin_address = Self::to_bitcoin_address(&mk, self.get_bitcoin_network());
-
-            response.push(bitcoin_address);
+        let mut addrs = Vec::new();
+        for (addr, _) in &self.addresses_derivation_map {
+            addrs.push(bitcoin::Address::from_str(&addr).unwrap());
         }
+        addrs
+    }
+    /// Return total balance of addresses in wallet.
+    pub fn get_balance(&mut self) -> GetWalletBalanceResponse {
+        let mut aggregated_balance = GetWalletBalanceResponse {
+            confirmed: 0,
+            unconfirmed: 0,
+        };
+        for b in self.get_all_addresses_balance() {
+            aggregated_balance.unconfirmed += b.unconfirmed;
+            aggregated_balance.confirmed += b.confirmed;
+        }
+        aggregated_balance
+    }
+    /// Get address derivation information. Return None if address not derived by this wallet.
+    pub fn get_address(&self, address: &String) -> Option<AddressDerivation> {
+        match self.addresses_derivation_map.get(address) {
+            Some(entry) => Some(*entry),
+            None => None
+        }
+    }
 
+    /// List unspent outputs for addresses derived by this wallet.
+    pub fn list_unspent(&self) -> Vec<GetListUnspentResponse> {
+        let response: Vec<GetListUnspentResponse> = self
+            .get_all_addresses()
+            .into_iter()
+            .map(|a| self.list_unspent_for_addresss(a.to_string()))
+            .flatten()
+            .collect();
         response
     }
 
-    fn derive_new_key(private_share: &PrivateShare, pos: u32) -> (u32, MasterKey2) {
-        let last_pos: u32 = pos + 1;
+    /* PRIVATE */
+    fn list_unspent_for_addresss(&self, address: String) -> Vec<GetListUnspentResponse> {
+        let resp = self.electrumx_client.get_list_unspent(&address).unwrap();
+        resp.into_iter()
+            .map(|u| GetListUnspentResponse {
+                value: u.value,
+                height: u.height,
+                tx_hash: u.tx_hash,
+                tx_pos: u.tx_pos,
+                address: address.clone(),
+            })
+            .collect()
+    }
 
-        let last_child_master_key = private_share
-            .master_key
-            .get_child(vec![BigInt::from(0), BigInt::from(last_pos)]);
-
-        (last_pos, last_child_master_key)
+    pub fn to_p2wpkh_address(&self, pub_key: &PublicKey) -> bitcoin::Address {
+        bitcoin::Address::p2wpkh(
+            &to_bitcoin_public_key(pub_key.key),
+            self.get_bitcoin_network()
+        )
     }
 
     fn get_bitcoin_network(&self) -> Network {
         self.network.parse::<Network>().unwrap()
-    }
-
-    pub fn to_bitcoin_address(mk: &MasterKey2, network: Network) -> bitcoin::Address {
-        bitcoin::Address::p2wpkh(
-            &to_bitcoin_public_key(mk.public.q.get_element()),
-            network
-        )
     }
 }
 
@@ -552,5 +264,70 @@ pub fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
     bitcoin::util::key::PublicKey {
         compressed: true,
         key: pk
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state_entity::util::*;
+    use bitcoin::{ Amount, TxIn, OutPoint, Script };
+    use bitcoin::hashes::sha256d;
+
+    fn gen_wallet() -> Wallet {
+        Wallet::new(
+            &[0xcd; 32],
+            &"regtest".to_string(),
+            ClientShim::new("http://localhost:8000".to_string(), None)
+        )
+    }
+    #[test]
+    fn test_basic_addr_generation() {
+        let mut wallet = gen_wallet();
+        let addr1 = wallet.get_new_bitcoin_address();
+        assert!(wallet.get_address(&addr1.to_string()).is_some());
+        assert!(wallet.get_address(&String::from("test")).is_none());
+        let _ = wallet.get_new_bitcoin_address();
+        let _ = wallet.get_new_bitcoin_address();
+        assert_eq!(wallet.get_all_addresses().len(),3);
+    }
+
+    #[test]
+    fn test_tx_signing() {
+        let expected_witness = vec!(
+            vec!(48, 69, 2, 33, 0, 150, 253, 50, 55, 46, 20, 32, 126, 52, 91, 106, 70, 140, 77, 48, 63, 61, 120, 207, 38, 4, 9, 76, 213, 188, 236, 65, 29, 66, 167, 102, 172, 2, 32, 119, 56, 58, 56, 123, 138, 4, 59, 69, 218, 221, 81, 178, 173, 248, 8, 25, 133, 158, 109, 82, 1, 160, 89, 246, 61, 126, 152, 69, 134, 236, 116, 1),
+             vec!(3, 117, 86, 76, 139, 78, 224, 113, 7, 64, 95, 108, 244, 182, 62, 233, 254, 158, 251, 233, 160, 11, 195, 122, 213, 124, 230, 51, 124, 162, 241, 219, 112)
+        );
+
+        let mut wallet = gen_wallet();
+        let addr = wallet.get_new_bitcoin_address();
+
+        let inputs =  vec![
+            TxIn {
+                previous_output: OutPoint {
+                    txid: sha256d::Hash::from_str(&String::from("e0a97cb38e7e73617ef75a57eaf2841eb06833407c0eae08029bd04ea7e6115a")).unwrap(),
+                    vout: 1 },
+                sequence: RBF,
+                witness: Vec::new(),
+                script_sig: Script::new(),
+            }
+        ];
+        let amount = Amount::ONE_BTC;
+
+        let tx = build_tx_0(&inputs, &addr, &amount).unwrap();
+        let signed_tx  = wallet.sign_tx(&tx, vec!(0), vec!(addr), vec!(amount));
+        let witness = &signed_tx.input.get(0).unwrap().witness;
+
+        assert_eq!(hex::encode(witness.get(0).unwrap()), hex::encode(expected_witness.get(0).unwrap()));
+        assert_eq!(hex::encode(witness.get(1).unwrap()), hex::encode(expected_witness.get(1).unwrap()));
+    }
+    #[test]
+    fn test_mocks() {
+        let mut wallet = gen_wallet();
+        let _ = wallet.get_new_bitcoin_address();
+        let _ = wallet.get_new_bitcoin_address();
+        println!("balances: {:?}",wallet.get_all_addresses_balance());
+        println!("list unspent: {:?}",wallet.list_unspent());
     }
 }

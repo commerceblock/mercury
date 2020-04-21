@@ -16,7 +16,7 @@ use crate::ClientShim;
 use crate::state_entity::util::{ build_tx_0, build_tx_k, build_tx_1};
 
 use super::super::utilities::requests;
-use super::super::wallet::wallet::Wallet;
+use super::super::wallet::shared_wallet::SharedWallet;
 use hex;
 
 
@@ -31,7 +31,7 @@ pub struct DepositMessage1 {
     proof_pubkey: String
 }
 
-pub fn deposit(mut wallet: Wallet, client_shim: &ClientShim, inputs: Vec<TxIn>, funding_addr: Address, amount: Amount) ->(String, String) {
+pub fn deposit(mut wallet: SharedWallet, client_shim: &ClientShim, inputs: Vec<TxIn>, funding_addr: Address, amount: Amount) ->(String, String) {
     // make funding tx
     let tx_0 = build_tx_0(&inputs, &funding_addr, &amount).unwrap();
     println!("tx_O: {:?}",tx_0);

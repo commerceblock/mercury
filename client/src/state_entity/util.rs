@@ -123,9 +123,7 @@ mod tests {
         let sighash = tx_0.signature_hash(0, &addr.script_pubkey(), amount.as_sat() as u32);
         // Makes signature.
         let msg = Message::from_slice(&sighash[..]).unwrap();
-        let signature = secp.sign(&msg, &priv_key.key).serialize_der().to_vec();
-
-        println!("signature: {:?}", signature);
+        let _signature = secp.sign(&msg, &priv_key.key).serialize_der().to_vec();
 
         let tx_k = build_tx_k(tx_0.input.get(0).unwrap(), &addr, &amount).unwrap();
         // println!("{}", serde_json::to_string_pretty(&tx_k).unwrap());

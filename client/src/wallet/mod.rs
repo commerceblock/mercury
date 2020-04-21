@@ -1,3 +1,3 @@
 
-pub mod wallet_std;
 pub mod wallet;
+pub mod shared_wallet;

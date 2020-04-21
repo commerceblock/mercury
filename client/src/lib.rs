@@ -39,7 +39,7 @@ pub mod schnorr;
 pub mod state_entity;
 
 mod utilities;
-mod tests;
+mod mocks;
 
 type Result<T> = std::result::Result<T, failure::Error>;
 

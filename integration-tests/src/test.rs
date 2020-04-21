@@ -4,7 +4,7 @@ mod tests {
     extern crate client_lib;
     extern crate bitcoin;
 
-    use client_lib::wallet::wallet::Wallet;
+    use client_lib::wallet::shared_wallet::SharedWallet;
     use client_lib::*;
     use server_lib::server;
 
@@ -80,7 +80,7 @@ mod tests {
         let last_derived_pos = 0;
         let addresses_derivation_map = HashMap::new();
         let network = "regtest".to_string();
-        let mut wallet = Wallet {
+        let mut wallet = SharedWallet {
             id,
             network,
             private_share,
