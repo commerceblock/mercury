@@ -8,7 +8,7 @@
 //
 use super::types::PrivateShare;
 use super::super::utilities::requests;
-use super::super::wallet;
+use super::super::wallet::shared_wallet::SharedWallet;
 use super::super::ClientShim;
 use curv::cryptographic_primitives::twoparty::coin_flip_optimal_rounds;
 use kms::ecdsa::two_party::MasterKey2;
@@ -19,7 +19,7 @@ use std::collections::HashMap;
 
 const ROT_PATH_PRE: &str = "ecdsa/rotate";
 
-pub fn rotate_master_key(wallet: wallet::Wallet, client_shim: &ClientShim) -> wallet::Wallet {
+pub fn rotate_master_key(wallet: SharedWallet, client_shim: &ClientShim) -> SharedWallet {
     let id = &wallet.private_share.id.clone();
     let coin_flip_party1_first_message: coin_flip_optimal_rounds::Party1FirstMessage =
         requests::post(client_shim, &format!("{}/{}/first", ROT_PATH_PRE, id)).unwrap();
@@ -96,7 +96,7 @@ pub fn rotate_master_key(wallet: wallet::Wallet, client_shim: &ClientShim) -> wa
     };
 
     let addresses_derivation_map = HashMap::new();
-    let mut wallet_after_rotate = wallet::Wallet {
+    let mut wallet_after_rotate = SharedWallet {
         id: wallet.id.clone(),
         network: wallet.network.clone(),
         private_share,

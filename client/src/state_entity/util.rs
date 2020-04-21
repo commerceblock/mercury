@@ -19,6 +19,7 @@ pub const NETWORK: bitcoin::network::constants::Network = Network::Regtest;
 #[allow(dead_code)]
 pub const RBF: u32 = 0xffffffff - 2;
 const DUSTLIMIT: u64 = 100;
+const FEE: u64 = 1000;
 
 /// generate bitcoin::util::key key pair
 pub fn generate_keypair() -> (util::key::PrivateKey, util::key::PublicKey) {
@@ -41,7 +42,7 @@ pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &Address, amount: &Amount) -> R
                 output: vec![
                     TxOut {
                         script_pubkey: p_address.script_pubkey(),
-                        value: amount.as_sat(),
+                        value: amount.as_sat()-FEE,
                     }
                 ],
                 lock_time: 0,
@@ -60,7 +61,7 @@ pub fn build_tx_k(funding_tx_in: &TxIn, p_address: &Address, amount: &Amount) ->
                 output: vec![
                     TxOut {
                         script_pubkey: p_address.script_pubkey(),
-                        value: amount.as_sat()-DUSTLIMIT,
+                        value: amount.as_sat()-DUSTLIMIT-FEE,
                     },
                     TxOut {
                         script_pubkey: script,
@@ -81,7 +82,7 @@ pub fn build_tx_1(mut txk_input: TxIn, b_address: &Address, amount: &Amount) -> 
                 output: vec![
                     TxOut {
                         script_pubkey: b_address.script_pubkey(),
-                        value: amount.as_sat(),
+                        value: amount.as_sat()-FEE,
                     }
                 ],
                 lock_time: 0,
@@ -93,14 +94,12 @@ pub fn build_tx_1(mut txk_input: TxIn, b_address: &Address, amount: &Amount) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json;
+    // use serde_json;
 
     use bitcoin::OutPoint;
     use bitcoin::blockdata::script::Script;
     use bitcoin::secp256k1::{Secp256k1, Message};
     use bitcoin::hashes::sha256d;
-
-    use crate::util::generate_keypair;
 
     #[test]
     fn transaction() {
@@ -118,21 +117,19 @@ mod tests {
         ];
         let amount = Amount::ONE_BTC;
         let tx_0 = build_tx_0(&inputs, &addr, &amount).unwrap();
-        println!("{}", serde_json::to_string_pretty(&tx_0).unwrap());
+        // println!("{}", serde_json::to_string_pretty(&tx_0).unwrap());
 
         // Compute sighash
         let sighash = tx_0.signature_hash(0, &addr.script_pubkey(), amount.as_sat() as u32);
         // Makes signature.
         let msg = Message::from_slice(&sighash[..]).unwrap();
-        let signature = secp.sign(&msg, &priv_key.key).serialize_der().to_vec();
-
-        println!("signature: {:?}", signature);
+        let _signature = secp.sign(&msg, &priv_key.key).serialize_der().to_vec();
 
         let tx_k = build_tx_k(tx_0.input.get(0).unwrap(), &addr, &amount).unwrap();
-        println!("{}", serde_json::to_string_pretty(&tx_k).unwrap());
+        // println!("{}", serde_json::to_string_pretty(&tx_k).unwrap());
 
-        let tx_1 = build_tx_1(tx_k.input.get(0).unwrap().clone(), &addr, &amount).unwrap();
-        println!("{}", serde_json::to_string_pretty(&tx_1).unwrap());
+        let _tx_1 = build_tx_1(tx_k.input.get(0).unwrap().clone(), &addr, &amount).unwrap();
+        // println!("{}", serde_json::to_string_pretty(&tx_1).unwrap());
     }
 
     #[test]

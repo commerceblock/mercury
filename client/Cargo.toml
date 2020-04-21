@@ -31,6 +31,7 @@ hex = "0.3.2"
 bitcoin = "0.20.0"
 config = "0.9"
 floating-duration = "0.1.2"
+rand = "0.6.5"
 
 [dependencies.zk-paillier]
 git = "https://github.com/KZen-networks/zk-paillier"
