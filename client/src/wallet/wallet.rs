@@ -16,9 +16,10 @@ use bitcoin::secp256k1::{ All, Secp256k1, Message };
 use uuid::Uuid;
 use std::collections::HashMap;
 use std::str::FromStr;
+use serde_json::json;
+use std::fs;
 
-// TODO: move that to a config file and point to CommerceBlock's electrum server addresses
-// const ELECTRUM_HOST: &str = "ec2-34-219-15-143.us-west-2.compute.amazonaws.com:60001";
+const WALLET_FILENAME: &str = "wallet/wallet.data";
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct GetBalanceResponse {
@@ -93,25 +94,73 @@ impl Wallet {
         self.shared_wallets.last().unwrap()
     }
 
-    // TODO: make serializable so wallet can be stored
+    /// serialize wallet to json
+    pub fn to_json(&self) -> serde_json::Value {
+        json!({
+            "id": self.id,
+            "network": self.network,
+            "master_priv_key": self.master_priv_key.to_string(),
+            "master_pub_key": self.master_pub_key.to_string(),
+            "last_derived_pos": self.last_derived_pos,
+            "shared_wallets": serde_json::to_string(&self.shared_wallets).unwrap()
+        })
+    }
 
-    // pub fn save_to(&self, filepath: &str) {
-    //     let wallet_json = serde_json::to_string(self).unwrap();
-    //     fs::write(filepath, wallet_json).expect("Unable to save wallet!");
-    //     debug!("(wallet id: {}) Saved wallet to disk", self.id);
-    // }
-    // pub fn save(&self) {
-    //     self.save_to(WALLET_FILENAME)
-    // }
-    // pub fn load_from(filepath: &str) -> SharedWallet {
-    //     let data = fs::read_to_string(filepath).expect("Unable to load wallet!");
-    //     let wallet: SharedWallet = serde_json::from_str(&data).unwrap();
-    //     debug!("(wallet id: {}) Loaded wallet to memory", wallet.id);
-    //     wallet
-    // }
-    // pub fn load() -> SharedWallet {
-    //     SharedWallet::load_from(WALLET_FILENAME)
-    // }
+    /// load wallet from jon
+    pub fn from_json(json: serde_json::Value, network: &String, client_shim: ClientShim) -> Self {
+        let secp = Secp256k1::new();
+        let mut master_priv_key = ExtendedPrivKey::from_str(json["master_priv_key"].as_str().unwrap()).unwrap();
+        master_priv_key.network = network.parse::<Network>().unwrap();
+        let mut master_pub_key = ExtendedPubKey::from_str(json["master_pub_key"].as_str().unwrap()).unwrap();
+        master_pub_key.network = network.parse::<Network>().unwrap();
+
+        let mut wallet = Wallet {
+            id: json["id"].as_str().unwrap().to_string(),
+            network: json["network"].as_str().unwrap().to_string(),
+            secp,
+            electrumx_client: MockElectrum::new(),
+            client_shim,
+            master_priv_key,
+            master_pub_key,
+            last_derived_pos: 0,
+            addresses_derivation_map: HashMap::new(),
+            shared_wallets: vec!()
+        };
+        for _ in 0..json["last_derived_pos"].as_u64().unwrap() {
+            wallet.get_new_bitcoin_address();
+        }
+        let shared_wallets_str = &json["shared_wallets"].as_str().unwrap();
+        if shared_wallets_str.len() != 2 { // is not empty
+            println!("got here");
+            let shared_wallets:Vec<SharedWallet> = serde_json::from_str(shared_wallets_str).unwrap();
+            wallet.shared_wallets = shared_wallets;
+        }
+
+        debug!("(wallet id: {}) Loaded wallet to memory", wallet.id);
+        wallet
+    }
+
+    /// save to disk
+    pub fn save_to(&self, filepath: &str) {
+        let wallet_json = self.to_json().to_string();
+        fs::write(filepath, wallet_json).expect("Unable to save wallet!");
+        debug!("(wallet id: {}) Saved wallet to disk", self.id);
+    }
+    pub fn save(&self) {
+        self.save_to(WALLET_FILENAME)
+    }
+
+    /// load wallet from disk
+    pub fn load_from(filepath: &str, network: &String, client_shim: ClientShim) -> Wallet {
+        let data = fs::read_to_string(filepath).expect("Unable to load wallet!");
+        let serde_json_data = serde_json::from_str(&data).unwrap();
+        let wallet: Wallet = Wallet::from_json(serde_json_data, network, client_shim);
+        debug!("(wallet id: {}) Loaded wallet to memory", wallet.id);
+        wallet
+    }
+    pub fn load(network: &String, client_shim: ClientShim) -> Wallet {
+        Wallet::load_from(WALLET_FILENAME, network, client_shim)
+    }
 
     /// generate new address
     pub fn get_new_bitcoin_address(&mut self) -> bitcoin::Address {
@@ -275,6 +324,8 @@ mod tests {
     use bitcoin::{ Amount, TxIn, OutPoint, Script };
     use bitcoin::hashes::sha256d;
 
+    const TEST_WALLET_FILENAME: &str = "test-assets/wallet.data";
+
     fn gen_wallet() -> Wallet {
         Wallet::new(
             &[0xcd; 32],
@@ -282,6 +333,30 @@ mod tests {
             ClientShim::new("http://localhost:8000".to_string(), None)
         )
     }
+
+    #[test]
+    fn load_wallet_test() {
+        Wallet::load_from(TEST_WALLET_FILENAME,&"regtest".to_string(),ClientShim::new("http://localhost:8000".to_string(), None));
+    }
+
+    #[test]
+    fn test_to_and_from_json() {
+        let mut wallet = gen_wallet();
+        let addr1 = wallet.get_new_bitcoin_address();
+        let addr2 = wallet.get_new_bitcoin_address();
+        let wallet_json = wallet.to_json();
+        let wallet_rebuilt = super::Wallet::from_json(wallet_json,&"regtest".to_string(),ClientShim::new("http://localhost:8000".to_string(), None));
+        assert_eq!(wallet.id,wallet_rebuilt.id);
+        assert_eq!(wallet.network,wallet_rebuilt.network);
+        assert_eq!(wallet.master_priv_key.chain_code,wallet_rebuilt.master_priv_key.chain_code);
+        assert_eq!(wallet.master_priv_key.private_key.to_bytes(),wallet_rebuilt.master_priv_key.private_key.to_bytes());
+        assert_eq!(wallet.master_pub_key.chain_code,wallet_rebuilt.master_pub_key.chain_code);
+        assert_eq!(wallet.master_pub_key.public_key,wallet_rebuilt.master_pub_key.public_key);
+        assert_eq!(wallet.last_derived_pos,wallet_rebuilt.last_derived_pos);
+        assert!(wallet_rebuilt.addresses_derivation_map.contains_key(&addr1.to_string()));
+        assert!(wallet_rebuilt.addresses_derivation_map.contains_key(&addr2.to_string()));
+    }
+
     #[test]
     fn test_basic_addr_generation() {
         let mut wallet = gen_wallet();

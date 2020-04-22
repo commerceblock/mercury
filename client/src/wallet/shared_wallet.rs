@@ -38,8 +38,8 @@ use std::str::FromStr;
 // TODO: move that to a config file and double check electrum server addresses
 const ELECTRUM_HOST: &str = "ec2-34-219-15-143.us-west-2.compute.amazonaws.com:60001";
 //const ELECTRUM_HOST: &str = "testnetnode.arihanc.com:51001";
-const WALLET_FILENAME: &str = "wallet/wallet.data";
-const BACKUP_FILENAME: &str = "wallet/backup.data";
+const WALLET_FILENAME: &str = "wallet/shared_wallet.data";
+const BACKUP_FILENAME: &str = "wallet/shared_backup.data";
 
 #[derive(Serialize, Deserialize)]
 pub struct SignSecondMsgRequest {
@@ -553,31 +553,5 @@ pub fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
     bitcoin::util::key::PublicKey {
         compressed: true,
         key: pk
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const TEST_WALLET_FILENAME: &str = "test-assets/wallet.data";
-
-    #[test]
-    fn load_wallet_test() {
-        SharedWallet::load_from(TEST_WALLET_FILENAME);
-    }
-
-    #[test]
-    fn get_address_test() {
-        let  mut w : SharedWallet = SharedWallet::load_from(TEST_WALLET_FILENAME);
-        let a = w.get_new_bitcoin_address();
-        assert!(!a.to_string().is_empty())
-    }
-
-    #[test]
-    fn get_balance_test() {
-        let  mut w : SharedWallet = SharedWallet::load_from(TEST_WALLET_FILENAME);
-        let b = w.get_balance();
-        assert!(b.confirmed > 0);
     }
 }
