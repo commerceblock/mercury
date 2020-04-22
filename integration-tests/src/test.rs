@@ -4,14 +4,13 @@ mod tests {
     extern crate client_lib;
     extern crate bitcoin;
 
-    use client_lib::wallet::shared_wallet::SharedWallet;
+    use client_lib::wallet;
     use client_lib::*;
     use server_lib::server;
 
     use bitcoin::{ Amount, TxIn };
     use bitcoin::OutPoint;
     use bitcoin::hashes::sha256d;
-
     use std::{thread, time};
     use std::collections::HashMap;
 
@@ -80,7 +79,7 @@ mod tests {
         let last_derived_pos = 0;
         let addresses_derivation_map = HashMap::new();
         let network = "regtest".to_string();
-        let mut wallet = SharedWallet {
+        let mut wallet = wallet::shared_wallet::SharedWallet {
             id,
             network,
             private_share,
@@ -104,6 +103,25 @@ mod tests {
         assert!(resp.0 == String::from("deposit"));
     }
 
+    #[test]
+    fn test_wallet_load_with_shared_wallet() {
+        spawn_server();
+        let mut wallet = gen_wallet();
+        wallet.gen_shared_wallet();
+
+        let wallet_json = wallet.to_json();
+        let wallet_rebuilt = wallet::wallet::Wallet::from_json(wallet_json, &"regtest".to_string(), ClientShim::new("http://localhost:8000".to_string(), None));
+
+        let shared = wallet.shared_wallets.get(0).unwrap();
+        let shared_rebuilt = wallet_rebuilt.shared_wallets.get(0).unwrap();
+
+        assert_eq!(shared.id,shared_rebuilt.id);
+        assert_eq!(shared.network,shared_rebuilt.network);
+        assert_eq!(shared.private_share.id, shared_rebuilt.private_share.id);
+        assert_eq!(shared.private_share.master_key.public, shared_rebuilt.private_share.master_key.public);
+        assert_eq!(shared.last_derived_pos,shared_rebuilt.last_derived_pos);
+    }
+
 
     fn spawn_server() {
         // Rocket server is blocking, so we spawn a new thread.
@@ -113,5 +131,13 @@ mod tests {
 
         let five_seconds = time::Duration::from_millis(5000);
         thread::sleep(five_seconds);
+    }
+
+    fn gen_wallet() -> wallet::wallet::Wallet {
+        wallet::wallet::Wallet::new(
+            &[0xcd; 32],
+            &"regtest".to_string(),
+            ClientShim::new("http://localhost:8000".to_string(), None)
+        )
     }
 }

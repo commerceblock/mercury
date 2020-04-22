@@ -43,7 +43,7 @@ mod mocks;
 
 type Result<T> = std::result::Result<T, failure::Error>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ClientShim {
     pub client: reqwest::Client,
     pub auth_token: Option<String>,
