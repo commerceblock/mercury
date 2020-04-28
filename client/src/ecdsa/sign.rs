@@ -46,17 +46,14 @@ pub fn sign(
         &message,
     );
 
-    let signature = match get_signature(
+    let signature = get_signature(
         client_shim,
         message,
         party_two_sign_message,
         x_pos,
         y_pos,
         &id,
-    ) {
-        Ok(s) => s,
-        Err(e) => return Err(format_err!("ecdsa::get_signature failed failed: {}", e))
-    };
+    )?;
 
     Ok(signature)
 }
@@ -81,6 +78,12 @@ fn get_signature(
             Some(s) => s,
             None => return Err(failure::err_msg("party1 sign second message request failed"))
         };
+    // catch error with empty party_one::SignatureRecid for now
+    if signature.s == BigInt::from(0) {
+        if signature.r == BigInt::from(0) {
+            return Err(format_err!("Sig hash in message to sign does not match with back-up transaction data provided to State Entity."));
+        }
+    }
 
     Ok(signature)
 }

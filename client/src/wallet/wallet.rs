@@ -6,13 +6,14 @@ use crate::mocks::mock_electrum::MockElectrum;
 use crate::wallet::shared_wallet::SharedWallet;
 use crate::ClientShim;
 
-use bitcoin::Network;
+use bitcoin::{ Network, Address };
 use bitcoin::util::bip32::{ ExtendedPubKey, ExtendedPrivKey, ChildNumber };
 use bitcoin::util::key::{ PublicKey, PrivateKey };
 use bitcoin::util::bip143::SighashComponents;
 use bitcoin::secp256k1::{ All, Secp256k1, Message };
 
 // use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
+use super::super::Result;
 use uuid::Uuid;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -89,11 +90,6 @@ impl Wallet {
         }
     }
 
-    pub fn gen_shared_wallet(&mut self) -> &SharedWallet {
-        self.shared_wallets.push(SharedWallet::new(&self.client_shim, &self.network));
-        self.shared_wallets.last().unwrap()
-    }
-
     /// serialize wallet to json
     pub fn to_json(&self) -> serde_json::Value {
         json!({
@@ -131,7 +127,6 @@ impl Wallet {
         }
         let shared_wallets_str = &json["shared_wallets"].as_str().unwrap();
         if shared_wallets_str.len() != 2 { // is not empty
-            println!("got here");
             let shared_wallets:Vec<SharedWallet> = serde_json::from_str(shared_wallets_str).unwrap();
             wallet.shared_wallets = shared_wallets;
         }
@@ -178,8 +173,11 @@ impl Wallet {
     }
 
     /// Derive new child key from master extended key
-    fn derive_new_key(&mut self) -> Result<ExtendedPrivKey, bitcoin::util::bip32::Error> {
-        self.master_priv_key.ckd_priv(&self.secp, ChildNumber::from_hardened_idx(self.last_derived_pos).unwrap())
+    fn derive_new_key(&mut self) -> Result<ExtendedPrivKey> {
+        match self.master_priv_key.ckd_priv(&self.secp, ChildNumber::from_hardened_idx(self.last_derived_pos).unwrap()) {
+            Ok(res) => Ok(res),
+            Err(e) => Err(format_err!("{:?}",e))
+        }
     }
 
     /// Sign inputs with given addresses derived by this wallet. input_indices, addresses and amoumts lists
@@ -225,7 +223,41 @@ impl Wallet {
         return signed_transaction
     }
 
-    /// return alance of address
+    /// create new 2P-ECDSA wallet with state entity
+    pub fn gen_shared_wallet(&mut self, id: &String) -> Result<()> {
+        self.shared_wallets.push(SharedWallet::new(id, &self.client_shim, &self.network)?);
+        Ok(())
+    }
+
+    /// Get shared wallet by id. Return None if no shared wallet with given id.
+    pub fn get_shared_wallet(&self, id: &String) -> Option<&SharedWallet> {
+        for shared in &self.shared_wallets {
+            if shared.id == *id {
+                return Some(shared);
+            }
+        }
+        None
+    }
+
+    /// Get mutable reference to shared wallet by id. Return None if no shared wallet with given id.
+    pub fn get_shared_wallet_mut(&mut self, id: &String) -> Option<&mut SharedWallet> {
+        for shared in &mut self.shared_wallets {
+            if shared.id == *id {
+                return Some(shared);
+            }
+        }
+        None
+    }
+
+    /// Generate address for shared wallet
+    pub fn gen_addr_for_shared_wallet(&mut self, id: &String) -> Result<Address> {
+        match self.get_shared_wallet_mut(id) {
+            Some(shared) => Ok(shared.get_new_bitcoin_address()),
+            None => Err(format_err!("No shared wallet with id {}",id)),
+        }
+    }
+
+    /// return balance of address
     fn get_address_balance(&self, address: &bitcoin::Address) -> GetBalanceResponse {
         let resp = self.electrumx_client.get_balance(&address.to_string()).unwrap();
         GetBalanceResponse {

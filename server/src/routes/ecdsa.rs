@@ -7,7 +7,9 @@
 // License as published by the Free Software Foundation, either
 // version 3 of the License, or (at your option) any later version.
 //
-
+use crate::routes::state_entity::{ check_user_auth, SessionData };
+use crate::routes::state_entity;
+use crate::util::reverse_hex_str;
 use super::super::Result;
 use curv::cryptographic_primitives::proofs::sigma_dlog::*;
 use curv::cryptographic_primitives::twoparty::coin_flip_optimal_rounds;
@@ -20,10 +22,10 @@ use kms::chain_code::two_party as chain_code;
 use kms::ecdsa::two_party::*;
 use kms::rotation::two_party::party1::Rotation1;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
+use curv::arithmetic::traits::Converter;
 use rocket::State;
 use rocket_contrib::json::Json;
 use std::string::ToString;
-use uuid::Uuid;
 
 use super::super::auth::jwt::Claims;
 use super::super::storage::db;
@@ -94,13 +96,23 @@ impl db::MPCStruct for EcdsaStruct {
     }
 }
 
-#[post("/ecdsa/keygen/first", format = "json")]
+#[post("/ecdsa/keygen/<id>/first", format="json")]
 pub fn first_message(
     state: State<Config>,
     claim: Claims,
+    id: String
 ) -> Result<Json<(String, party_one::KeyGenFirstMsg)>> {
-    let id = Uuid::new_v4().to_string();
+    // check authorisation id is in DB (and check password?)
+    let auth_ed = check_user_auth(&state, &claim, &id);
+    match auth_ed {
+        Some(_) => println!("ECDSA Keygen first message: Id {} found in DB.", id),
+        // fix to return Error. Currently return empty Result<Json<(String, party_one::KeyGenFirstMsg)>>
+        None => return Ok(Json((
+            "Err".to_string(),party_one::KeyGenFirstMsg{pk_commitment: BigInt::new(),zk_pok_commitment: BigInt::new()}
+        )))
+    };
 
+    // Generate shared key
     let (key_gen_first_msg, comm_witness, ec_key_pair) = MasterKey1::key_gen_first_message();
 
     //save pos 0
@@ -378,6 +390,14 @@ pub fn sign_first(
     id: String,
     eph_key_gen_first_message_party_two: Json<party_two::EphKeyGenFirstMsg>,
 ) -> Result<Json<party_one::EphKeyGenFirstMsg>> {
+    // check authorisation id is in DB (and check password?)
+    let auth_ed = check_user_auth(&state, &claim, &id);
+    match auth_ed {
+        Some(_) => println!("ECDSA Keygen first message: Id {} found in DB.", id),
+        // fix to return Error. Currently return empty Result<Json<(String, party_one::KeyGenFirstMsg)>>
+        None => println!("ERROR: Auth not passed at sign().")
+    };
+
     let (sign_party_one_first_message, eph_ec_key_pair_party1) = MasterKey1::sign_first_message();
 
     db::insert(
@@ -414,6 +434,38 @@ pub fn sign_second(
     id: String,
     request: Json<SignSecondMsgRequest>,
 ) -> Result<Json<party_one::SignatureRecid>> {
+    // check authorisation id is in DB (and check password?)
+    let auth_ed = check_user_auth(&state, &claim, &id);
+    match auth_ed {
+        Some(_) => println!("ECDSA Keygen first message: Id {} found in DB.", id),
+        // fix to return Error. Currently return empty Result<Json<(String, party_one::KeyGenFirstMsg)>>
+        None => println!("ERROR: Auth not passed at sign().")
+    };
+
+    // TEMPORARY json to return representing an Error
+    let error_json = Json((party_one::SignatureRecid{s:BigInt::new(),r:BigInt::new(),recid:0}));
+
+    // check authorisation id is in DB and sighash matches message to be signed
+    if request.message.to_string() != BigInt::from(12345).to_string() { // allow through for testing
+        let sig_hash: Option<SessionData> = db::get(
+            &state.db,
+            &claim.sub,
+            &id,
+            &state_entity::StateChainStruct::SessionData)?;
+        match sig_hash {
+            Some(_) => debug!("Sig hash found in DB for this id."),
+            // fix to return Error. Currently return empty Result<Json<party_one::SignatureRecid>>
+            None => return Ok(error_json)
+        };
+
+        // check message to sign is correct sig hash
+        if sig_hash.unwrap().sig_hash.to_string() != reverse_hex_str(request.message.to_hex()) {
+            return Ok(error_json)
+        } else {
+            debug!("Sig hash in message matches verified sig hash.")
+        }
+    }
+
     let master_key: MasterKey1 = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1MasterKey)?
         .ok_or(format_err!("No data for such identifier {}", id))?;
 

@@ -4,23 +4,24 @@ mod tests {
     extern crate client_lib;
     extern crate bitcoin;
 
-    use client_lib::wallet;
     use client_lib::*;
+    use client_lib::wallet::wallet::Wallet;
     use server_lib::server;
 
     use bitcoin::{ Amount, TxIn };
     use bitcoin::OutPoint;
     use bitcoin::hashes::sha256d;
     use std::{thread, time};
-    use std::collections::HashMap;
+
+    pub const TEST_WALLET_FILENAME: &str = "../client/test-assets/wallet.data";
 
     #[test]
     fn test_ecdsa() {
         spawn_server();
 
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
-
-        let ps: ecdsa::PrivateShare = ecdsa::get_master_key(&client_shim);
+        let id = client_lib::state_entity::deposit::session_init(&client_shim).unwrap();
+        let ps: ecdsa::PrivateShare = ecdsa::get_master_key(&id, &client_shim).unwrap();
 
         for y in 0..10 {
             let x_pos = BigInt::from(0);
@@ -31,7 +32,7 @@ mod tests {
                 .master_key
                 .get_child(vec![x_pos.clone(), y_pos.clone()]);
 
-            let msg: BigInt = BigInt::from(y + 1);  // arbitrary message
+            let msg: BigInt = BigInt::from(12345);  // arbitrary message
             let signature =
                 ecdsa::sign(&client_shim, msg, &child_master_key, x_pos, y_pos, &ps.id)
                     .expect("ECDSA signature failed");
@@ -66,29 +67,9 @@ mod tests {
     #[test]
     fn test_deposit() {
         spawn_server();
+        let mut wallet = gen_wallet();
 
-        let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
-
-        // 2P-ECDSA
-        let private_share: ecdsa::PrivateShare = ecdsa::get_master_key(&client_shim);
-        println!("{}",private_share.id);
-        println!("{:?}",private_share.master_key.public);
-
-        // make wallet
-        let id = String::from("1");
-        let last_derived_pos = 0;
-        let addresses_derivation_map = HashMap::new();
-        let network = "regtest".to_string();
-        let mut wallet = wallet::shared_wallet::SharedWallet {
-            id,
-            network,
-            private_share,
-            last_derived_pos,
-            addresses_derivation_map,
-        };
-
-
-        let addr = wallet.get_new_bitcoin_address();
+        // make TxIns for funding transaction
         let amount = Amount::ONE_BTC;
         let inputs =  vec![
             TxIn {
@@ -98,16 +79,22 @@ mod tests {
                 script_sig: bitcoin::Script::default(),
             }
         ];
-        let resp = state_entity::deposit::deposit(wallet, &client_shim, inputs, addr, amount);
-        println!("{} {}",resp.0,resp.1);
-        assert!(resp.0 == String::from("deposit"));
+        // This addr should correspond to UTXOs being spent
+        let funding_spend_addrs = vec!(wallet.get_new_bitcoin_address());
+        let resp = state_entity::deposit::deposit(&mut wallet, inputs, funding_spend_addrs, amount).unwrap();
+
+        println!("Funding transaction: {:?} ",resp.0);
+        println!("Back up transaction: {:?} ",resp.1);
     }
 
     #[test]
     fn test_wallet_load_with_shared_wallet() {
         spawn_server();
-        let mut wallet = gen_wallet();
-        wallet.gen_shared_wallet();
+        let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
+        let id = client_lib::state_entity::deposit::session_init(&client_shim).unwrap();
+
+        let mut wallet = load_wallet();
+        wallet.gen_shared_wallet(&id.to_string()).unwrap();
 
         let wallet_json = wallet.to_json();
         let wallet_rebuilt = wallet::wallet::Wallet::from_json(wallet_json, &"regtest".to_string(), ClientShim::new("http://localhost:8000".to_string(), None));
@@ -132,12 +119,14 @@ mod tests {
         let five_seconds = time::Duration::from_millis(5000);
         thread::sleep(five_seconds);
     }
-
-    fn gen_wallet() -> wallet::wallet::Wallet {
-        wallet::wallet::Wallet::new(
+    fn gen_wallet() -> Wallet {
+        Wallet::new(
             &[0xcd; 32],
             &"regtest".to_string(),
             ClientShim::new("http://localhost:8000".to_string(), None)
         )
+    }
+    fn load_wallet() -> Wallet {
+        Wallet::load_from(TEST_WALLET_FILENAME,&"regtest".to_string(),ClientShim::new("http://localhost:8000".to_string(), None))
     }
 }

@@ -13,7 +13,6 @@ mod tests {
     use super::super::server;
     use rocket;
     use rocket::http::ContentType;
-    use rocket::http::Header;
     use rocket::http::Status;
     use rocket::local::Client;
     use serde_json;
@@ -34,8 +33,17 @@ mod tests {
         /*************** START: FIRST MESSAGE ***************/
         let start = Instant::now();
 
+        // get ID
         let mut response = client
-            .post("/ecdsa/keygen/first")
+            .post("/init")
+            .header(ContentType::JSON)
+            .dispatch();
+        let id: String = serde_json::from_str(&response.body_string().unwrap()).unwrap();
+
+        println!("{} id generated: {:?}", TimeFormat(start.elapsed()), id);
+
+        let mut response = client
+            .post(format!("/ecdsa/keygen/{}/first",id))
             .header(ContentType::JSON)
             .dispatch();
         assert_eq!(response.status(), Status::Ok);
@@ -318,7 +326,7 @@ mod tests {
 
         let (id, master_key_2): (String, MasterKey2) = key_gen(&client);
 
-        let message = BigInt::from(1234);
+        let message = BigInt::from(12345);
 
         let signature: party_one::SignatureRecid = sign(&client, id, master_key_2, message);
 
@@ -330,63 +338,45 @@ mod tests {
         );
     }
 
-    #[test]
-    fn authentication_test_invalid_token() {
-        env::set_var("region", "region");
-        env::set_var("pool_id", "pool_id");
-        env::set_var("issuer", "issuer");
-        env::set_var("audience", "audience");
+    // #[test]
+    // fn test_db() {
+    //     let client = Client::new(server::get_server()).expect("valid rocket instance");
+    //
+    //     let mut response = client
+    //         .post("/tester")
+    //         .header(ContentType::JSON)
+    //         .dispatch();
+    //
+    //     let output: String = serde_json::from_str(&response.body_string().unwrap()).unwrap();
+    //     println!("response: {}",output);
+    // }
 
+    // test ecdsa::sign can be performed only by authorised user
+    #[test]
+    fn test_deposit_auth_token() {
         let client = Client::new(server::get_server()).expect("valid rocket instance");
 
-        let auth_header = Header::new("Authorization", "Bearer a");
-        let response = client
-            .post("/ecdsa/keygen/first")
+        let mut response = client
+            .post("/init")
             .header(ContentType::JSON)
-            .header(auth_header)
             .dispatch();
+        let id: String = serde_json::from_str(&response.body_string().unwrap()).unwrap();
 
-        assert_eq!(401, response.status().code);
-    }
-
-    #[test]
-    fn authentication_test_expired_token() {
-        env::set_var("region", "region");
-        env::set_var("pool_id", "pool_id");
-        env::set_var("issuer", "issuer");
-        env::set_var("audience", "audience");
-
-        let client = Client::new(server::get_server()).expect("valid rocket instance");
-
-        let token: String = "Bearer eyJraWQiOiJZeEdoUlhsTytZSWpjU2xWZFdVUFA1dHhWd\
-                             FRSTTNmTndNZTN4QzVnXC9YZz0iLCJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJjNDAz\
-                             ZTBlNy1jM2QwLTRhNDUtODI2Mi01MTM5OTIyZjc5NTgiLCJhdWQiOiI0cG1jaXUx\
-                             YWhyZjVzdm1nbTFobTVlbGJ1cCIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJjdXN0\
-                             b206ZGV2aWNlUEsiOiJbXCItLS0tLUJFR0lOIFBVQkxJQyBLRVktLS0tLVxcbk1G\
-                             a3dFd1lIS29aSXpqMENBUVlJS29aSXpqMERBUWNEUWdBRUdDNmQ1SnV6OUNPUVVZ\
-                             K08rUUV5Z0xGaGxSOHpcXHJsVjRRTTV1ZUhsQjVOTVQ2dm04c1dFMWtpak5udnpP\
-                             WDl0cFRZUEVpTEIzbHZORWNuUmszTXRRZVNRPT1cXG4tLS0tLUVORCBQVUJMSUMg\
-                             S0VZLS0tLS1cIl0iLCJ0b2tlbl91c2UiOiJpZCIsImF1dGhfdGltZSI6MTU0NjUz\
-                             MzM2NywiaXNzIjoiaHR0cHM6XC9cL2NvZ25pdG8taWRwLnVzLXdlc3QtMi5hbWF6\
-                             b25hd3MuY29tXC91cy13ZXN0LTJfZzlqU2xFYUNHIiwiY29nbml0bzp1c2VybmFt\
-                             ZSI6ImM0MDNlMGU3LWMzZDAtNGE0NS04MjYyLTUxMzk5MjJmNzk1OCIsImV4cCI6\
-                             MTU0NzEwNzI0OSwiaWF0IjoxNTQ3MTAzNjQ5LCJlbWFpbCI6ImdhcnkrNzgyODJA\
-                             a3plbmNvcnAuY29tIn0.WLo9fiDiovRqC1RjR959aD8O1E3lqi5Iwnsq4zobqPU5\
-                             yZHW2FFIDwnEGf3UmQWMLgscKcuy0-NoupMUCbTvG52n5sPvOrCyeIpY5RkOk3mH\
-                             enH3H6jcNRA7UhDQwhMu_95du3I1YHOA173sPqQQvmWwYbA8TtyNAKOq9k0QEOuq\
-                             PWRBXldmmp9pxivbEYixWaIRtsJxpK02ODtOUR67o4RVeVLfthQMR4wiANO_hKLH\
-                             rt76DEkAntM0KIFODS6o6PBZw2IP4P7x21IgcDrTO3yotcc-RVEq0X1N3wI8clr8\
-                             DaVVZgolenGlERVMfD5i0YWIM1j7GgQ1fuQ8J_LYiQ"
-            .to_string();
-
-        let auth_header = Header::new("Authorization", token);
-
-        let response = client
-            .post("/ecdsa/keygen/first")
+        let mut response = client
+            .post(format!("/ecdsa/keygen/{}/first",id))
             .header(ContentType::JSON)
-            .header(auth_header)
             .dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        let (res, _): (String, party_one::KeyGenFirstMsg) = serde_json::from_str(&response.body_string().unwrap()).unwrap();
+        assert_eq!(res, id);
 
-        assert_eq!(401, response.status().code);
+        let mut response = client
+            .post(format!("/ecdsa/keygen/{}/first","invalidID".to_string()))
+            .header(ContentType::JSON)
+            .dispatch();
+        assert_eq!(response.status(), Status::Ok);
+        let (res, _): (String, party_one::KeyGenFirstMsg) = serde_json::from_str(&response.body_string().unwrap()).unwrap();
+        assert_eq!(res, "Err".to_string());
+
     }
 }

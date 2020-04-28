@@ -74,11 +74,10 @@ pub fn build_tx_k(funding_tx_in: &TxIn, p_address: &Address, amount: &Amount) ->
     Ok(tx_k)
 }
 
-/// build backup tx spending P output of txK to given backup address at maximum nSequence
-pub fn build_tx_1(mut txk_input: TxIn, b_address: &Address, amount: &Amount) -> Result<Transaction,()> {
-    txk_input.sequence = 65535;
+/// build backup tx spending P output of txK to given backup address
+pub fn build_tx_b(txk_input: &TxIn, b_address: &Address, amount: &Amount) -> Result<Transaction,()> {
     let tx_0 = Transaction {
-                input: vec![txk_input],
+                input: vec![txk_input.clone()],
                 output: vec![
                     TxOut {
                         script_pubkey: b_address.script_pubkey(),
@@ -128,7 +127,7 @@ mod tests {
         let tx_k = build_tx_k(tx_0.input.get(0).unwrap(), &addr, &amount).unwrap();
         // println!("{}", serde_json::to_string_pretty(&tx_k).unwrap());
 
-        let _tx_1 = build_tx_1(tx_k.input.get(0).unwrap().clone(), &addr, &amount).unwrap();
+        let _tx_1 = build_tx_b(&tx_k.input.get(0).unwrap(), &addr, &amount).unwrap();
         // println!("{}", serde_json::to_string_pretty(&tx_1).unwrap());
     }
 
