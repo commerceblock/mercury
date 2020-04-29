@@ -7,11 +7,11 @@
 // version 3 of the License, or (at your option) any later version.
 //
 
-use std::ffi::CString;
-use std::os::raw::c_char;
+// use std::ffi::CString;
+// use std::os::raw::c_char;
 
 pub mod requests;
 
-pub fn error_to_c_string(e: failure::Error) -> *mut c_char {
-    CString::new(format!("Error: {}", e.to_string())).unwrap().into_raw()
-}
+// pub fn error_to_c_string(e: failure::Error) -> *mut c_char {
+//     CString::new(format!("Error: {}", e.to_string())).unwrap().into_raw()
+// }

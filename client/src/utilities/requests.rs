@@ -9,15 +9,18 @@
 use serde;
 use std::time::Instant;
 use floating_duration::TimeFormat;
-use super::super::ClientShim;
 
-pub fn post<V>(client_shim: &ClientShim, path: &str) -> Option<V>
+use crate::error::CError;
+use super::super::ClientShim;
+use super::super::Result;
+
+pub fn post<V>(client_shim: &ClientShim, path: &str) -> Result<V>
     where V: serde::de::DeserializeOwned
 {
     _postb(client_shim, path, "{}")
 }
 
-pub fn postb<T, V>(client_shim: &ClientShim, path: &str, body: T) -> Option<V>
+pub fn postb<T, V>(client_shim: &ClientShim, path: &str, body: T) -> Result<V>
 where
     T: serde::ser::Serialize,
     V: serde::de::DeserializeOwned
@@ -25,7 +28,7 @@ where
     _postb(client_shim, path, body)
 }
 
-fn _postb<T, V>(client_shim: &ClientShim, path: &str, body: T) -> Option<V>
+fn _postb<T, V>(client_shim: &ClientShim, path: &str, body: T) -> Result<V>
     where
         T: serde::ser::Serialize,
         V: serde::de::DeserializeOwned
@@ -40,14 +43,26 @@ fn _postb<T, V>(client_shim: &ClientShim, path: &str, body: T) -> Option<V>
         b = b.bearer_auth(client_shim.auth_token.clone().unwrap());
     }
 
-    let res = b.json(&body).send();
+    // catch reqwest errors
+    let value = match b.json(&body).send() {
+        Ok(mut v) => v.text().unwrap(),
+        Err(e) => return Err(CError::from(e))
+    };
 
     info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
 
-    let value = match res {
-        Ok(mut v) => v.text().unwrap(),
-        Err(_) => return None
-    };
+    // catch State entity errors
+    if value == "User authorisation failed".to_string() {
+        return Err(CError::StateEntityError(value));
+    }
+    if value == "Signing Error: No sig hash found for state chain session.".to_string() {
+        return Err(CError::StateEntityError(value));
+    }
+    if value == "Signing Error: Message to be signed does not match verified sig hash.".to_string() {
+        return Err(CError::StateEntityError(value));
+    }
 
-    Some(serde_json::from_str(value.as_str()).unwrap())
+
+
+    Ok(serde_json::from_str(value.as_str()).unwrap())
 }

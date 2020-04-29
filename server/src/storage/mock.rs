@@ -3,6 +3,7 @@
 //! Mock Storage interface and implementation for building and testing State Entity.
 //! This should be implemented in DBv when we have decided on a storage method.
 
+use bitcoin::Transaction;
 use std::fmt;
 
 /// StateChain is an item in storage. It consists of an ID and chain of active transitory keys
@@ -11,20 +12,27 @@ pub struct StateChain {
     /// ID
     pub id: u32,
     /// chain of transitory key history
-    pub chain: Vec<String> // String for now. Unsure on data type at the moment.
+    pub chain: Vec<String>, // Chain of owners. String for now as unsure on data type at the moment.
+    /// backup transaction
+    pub tx_b: Transaction
 }
 impl StateChain {
     /// create a new StateChain
     pub fn new(id: u32) -> Self {
-        return StateChain{
+        return StateChain {
             id: id,
-            chain: Vec::new()
+            chain: Vec::new(),
+            tx_b: Transaction {
+                version: 2,
+                lock_time: 0,
+                input: vec!(),
+                output: vec!(),
+            }
         }
     }
 }
 impl fmt::Display for StateChain {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-
         write!(f, "Id: {} \nchain: {:?}", self.id, self.chain)
     }
 }
@@ -40,13 +48,16 @@ impl MockStorage {
     /// Create a MockStorage with all flags turned off by default
     pub fn new() -> Self {
         MockStorage {
-            state_chains: vec!(StateChain::new(0),StateChain::new(1),StateChain::new(2))
+            state_chains: vec!()
         }
     }
 }
 
+
 /// state chain DB
 pub trait Storage {
+    /// crate new state chain
+    fn new_chain(&mut self) -> u32;
     /// append new chain tip
     fn append_to_chain(&mut self, chain_id: usize, state_transition: String) -> Result<(),()>;
     /// return entire chain structure
@@ -56,6 +67,10 @@ pub trait Storage {
 }
 
 impl Storage for MockStorage {
+    fn new_chain(&mut self) -> u32 {
+        self.state_chains.push(StateChain::new(self.state_chains.len() as u32));
+        self.state_chains.last().unwrap().id.clone()
+    }
     fn append_to_chain(&mut self, chain_id: usize, state_transition: String) -> Result<(),()> {
         self.state_chains.get_mut(chain_id).unwrap().chain.push(state_transition);
         Ok(())
@@ -67,22 +82,4 @@ impl Storage for MockStorage {
         }
     }
     fn attest_via_mainstay(&self) -> Result<(),()> { unimplemented!()}
-}
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn quick_tests() {
-        // append
-        let mut mock_storage = MockStorage::new();
-        assert!(mock_storage.state_chains[0].chain.len() == 0);
-        let _ = mock_storage.append_to_chain(0, "test".to_string());
-        assert!(mock_storage.state_chains[0].chain[0] == "test");
-        assert!(mock_storage.state_chains[0].chain.len() == 1);
-        // get_chain_state
-        assert!(mock_storage.get_chain(0).unwrap().chain == ["test"]);
-    }
 }

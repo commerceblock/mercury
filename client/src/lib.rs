@@ -37,11 +37,12 @@ pub mod escrow;
 pub mod wallet;
 pub mod schnorr;
 pub mod state_entity;
+pub mod error;
 
 mod utilities;
 mod mocks;
 
-type Result<T> = std::result::Result<T, failure::Error>;
+type Result<T> = std::result::Result<T, error::CError>;
 
 #[derive(Debug, Clone)]
 pub struct ClientShim {

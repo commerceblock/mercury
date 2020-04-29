@@ -98,6 +98,7 @@ pub fn get_server() -> Rocket {
                 schnorr::keygen_second,
                 schnorr::keygen_third,
                 schnorr::sign,
+                state_entity::session_init,
                 state_entity::deposit_first
             ],
         )
