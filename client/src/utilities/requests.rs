@@ -55,6 +55,14 @@ fn _postb<T, V>(client_shim: &ClientShim, path: &str, body: T) -> Result<V>
     if value == "User authorisation failed".to_string() {
         return Err(CError::StateEntityError(value));
     }
+    if value == "Signing Error: No sig hash found for state chain session.".to_string() {
+        return Err(CError::StateEntityError(value));
+    }
+    if value == "Signing Error: Message to be signed does not match verified sig hash.".to_string() {
+        return Err(CError::StateEntityError(value));
+    }
+
+
 
     Ok(serde_json::from_str(value.as_str()).unwrap())
 }

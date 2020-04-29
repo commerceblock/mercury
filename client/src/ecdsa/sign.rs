@@ -68,12 +68,6 @@ fn get_signature(
 
     let signature: party_one::SignatureRecid =
         requests::postb(client_shim, &format!("/ecdsa/sign/{}/second", id), &request)?;
-    // catch error with empty party_one::SignatureRecid for now
-    if signature.s == BigInt::from(0) {
-        if signature.r == BigInt::from(0) {
-            // return Err(format_err!("Sig hash in message to sign does not match with back-up transaction data provided to State Entity."));
-        }
-    }
 
     Ok(signature)
 }

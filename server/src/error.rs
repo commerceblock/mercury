@@ -15,6 +15,8 @@ use std::io::Cursor;
 pub enum SEError {
     /// Athorisation failed
     AuthError,
+    /// None or incorrect sig hash found for statechain
+    SigningError(String),
     /// Generic error from string error message
     Generic(String),
 }
@@ -30,17 +32,12 @@ impl fmt::Display for SEError {
         match *self {
             SEError::Generic(ref e) => write!(f, "generic Error: {}", e),
             SEError::AuthError => write!(f,"User authorisation failed"),
+            SEError::SigningError(ref e) => write!(f,"Signing Error: {}",e),
         }
     }
 }
 
 impl error::Error for SEError {
-    fn description(&self) -> &str {
-        match *self {
-            SEError::Generic(_) => "Generic error",
-            SEError::AuthError => "User authorisation failed",
-        }
-    }
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match *self {
             _ => None,

@@ -426,10 +426,7 @@ pub fn sign_second(
     // check authorisation id is in DB (and check password?)
     check_user_auth(&state, &claim, &id)?;
 
-    // TEMPORARY json to return representing an Error
-    let error_json = Json((party_one::SignatureRecid{s:BigInt::new(),r:BigInt::new(),recid:0}));
-
-    // check authorisation id is in DB and sighash matches message to be signed
+    // checksighash matches message to be signed
     if request.message.to_string() != BigInt::from(12345).to_string() { // allow through for testing
         let sig_hash: Option<SessionData> = db::get(
             &state.db,
@@ -439,12 +436,12 @@ pub fn sign_second(
         match sig_hash {
             Some(_) => debug!("Sig hash found in DB for this id."),
             // fix to return Error. Currently return empty Result<Json<party_one::SignatureRecid>>
-            None => return Ok(error_json)
+            None => return Err(SEError::SigningError(String::from("No sig hash found for state chain session.")))
         };
 
         // check message to sign is correct sig hash
         if sig_hash.unwrap().sig_hash.to_string() != reverse_hex_str(request.message.to_hex()) {
-            return Ok(error_json)
+            return Err(SEError::SigningError(String::from("Message to be signed does not match verified sig hash.")))
         } else {
             debug!("Sig hash in message matches verified sig hash.")
         }
