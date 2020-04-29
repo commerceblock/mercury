@@ -338,24 +338,11 @@ mod tests {
         );
     }
 
-    // #[test]
-    // fn test_db() {
-    //     let client = Client::new(server::get_server()).expect("valid rocket instance");
-    //
-    //     let mut response = client
-    //         .post("/tester")
-    //         .header(ContentType::JSON)
-    //         .dispatch();
-    //
-    //     let output: String = serde_json::from_str(&response.body_string().unwrap()).unwrap();
-    //     println!("response: {}",output);
-    // }
-
     // test ecdsa::sign can be performed only by authorised user
     #[test]
-    fn test_deposit_auth_token() {
+    fn test_auth_token() {
         let client = Client::new(server::get_server()).expect("valid rocket instance");
-
+        // generate ID
         let mut response = client
             .post("/init")
             .header(ContentType::JSON)
@@ -367,16 +354,17 @@ mod tests {
             .header(ContentType::JSON)
             .dispatch();
         assert_eq!(response.status(), Status::Ok);
+
         let (res, _): (String, party_one::KeyGenFirstMsg) = serde_json::from_str(&response.body_string().unwrap()).unwrap();
         assert_eq!(res, id);
 
+        // use incorrect ID
         let mut response = client
             .post(format!("/ecdsa/keygen/{}/first","invalidID".to_string()))
             .header(ContentType::JSON)
             .dispatch();
-        assert_eq!(response.status(), Status::Ok);
-        let (res, _): (String, party_one::KeyGenFirstMsg) = serde_json::from_str(&response.body_string().unwrap()).unwrap();
-        assert_eq!(res, "Err".to_string());
 
+        let res = response.body_string().unwrap();
+        assert_eq!(res, "User authorisation failed".to_string());
     }
 }

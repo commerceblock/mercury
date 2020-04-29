@@ -16,6 +16,24 @@ mod tests {
     pub const TEST_WALLET_FILENAME: &str = "../client/test-assets/wallet.data";
 
     #[test]
+    fn test_session_init() {
+        spawn_server();
+        let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
+        let res = client_lib::state_entity::deposit::session_init(&client_shim);
+        assert!(res.is_ok());
+        println!("ID: {}",res.unwrap());
+    }
+
+    #[test]
+    fn test_failed_auth() {
+        spawn_server();
+        let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
+        if let Err(e) = ecdsa::get_master_key(&"Invalid id".to_string(), &client_shim) {
+            assert_eq!(e.to_string(),"State Entity Error: User authorisation failed".to_string());
+        }
+    }
+
+    #[test]
     fn test_ecdsa() {
         spawn_server();
 
@@ -82,7 +100,6 @@ mod tests {
         // This addr should correspond to UTXOs being spent
         let funding_spend_addrs = vec!(wallet.get_new_bitcoin_address());
         let resp = state_entity::deposit::deposit(&mut wallet, inputs, funding_spend_addrs, amount).unwrap();
-
         println!("Funding transaction: {:?} ",resp.0);
         println!("Back up transaction: {:?} ",resp.1);
     }

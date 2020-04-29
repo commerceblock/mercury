@@ -3,6 +3,7 @@ use super::Result;
 use super::ClientShim;
 use multi_party_schnorr::protocols::thresholdsig::zilliqa_schnorr::*;
 pub use multi_party_schnorr::protocols::thresholdsig::zilliqa_schnorr::{Signature, Share};
+use crate::error::CError::SchnorrError;
 
 const PREFIX: &str = "schnorr";
 const PARTY1_INDEX: usize = 1; // server
@@ -32,7 +33,7 @@ pub fn generate_key(client_shim: &ClientShim) -> Result<Share> {
         &vec![party1_msg2.clone(), msg2],
         &vec![party1_msg1, msg1],
         &vec![PARTY1_INDEX, PARTY2_INDEX])
-        .or_else(|e| Err(e))?;
+        .or_else(|e| Err(SchnorrError(e.to_string())))?;
     let msg3 = KeyGenMessage3 {
         vss_scheme,
         secret_share: secret_shares[PARTY1_INDEX - 1],
@@ -50,7 +51,7 @@ pub fn generate_key(client_shim: &ClientShim) -> Result<Share> {
         &vec![party1_msg3.secret_share, secret_shares[key.party_index - 1]],
         &vss_scheme_vec,
         &key.party_index)
-        .or_else(|e| Err(e))?;
+        .or_else(|e| Err(SchnorrError(e.to_string())))?;
 
     let share: Share = Share {
         id,
@@ -91,7 +92,7 @@ pub fn sign(
         &vec![PARTY1_INDEX - 1, PARTY2_INDEX - 1],
         &share.vss_scheme_vec,
         &eph_share.vss_scheme_vec)
-        .or_else(|e| Err(e))?;
+        .or_else(|e| Err(SchnorrError(e.to_string())))?;
 
     let signature = Signature::generate(
         &vss_sum_local_sigs,
@@ -102,6 +103,6 @@ pub fn sign(
         message_slice,
     );
     signature.verify(message_slice, &share.shared_key.y)
-        .or_else(|e| Err(format_err!("{}", e)))
+        .or_else(|e| Err(SchnorrError(e.to_string())))
         .and_then(|()| Ok(signature))
 }

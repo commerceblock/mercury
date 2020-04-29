@@ -2,6 +2,7 @@
 //!
 //! State Entity implementation
 
+use crate::error::SEError;
 use crate::util::build_tx_b;
 use bitcoin::{ Address, Amount, OutPoint, TxIn };
 use bitcoin::hashes::sha256d;
@@ -61,6 +62,9 @@ pub fn session_init(
     // generate shared wallet ID (user ID)
     let user_id = Uuid::new_v4().to_string();
 
+    // Verification/PoW/authoriation falied
+    // Err(SEError::AuthError)
+
     // create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
     db::insert(
@@ -72,22 +76,22 @@ pub fn session_init(
             id: user_id.clone(),
         }
     )?;
-
     Ok(Json(user_id))
 }
 
-/// Authenticate User
+/// check if user has passed authentication
 pub fn check_user_auth(
     state: &State<Config>,
     claim: &Claims,
     id: &String
-) -> Option<UserSession> {
+) -> Result<UserSession> {
     // check authorisation id is in DB (and check password?)
     db::get(
         &state.db,
         &claim.sub,
         &id,
         &StateChainStruct::UserSession).unwrap()
+    .ok_or(SEError::AuthError)
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -110,12 +114,8 @@ pub fn deposit_first(
     deposit_msg: Json<DepositMessage1>,
 ) -> Result<Json<()>> {
     // auth user
-    let auth_ed = check_user_auth(&state, &claim, &id);
-    match auth_ed {
-        Some(_) => println!("ECDSA Keygen first message: Id {} found in DB.", id),
-        // fix to return Error. Currently return empty Result<Json<(String, party_one::KeyGenFirstMsg)>>
-        None => println!("deposit_first() auth error")
-    };
+    check_user_auth(&state, &claim, &id)?;
+
     // rebuild tx_b sig hash to verify co-sign will be signing the correct data
     let tx_b_txin = TxIn {
         previous_output: OutPoint {

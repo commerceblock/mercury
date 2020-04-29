@@ -27,11 +27,8 @@ pub fn get_master_key(id: &String, client_shim: &ClientShim) -> Result<PrivateSh
     let start = Instant::now();
 
     let (id, kg_party_one_first_message): (String, party_one::KeyGenFirstMsg) =
-        requests::post(client_shim, &format!("{}/{}/first", KG_PATH_PRE, id)).unwrap();
-    // have to do this here for now until rocket::Error handling implemented
-    if id == "Err".to_string() {
-        return Err(format_err!("Auth not passed. ID not known to State Entity"));
-    }
+        requests::post(client_shim, &format!("{}/{}/first", KG_PATH_PRE, id))?;
+
     let (kg_party_two_first_message, kg_ec_key_pair_party2) = MasterKey2::key_gen_first_message();
 
     let body = &kg_party_two_first_message.d_log_proof;

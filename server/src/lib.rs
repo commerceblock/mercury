@@ -52,8 +52,9 @@ pub mod server;
 pub mod storage;
 pub mod util;
 pub mod tests;
+pub mod error;
 
-type Result<T> = std::result::Result<T, failure::Error>;
+type Result<T> = std::result::Result<T, error::SEError>;
 
 pub struct Config {
     pub db: storage::db::DB,

@@ -2,6 +2,7 @@
 //!
 //! Basic Bitcoin wallet functionality. Full key owned by this wallet.
 
+use crate::error::{ CError, WalletErrorType::SharedWalletNotFound };
 use crate::mocks::mock_electrum::MockElectrum;
 use crate::wallet::shared_wallet::SharedWallet;
 use crate::ClientShim;
@@ -70,7 +71,6 @@ pub struct Wallet {
     pub addresses_derivation_map: HashMap<String, AddressDerivation>,
     pub shared_wallets: Vec<SharedWallet> // vector of wallets co-owned with state entities
 }
-
 impl Wallet {
     pub fn new(seed: &[u8], network: &String, client_shim: ClientShim) -> Wallet {
         let secp = Secp256k1::new();
@@ -176,7 +176,7 @@ impl Wallet {
     fn derive_new_key(&mut self) -> Result<ExtendedPrivKey> {
         match self.master_priv_key.ckd_priv(&self.secp, ChildNumber::from_hardened_idx(self.last_derived_pos).unwrap()) {
             Ok(res) => Ok(res),
-            Err(e) => Err(format_err!("{:?}",e))
+            Err(e) => Err(CError::from(e))
         }
     }
 
@@ -253,7 +253,7 @@ impl Wallet {
     pub fn gen_addr_for_shared_wallet(&mut self, id: &String) -> Result<Address> {
         match self.get_shared_wallet_mut(id) {
             Some(shared) => Ok(shared.get_new_bitcoin_address()),
-            None => Err(format_err!("No shared wallet with id {}",id)),
+            None => Err(CError::WalletError(SharedWalletNotFound,id.to_string())),
         }
     }
 
@@ -437,4 +437,12 @@ mod tests {
         println!("balances: {:?}",wallet.get_all_addresses_balance());
         println!("list unspent: {:?}",wallet.list_unspent());
     }
+    #[test]
+    fn test_gen_shared_addr_error() {
+        let mut wallet = gen_wallet();
+        if let Err(e) = wallet.gen_addr_for_shared_wallet(&"id".to_string()) {
+            assert_eq!(e.to_string(),"Wallet Error: No shared wallet found. (value: id)".to_string())
+        }
+    }
+
 }
