@@ -18,8 +18,8 @@ mod tests {
     #[test]
     fn test_session_init() {
         spawn_server();
-        let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
-        let res = client_lib::state_entity::deposit::session_init(&client_shim);
+        let mut wallet = load_wallet();
+        let res = client_lib::state_entity::deposit::session_init(&mut wallet);
         assert!(res.is_ok());
         println!("ID: {}",res.unwrap());
     }
@@ -37,9 +37,9 @@ mod tests {
     fn test_ecdsa() {
         spawn_server();
 
-        let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
-        let id = client_lib::state_entity::deposit::session_init(&client_shim).unwrap();
-        let ps: ecdsa::PrivateShare = ecdsa::get_master_key(&id, &client_shim).unwrap();
+        let mut wallet = load_wallet();
+        let id = client_lib::state_entity::deposit::session_init(&mut wallet).unwrap();
+        let ps: ecdsa::PrivateShare = ecdsa::get_master_key(&id, &wallet.client_shim).unwrap();
 
         for y in 0..10 {
             let x_pos = BigInt::from(0);
@@ -52,7 +52,7 @@ mod tests {
 
             let msg: BigInt = BigInt::from(12345);  // arbitrary message
             let signature =
-                ecdsa::sign(&client_shim, msg, &child_master_key, x_pos, y_pos, &ps.id)
+                ecdsa::sign(&wallet.client_shim, msg, &child_master_key, x_pos, y_pos, &ps.id)
                     .expect("ECDSA signature failed");
 
             println!(
@@ -107,10 +107,9 @@ mod tests {
     #[test]
     fn test_wallet_load_with_shared_wallet() {
         spawn_server();
-        let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
-        let id = client_lib::state_entity::deposit::session_init(&client_shim).unwrap();
 
         let mut wallet = load_wallet();
+        let id = client_lib::state_entity::deposit::session_init(&mut wallet).unwrap();
         wallet.gen_shared_wallet(&id.to_string()).unwrap();
 
         let wallet_json = wallet.to_json();

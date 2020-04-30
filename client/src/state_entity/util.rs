@@ -2,17 +2,24 @@
 //!
 //! Utilities methods for state entity and mock classes
 
+use super::super::utilities::requests;
+use super::super::Result;
+use crate::wallet::wallet::Wallet;
+use crate::ecdsa;
 
-use rand::rngs::OsRng;
 use bitcoin::util;
-use bitcoin::secp256k1::{ Secp256k1, key::SecretKey };
-
-use bitcoin::blockdata::transaction::{ TxIn, TxOut, Transaction };
+use bitcoin::{ Address, Amount, Transaction, TxIn, TxOut };
+use bitcoin::util::bip143::SighashComponents;
+use bitcoin::secp256k1::{ Secp256k1, key::SecretKey, Signature };
 use bitcoin::blockdata::script::Builder;
 use bitcoin::blockdata::opcodes::OP_TRUE;
-use bitcoin::util::{ address::Address, amount::Amount };
 use bitcoin::network::constants::Network;
+use curv::{BigInt};
+use curv::arithmetic::traits::Converter;
+use curv::elliptic::curves::traits::ECPoint;
 
+use rand::rngs::OsRng;
+use std::str::FromStr;
 
 /// network - move this to config
 pub const NETWORK: bitcoin::network::constants::Network = Network::Regtest;
@@ -35,8 +42,63 @@ pub fn generate_keypair() -> (util::key::PrivateKey, util::key::PublicKey) {
     return (priv_key, pub_key)
 }
 
+/// struct contains data necessary to caluculate tx input sighash
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PrepareSignTxMessage {
+    pub spending_addr: String, // address which funding tx funds are sent to
+    pub input_txid: String,
+    pub input_vout: u32,
+    pub input_seq: u32,
+    pub address: String,
+    pub amount: u64
+}
+
+pub fn cosign_tx_input(wallet: &mut Wallet, shared_wallet_id: &String, tx: &Transaction, prepare_sign_msg: &PrepareSignTxMessage) -> Result<Transaction> {
+
+    // message 1 - send back-up tx data for validation.
+    requests::postb(&wallet.client_shim, &format!("prepare-sign/{}", shared_wallet_id), prepare_sign_msg)?;
+
+    // Co-sign back-up tx
+    // get sigHash and transform into message to be signed
+    let mut tx_signed = tx.clone();
+    let comp = SighashComponents::new(&tx);
+    let sig_hash = comp.sighash_all(
+        &tx.input[0],
+        &Address::from_str(&prepare_sign_msg.spending_addr).unwrap().script_pubkey(),
+        prepare_sign_msg.amount
+    );
+
+    let shared_wal = wallet.get_shared_wallet(&shared_wallet_id).expect("No shared wallet found for id");
+    let address_derivation = shared_wal.addresses_derivation_map.get(&prepare_sign_msg.spending_addr).unwrap();
+    let mk = &address_derivation.mk;
+
+    // co-sign back up tranaction
+    let signature = ecdsa::sign(
+        &wallet.client_shim,
+        BigInt::from_hex(&hex::encode(&sig_hash[..])),
+        &mk,
+        BigInt::from(0),
+        BigInt::from(address_derivation.pos),
+        &shared_wal.private_share.id,
+    ).unwrap();
+
+    let mut v = BigInt::to_vec(&signature.r);
+    v.extend(BigInt::to_vec(&signature.s));
+
+    let mut sig_vec = Signature::from_compact(&v[..])
+        .unwrap()
+        .serialize_der()
+        .to_vec();
+    sig_vec.push(01);
+
+    let pk_vec = mk.public.q.get_element().serialize().to_vec();
+
+    tx_signed.input[0].witness = vec![sig_vec, pk_vec];
+    Ok(tx_signed)
+}
+
 /// build funding tx spending inputs to p2wpkh address P for amount A
-pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &Address, amount: &Amount) -> Result<Transaction,()> {
+pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &Address, amount: &Amount) -> Result<Transaction> {
     let tx_0 = Transaction {
                 input: inputs.to_vec(),
                 output: vec![
@@ -54,7 +116,7 @@ pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &Address, amount: &Amount) -> R
 /// build kick-off transaction spending funding tx to:
 ///     - amount A-D to p2wpkh address P, and
 ///     - amount D to script OP_TRUE
-pub fn build_tx_k(funding_tx_in: &TxIn, p_address: &Address, amount: &Amount) -> Result<Transaction,()> {
+pub fn build_tx_k(funding_tx_in: &TxIn, p_address: &Address, amount: &Amount) -> Result<Transaction> {
     let script = Builder::new().push_opcode(OP_TRUE).into_script();
     let tx_k = Transaction {
                 input: vec![funding_tx_in.clone()],
@@ -75,7 +137,7 @@ pub fn build_tx_k(funding_tx_in: &TxIn, p_address: &Address, amount: &Amount) ->
 }
 
 /// build backup tx spending P output of txK to given backup address
-pub fn build_tx_b(txk_input: &TxIn, b_address: &Address, amount: &Amount) -> Result<Transaction,()> {
+pub fn build_tx_b(txk_input: &TxIn, b_address: &Address, amount: &Amount) -> Result<Transaction> {
     let tx_0 = Transaction {
                 input: vec![txk_input.clone()],
                 output: vec![

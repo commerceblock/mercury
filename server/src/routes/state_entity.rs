@@ -31,6 +31,7 @@ pub struct StateChain {
 pub struct UserSession {
     pub id: String,
     // pub pass: String
+    pub proof_key: String // user's public proof key
 }
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct SessionData {
@@ -54,10 +55,12 @@ impl db::MPCStruct for StateChainStruct {
 /// Initiliase session
 ///     - Generate and return shared wallet ID
 ///     - Can do auth or other DDoS mitigation here
-#[post("/init", format = "json")]
+///     - Input
+#[post("/init", format = "json", data = "<proof_key>")]
 pub fn session_init(
     state: State<Config>,
     claim: Claims,
+    proof_key: String,
 ) -> Result<Json<(String)>> {
     // generate shared wallet ID (user ID)
     let user_id = Uuid::new_v4().to_string();
@@ -74,6 +77,7 @@ pub fn session_init(
         &StateChainStruct::UserSession,
         &UserSession {
             id: user_id.clone(),
+            proof_key: proof_key,
         }
     )?;
     Ok(Json(user_id))
@@ -94,50 +98,51 @@ pub fn check_user_auth(
     .ok_or(SEError::AuthError)
 }
 
+/// struct contains data necessary to caluculate tx input sighash
 #[derive(Serialize, Deserialize, Debug)]
-pub struct DepositMessage1 {
-    p_addr: String, // address which funding tx funds are sent to
-    tx_b_input_txid: String,
-    tx_b_input_vout: u32,
-    tx_b_input_seq: u32,
-    tx_b_address: String,
-    tx_b_amount: u64
+pub struct PrepareSignTxMessage {
+    spending_addr: String, // address which funding tx funds are sent to
+    input_txid: String,
+    input_vout: u32,
+    input_seq: u32,
+    address: String,
+    amount: u64
 }
 
-/// deposit first message
-///     - calculate and store back up tx sighash for validation before performing ecdsa::sign
-#[post("/deposit/<id>/first", format = "json", data = "<deposit_msg>")]
-pub fn deposit_first(
+/// prepare to sign a transaction input
+///     - calculate and store tx sighash for validation before performing ecdsa::sign
+#[post("/prepare-sign/<id>", format = "json", data = "<prepare_sign_msg>")]
+pub fn prepare_sign(
     state: State<Config>,
     claim: Claims,
     id: String,
-    deposit_msg: Json<DepositMessage1>,
+    prepare_sign_msg: Json<PrepareSignTxMessage>,
 ) -> Result<Json<()>> {
     // auth user
     check_user_auth(&state, &claim, &id)?;
 
     // rebuild tx_b sig hash to verify co-sign will be signing the correct data
-    let tx_b_txin = TxIn {
+    let txin = TxIn {
         previous_output: OutPoint {
-            txid: sha256d::Hash::from_str(&deposit_msg.tx_b_input_txid).unwrap(),
-            vout: deposit_msg.tx_b_input_vout
+            txid: sha256d::Hash::from_str(&prepare_sign_msg.input_txid).unwrap(),
+            vout: prepare_sign_msg.input_vout
         },
-        sequence: deposit_msg.tx_b_input_seq,
+        sequence: prepare_sign_msg.input_seq,
         witness: Vec::new(),
         script_sig: bitcoin::Script::default(),
     };
 
     let tx_b = build_tx_b(
-        &tx_b_txin,
-        &Address::from_str(&deposit_msg.tx_b_address).unwrap(),
-        &Amount::from_sat(deposit_msg.tx_b_amount)
+        &txin,
+        &Address::from_str(&prepare_sign_msg.address).unwrap(),
+        &Amount::from_sat(prepare_sign_msg.amount)
     ).unwrap();
 
     let comp = SighashComponents::new(&tx_b);
     let sig_hash = comp.sighash_all(
-        &tx_b_txin,
-        &Address::from_str(&deposit_msg.p_addr).unwrap().script_pubkey(),
-        deposit_msg.tx_b_amount
+        &txin,
+        &Address::from_str(&prepare_sign_msg.spending_addr).unwrap().script_pubkey(),
+        prepare_sign_msg.amount
     );
 
     // store sig_hash with state chain id

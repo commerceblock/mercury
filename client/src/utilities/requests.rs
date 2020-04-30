@@ -61,8 +61,9 @@ fn _postb<T, V>(client_shim: &ClientShim, path: &str, body: T) -> Result<V>
     if value == "Signing Error: Message to be signed does not match verified sig hash.".to_string() {
         return Err(CError::StateEntityError(value));
     }
-
-
+    if value == "Invalid sig hash - Odd number of characters.".to_string() {
+        return Err(CError::StateEntityError(value));
+    }
 
     Ok(serde_json::from_str(value.as_str()).unwrap())
 }

@@ -2,11 +2,12 @@
 //!
 //! Utilities methods for state entity and mock classes
 
+use super::Result;
+use crate::error::SEError;
 
 use rand::rngs::OsRng;
 use bitcoin::util;
 use bitcoin::secp256k1::{ Secp256k1, key::SecretKey };
-
 use bitcoin::blockdata::transaction::{ TxIn, TxOut, Transaction };
 use bitcoin::blockdata::script::Builder;
 use bitcoin::blockdata::opcodes::OP_TRUE;
@@ -22,8 +23,10 @@ const DUSTLIMIT: u64 = 100;
 const FEE: u64 = 1000;
 
 
-pub fn reverse_hex_str(hex_str: String) -> String {
-    assert!(hex_str.len() % 2 == 0);
+pub fn reverse_hex_str(hex_str: String) -> Result<String> {
+    if hex_str.len() % 2 != 0 {
+        return Err(SEError::SigningError(String::from("Invalid sig hash - Odd number of characters.")))
+    }
     let mut hex_str = hex_str.chars().rev().collect::<String>();
     let mut result = String::with_capacity(hex_str.len());
     unsafe {
@@ -33,7 +36,7 @@ pub fn reverse_hex_str(hex_str: String) -> String {
             result.push(char::from(hex_vec[i]));
         }
     }
-    return result
+    Ok(result)
 }
 
 /// generate bitcoin::util::key key pair
@@ -51,7 +54,7 @@ pub fn generate_keypair() -> (util::key::PrivateKey, util::key::PublicKey) {
 }
 
 /// build funding tx spending inputs to p2wpkh address P for amount A
-pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &Address, amount: &Amount) -> Result<Transaction,()> {
+pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &Address, amount: &Amount) -> Result<Transaction> {
     let tx_0 = Transaction {
                 input: inputs.to_vec(),
                 output: vec![
@@ -69,7 +72,7 @@ pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &Address, amount: &Amount) -> R
 /// build kick-off transaction spending funding tx to:
 ///     - amount A-D to p2wpkh address P, and
 ///     - amount D to script OP_TRUE
-pub fn build_tx_k(funding_tx_in: &TxIn, p_address: &Address, amount: &Amount) -> Result<Transaction,()> {
+pub fn build_tx_k(funding_tx_in: &TxIn, p_address: &Address, amount: &Amount) -> Result<Transaction> {
     let script = Builder::new().push_opcode(OP_TRUE).into_script();
     let tx_k = Transaction {
                 input: vec![funding_tx_in.clone()],
@@ -90,7 +93,7 @@ pub fn build_tx_k(funding_tx_in: &TxIn, p_address: &Address, amount: &Amount) ->
 }
 
 /// build backup tx spending P output of txK to given backup address
-pub fn build_tx_b(txk_input: &TxIn, b_address: &Address, amount: &Amount) -> Result<Transaction,()> {
+pub fn build_tx_b(txk_input: &TxIn, b_address: &Address, amount: &Amount) -> Result<Transaction> {
     let tx_0 = Transaction {
                 input: vec![txk_input.clone()],
                 output: vec![

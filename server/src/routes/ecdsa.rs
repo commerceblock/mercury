@@ -7,11 +7,12 @@
 // License as published by the Free Software Foundation, either
 // version 3 of the License, or (at your option) any later version.
 //
+use super::super::Result;
 use crate::routes::state_entity::{ check_user_auth, SessionData };
 use crate::routes::state_entity;
 use crate::util::reverse_hex_str;
 use crate::error::SEError;
-use super::super::Result;
+
 use curv::cryptographic_primitives::proofs::sigma_dlog::*;
 use curv::cryptographic_primitives::twoparty::coin_flip_optimal_rounds;
 use curv::cryptographic_primitives::twoparty::dh_key_exchange_variant_with_pok_comm::{
@@ -440,7 +441,7 @@ pub fn sign_second(
         };
 
         // check message to sign is correct sig hash
-        if sig_hash.unwrap().sig_hash.to_string() != reverse_hex_str(request.message.to_hex()) {
+        if sig_hash.unwrap().sig_hash.to_string() != reverse_hex_str(request.message.to_hex())? {
             return Err(SEError::SigningError(String::from("Message to be signed does not match verified sig hash.")))
         } else {
             debug!("Sig hash in message matches verified sig hash.")
