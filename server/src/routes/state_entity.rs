@@ -4,9 +4,12 @@
 
 use crate::error::SEError;
 use crate::util::build_tx_b;
-use bitcoin::{ Address, Amount, OutPoint, TxIn };
+use bitcoin::{ Address, Amount, OutPoint, TxIn, PublicKey, Transaction };
 use bitcoin::hashes::sha256d;
 use bitcoin::util::bip143::SighashComponents;
+
+use curv::elliptic::curves::traits::ECScalar;
+use curv::FE;
 
 use super::super::Result;
 use rocket_contrib::json::Json;
@@ -24,63 +27,51 @@ pub struct StateChain {
     pub id: String,
     /// chain of transitory key history (owners)
     pub chain: Vec<String>, // Chain of owners. String for now as unsure on data type at the moment.
+    /// current back-up transaction
+    pub backup_tx: Option<Transaction>
 }
 
-/// user ID
+/// User ID
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct UserSession {
+    /// User's identification
     pub id: String,
+    /// User's password
     // pub pass: String
-    pub proof_key: String // user's public proof key
+    /// User's public proof key
+    pub proof_key: String
 }
+/// User Session Data
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct SessionData {
+    /// back up tx's sig hash
     pub sig_hash: sha256d::Hash,
+    /// back up tx
+    pub backup_tx: Transaction,
+    /// ID of state chain that this back up tx is for
     pub state_chain_id: String
+}
+
+/// TransferData provides new Owner's data for UserSession and SessionData structs
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct TransferData {
+    pub state_chain_id: String,
+    pub receiver_proof_key: PublicKey,
+    pub x1: FE
 }
 
 #[derive(Debug)]
 pub enum StateChainStruct {
     UserSession,
     SessionData,
-    StateChain
+    StateChain,
+    TransferData
 }
 
 impl db::MPCStruct for StateChainStruct {
     fn to_string(&self) -> String {
         format!("StateChain{:?}", self)
     }
-}
-
-/// Initiliase session
-///     - Generate and return shared wallet ID
-///     - Can do auth or other DDoS mitigation here
-///     - Input
-#[post("/init", format = "json", data = "<proof_key>")]
-pub fn session_init(
-    state: State<Config>,
-    claim: Claims,
-    proof_key: String,
-) -> Result<Json<(String)>> {
-    // generate shared wallet ID (user ID)
-    let user_id = Uuid::new_v4().to_string();
-
-    // Verification/PoW/authoriation falied
-    // Err(SEError::AuthError)
-
-    // create DB entry for newly generated ID signalling that user has passed some
-    // verification. For now use ID as 'password' to interact with state entity
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &user_id,
-        &StateChainStruct::UserSession,
-        &UserSession {
-            id: user_id.clone(),
-            proof_key: proof_key,
-        }
-    )?;
-    Ok(Json(user_id))
 }
 
 /// check if user has passed authentication
@@ -98,21 +89,107 @@ pub fn check_user_auth(
     .ok_or(SEError::AuthError)
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DepositMsg1 {
+    pub proof_key: String,
+}
+
+/// Initiliase deposit protocol
+///     - Generate and return shared wallet ID
+///     - Can do auth or other DoS mitigation here
+///     - Input
+#[post("/deposit/init", format = "json", data = "<msg1>")]
+pub fn deposit_init(
+    state: State<Config>,
+    claim: Claims,
+    msg1: Json<DepositMsg1>,
+) -> Result<Json<(String)>> {
+    // generate shared wallet ID (user ID)
+    let user_id = Uuid::new_v4().to_string();
+
+    // Verification/PoW/authoriation failed
+    // Err(SEError::AuthError)
+
+    // create DB entry for newly generated ID signalling that user has passed some
+    // verification. For now use ID as 'password' to interact with state entity
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &user_id,
+        &StateChainStruct::UserSession,
+        &UserSession {
+            id: user_id.clone(),
+            proof_key: msg1.proof_key.clone(),
+        }
+    )?;
+    Ok(Json(user_id))
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TransferMsg1 {
+    id: String,
+    receiver_proof_key: PublicKey,
+}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TransferMsg2 {
+    x1: FE,
+}
+/// Initiliase transfer protocol
+///     - Authorisation of Owner and DoS protection
+///     - Validate transfer parameters
+///     - Store transfer parameters
+#[post("/transfer/init", format = "json", data = "<msg1>")]
+pub fn transfer_init(
+    state: State<Config>,
+    claim: Claims,
+    msg1: Json<TransferMsg1>,
+) -> Result<Json<TransferMsg2>> {
+    // auth user
+    check_user_auth(&state, &claim, &msg1.id)?;
+
+    // Verification/PoW/authoriation failed
+    // Err(SEError::AuthError)
+
+    // get state_chain id
+    let session_data: SessionData =
+        db::get(&state.db, &claim.sub, &msg1.id, &StateChainStruct::SessionData)?
+            .ok_or(SEError::Generic(format!("No data for such identifier {}", msg1.id)))?;
+
+    // Generate x1
+    let x1: FE = ECScalar::new_random();
+
+    // create TransferData DB entry
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &msg1.id,
+        &StateChainStruct::TransferData,
+        &TransferData {
+            state_chain_id: session_data.state_chain_id.clone(),
+            receiver_proof_key: msg1.receiver_proof_key,
+            x1
+        }
+    )?;
+
+    // TODO encrypt x1 with Senders proof key
+    Ok(Json(TransferMsg2{x1}))
+}
+
 /// struct contains data necessary to caluculate tx input sighash
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PrepareSignTxMessage {
-    spending_addr: String, // address which funding tx funds are sent to
-    input_txid: String,
-    input_vout: u32,
-    input_seq: u32,
-    address: String,
-    amount: u64
+    pub spending_addr: String, // address which funding tx funds are sent to
+    pub input_txid: String,
+    pub input_vout: u32,
+    pub address: String,
+    pub amount: u64,
+    pub transfer: bool // is transfer? (create new or update state chain?)
 }
 
-/// prepare to sign a transaction input
+/// prepare to sign backup transaction input
 ///     - calculate and store tx sighash for validation before performing ecdsa::sign
 #[post("/prepare-sign/<id>", format = "json", data = "<prepare_sign_msg>")]
-pub fn prepare_sign(
+pub fn prepare_sign_backup(
     state: State<Config>,
     claim: Claims,
     id: String,
@@ -127,7 +204,7 @@ pub fn prepare_sign(
             txid: sha256d::Hash::from_str(&prepare_sign_msg.input_txid).unwrap(),
             vout: prepare_sign_msg.input_vout
         },
-        sequence: prepare_sign_msg.input_seq,
+        sequence: 0xFFFFFFFF,
         witness: Vec::new(),
         script_sig: bitcoin::Script::default(),
     };
@@ -145,7 +222,7 @@ pub fn prepare_sign(
         prepare_sign_msg.amount
     );
 
-    // store sig_hash with state chain id
+    // store SessionData for user: sig_hash with back up tx and state chain id
     let state_chain_id = Uuid::new_v4().to_string();
     db::insert(
         &state.db,
@@ -154,21 +231,26 @@ pub fn prepare_sign(
         &StateChainStruct::SessionData,
         &SessionData {
             sig_hash: sig_hash.clone(),
+            backup_tx: tx_b.clone(),
             state_chain_id: state_chain_id.clone()
         }
     )?;
 
-    // create StateChain DB object
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &state_chain_id,
-        &StateChainStruct::StateChain,
-        &StateChain {
-            id: state_chain_id.clone(),
-            chain: vec!(id)
-        }
-    )?;
+    // create StateChain DB object if deposit
+    if prepare_sign_msg.transfer == false {
+        println!("creating SC");
+        db::insert(
+            &state.db,
+            &claim.sub,
+            &state_chain_id,
+            &StateChainStruct::StateChain,
+            &StateChain {
+                id: state_chain_id.clone(),
+                chain: vec!(id),
+                backup_tx: None
+            }
+        )?;
+    }
 
     Ok(Json(()))
 }

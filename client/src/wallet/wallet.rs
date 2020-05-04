@@ -7,9 +7,8 @@ use crate::mocks::mock_electrum::MockElectrum;
 use crate::wallet::shared_wallet::SharedWallet;
 use crate::ClientShim;
 
-use bitcoin::{ Network, Address };
+use bitcoin::{ Network, Address, PublicKey, PrivateKey };
 use bitcoin::util::bip32::{ ExtendedPubKey, ExtendedPrivKey, ChildNumber };
-use bitcoin::util::key::{ PublicKey, PrivateKey };
 use bitcoin::util::bip143::SighashComponents;
 use bitcoin::secp256k1::{ All, Secp256k1, Message };
 
@@ -55,6 +54,13 @@ impl AddressDerivation {
     pub fn new(pos: u32, private_key: PrivateKey, public_key: PublicKey) -> Self {
         AddressDerivation { pos, private_key, public_key }
     }
+}
+
+/// Address generated for State Entity transfer protocol
+#[derive(Deserialize, Debug)]
+pub struct StateEntityAddress {
+    pub backup_addr: String,
+    pub proof_key: PublicKey,
 }
 
 /// Standard Bitcoin Wallet
@@ -103,7 +109,7 @@ impl Wallet {
     }
 
     /// load wallet from jon
-    pub fn from_json(json: serde_json::Value, network: &String, client_shim: ClientShim) -> Self {
+    pub fn from_json(json: serde_json::Value, network: &String, client_shim: ClientShim) -> Result<Self> {
         let secp = Secp256k1::new();
         let mut master_priv_key = ExtendedPrivKey::from_str(json["master_priv_key"].as_str().unwrap()).unwrap();
         master_priv_key.network = network.parse::<Network>().unwrap();
@@ -123,7 +129,7 @@ impl Wallet {
             shared_wallets: vec!()
         };
         for _ in 0..json["last_derived_pos"].as_u64().unwrap() {
-            wallet.get_new_bitcoin_address();
+            wallet.get_new_bitcoin_address()?;
         }
         let shared_wallets_str = &json["shared_wallets"].as_str().unwrap();
         if shared_wallets_str.len() != 2 { // is not empty
@@ -132,7 +138,7 @@ impl Wallet {
         }
 
         debug!("(wallet id: {}) Loaded wallet to memory", wallet.id);
-        wallet
+        Ok(wallet)
     }
 
     /// save to disk
@@ -146,20 +152,20 @@ impl Wallet {
     }
 
     /// load wallet from disk
-    pub fn load_from(filepath: &str, network: &String, client_shim: ClientShim) -> Wallet {
+    pub fn load_from(filepath: &str, network: &String, client_shim: ClientShim) -> Result<Wallet> {
         let data = fs::read_to_string(filepath).expect("Unable to load wallet!");
         let serde_json_data = serde_json::from_str(&data).unwrap();
-        let wallet: Wallet = Wallet::from_json(serde_json_data, network, client_shim);
+        let wallet: Wallet = Wallet::from_json(serde_json_data, network, client_shim)?;
         debug!("(wallet id: {}) Loaded wallet to memory", wallet.id);
-        wallet
+        Ok(wallet)
     }
-    pub fn load(network: &String, client_shim: ClientShim) -> Wallet {
-        Wallet::load_from(WALLET_FILENAME, network, client_shim)
+    pub fn load(network: &String, client_shim: ClientShim) -> Result<Wallet> {
+        Ok(Wallet::load_from(WALLET_FILENAME, network, client_shim)?)
     }
 
     /// generate new address
-    pub fn get_new_bitcoin_address(&mut self) -> bitcoin::Address {
-        let new_ext_priv_key = self.derive_new_key().unwrap();
+    pub fn get_new_bitcoin_address(&mut self) -> Result<bitcoin::Address> {
+        let new_ext_priv_key = self.derive_new_key()?;
         let new_ext_pub_key = ExtendedPubKey::from_private(&self.secp, &new_ext_priv_key);
 
         let address = self.to_p2wpkh_address(&new_ext_pub_key.public_key);
@@ -169,7 +175,22 @@ impl Wallet {
             .insert(address.to_string(),
                 AddressDerivation::new(self.last_derived_pos, new_ext_priv_key.private_key, new_ext_pub_key.public_key));
 
-        address
+        Ok(address)
+    }
+
+    pub fn get_new_state_entity_address(&mut self) -> Result<StateEntityAddress> {
+        let new_ext_priv_key = self.derive_new_key().unwrap();
+        let new_ext_pub_key = ExtendedPubKey::from_private(&self.secp, &new_ext_priv_key);
+        let proof_key_addr = self.to_p2wpkh_address(&new_ext_pub_key.public_key);
+        self.last_derived_pos += 1;
+        self.addresses_derivation_map
+            .insert(proof_key_addr.to_string(),
+                AddressDerivation::new(self.last_derived_pos, new_ext_priv_key.private_key, new_ext_pub_key.public_key));
+        Ok(StateEntityAddress{
+            backup_addr: self.get_new_bitcoin_address()?.to_string(),
+            proof_key: new_ext_pub_key.public_key
+        })
+
     }
 
     /// Derive new child key from master extended key
@@ -368,16 +389,16 @@ mod tests {
 
     #[test]
     fn load_wallet_test() {
-        Wallet::load_from(TEST_WALLET_FILENAME,&"regtest".to_string(),ClientShim::new("http://localhost:8000".to_string(), None));
+        Wallet::load_from(TEST_WALLET_FILENAME,&"regtest".to_string(),ClientShim::new("http://localhost:8000".to_string(), None)).unwrap();
     }
 
     #[test]
     fn test_to_and_from_json() {
         let mut wallet = gen_wallet();
-        let addr1 = wallet.get_new_bitcoin_address();
-        let addr2 = wallet.get_new_bitcoin_address();
+        let addr1 = wallet.get_new_bitcoin_address().unwrap();
+        let addr2 = wallet.get_new_bitcoin_address().unwrap();
         let wallet_json = wallet.to_json();
-        let wallet_rebuilt = super::Wallet::from_json(wallet_json,&"regtest".to_string(),ClientShim::new("http://localhost:8000".to_string(), None));
+        let wallet_rebuilt = super::Wallet::from_json(wallet_json,&"regtest".to_string(),ClientShim::new("http://localhost:8000".to_string(), None)).unwrap();
         assert_eq!(wallet.id,wallet_rebuilt.id);
         assert_eq!(wallet.network,wallet_rebuilt.network);
         assert_eq!(wallet.master_priv_key.chain_code,wallet_rebuilt.master_priv_key.chain_code);
@@ -392,7 +413,7 @@ mod tests {
     #[test]
     fn test_basic_addr_generation() {
         let mut wallet = gen_wallet();
-        let addr1 = wallet.get_new_bitcoin_address();
+        let addr1 = wallet.get_new_bitcoin_address().unwrap();
         assert!(wallet.get_address(&addr1.to_string()).is_some());
         assert!(wallet.get_address(&String::from("test")).is_none());
         let _ = wallet.get_new_bitcoin_address();
@@ -408,7 +429,7 @@ mod tests {
         );
 
         let mut wallet = gen_wallet();
-        let addr = wallet.get_new_bitcoin_address();
+        let addr = wallet.get_new_bitcoin_address().unwrap();
 
         let inputs =  vec![
             TxIn {

@@ -8,8 +8,7 @@
 // version 3 of the License, or (at your option) any later version.
 //
 use super::super::Result;
-use crate::routes::state_entity::{ check_user_auth, SessionData };
-use crate::routes::state_entity;
+use crate::routes::state_entity::{ check_user_auth, StateChainStruct, SessionData, StateChain };
 use crate::util::reverse_hex_str;
 use crate::error::SEError;
 
@@ -19,6 +18,7 @@ use curv::cryptographic_primitives::twoparty::dh_key_exchange_variant_with_pok_c
     CommWitness, EcKeyPair, Party1FirstMessage, Party1SecondMessage,
 };
 use curv::elliptic::curves::secp256_k1::Secp256k1Scalar;
+use curv::elliptic::curves::traits::ECPoint;
 use curv::{BigInt, GE};
 use kms::chain_code::two_party as chain_code;
 use kms::ecdsa::two_party::*;
@@ -28,6 +28,7 @@ use curv::arithmetic::traits::Converter;
 use rocket::State;
 use rocket_contrib::json::Json;
 use std::string::ToString;
+use bitcoin::secp256k1::{ Signature };
 
 use super::super::auth::jwt::Claims;
 use super::super::storage::db;
@@ -433,7 +434,7 @@ pub fn sign_second(
             &state.db,
             &claim.sub,
             &id,
-            &state_entity::StateChainStruct::SessionData)?;
+            &StateChainStruct::SessionData)?;
         match sig_hash {
             Some(_) => debug!("Sig hash found in DB for this id."),
             // fix to return Error. Currently return empty Result<Json<party_one::SignatureRecid>>
@@ -464,18 +465,48 @@ pub fn sign_second(
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::EphKeyGenFirstMsg)?
             .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
 
-    let signature_with_recid = child_master_key.sign_second_message(
+    let signature;
+    match child_master_key.sign_second_message(
         &request.party_two_sign_message,
         &eph_key_gen_first_message_party_two,
         &eph_ec_key_pair_party1,
         &request.message,
-    );
-
-    if signature_with_recid.is_err() {
-        panic!("validation failed")
+    ) {
+        Ok(sig) => signature = sig,
+        Err(_) => panic!("validation failed")
     };
 
-    Ok(Json(signature_with_recid.unwrap()))
+    // Add back up transaction to State Chain
+    let session_data: SessionData =
+        db::get(&state.db, &claim.sub, &id, &StateChainStruct::SessionData)?
+            .ok_or(SEError::Generic(format!("No SessionData for such identifier {}", id)))?;
+
+    let mut backup_tx = session_data.backup_tx.clone();
+    let mut v = BigInt::to_vec(&signature.r);     // make signature witness
+    v.extend(BigInt::to_vec(&signature.s));
+    let mut sig_vec = Signature::from_compact(&v[..])
+        .unwrap()
+        .serialize_der()
+        .to_vec();
+    sig_vec.push(01);
+    let pk_vec = child_master_key.public.q.get_element().serialize().to_vec();
+    backup_tx.input[0].witness = vec![sig_vec, pk_vec];
+
+    // update StateChain DB object
+    let mut state_chain: StateChain =
+        db::get(&state.db, &claim.sub, &session_data.state_chain_id, &StateChainStruct::StateChain)?
+            .ok_or(SEError::Generic(format!("No StateChain for such identifier {}", session_data.state_chain_id)))?;
+
+    state_chain.backup_tx = Some(backup_tx);
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &session_data.state_chain_id,
+        &StateChainStruct::StateChain,
+        &state_chain
+    )?;
+
+    Ok(Json(signature))
 }
 
 pub fn get_mk(state: &State<Config>, claim: Claims, id: &String) -> Result<MasterKey1> {

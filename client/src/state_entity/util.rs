@@ -2,6 +2,7 @@
 //!
 //! Utilities methods for state entity and mock classes
 
+use bitcoin::OutPoint;
 use super::super::utilities::requests;
 use super::super::Result;
 use crate::wallet::wallet::Wallet;
@@ -14,6 +15,7 @@ use bitcoin::secp256k1::{ Secp256k1, key::SecretKey, Signature };
 use bitcoin::blockdata::script::Builder;
 use bitcoin::blockdata::opcodes::OP_TRUE;
 use bitcoin::network::constants::Network;
+use bitcoin::hashes::sha256d;
 use curv::{BigInt};
 use curv::arithmetic::traits::Converter;
 use curv::elliptic::curves::traits::ECPoint;
@@ -48,18 +50,35 @@ pub struct PrepareSignTxMessage {
     pub spending_addr: String, // address which funding tx funds are sent to
     pub input_txid: String,
     pub input_vout: u32,
-    pub input_seq: u32,
     pub address: String,
-    pub amount: u64
+    pub amount: u64,
+    pub transfer: bool
 }
 
-pub fn cosign_tx_input(wallet: &mut Wallet, shared_wallet_id: &String, tx: &Transaction, prepare_sign_msg: &PrepareSignTxMessage) -> Result<Transaction> {
+/// Sign a transaction input with state entity shared wallet
+pub fn cosign_tx_input(wallet: &mut Wallet, shared_wallet_id: &String, prepare_sign_msg: &PrepareSignTxMessage) -> Result<Transaction> {
 
     // message 1 - send back-up tx data for validation.
     requests::postb(&wallet.client_shim, &format!("prepare-sign/{}", shared_wallet_id), prepare_sign_msg)?;
 
     // Co-sign back-up tx
     // get sigHash and transform into message to be signed
+    let txin = TxIn {
+        previous_output: OutPoint {
+            txid: sha256d::Hash::from_str(&prepare_sign_msg.input_txid).unwrap(),
+            vout: prepare_sign_msg.input_vout
+        },
+        sequence: 0xFFFFFFFF,
+        witness: Vec::new(),
+        script_sig: bitcoin::Script::default(),
+    };
+
+    let tx = build_tx_b(
+        &txin,
+        &Address::from_str(&prepare_sign_msg.address).unwrap(),
+        &Amount::from_sat(prepare_sign_msg.amount)
+    ).unwrap();
+
     let mut tx_signed = tx.clone();
     let comp = SighashComponents::new(&tx);
     let sig_hash = comp.sighash_all(

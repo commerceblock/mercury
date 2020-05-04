@@ -3,15 +3,10 @@
 //! Contains key shares of co-owned keys between user and server.
 //! Functionality includes key gen, server back-up and co-signing
 
-use bitcoin::Address;
-use bitcoin;
 use bitcoin::network::constants::Network;
-use bitcoin::util::bip143::SighashComponents;
-use bitcoin::secp256k1::Signature;
 use curv::elliptic::curves::traits::ECPoint;
 use curv::{BigInt, GE};
-use kms::ecdsa::two_party::MasterKey2;
-use kms::ecdsa::two_party::*;
+use kms::ecdsa::two_party::{ MasterKey2, Party2Public, party2 };
 use serde_json;
 use std::fs;
 
@@ -23,8 +18,6 @@ use super::super::ecdsa::types::PrivateShare;
 use super::super::escrow;
 use super::super::ClientShim;
 use super::super::Result;
-use curv::arithmetic::traits::Converter;
-use hex;
 use std::collections::HashMap;
 
 const BACKUP_FILENAME: &str = "wallet/shared_backup.data";
@@ -142,52 +135,6 @@ impl SharedWallet {
             Ok(_x) => println!("backup verified 🍻"),
             Err(_e) => println!("Backup was not verified correctly 😲"),
         }
-    }
-
-    /// sign tx input with key corresponding to given addr
-    pub fn sign_tx_input(&mut self, client_shim: &ClientShim, tx: &mut bitcoin::Transaction, input_index: usize, addr: &Address, amount: u64) {
-        let address_derivation;
-        match self.addresses_derivation_map.get(&addr.to_string()) {
-            None => panic!("No key found in wallet for address"),
-            Some(derivation) => {
-                address_derivation = derivation;
-            },
-        }
-
-        let mk = &address_derivation.mk;
-        let pk = mk.public.q.get_element();
-
-        let comp = SighashComponents::new(&tx);
-        let sig_hash = comp.sighash_all(
-            &tx.input[input_index],
-            &bitcoin::Address::p2pkh(
-                &to_bitcoin_public_key(pk),
-                self.get_bitcoin_network()).script_pubkey(),
-            amount,
-        );
-
-        let signature = ecdsa::sign(
-            client_shim,
-            BigInt::from_hex(&hex::encode(&sig_hash[..])),
-            &mk,
-            BigInt::from(0),
-            BigInt::from(address_derivation.pos),
-            &self.private_share.id,
-        ).unwrap();
-
-        let mut v = BigInt::to_vec(&signature.r);
-        v.extend(BigInt::to_vec(&signature.s));
-
-        let mut sig_vec = Signature::from_compact(&v[..])
-            .unwrap()
-            .serialize_der()
-            .to_vec();
-        sig_vec.push(01);
-
-        let pk_vec = pk.serialize().to_vec();
-
-        tx.input[0].witness = vec![sig_vec, pk_vec];
-
     }
 
     pub fn get_new_bitcoin_address(&mut self) -> bitcoin::Address {

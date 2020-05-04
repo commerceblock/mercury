@@ -9,6 +9,7 @@
 #[cfg(test)]
 mod tests {
 
+    use crate::routes::state_entity::{DepositMsg1, PrepareSignTxMessage};
     use super::super::routes::ecdsa;
     use super::super::server;
     use rocket;
@@ -34,8 +35,11 @@ mod tests {
         let start = Instant::now();
 
         // get ID
+        let deposit_msg1 = DepositMsg1{proof_key: String::from("proof key")};
+        let body = serde_json::to_string(&deposit_msg1).unwrap();
         let mut response = client
-            .post("/init")
+            .post("/deposit/init")
+            .body(body)
             .header(ContentType::JSON)
             .dispatch();
         let id: String = serde_json::from_str(&response.body_string().unwrap()).unwrap();
@@ -307,13 +311,14 @@ mod tests {
         );
 
         let res_body = response.body_string().unwrap();
+
         let signature_recid: party_one::SignatureRecid = serde_json::from_str(&res_body).unwrap();
 
         signature_recid
     }
 
     #[test]
-    fn key_gen_and_sign() {
+    fn deposit_key_gen_and_sign() {
         // Passthrough mode
         env::set_var("region", "");
         env::set_var("pool_id", "");
@@ -324,7 +329,32 @@ mod tests {
 
         let client = Client::new(server::get_server()).expect("valid rocket instance");
 
+        // key gen
         let (id, master_key_2): (String, MasterKey2) = key_gen(&client);
+
+        // prepare sign message
+        let tx_b_prepare_sign_msg = PrepareSignTxMessage {
+            spending_addr: String::from("bcrt1qjtsfty6z7v5jrj7s9qn4x9gv0np6h8273k3cy9"),
+            input_txid: String::from("a60c61baf75c3f01e82a4880310cb4c7bdec95aee1e50ca7293d2233d5d35cab"),
+            input_vout: 0,
+            address: String::from("bcrt1qz3rcytulyfvkwje88q4a7nvzuj3td9crhlvqnl"),
+            amount: 100000000,
+            transfer: false
+        };
+        let body = serde_json::to_string(&tx_b_prepare_sign_msg).unwrap();
+
+        let start = Instant::now();
+        let response = client
+            .post(format!("/prepare-sign/{}", id))
+            .body(body)
+            .header(ContentType::JSON)
+            .dispatch();
+        assert_eq!(response.status(), Status::Ok);
+
+        println!(
+            "{} Network/Server: prepare sign message",
+            TimeFormat(start.elapsed())
+        );
 
         let message = BigInt::from(12345);
 
@@ -342,9 +372,12 @@ mod tests {
     #[test]
     fn test_auth_token() {
         let client = Client::new(server::get_server()).expect("valid rocket instance");
-        // generate ID
+        // get ID
+        let deposit_msg1 = DepositMsg1{proof_key: String::from("proof key")};
+        let body = serde_json::to_string(&deposit_msg1).unwrap();
         let mut response = client
-            .post("/init")
+            .post("/deposit/init")
+            .body(body)
             .header(ContentType::JSON)
             .dispatch();
         let id: String = serde_json::from_str(&response.body_string().unwrap()).unwrap();
