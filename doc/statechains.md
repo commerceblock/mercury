@@ -1,34 +1,24 @@
-# Statechain protocol for P2PKH and DLCs
+# Mercury statechain protocol
 
 This document describes the specification and operation of the Mercury **statechain** [1] system to tranfer ownership of Bitcoin (or Elements based) *unspent transaction outputs* (UTXOs) between parties without performing on-chain transactions. The ability to perform this transfer without requiring the confirmation (mining) of on-chain transactions has several advantages in a variety of different applications:
 
 * Transfer of ownership can be faster (instant) and negligible cost (no on-chain transaction fee). 
 * Transfer of ownership can be more private (transfers are only recorded on the statechain). 
-* It is possible to transfer the ownership of one public key of a multisig UTXO, for example one position in a discreet log contract (DLC) without the cooperation of the counterparty.  
+* It is possible to transfer the ownership of one public key of a multisig UTXO, for example one position in a discreet log contract (DLC), or one side of a Lightning payment channel, without the cooperation of the counterparty.  
 
-This functionality requires a trusted third party - refered to as the *statechain entity* or *SE* - which is operated by a service provider, and can generate fee income. Crucially, however, the SE never has custody of the UTXOs, which minimises regulatory requirements and trust. The SE can be formed of a single party, or can be a *federation* of separate entities implemented via multiple key shares, each of which need to agree on the signature generation (see *Federated statchain entities*). 
+This functionality requires a trusted third party - refered to as the *statechain entity* or *SE* - which is operated by a service provider, and can generate fee income. Crucially, however, the SE never has custody of the UTXOs, which minimises regulatory requirements and the trust required in the SE. The SE can be formed of a single party, or can be a *federation* of separate entities implemented via multiple key shares, each of which need to agree on the signature generation (see *Federated statchain entities*). 
 
 ## UTXO Types
 
 A UTXO is the fundamental object that defines value and ownership in a cryptocurrency such as Bitcoin. A UTXO is identified by a transaction ID (`TxID`) and output index number (`n`) and has two properties: 1. A value (in BTC) and 2. Spending conditions (defined in Script). The spending conditions can be arbitrarily complex (within the limits of the consensus rules), but is most commonly defined by a single public key (or public key hash) and can only be spent by transaction signed with the corresponding public key. This is known as a pay-to-public-key-hash output (P2(W)PKH). Other more complex spending conditions include multisig outputs (where spending transactions need to be signed by `m` public keys where `n >= m` are specified in the spending conditions) and time-locked and hash-locked outputs (inlcuding HTLCs as utilised by the Lightning Network and DLCs). 
 
-The statechain model described here can be used to transfer the ability to sign a single public key spending condition or one part of a 2-of-2 multisig, allowing for the transfer (novation) of DLC counterparty positions. 
-
-## UTXO statechains
-
-The function of the system is that it enables control of a UTXO to be transferred between two parties (who don't trust each other) via the SE without an on-chain transaction. The SE only needs to be trusted to operate the protocol (and crucially not store any information about previous key shares) and then transfer of ownership is completely secure, even if the SE was to later get compromised or hacked. At any time the SE can prove that they have the key share for the current owner (and only to the current owner). Additional trust would be required in the SE that they are not double-spending the output, however they would need to collude with a current owner in order to attempt to do this. However a new owner (i.e. the buyer of the UTXO) requires a guarantee that this hasn't happened (i.e. that the current owner and SE have conspired to pass ownership to two or more buyers). To guarantee this, the new owner requires a proof that their ownership is *unique*: this is achieved via UTXO *statechains* - immutable and unique sequences of verifiable ownership transfer. The current owner is required to sign a *statechain transaction* (`SCTx`) with an owner key to transfer ownership to a new owner (i.e. a new owner key). This means that any theft of the UTXO by the collusion of a corrupt SE and old owner can be proven. 
-
-The *ownership proof* then consists of a unique sequence of ownership keys (with signed transfers) for the full history of each UTXO. This full history is published by the SE, using the Mainstay protocol to ensure this sequence is both unique and immutable. This utilises Bitcoin's global state (resulting in a verifiable *proof of publication* for each ownership change). 
-
-### Sparse Merkle Tree
-
-A specific SE will operate the proof of publication for all UTXO ownership sequences under its management via a single Mainstay slot. The SE will commit the root of a *sparse Merkle tree* (SMT) into the specified slot every time it is updated (which then in turn is attested to the Bitcoin staychain every block/hour). The SMT has a leaf for each unique UTXO (256 bit number) managed by the SE, and the current UTXO statechain is committed to this leaf at each update. 
-
-UTXO transfers can obviously happen much more frequently than the Mainstay attestation interval (which is limited by the Bitcoin block time), however this statechain attestation substantially limits the value that the SE could steal without owner proof. 
+The statechain model described here can be used to transfer the ability to sign a single public key spending condition or one part of a 2-of-2 multisig, allowing for the transfer (novation) of DLC counterparty positions or Lightning channels. 
 
 ## P2PKH output transfer
 
-The simplest function of a statechain system is to enable the transfer the ownership of individual UTXOs controlled by a single public key from one party to another without an on-chain (Bitcoin) transaction. The SE facilitates this change of ownership, but has no way to seize, confiscate or freeze the output. This is achieved via the SE controling a *share* of the UTXO key combined with a system of *backup* transactions which can be used to claim the value of the UTXO by the current owner in the case the SE does not cooperate. The backup transactions are cooperatively signed by the owners and the SE at the point of transfer, and consist of a *kickoff* transaction (which initiates the timelocks) which can be spent by a second transaction with a relative time-lock (using the `nSequence` field as described in BIP68 [2]) paying to an owner generated address [3]. Each new owner is given the same kick-off transaction and a second signed transaction (paying to the new owner address) with a lower `nSequence` number than the previous owner (allowing them to claim the output of the kickoff transaction before any previous owner). 
+The simplest function of the Mercury system is to enable the transfer the ownership of individual UTXOs controlled by a single public key `P` from one party to another without an on-chain (Bitcoin) transaction. The SE facilitates this change of ownership, but has no way to seize, confiscate or freeze the output. To enable this, the private key for `P` is shared between the SE and the owner, such that no party ever has knowledge of the full private key (which is `s1*o1` where `s1` is the SE private key share, and `o1` is the owner key share) and so cooperation of the owner is required to spend the UTXO. However, by sharing the secret key in this way, the SE can change its key share (`s1 -> s2`) so that it combines with a new owner key share (`o2`) with the cooperation of the original owner without changing the full key (i.e. `s1*o1 = s2*o2`) all without any party revealing their key shares or learning the full key. The exclusive control of the UTXO then passes to the new owner without an on-chain transaction, and the SE only needs to be trusted to follow the protocol and delete/overwrite the key share corresponding to the previous owner. 
+
+This key update/transfer mechanism can additionally be combined with a system of *backup* transactions which can be used to claim the value of the UTXO by the current owner in the case the SE does not cooperate or has disappeared. The backup transactions are cooperatively signed by the owners and the SE at the point of transfer, and consist of a *kickoff* transaction (which initiates the timelocks) which can be spent by a second transaction with a relative time-lock (using the `nSequence` field as described in BIP68 [2]) paying to an owner generated address [3]. Each new owner is given the same kick-off transaction and a second signed transaction (paying to the new owner address) with a lower `nSequence` number than the previous owner (allowing them to claim the output of the kickoff transaction before any previous owner). 
 
 <br><br>
 <p align="center">
@@ -56,9 +46,8 @@ The decrementing relative timelock backup mechanism limits the number of tranfer
 
 The life-cycle of a P2PKH deposit into the statechain, transfer and withdrawal is summarised as follows:
 
-1. The depositor (Owner 1) initiates a UTXO statechain with the SE by paying BTC to a P2PKH address where Owner 1 and the SE share the private key required to spend the UTXO. 
-2. Owner 1 and the SE cooperatively sign a kick-off transaction spending the UTXO to a relative timelocked transaction in turn spending to an address controlled by Owner 1 which can be confirmed after the `nSequence` locktime in case the SE stops cooperating. 
-3. Owner 1 can verifiably transfer ownership of the UTXO to a new party (Owner 2) via a key update procedure that overwrites the private key share of SE that invalidates the Owner 1 private key and *activates* the Owner 2 private key share, after cooperatively signing a new backup transaction paying to an address controlled by Owner 2 which can be confirmed after an `nSequence` locktime, which is shorted (by an accepted confirmation interval) than the previous owner. 
+1. The depositor (Owner 1) initiates a UTXO statechain with the SE by paying BTC to a P2PKH address where Owner 1 and the SE share the private key required to spend the UTXO. Additionally, the SE and the depositor can cooperate to sign a kick-off and backup transaction spending the UTXO to a relative timelocked transaction spending to an address controlled by Owner 1 which can be confirmed after the `nSequence` locktime in case the SE stops cooperating. 
+3. Owner 1 can verifiably transfer ownership of the UTXO to a new party (Owner 2) via a key update procedure that overwrites the private key share of SE that invalidates the Owner 1 private key and *activates* the Owner 2 private key share. Additionally, the transfer can incorporate the cooperative signing of a new backup transaction paying to an address controlled by Owner 2 which can be confirmed after an `nSequence` locktime, which is shorted (by an accepted confirmation interval) than the previous owner. 
 5. This transfer can be repeated multiple times to new owners as required (up until the most recent recovery relative locktime reaches a limit > 0). 
 6. At any time the most recent owner and SE can cooperate to sign a transaction spending the UTXO to an address of the most recent owner's choice (withdrawal). 
 
@@ -72,7 +61,64 @@ The life-cycle of a P2PKH deposit into the statechain, transfer and withdrawal i
 </p>
 <br><br>
 
-As described above, double-spending of the UTXO (by a corrupt SE) is prevented by a proof-of-uniqueness from the Mainstay protocol. Each unique transfer of the UTXO between owners is recorded on the SE statechain, with each transfer requiring a signature from the current owner. Spending of the UTXO by anyone except the current owner can be proven as fraudulent by the current owner. 
+As described below, double-spending of the UTXO (by a corrupt SE) is prevented by a proof-of-uniqueness from the Mainstay protocol. Each unique transfer of the UTXO between owners is recorded on the SE statechain, with each transfer requiring a signature from the current owner. Spending of the UTXO by anyone except the current owner can be unambiguously proven as fraudulent by the current owner. 
+
+## UTXO statechains
+
+The essential function of the Mercury system is that it enables 'ownership' (and control) of a UTXO to be transferred between two parties (who don't need to trust each other) via the SE without an on-chain transaction. The SE only needs to be trusted to operate the protocol (and crucially not store any information about previous key shares) and then the transfer of ownership is completely secure, even if the SE was to later get compromised or hacked. At any time the SE can prove that they have the key share for the current owner (and only to the current owner). Additional trust would be required in the SE that they are not double-spending the output, however they would need to collude with a current owner in order to attempt to do this. However a new owner (i.e. the buyer of the UTXO) requires a guarantee that this hasn't happened (i.e. that the current owner and SE have conspired to pass ownership to two or more buyers). To guarantee this, the new owner requires a proof that their ownership is *unique*: this is achieved via UTXO *statechains* - immutable and unique sequences of verifiable ownership transfer. The current owner is required to sign a *statechain transaction* (`SCTx`) with an owner key to transfer ownership to a new owner (i.e. a new owner key). This means that any theft of the UTXO by the collusion of a corrupt SE and old owner can be independently and conclusively proven. 
+
+The *ownership proof* then consists of a unique sequence of ownership keys (with signed transfers) for the full history of each UTXO. This full history is published by the SE, using the Mainstay protocol to ensure this sequence is both unique and immutable. This utilises Bitcoin's global state (resulting in a verifiable *proof of publication* for each ownership change). 
+
+### Sparse Merkle Tree
+
+A specific SE will operate the proof of publication for all UTXO ownership sequences under its management via a single Mainstay slot (for details refer to the Mainstay [documentation](https://commerceblock.readthedocs.io/en/latest/mainstay-con/index.html)). The SE will commit the root of a [*sparse Merkle tree*](https://eprint.iacr.org/2016/683.pdf) (SMT) into the specified slot every time it is updated (which then in turn is attested to the Bitcoin staychain every block/hour). The SMT has a leaf for each unique UTXO TxID (256 bit number) managed by the SE, and the current UTXO statechain is committed to this leaf at each update. The use of the SMT enables proof that each leaf commitment is unique to the UTXO TxID. 
+
+<br><br>
+<p align="center">
+<img src="images/proof1.png" align="middle" width="440" vspace="20">
+</p>
+
+<p align="center">
+  <b>Fig. 4</b>: Illustration of sequences of UTXO ownership (statechains) committed to the sparse Merkle tree (SMT), the root of which is in turn committed to a defined Mainstay slot (`slot_id`), which is in turn committed to the staychain of transactions on the Bitcoin blockchain. 
+</p>
+<br><br>
+
+### Ownership transfer
+
+The UTXO ownership sequence consists of a chain of *statechain transactions* (`SCTx`) transferring ownership. This chain starts with the single *proof* public key of the depositor, and each time the ownership of the UTXO is passed from one owner to the next, the current owner must sign the statechain concatenated with the new owner proof public key. Specifically, when a user deposits into a new UTXO with the SE, they provide a proof public key `C1` (to which only the depositor knows the private key `c1`). This initial state (`s_1 = H(C1)` where `H(...)` denotes the SHA256 hash function) is committed to the SE SMT at the position of the UTXO TxID. 
+
+When the depositor (`C1`) then transfers ownership to `C2` they provide a signature `sig_C1` over `s_1|C2` and the new state:
+
+`s_2 = H(s_1|C2|sig_C1[s_1|C2])`
+
+which is then committed to the SMT at the position of the UTXO TxID. Then when the owner `C2` transfers ownership to `C3` they provide a signature `sig_C2` over `s_2|C3`. The new state then becomes:
+
+`s_3 = H(s_2|C3|sig_C2[s_2|C3])`
+
+and so on for each transfer of ownership from `old_key` to `new_key`:
+
+`new_state = H(old_state|new_key|sig_old_key[old_state|new_key])`
+
+If no change of ownership occurs between Mainstay attestations, the state does not change (and the latest slot attestation is the proof of publication). If the ownership changes more frequently than the slot attestation, then the ownership state is updated for each transfer and the current state is attested at the next interval. 
+
+<br><br>
+<p align="center">
+<img src="images/proof2.png" align="middle" width="520" vspace="20">
+</p>
+
+<p align="center">
+  <b>Fig. 1</b>: Merkle path proofs of UTXO state publication. The committed state for a specified UTXO TxID is updated as the ownership is transferred between public keys. 
+</p>
+<br><br>
+
+### Fraud Proof
+
+The statechain (and its proof of publication in the Bitcoin staychain) for a specific UTXO can be used by the current owner as proof of ownership and as a fraud proof if the UTXO is spent without their permission (i.e. by a corrupt or colluding SE keeping old key shares). This acts as a powerful incentive to keep the SE honest and preventing them from commiting a large scale fraud. In order to spend the UTXO, the current owner must sign a `SCTx` transaction with their proof public key (`C`) to the address the Bitcoin UTXO is paid to - if this address is different, this is proof that the SE is corrupt. 
+
+The proof-of-publication (via Mainstay) acts as a proof of unique ownership of the UTXO by the owner, however this has a latency that is limited by the Mainstay attestation period (i.e. the Bitcoin block confirmation time). Proof of ownership cannot be obtained faster than this, however a proof of fraud can be. The state can be committed to an unconfirmed Mainstay transaction instantly (and updated via the replace-by-fee mechanism) which must be signed by the Mainstay operator
+
+
+## Protocol
 
 ### Preliminaries
 
@@ -173,10 +219,10 @@ The current owner of a deposit can at any time withdraw from the platform to eit
 
 This would proceed as follows:
 
-1. The current owner (e.g. Owner 2) creates a transaction `TxW` that spends `Tx0` to any address or output(s) they choose. 
+1. The current owner (e.g. Owner 2) creates a transaction `TxW` that spends `Tx0` to an address `W`. 
 2. The owner then requests that the SE cooperate to sign this transaction using the shared public key `P`. 
-3. The owner signs the string: `TxID:n:close` with their key `C2` and sends it to the SE. 
-4. SE and the owner sign `TxW`
+3. The owner signs the current state concatenated with `H(W)` with their key `C2` and sends it to the SE. 
+4. SE and the owner sign `TxW`. The SE must confirm that `TxW` pays to `W` (otherwise this will create a fraud proof). 
 3. The fully signed `TxW` is then broadcast and confirmed. 
 4. The SE commits the close string to the leaf of the SMT at position TxID of `Tx0`, to verifiably close the UTXO chain of ownership. 
 
