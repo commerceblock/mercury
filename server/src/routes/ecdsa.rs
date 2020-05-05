@@ -479,7 +479,7 @@ pub fn sign_second(
     // Add back up transaction to State Chain
     let session_data: SessionData =
         db::get(&state.db, &claim.sub, &id, &StateChainStruct::SessionData)?
-            .ok_or(SEError::Generic(format!("No SessionData for such identifier {}", id)))?;
+            .ok_or(SEError::Generic(format!("No data for such identifier: SessionData {}", id)))?;
 
     let mut backup_tx = session_data.backup_tx.clone();
     let mut v = BigInt::to_vec(&signature.r);     // make signature witness
@@ -495,7 +495,7 @@ pub fn sign_second(
     // update StateChain DB object
     let mut state_chain: StateChain =
         db::get(&state.db, &claim.sub, &session_data.state_chain_id, &StateChainStruct::StateChain)?
-            .ok_or(SEError::Generic(format!("No StateChain for such identifier {}", session_data.state_chain_id)))?;
+            .ok_or(SEError::Generic(format!("No data for such identifier: StateChain {}", session_data.state_chain_id)))?;
 
     state_chain.backup_tx = Some(backup_tx);
     db::insert(

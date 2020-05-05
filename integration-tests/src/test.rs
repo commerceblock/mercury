@@ -4,12 +4,12 @@ mod tests {
     extern crate client_lib;
     extern crate bitcoin;
 
+    use client_lib::state_entity::util::PrepareSignTxMessage;
     use client_lib::*;
     use client_lib::wallet::wallet::Wallet;
     use server_lib::server;
 
-    use bitcoin::{ Amount, TxIn };
-    use bitcoin::OutPoint;
+    use bitcoin::{ Amount, TxIn, Transaction, OutPoint };
     use bitcoin::hashes::sha256d;
     use std::{thread, time};
 
@@ -83,33 +83,53 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_deposit() {
-        spawn_server();
-        let mut wallet = gen_wallet();
-
+    fn run_deposit(wallet: &mut Wallet) -> (String, String, Transaction, Transaction, PrepareSignTxMessage)  {
         // make TxIns for funding transaction
         let amount = Amount::ONE_BTC;
         let inputs =  vec![
-            TxIn {
-                previous_output: OutPoint { txid: sha256d::Hash::default(), vout: 0 },
-                sequence: 0xffffffff - 2,
-                witness: Vec::new(),
-                script_sig: bitcoin::Script::default(),
-            }
+        TxIn {
+            previous_output: OutPoint { txid: sha256d::Hash::default(), vout: 0 },
+            sequence: 0xffffffff - 2,
+            witness: Vec::new(),
+            script_sig: bitcoin::Script::default(),
+        }
         ];
         // This addr should correspond to UTXOs being spent
         let funding_spend_addrs = vec!(wallet.get_new_bitcoin_address().unwrap());
         let resp = state_entity::deposit::deposit(
-            &mut wallet,
+            wallet,
             inputs,
             funding_spend_addrs,
             amount
         ).unwrap();
 
-        println!("Shared wallet id: {:?} ",resp.0);
-        println!("Funding transaction: {:?} ",resp.1);
-        println!("Back up transaction: {:?} ",resp.2);
+        return resp
+
+    }
+    #[test]
+    fn test_deposit() {
+        spawn_server();
+        let mut wallet = gen_wallet();
+
+        let desposit = run_deposit(&mut wallet);
+        println!("Shared wallet id: {:?} ",desposit.0);
+        println!("Funding transaction: {:?} ",desposit.1);
+        println!("Back up transaction: {:?} ",desposit.2);
+    }
+
+    #[test]
+    fn test_get_statechain() {
+        spawn_server();
+        let mut wallet = gen_wallet();
+
+        if let Err(e) = state_entity::util::get_statechain(&mut wallet, &String::from("id")) {
+            assert!(e.to_string().contains(&String::from("No data for such identifier: StateChain id")))
+        }
+
+        let deposit = run_deposit(&mut wallet);
+
+        let state_chain = state_entity::util::get_statechain(&mut wallet, &String::from(deposit.1.clone())).unwrap();
+        assert_eq!(state_chain, vec!(deposit.0));
     }
 
     #[test]
@@ -130,8 +150,9 @@ mod tests {
         let funding_spend_addrs = vec!(wallet_sender.get_new_bitcoin_address().unwrap());
         let deposit_resp = state_entity::deposit::deposit(&mut wallet_sender, inputs, funding_spend_addrs, amount).unwrap();
         println!("Shared wallet id: {:?} ",deposit_resp.0);
-        println!("Funding transaction: {:?} ",deposit_resp.1);
-        println!("Back up transaction: {:?} ",deposit_resp.2);
+        println!("state chain id: {:?} ",deposit_resp.1);
+        println!("Funding transaction: {:?} ",deposit_resp.2);
+        println!("Back up transaction: {:?} ",deposit_resp.3);
 
         let mut wallet_receiver = gen_wallet();
         let receiver_addr = wallet_receiver.get_new_state_entity_address().unwrap();
@@ -140,8 +161,9 @@ mod tests {
             state_entity::transfer::transfer_sender(
                 &mut wallet_sender,
                 &deposit_resp.0,    // shared wallet id
+                &deposit_resp.1,    // state chain id
                 &receiver_addr,
-                deposit_resp.3     // backup tx prepare sign msg
+                deposit_resp.4     // backup tx prepare sign msg
         ).unwrap();
 
         println!("x1: {:?} ",tranfer_sender_resp.0);

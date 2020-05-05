@@ -16,16 +16,15 @@
 use bitcoin::Transaction;
 use super::super::Result;
 use crate::wallet::wallet::{ StateEntityAddress, Wallet };
-use crate::state_entity::util::{ cosign_tx_input, PrepareSignTxMessage };
+use crate::state_entity::util::{ get_statechain, cosign_tx_input, PrepareSignTxMessage };
 use super::super::utilities::requests;
 
 use curv::FE;
-use bitcoin::{ PublicKey };
 
 #[derive(Serialize, Debug)]
 pub struct TransferMsg1 {
     id: String,
-    receiver_proof_key: PublicKey,
+    new_state_chain: Vec<String>,
 }
 #[derive(Deserialize, Debug)]
 pub struct TransferMsg2 {
@@ -33,17 +32,26 @@ pub struct TransferMsg2 {
 }
 
 // Transfer coins to new Owner from this wallet
-pub fn transfer_sender(wallet: &mut Wallet, shared_wallet_id: &String, receiver_addr: &StateEntityAddress, mut prev_tx_b_prepare_sign_msg: PrepareSignTxMessage) -> Result<(FE, Transaction)> {
-    // init transfer: send Receivers proof_key
+pub fn transfer_sender(wallet: &mut Wallet, shared_wallet_id: &String, state_chain_id: &String, receiver_addr: &StateEntityAddress, mut prev_tx_b_prepare_sign_msg: PrepareSignTxMessage) -> Result<(FE, Transaction)> {
+    // first sign state chain (simply append receivers proof key for now)
+    let mut state_chain: Vec<String> = get_statechain(wallet, state_chain_id)?;
+    state_chain.push(receiver_addr.proof_key.to_string());
+
+    // init transfer: perform auth and send new statechain
     let transfer_msg2: TransferMsg2 = requests::postb(&wallet.client_shim,&format!("/transfer/init"),
         &TransferMsg1 {
             id: shared_wallet_id.to_string(),
-            receiver_proof_key: receiver_addr.proof_key
+            new_state_chain: state_chain
         })?;
 
     // sign new back up tx
     prev_tx_b_prepare_sign_msg.address = receiver_addr.backup_addr.clone();
-    let new_tx_b_signed = cosign_tx_input(wallet, &shared_wallet_id, &prev_tx_b_prepare_sign_msg)?;
+    let (_, new_tx_b_signed) = cosign_tx_input(wallet, &shared_wallet_id, &prev_tx_b_prepare_sign_msg)?;
+
+    // get o1 priv key
+    let shared_wal = wallet.get_shared_wallet(&shared_wallet_id).expect("No shared wallet found for id");
+    let address_derivation = shared_wal.addresses_derivation_map.get(&prev_tx_b_prepare_sign_msg.spending_addr).unwrap();
+    let o1 = &address_derivation.mk.private.x2;
 
     Ok((transfer_msg2.x1, new_tx_b_signed))
 }

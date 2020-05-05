@@ -52,16 +52,16 @@ fn _postb<T, V>(client_shim: &ClientShim, path: &str, body: T) -> Result<V>
     info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
 
     // catch State entity errors
-    if value == "User authorisation failed".to_string() {
+    if value.contains(&String::from("No data for such identifier")) {
         return Err(CError::StateEntityError(value));
     }
-    if value == "Signing Error: No sig hash found for state chain session.".to_string() {
+    if value.contains(&String::from("Signing Error")) {
         return Err(CError::StateEntityError(value));
     }
-    if value == "Signing Error: Message to be signed does not match verified sig hash.".to_string() {
+    if value == String::from("User authorisation failed") {
         return Err(CError::StateEntityError(value));
     }
-    if value == "Invalid sig hash - Odd number of characters.".to_string() {
+    if value == String::from("Invalid sig hash - Odd number of characters.") {
         return Err(CError::StateEntityError(value));
     }
 

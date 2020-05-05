@@ -44,6 +44,11 @@ pub fn generate_keypair() -> (util::key::PrivateKey, util::key::PublicKey) {
     return (priv_key, pub_key)
 }
 
+/// Get state chain by ID
+pub fn get_statechain(wallet: &mut Wallet, state_chain_id: &String) -> Result<Vec<String>> {
+    requests::post(&wallet.client_shim,&format!("api/statechain/{}",state_chain_id))
+}
+
 /// struct contains data necessary to caluculate tx input sighash
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PrepareSignTxMessage {
@@ -56,10 +61,10 @@ pub struct PrepareSignTxMessage {
 }
 
 /// Sign a transaction input with state entity shared wallet
-pub fn cosign_tx_input(wallet: &mut Wallet, shared_wallet_id: &String, prepare_sign_msg: &PrepareSignTxMessage) -> Result<Transaction> {
+pub fn cosign_tx_input(wallet: &mut Wallet, shared_wallet_id: &String, prepare_sign_msg: &PrepareSignTxMessage) -> Result<(String, Transaction)> {
 
     // message 1 - send back-up tx data for validation.
-    requests::postb(&wallet.client_shim, &format!("prepare-sign/{}", shared_wallet_id), prepare_sign_msg)?;
+    let state_chain_id: String = requests::postb(&wallet.client_shim, &format!("prepare-sign/{}", shared_wallet_id), prepare_sign_msg)?;
 
     // Co-sign back-up tx
     // get sigHash and transform into message to be signed
@@ -113,7 +118,7 @@ pub fn cosign_tx_input(wallet: &mut Wallet, shared_wallet_id: &String, prepare_s
     let pk_vec = mk.public.q.get_element().serialize().to_vec();
 
     tx_signed.input[0].witness = vec![sig_vec, pk_vec];
-    Ok(tx_signed)
+    Ok((state_chain_id, tx_signed))
 }
 
 /// build funding tx spending inputs to p2wpkh address P for amount A

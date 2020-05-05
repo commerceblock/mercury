@@ -56,7 +56,7 @@ pub struct SessionData {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct TransferData {
     pub state_chain_id: String,
-    pub receiver_proof_key: PublicKey,
+    pub new_state_chain: Vec<String>,
     pub x1: FE
 }
 
@@ -89,6 +89,20 @@ pub fn check_user_auth(
     .ok_or(SEError::AuthError)
 }
 
+
+#[post("/api/statechain/<id>", format = "json")]
+pub fn get_statechain(
+    state: State<Config>,
+    claim: Claims,
+    id: String,
+) -> Result<Json<Vec<String>>> {
+    let session_data: StateChain =
+        db::get(&state.db, &claim.sub, &id, &StateChainStruct::StateChain)?
+            .ok_or(SEError::Generic(format!("No data for such identifier: StateChain {}", id)))?;
+    Ok(Json(session_data.chain))
+}
+
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DepositMsg1 {
     pub proof_key: String,
@@ -103,7 +117,7 @@ pub fn deposit_init(
     state: State<Config>,
     claim: Claims,
     msg1: Json<DepositMsg1>,
-) -> Result<Json<(String)>> {
+) -> Result<Json<String>> {
     // generate shared wallet ID (user ID)
     let user_id = Uuid::new_v4().to_string();
 
@@ -128,7 +142,7 @@ pub fn deposit_init(
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMsg1 {
     id: String,
-    receiver_proof_key: PublicKey,
+    new_state_chain: Vec<String>,
 }
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMsg2 {
@@ -166,7 +180,7 @@ pub fn transfer_init(
         &StateChainStruct::TransferData,
         &TransferData {
             state_chain_id: session_data.state_chain_id.clone(),
-            receiver_proof_key: msg1.receiver_proof_key,
+            new_state_chain: msg1.new_state_chain.clone(),
             x1
         }
     )?;
@@ -194,7 +208,7 @@ pub fn prepare_sign_backup(
     claim: Claims,
     id: String,
     prepare_sign_msg: Json<PrepareSignTxMessage>,
-) -> Result<Json<()>> {
+) -> Result<Json<String>> {
     // auth user
     check_user_auth(&state, &claim, &id)?;
 
@@ -222,23 +236,24 @@ pub fn prepare_sign_backup(
         prepare_sign_msg.amount
     );
 
-    // store SessionData for user: sig_hash with back up tx and state chain id
-    let state_chain_id = Uuid::new_v4().to_string();
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &StateChainStruct::SessionData,
-        &SessionData {
-            sig_hash: sig_hash.clone(),
-            backup_tx: tx_b.clone(),
-            state_chain_id: state_chain_id.clone()
-        }
-    )?;
 
-    // create StateChain DB object if deposit
+    // if deposit()
     if prepare_sign_msg.transfer == false {
-        println!("creating SC");
+        // store SessionData for user: sig_hash with back up tx and state chain id
+        let state_chain_id = Uuid::new_v4().to_string();
+        db::insert(
+            &state.db,
+            &claim.sub,
+            &id,
+            &StateChainStruct::SessionData,
+            &SessionData {
+                sig_hash: sig_hash.clone(),
+                backup_tx: tx_b.clone(),
+                state_chain_id: state_chain_id.clone()
+            }
+        )?;
+
+        // create StateChain DB object
         db::insert(
             &state.db,
             &claim.sub,
@@ -250,7 +265,33 @@ pub fn prepare_sign_backup(
                 backup_tx: None
             }
         )?;
-    }
 
-    Ok(Json(()))
+        return Ok(Json(state_chain_id));
+    };
+
+    // if transfer() get and update SessionData for this user
+    let mut session_data: SessionData =
+        db::get(&state.db, &claim.sub, &id, &StateChainStruct::SessionData)?
+            .ok_or(SEError::Generic(format!("No data for such identifier: SessionData {}", id)))?;
+
+    session_data.sig_hash = sig_hash;
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &id,
+        &StateChainStruct::SessionData,
+        &session_data
+    )?;
+
+    Ok(Json(String::from("")))
 }
+
+// #[derive(Serialize, Deserialize, Debug)]
+// pub struct TransferMsg3 {
+//     : FE,
+// }
+// /// Sign state chain to pass ownership to new owner
+// #[post("/sign-sign_statechain/<id>", format = "json", data = "<prepare_sign_msg>")]
+// pub fn sign_statechain() {
+//
+// }

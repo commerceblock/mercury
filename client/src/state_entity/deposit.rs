@@ -35,7 +35,9 @@ pub fn session_init(wallet: &mut Wallet) -> Result<String> {
 
 /// Deposit coins into state entity. Requires list of inputs and spending addresses of those inputs
 /// for funding transaction.
-pub fn deposit(wallet: &mut Wallet, inputs: Vec<TxIn>, funding_spend_addrs: Vec<Address>, amount: Amount) -> Result<(String, Transaction, Transaction, PrepareSignTxMessage)> {
+pub fn deposit(wallet: &mut Wallet, inputs: Vec<TxIn>, funding_spend_addrs: Vec<Address>, amount: Amount)
+    -> Result<(String, String, Transaction, Transaction, PrepareSignTxMessage)>
+{
     // init. Receive shared wallet ID
     let shared_wallet_id: String = session_init(wallet)?;
 
@@ -60,7 +62,7 @@ pub fn deposit(wallet: &mut Wallet, inputs: Vec<TxIn>, funding_spend_addrs: Vec<
         transfer: false
     };
 
-    let tx_b_signed = cosign_tx_input(wallet, &shared_wallet_id, &tx_b_prepare_sign_msg)?;
+    let (state_chain_id, tx_b_signed) = cosign_tx_input(wallet, &shared_wallet_id, &tx_b_prepare_sign_msg)?;
 
-    Ok((shared_wallet_id, tx_0_signed, tx_b_signed, tx_b_prepare_sign_msg))
+    Ok((shared_wallet_id, state_chain_id, tx_0_signed, tx_b_signed, tx_b_prepare_sign_msg))
 }

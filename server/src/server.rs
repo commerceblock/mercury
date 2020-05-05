@@ -100,7 +100,8 @@ pub fn get_server() -> Rocket {
                 schnorr::sign,
                 state_entity::deposit_init,
                 state_entity::transfer_init,
-                state_entity::prepare_sign_backup
+                state_entity::prepare_sign_backup,
+                state_entity::get_statechain
             ],
         )
         .manage(db_config)
