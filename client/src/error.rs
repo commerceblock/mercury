@@ -28,6 +28,11 @@ impl From<String> for CError {
         CError::Generic(e)
     }
 }
+impl From<&str> for CError {
+    fn from(e: &str) -> CError {
+        CError::Generic(e.to_string())
+    }
+}
 
 impl From<Bip32Error> for CError {
     fn from(e: Bip32Error) -> CError {
@@ -58,7 +63,7 @@ impl WalletErrorType {
 impl fmt::Display for CError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            CError::Generic(ref e) => write!(f, "generic Error: {}", e),
+            CError::Generic(ref e) => write!(f, "Error: {}", e),
             CError::StateEntityError(ref e) => write!(f, "State Entity Error: {}", e),
             CError::SchnorrError(ref e) => write!(f, "Schnorr Error: {}", e),
             CError::WalletError(ref error, ref value) => write!(f, "Wallet Error: {} (value: {})", error.as_str(), value),

@@ -30,7 +30,7 @@ impl From<String> for SEError {
 impl fmt::Display for SEError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            SEError::Generic(ref e) => write!(f, "generic Error: {}", e),
+            SEError::Generic(ref e) => write!(f, "Error: {}", e),
             SEError::AuthError => write!(f,"User authorisation failed"),
             SEError::SigningError(ref e) => write!(f,"Signing Error: {}",e),
         }

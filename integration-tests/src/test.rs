@@ -166,8 +166,16 @@ mod tests {
                 deposit_resp.4     // backup tx prepare sign msg
         ).unwrap();
 
-        println!("x1: {:?} ",tranfer_sender_resp.0);
-        println!("Back up transaction: {:?} ",tranfer_sender_resp.1);
+        println!("tranfer_sender_resp: {:?} ",tranfer_sender_resp);
+
+        let transfer_receiver_resp  =
+            state_entity::transfer::transfer_receiver(
+                &mut wallet_receiver,
+                &tranfer_sender_resp,
+                &receiver_addr
+            ).unwrap();
+
+        println!("transfer_receiver_resp: {:?} ",transfer_receiver_resp);
 
     }
 

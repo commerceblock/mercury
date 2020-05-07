@@ -10,38 +10,60 @@
 //      b. State Entity generate x1 and sends to Sender
 //      c. Sender and State Entity Co-sign new back up transaction sending to Receivers
 //          backup address Addr(B2)
-// 2. Receiver performs transfer with State
-//      a.
+// 2. Receiver performs transfer with State Entity
+//      a. Verify state chain is updated
+//      b. calculate t1=01x1
+//      c. calucaulte t2 = t1*o2_inv
+//      d. Send t2, O2 to state entity
+//      e. Verify o2*S2 = P
 
-use bitcoin::Transaction;
 use super::super::Result;
+use crate::error::CError;
 use crate::wallet::wallet::{ StateEntityAddress, Wallet };
 use crate::state_entity::util::{ get_statechain, cosign_tx_input, PrepareSignTxMessage };
 use super::super::utilities::requests;
 
-use curv::FE;
+use bitcoin::Transaction;
+use curv::elliptic::curves::traits::{ECPoint, ECScalar};
+use curv::{FE, GE};
 
+/// Sender -> SE
 #[derive(Serialize, Debug)]
 pub struct TransferMsg1 {
-    id: String,
+    shared_wallet_id: String,
     new_state_chain: Vec<String>,
 }
+/// SE -> Sender
 #[derive(Deserialize, Debug)]
 pub struct TransferMsg2 {
     x1: FE,
 }
+/// Sender -> Receiver
+#[derive(Deserialize, Debug)]
+pub struct TransferMsg3 {
+    shared_wallet_id: String,
+    t1: FE, // t1 = o1x1
+    new_backup_tx: Transaction,
+    state_chain: Vec<String>,
+}
 
-// Transfer coins to new Owner from this wallet
-pub fn transfer_sender(wallet: &mut Wallet, shared_wallet_id: &String, state_chain_id: &String, receiver_addr: &StateEntityAddress, mut prev_tx_b_prepare_sign_msg: PrepareSignTxMessage) -> Result<(FE, Transaction)> {
+/// Transfer coins to new Owner from this wallet
+pub fn transfer_sender(
+    wallet: &mut Wallet,
+    shared_wallet_id: &String,
+    state_chain_id: &String,
+    receiver_addr: &StateEntityAddress,
+    mut prev_tx_b_prepare_sign_msg: PrepareSignTxMessage
+) -> Result<TransferMsg3> {
     // first sign state chain (simply append receivers proof key for now)
     let mut state_chain: Vec<String> = get_statechain(wallet, state_chain_id)?;
     state_chain.push(receiver_addr.proof_key.to_string());
 
     // init transfer: perform auth and send new statechain
-    let transfer_msg2: TransferMsg2 = requests::postb(&wallet.client_shim,&format!("/transfer/init"),
+    let transfer_msg2: TransferMsg2 = requests::postb(&wallet.client_shim,&format!("/transfer/sender"),
         &TransferMsg1 {
-            id: shared_wallet_id.to_string(),
-            new_state_chain: state_chain
+            shared_wallet_id: shared_wallet_id.to_string(),
+            new_state_chain: state_chain.clone()
         })?;
 
     // sign new back up tx
@@ -50,16 +72,68 @@ pub fn transfer_sender(wallet: &mut Wallet, shared_wallet_id: &String, state_cha
 
     // get o1 priv key
     let shared_wal = wallet.get_shared_wallet(&shared_wallet_id).expect("No shared wallet found for id");
-    let address_derivation = shared_wal.addresses_derivation_map.get(&prev_tx_b_prepare_sign_msg.spending_addr).unwrap();
-    let o1 = &address_derivation.mk.private.x2;
+    let o1 = shared_wal.private_share.master_key.private.get_private_key();
 
-    Ok((transfer_msg2.x1, new_tx_b_signed))
+    // t1 = o1x1
+    let t1 = o1 * transfer_msg2.x1;
+
+    let transfer_msg3 = TransferMsg3 {
+        shared_wallet_id: shared_wallet_id.to_string(),
+        t1, // should be encrypted
+        new_backup_tx: new_tx_b_signed,
+        state_chain
+    };
+    Ok(transfer_msg3)
 }
 
+/// Receiver -> State Entity
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TransferMsg4 {
+    shared_wallet_id: String,
+    t2: FE, // t2 = t1*o2_inv = o1*x1*o2_inv
+    state_chain: Vec<String>,
+    o2_pub: GE
+}
+/// State Entity -> Receiver
+#[derive(Deserialize, Debug)]
+pub struct TransferMsg5 {
+    s2_pub: GE
+}
 /// Transfer coins from old Owner to this wallet
-pub fn transfer_receiver(wallet: &mut Wallet) {
+pub fn transfer_receiver(
+    wallet: &mut Wallet,
+    transfer_msg3: &TransferMsg3,
+    se_addr: &StateEntityAddress
+) -> Result<TransferMsg5> {
+    // verify state chain represents this address as new owner
+    if se_addr.proof_key.to_string() != transfer_msg3.state_chain.last().ok_or("State chain empty")?.to_string() {
+        return Err(CError::Generic(String::from("State Chain verification failed.")))
+    }
+    // generate o2 private key and corresponding 02 public key
+    let o2: FE = ECScalar::new_random();
+    let g: GE = ECPoint::generator();
+    let o2_pub: GE = g * o2;
 
+    // decrypt t1
 
+    // t2 = t1*o2_inv = o1*x1*o2_inv
+    let t2 = transfer_msg3.t1 * (o2.invert());
+
+    // encrypt t2 with SE key and sign with Receiver proof key (se_addr.proof_key)
+
+    let transfer_msg5: TransferMsg5 = requests::postb(&wallet.client_shim,&format!("/transfer/receiver"),
+        &TransferMsg4 {
+            shared_wallet_id: transfer_msg3.shared_wallet_id.clone(),
+            t2, // should be encrypted
+            state_chain: transfer_msg3.state_chain.clone(),
+            o2_pub
+        })?;
+
+    // Make shared wallet with new private share
+
+    // Check that the first address generated is the backup tx output address
+
+    Ok(transfer_msg5)
 }
 
 
@@ -75,6 +149,7 @@ mod tests {
 
         //owner1 share
         let o1_s: FE = ECScalar::new_random();
+        let o1_p: GE = g * o1_s;
 
         // SE share
         let s1_s: FE = ECScalar::new_random();
@@ -82,6 +157,8 @@ mod tests {
 
         // deposit P
         let p_p = s1_p*o1_s;
+        println!("P1: {:?}",p_p);
+        let p_p = o1_p*s1_s;
         println!("P1: {:?}",p_p);
 
 

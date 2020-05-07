@@ -25,7 +25,7 @@ const FEE: u64 = 1000;
 
 pub fn reverse_hex_str(hex_str: String) -> Result<String> {
     if hex_str.len() % 2 != 0 {
-        return Err(SEError::SigningError(String::from("Invalid sig hash - Odd number of characters.")))
+        return Err(SEError::SigningError(format!("Invalid sig hash - Odd number of characters. SigHash: {}",hex_str)))
     }
     let mut hex_str = hex_str.chars().rev().collect::<String>();
     let mut result = String::with_capacity(hex_str.len());

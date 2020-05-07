@@ -6,11 +6,11 @@
 use bitcoin::network::constants::Network;
 use curv::elliptic::curves::traits::ECPoint;
 use curv::{BigInt, GE};
-use kms::ecdsa::two_party::{ MasterKey2, Party2Public, party2 };
 use serde_json;
 use std::fs;
 
 use centipede::juggling::proof_system::{Helgamalsegmented, Proof};
+use kms::ecdsa::two_party::{ MasterKey2, Party2Public, party2 };
 use kms::chain_code::two_party::party2::ChainCode2;
 
 use super::super::ecdsa;

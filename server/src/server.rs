@@ -98,10 +98,11 @@ pub fn get_server() -> Rocket {
                 schnorr::keygen_second,
                 schnorr::keygen_third,
                 schnorr::sign,
+                state_entity::get_statechain,
                 state_entity::deposit_init,
-                state_entity::transfer_init,
                 state_entity::prepare_sign_backup,
-                state_entity::get_statechain
+                state_entity::transfer_sender,
+                state_entity::transfer_receiver
             ],
         )
         .manage(db_config)

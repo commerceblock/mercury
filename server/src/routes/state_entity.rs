@@ -2,15 +2,16 @@
 //!
 //! State Entity implementation
 
+use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 use crate::error::SEError;
 use crate::util::build_tx_b;
-use bitcoin::{ Address, Amount, OutPoint, TxIn, PublicKey, Transaction };
+use crate::routes::ecdsa;
+use bitcoin::{ Address, Amount, OutPoint, TxIn, Transaction };
 use bitcoin::hashes::sha256d;
 use bitcoin::util::bip143::SighashComponents;
 
-use curv::elliptic::curves::traits::ECScalar;
-use curv::FE;
-
+use curv::elliptic::curves::traits::{ ECScalar,ECPoint };
+use curv::{FE,GE};
 use super::super::Result;
 use rocket_contrib::json::Json;
 use rocket::State;
@@ -139,55 +140,6 @@ pub fn deposit_init(
     Ok(Json(user_id))
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TransferMsg1 {
-    id: String,
-    new_state_chain: Vec<String>,
-}
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TransferMsg2 {
-    x1: FE,
-}
-/// Initiliase transfer protocol
-///     - Authorisation of Owner and DoS protection
-///     - Validate transfer parameters
-///     - Store transfer parameters
-#[post("/transfer/init", format = "json", data = "<msg1>")]
-pub fn transfer_init(
-    state: State<Config>,
-    claim: Claims,
-    msg1: Json<TransferMsg1>,
-) -> Result<Json<TransferMsg2>> {
-    // auth user
-    check_user_auth(&state, &claim, &msg1.id)?;
-
-    // Verification/PoW/authoriation failed
-    // Err(SEError::AuthError)
-
-    // get state_chain id
-    let session_data: SessionData =
-        db::get(&state.db, &claim.sub, &msg1.id, &StateChainStruct::SessionData)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", msg1.id)))?;
-
-    // Generate x1
-    let x1: FE = ECScalar::new_random();
-
-    // create TransferData DB entry
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &msg1.id,
-        &StateChainStruct::TransferData,
-        &TransferData {
-            state_chain_id: session_data.state_chain_id.clone(),
-            new_state_chain: msg1.new_state_chain.clone(),
-            x1
-        }
-    )?;
-
-    // TODO encrypt x1 with Senders proof key
-    Ok(Json(TransferMsg2{x1}))
-}
 
 /// struct contains data necessary to caluculate tx input sighash
 #[derive(Serialize, Deserialize, Debug)]
@@ -286,12 +238,120 @@ pub fn prepare_sign_backup(
     Ok(Json(String::from("")))
 }
 
-// #[derive(Serialize, Deserialize, Debug)]
-// pub struct TransferMsg3 {
-//     : FE,
-// }
-// /// Sign state chain to pass ownership to new owner
-// #[post("/sign-sign_statechain/<id>", format = "json", data = "<prepare_sign_msg>")]
-// pub fn sign_statechain() {
-//
-// }
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TransferMsg1 {
+    shared_wallet_id: String,
+    new_state_chain: Vec<String>,
+}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TransferMsg2 {
+    x1: FE,
+}
+/// Initiliase transfer protocol
+///     - Authorisation of Owner and DoS protection
+///     - Validate transfer parameters
+///     - Store transfer parameters
+#[post("/transfer/sender", format = "json", data = "<transfer_msg1>")]
+pub fn transfer_sender(
+    state: State<Config>,
+    claim: Claims,
+    transfer_msg1: Json<TransferMsg1>,
+) -> Result<Json<TransferMsg2>> {
+    // auth user
+    check_user_auth(&state, &claim, &transfer_msg1.shared_wallet_id)?;
+
+    // Verification/PoW/authoriation failed
+    // Err(SEError::AuthError)
+
+    // get state_chain id
+    let session_data: SessionData =
+        db::get(&state.db, &claim.sub, &transfer_msg1.shared_wallet_id, &StateChainStruct::SessionData)?
+            .ok_or(SEError::Generic(format!("No data for such identifier {}", transfer_msg1.shared_wallet_id)))?;
+
+    // Generate x1
+    let x1: FE = ECScalar::new_random();
+
+    // create TransferData DB entry
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &transfer_msg1.shared_wallet_id,
+        &StateChainStruct::TransferData,
+        &TransferData {
+            state_chain_id: session_data.state_chain_id.clone(),
+            new_state_chain: transfer_msg1.new_state_chain.clone(),
+            x1
+        }
+    )?;
+
+    // TODO encrypt x1 with Senders proof key
+    Ok(Json(TransferMsg2{x1}))
+}
+
+/// Receiver -> State Entity
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TransferMsg4 {
+    shared_wallet_id: String,
+    t2: FE, // t2 = t1*o2_inv = o1*x1*o2_inv
+    state_chain: Vec<String>,
+    o2_pub: GE
+}
+/// State Entity -> Receiver
+#[derive(Serialize, Debug)]
+pub struct TransferMsg5 {
+    s2_pub: GE
+}
+/// Transfer shared wallet to new Owner
+///     - check new Owner's state chain is correct
+///     - perform 2P-ECDSA key rotation
+///     - return new public shared key S2
+#[post("/transfer/receiver", format = "json", data = "<transfer_msg4>")]
+pub fn transfer_receiver(
+    state: State<Config>,
+    claim: Claims,
+    transfer_msg4: Json<TransferMsg4>,
+) -> Result<Json<TransferMsg5>> {
+    let id = transfer_msg4.shared_wallet_id.clone();
+    // Get TransferData for shared_wallet_id
+    let transfer_data: TransferData =
+        db::get(&state.db, &claim.sub, &id, &StateChainStruct::TransferData)?
+            .ok_or(SEError::Generic(format!("No data for such identifier: TransferData {:?}", &id)))?;
+    // ensure updated state chains are the same
+    if transfer_data.new_state_chain != transfer_msg4.state_chain {
+        debug!("Transfer protocol failed. Receiver state chain and State Entity state chain do not match.");
+        return Err(SEError::Generic(format!("State chain provided does not match state chain at id {}",transfer_data.state_chain_id)));
+    }
+
+    // Get Party1 (State Entity) private share
+    let party_1_private: Party1Private = db::get(&state.db, &claim.sub, &id, &ecdsa::EcdsaStruct::Party1Private)?
+    .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+    // Get Party2 (Owner 1) public share
+    let party_2_public: GE = db::get(&state.db, &claim.sub, &id, &ecdsa::EcdsaStruct::Party2Public)?
+        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+
+    // decrypt t2
+
+    let x1 = transfer_data.x1;
+    let t2 = transfer_msg4.t2;
+    let s1 = party_1_private.get_private_key();
+
+    // s2 = o1*o2_inv*s1
+    // t2 = o1*x1*o2_inv
+    let s2 = t2 * (x1.invert()) * s1;
+    let g: GE = ECPoint::generator();
+    let s2_pub: GE = g * s2;
+
+    let p1_pub = party_2_public * s1;
+    let p2_pub = transfer_msg4.o2_pub * s2;
+
+    // check P1 = o1_pub*s1 === p2 = o2_pub*s2
+    if p1_pub != p2_pub {
+        debug!("Transfer protocol failed. P1 != P2.");
+        return Err(SEError::Generic(String::from("Transfer protocol error: P1 != P2")));
+    }
+    Ok(Json(
+        TransferMsg5 {
+            s2_pub
+        }
+    ))
+}
