@@ -9,6 +9,13 @@ You will notice that rust-paillier contains depreciated code and so will not bui
 We will eventually update the 2P-ECDSA but for now you must open your local version of the rust-paillier
 library (as directed to in the error message) and remove/comment the problem line of code.
 
+You will need to use an experimental branch of rust, use `rustup` to switch to
+the nightly branch, and use cargo to build:
+```
+rustup default nightly
+cargo build
+```
+
 
 Disclaimer
 -------
