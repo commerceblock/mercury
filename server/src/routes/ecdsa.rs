@@ -481,12 +481,28 @@ pub fn sign_second(
             &StateChainStruct::SessionData)?;
         match sig_hash {
             Some(_) => debug!("Sig hash found in DB for this id."),
-            // fix to return Error. Currently return empty Result<Json<party_one::SignatureRecid>>
             None => return Err(SEError::SigningError(String::from("No sig hash found for state chain session.")))
         };
 
         // check message to sign is correct sig hash
-        if sig_hash.unwrap().sig_hash.to_string() != reverse_hex_str(request.message.to_hex())? {
+        let mut message_hex = request.message.to_hex();
+        let message_sig_hash;
+        match reverse_hex_str(message_hex.clone()) {
+            Ok(res) => message_sig_hash = res,
+            Err(e) => {
+                // Try for case in which sighash begins with leading 0's and so conversion to hex from
+                // BigInt is incorrect
+                let num_zeros = 64 - message_hex.len();
+                if num_zeros < 1 { return Err(SEError::from(e)) };
+                let temp = message_hex.clone();
+                message_hex = format!("{:0width$}",0 ,width = num_zeros);
+                message_hex.push_str(&temp);
+                // try reverse again
+                message_sig_hash = reverse_hex_str(message_hex.clone())?;
+            }
+        }
+
+        if sig_hash.unwrap().sig_hash.to_string() != message_sig_hash {
             return Err(SEError::SigningError(String::from("Message to be signed does not match verified sig hash.")))
         } else {
             debug!("Sig hash in message matches verified sig hash.")

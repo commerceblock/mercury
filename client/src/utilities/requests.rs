@@ -58,10 +58,10 @@ fn _postb<T, V>(client_shim: &ClientShim, path: &str, body: T) -> Result<V>
     if value.contains(&String::from("Signing Error")) {
         return Err(CError::StateEntityError(value));
     }
-    if value == String::from("User authorisation failed") {
+    if value.contains(&String::from("Invalid sig hash - Odd number of characters.")) {
         return Err(CError::StateEntityError(value));
     }
-    if value == String::from("Invalid sig hash - Odd number of characters.") {
+    if value == String::from("User authorisation failed") {
         return Err(CError::StateEntityError(value));
     }
     if value == String::from("Error: Invalid o2, try again.") {
