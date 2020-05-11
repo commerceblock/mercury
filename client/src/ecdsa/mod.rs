@@ -12,7 +12,7 @@ pub mod sign;
 pub mod types;
 pub mod recover;
 
-pub use keygen::get_master_key;
+pub use keygen::{get_master_key, get_master_key_with_fixed_secret};
 pub use rotate::rotate_master_key;
 pub use sign::sign;
 pub use types::PrivateShare;

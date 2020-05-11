@@ -3,6 +3,7 @@
 //! Contains key shares of co-owned keys between user and server.
 //! Functionality includes key gen, server back-up and co-signing
 
+use curv::FE;
 use bitcoin::network::constants::Network;
 use curv::elliptic::curves::traits::ECPoint;
 use curv::{BigInt, GE};
@@ -69,6 +70,21 @@ pub struct SharedWallet {
 impl SharedWallet {
     pub fn new(id: &String, client_shim: &ClientShim, net: &String) -> Result<SharedWallet> {
         let private_share = ecdsa::get_master_key(id, client_shim)?;
+        let last_derived_pos = 0;
+        let addresses_derivation_map = HashMap::new();
+        let network = net.clone();
+
+        Ok(SharedWallet {
+            id: id.to_string(),
+            network,
+            private_share,
+            last_derived_pos,
+            addresses_derivation_map,
+        })
+    }
+
+    pub fn new_fixed_secret_key(id: &String, client_shim: &ClientShim, net: &String, secrte_key: &FE) -> Result<SharedWallet> {
+        let private_share = ecdsa::get_master_key_with_fixed_secret(id, client_shim, secrte_key)?;
         let last_derived_pos = 0;
         let addresses_derivation_map = HashMap::new();
         let network = net.clone();

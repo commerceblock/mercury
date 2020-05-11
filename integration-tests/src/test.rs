@@ -153,6 +153,10 @@ mod tests {
         println!("state chain id: {:?} ",deposit_resp.1);
         println!("Funding transaction: {:?} ",deposit_resp.2);
         println!("Back up transaction: {:?} ",deposit_resp.3);
+        println!("tx_b_prepare_sign_msg: {:?} ",deposit_resp.4);
+
+        let state_chain = state_entity::util::get_statechain(&mut wallet_sender, &deposit_resp.1).unwrap();
+        assert_eq!(state_chain.len(),1);
 
         let mut wallet_receiver = gen_wallet();
         let receiver_addr = wallet_receiver.get_new_state_entity_address().unwrap();
@@ -177,6 +181,16 @@ mod tests {
 
         println!("transfer_receiver_resp: {:?} ",transfer_receiver_resp);
 
+        // check shared wallets have the same master public key
+        assert_eq!(
+            wallet_sender.get_shared_wallet(&deposit_resp.0).unwrap().private_share.master_key.public.q,
+            wallet_receiver.get_shared_wallet(&transfer_receiver_resp.new_shared_wallet_id).unwrap().private_share.master_key.public.q
+        );
+
+        // check state chain is updated
+        let state_chain = state_entity::util::get_statechain(&mut wallet_sender, &deposit_resp.1).unwrap();
+        assert_eq!(state_chain.len(),2);
+        assert_eq!(state_chain.last().unwrap().to_string(), receiver_addr.proof_key.to_string());
     }
 
     #[test]

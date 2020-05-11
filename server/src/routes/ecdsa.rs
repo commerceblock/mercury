@@ -6,7 +6,7 @@
 // it and/or modify it under the terms of the GNU General Public
 // License as published by the Free Software Foundation, either
 // version 3 of the License, or (at your option) any later version.
-//
+
 use super::super::Result;
 use crate::routes::state_entity::{ check_user_auth, StateChainStruct, SessionData, StateChain };
 use crate::util::reverse_hex_str;
@@ -110,6 +110,48 @@ pub fn first_message(
 
     // Generate shared key
     let (key_gen_first_msg, comm_witness, ec_key_pair) = MasterKey1::key_gen_first_message();
+
+    //save pos 0
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &id,
+        &EcdsaStruct::POS,
+        &HDPos { pos: 0u32 },
+    )?;
+
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &id,
+        &EcdsaStruct::KeyGenFirstMsg,
+        &key_gen_first_msg,
+    )?;
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &id,
+        &EcdsaStruct::CommWitness,
+        &comm_witness,
+    )?;
+    db::insert(&state.db, &claim.sub, &id, &EcdsaStruct::EcKeyPair, &ec_key_pair)?;
+
+    Ok(Json((id, key_gen_first_msg)))
+}
+
+/// For transfer protocol. Servers secret key s2 must be grabbed from db rather than
+/// randomly generated.
+#[post("/ecdsa/keygen/<id>/first-fixed", format="json")]
+pub fn first_message_fixed(
+    state: State<Config>,
+    claim: Claims,
+    id: String,
+) -> Result<Json<(String, party_one::KeyGenFirstMsg)>> {
+    // check authorisation id is in DB (and check password?)
+    let user_session = check_user_auth(&state, &claim, &id)?;
+
+    // Generate shared key
+    let (key_gen_first_msg, comm_witness, ec_key_pair) = MasterKey1::key_gen_first_message_predefined(user_session.s2.unwrap());
 
     //save pos 0
     db::insert(

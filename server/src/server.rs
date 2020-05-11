@@ -82,6 +82,7 @@ pub fn get_server() -> Rocket {
             routes![
                 ping::ping,
                 ecdsa::first_message,
+                ecdsa::first_message_fixed,
                 ecdsa::second_message,
                 ecdsa::third_message,
                 ecdsa::fourth_message,

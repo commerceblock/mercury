@@ -6,17 +6,18 @@ use std::error;
 use std::fmt;
 use bitcoin::util::bip32::Error as Bip32Error;
 use reqwest::Error as ReqwestError;
-/// State Entity library specific errors
+
+/// Client specific errors
 #[derive(Debug, Deserialize)]
 pub enum CError {
-    /// Wallet
-    WalletError(WalletErrorType, String),
-    /// State entity Athorisation failed
-    StateEntityError(String),
-    /// Schnorr
-    SchnorrError(String),
     /// Generic error from string error message
     Generic(String),
+    /// Wallet
+    WalletError(WalletErrorType, String),
+    /// State entity errors
+    StateEntityError(String),
+    /// Schnorr error
+    SchnorrError(String),
     /// Inherit all errors from bip32
     Bip32(String),
     /// Inherit error from reqwest
@@ -45,7 +46,7 @@ impl From<ReqwestError> for CError {
     }
 }
 
-/// Input parameter error types
+/// Wallet error types
 #[derive(Debug, Deserialize)]
 pub enum WalletErrorType {
     /// No shared wallet found for ID

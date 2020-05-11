@@ -19,7 +19,7 @@
 
 use super::super::Result;
 use crate::error::CError;
-use crate::wallet::wallet::{ StateEntityAddress, Wallet };
+use crate::wallet::wallet::{StateEntityAddress, Wallet};
 use crate::state_entity::util::{ get_statechain, cosign_tx_input, PrepareSignTxMessage };
 use super::super::utilities::requests;
 
@@ -95,9 +95,10 @@ pub struct TransferMsg4 {
     o2_pub: GE
 }
 /// State Entity -> Receiver
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct TransferMsg5 {
-    s2_pub: GE
+    pub new_shared_wallet_id: String,
+    s2_pub: GE,
 }
 /// Transfer coins from old Owner to this wallet
 pub fn transfer_receiver(
@@ -109,8 +110,47 @@ pub fn transfer_receiver(
     if se_addr.proof_key.to_string() != transfer_msg3.state_chain.last().ok_or("State chain empty")?.to_string() {
         return Err(CError::Generic(String::from("State Chain verification failed.")))
     }
+
+    // check try_o2() comments and docs for justification of below code
+    let mut done = false;
+    let mut transfer_msg5 = TransferMsg5::default();
+    let mut o2 = FE::zero();
+    while !done {
+        match try_o2(wallet, transfer_msg3) {
+            Ok(success_resp) => {
+                o2 = success_resp.0.clone();
+                transfer_msg5 = success_resp.1.clone();
+                done = true;
+            },
+            Err(e) => {
+                if !e.to_string().contains(&String::from("Error: Invalid o2, try again.")) {
+                    return Err(e);
+                }
+                debug!("try o2 failure. Trying again...");
+                println!("try o2 failure. Trying again...");
+            }
+        }
+    }
+
+    // Make shared wallet with new private share
+    let shared_id = &transfer_msg5.new_shared_wallet_id;
+    wallet.gen_shared_wallet_fixed_secret_key(shared_id,&o2)?;
+
+    // Check that the first address generated is the backup tx output address
+    let p_addr = wallet.gen_addr_for_shared_wallet(shared_id).unwrap();
+    println!("p_addr: {:?}",p_addr);
+    println!("new_backup_tx: {:?}",transfer_msg3.new_backup_tx);
+
+    Ok(transfer_msg5)
+}
+
+// Constraint on s2 size means that some (most) o2 values are not valid for the lindell_2017 protocol.
+// We must generate random o2, test if the resulting s2 is valid and try again if not.
+/// Carry out transfer_receiver() protocol with a randomly generated o2 value.
+pub fn try_o2(wallet: &mut Wallet, transfer_msg3: &TransferMsg3) -> Result<(FE,TransferMsg5)>{
     // generate o2 private key and corresponding 02 public key
     let o2: FE = ECScalar::new_random();
+
     let g: GE = ECPoint::generator();
     let o2_pub: GE = g * o2;
 
@@ -128,14 +168,18 @@ pub fn transfer_receiver(
             state_chain: transfer_msg3.state_chain.clone(),
             o2_pub
         })?;
+    Ok((o2,transfer_msg5))
 
-    // Make shared wallet with new private share
-
-    // Check that the first address generated is the backup tx output address
-
-    Ok(transfer_msg5)
 }
 
+impl Default for TransferMsg5 {
+    fn default() -> TransferMsg5 {
+        TransferMsg5 {
+            new_shared_wallet_id: String::from(""),
+            s2_pub: GE::base_point2(),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

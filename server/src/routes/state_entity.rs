@@ -11,7 +11,7 @@ use bitcoin::hashes::sha256d;
 use bitcoin::util::bip143::SighashComponents;
 
 use curv::elliptic::curves::traits::{ ECScalar,ECPoint };
-use curv::{FE,GE};
+use curv::{BigInt,FE,GE};
 use super::super::Result;
 use rocket_contrib::json::Json;
 use rocket::State;
@@ -40,7 +40,9 @@ pub struct UserSession {
     /// User's password
     // pub pass: String
     /// User's public proof key
-    pub proof_key: String
+    pub proof_key: String,
+    /// If transfer() then  SE must know s2 value to create shared wallet
+    pub s2: Option<FE>
 }
 /// User Session Data
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -60,12 +62,21 @@ pub struct TransferData {
     pub new_state_chain: Vec<String>,
     pub x1: FE
 }
+/// Information to create new shared wallet with new Owner
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct TransferSessionData {
+    pub state_chain_id: String,
+    pub new_state_chain: Vec<String>,
+    pub x1: FE
+}
 
 #[derive(Debug)]
 pub enum StateChainStruct {
     UserSession,
     SessionData,
+
     StateChain,
+
     TransferData
 }
 
@@ -135,6 +146,7 @@ pub fn deposit_init(
         &UserSession {
             id: user_id.clone(),
             proof_key: msg1.proof_key.clone(),
+            s2: None
         }
     )?;
     Ok(Json(user_id))
@@ -299,7 +311,8 @@ pub struct TransferMsg4 {
 /// State Entity -> Receiver
 #[derive(Serialize, Debug)]
 pub struct TransferMsg5 {
-    s2_pub: GE
+    new_shared_wallet_id: String,
+    s2_pub: GE,
 }
 /// Transfer shared wallet to new Owner
 ///     - check new Owner's state chain is correct
@@ -316,8 +329,10 @@ pub fn transfer_receiver(
     let transfer_data: TransferData =
         db::get(&state.db, &claim.sub, &id, &StateChainStruct::TransferData)?
             .ok_or(SEError::Generic(format!("No data for such identifier: TransferData {:?}", &id)))?;
+    let new_state_chain = transfer_data.new_state_chain;
+
     // ensure updated state chains are the same
-    if transfer_data.new_state_chain != transfer_msg4.state_chain {
+    if new_state_chain != transfer_msg4.state_chain {
         debug!("Transfer protocol failed. Receiver state chain and State Entity state chain do not match.");
         return Err(SEError::Generic(format!("State chain provided does not match state chain at id {}",transfer_data.state_chain_id)));
     }
@@ -338,6 +353,14 @@ pub fn transfer_receiver(
     // s2 = o1*o2_inv*s1
     // t2 = o1*x1*o2_inv
     let s2 = t2 * (x1.invert()) * s1;
+
+    // check s2 is valid for Lindell protocol (s2<q/3)
+    let sk_bigint = s2.to_big_int();
+    let q_third = FE::q();
+    if sk_bigint >= q_third.div_floor(&BigInt::from(3)) {
+        return Err(SEError::Generic(format!("Invalid o2, try again.")));
+    }
+
     let g: GE = ECPoint::generator();
     let s2_pub: GE = g * s2;
 
@@ -349,9 +372,42 @@ pub fn transfer_receiver(
         debug!("Transfer protocol failed. P1 != P2.");
         return Err(SEError::Generic(String::from("Transfer protocol error: P1 != P2")));
     }
+
+    // create new UserSession to allow new owner to generate shared wallet
+    let new_shared_wallet_id = Uuid::new_v4().to_string();
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &new_shared_wallet_id,
+        &StateChainStruct::UserSession,
+        &UserSession {
+            id: new_shared_wallet_id.clone(),
+            proof_key: new_state_chain.last().unwrap().clone(),
+            s2: Some(s2)
+        }
+    )?;
+
+    // update state chain
+    let mut state_chain: StateChain =
+        db::get(&state.db, &claim.sub, &transfer_data.state_chain_id, &StateChainStruct::StateChain)?
+            .ok_or(SEError::Generic(format!("No data for such identifier: TransferData {:?}", &transfer_data.state_chain_id)))?;
+
+    assert_eq!(state_chain.chain.len(), new_state_chain.len()-1);
+    assert!(state_chain.backup_tx.is_some());
+    state_chain.chain = new_state_chain;
+
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &transfer_data.state_chain_id,
+        &StateChainStruct::StateChain,
+        &state_chain
+    )?;
+
     Ok(Json(
         TransferMsg5 {
-            s2_pub
+            new_shared_wallet_id,
+            s2_pub,
         }
     ))
 }

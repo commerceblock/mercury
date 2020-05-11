@@ -64,6 +64,9 @@ fn _postb<T, V>(client_shim: &ClientShim, path: &str, body: T) -> Result<V>
     if value == String::from("Invalid sig hash - Odd number of characters.") {
         return Err(CError::StateEntityError(value));
     }
+    if value == String::from("Error: Invalid o2, try again.") {
+        return Err(CError::StateEntityError(value));
+    }
 
     Ok(serde_json::from_str(value.as_str()).unwrap())
 }

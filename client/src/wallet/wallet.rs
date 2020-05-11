@@ -2,6 +2,7 @@
 //!
 //! Basic Bitcoin wallet functionality. Full key owned by this wallet.
 
+use curv::FE;
 use crate::error::{ CError, WalletErrorType::SharedWalletNotFound };
 use crate::mocks::mock_electrum::MockElectrum;
 use crate::wallet::shared_wallet::SharedWallet;
@@ -247,6 +248,12 @@ impl Wallet {
     /// create new 2P-ECDSA wallet with state entity
     pub fn gen_shared_wallet(&mut self, id: &String) -> Result<()> {
         self.shared_wallets.push(SharedWallet::new(id, &self.client_shim, &self.network)?);
+        Ok(())
+    }
+    /// create new 2P-ECDSA wallet with predeinfed private key
+    pub fn gen_shared_wallet_fixed_secret_key(&mut self, id: &String, secret_key: &FE) -> Result<()> {
+        self.shared_wallets.push(
+            SharedWallet::new_fixed_secret_key(id, &self.client_shim, &self.network, secret_key)?);
         Ok(())
     }
 
