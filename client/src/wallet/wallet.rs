@@ -380,7 +380,8 @@ pub fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state_entity::util::*;
+    extern crate shared_lib;
+    use shared_lib::util::{build_tx_0,RBF};
     use bitcoin::{ Amount, TxIn, OutPoint, Script };
     use bitcoin::hashes::sha256d;
 

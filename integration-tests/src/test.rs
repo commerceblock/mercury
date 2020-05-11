@@ -2,12 +2,13 @@
 mod tests {
     extern crate server_lib;
     extern crate client_lib;
+    extern crate shared_lib;
     extern crate bitcoin;
 
-    use client_lib::state_entity::util::PrepareSignTxMessage;
     use client_lib::*;
     use client_lib::wallet::wallet::Wallet;
     use server_lib::server;
+    use shared_lib::structs::PrepareSignTxMessage;
 
     use bitcoin::{ Amount, TxIn, Transaction, OutPoint };
     use bitcoin::hashes::sha256d;
@@ -122,13 +123,13 @@ mod tests {
         spawn_server();
         let mut wallet = gen_wallet();
 
-        if let Err(e) = state_entity::util::get_statechain(&mut wallet, &String::from("id")) {
+        if let Err(e) = state_entity::api::get_statechain(&mut wallet, &String::from("id")) {
             assert!(e.to_string().contains(&String::from("No data for such identifier: StateChain id")))
         }
 
         let deposit = run_deposit(&mut wallet);
 
-        let state_chain = state_entity::util::get_statechain(&mut wallet, &String::from(deposit.1.clone())).unwrap();
+        let state_chain = state_entity::api::get_statechain(&mut wallet, &String::from(deposit.1.clone())).unwrap();
         assert_eq!(state_chain, vec!(deposit.0));
     }
 
@@ -155,7 +156,7 @@ mod tests {
         println!("Back up transaction: {:?} ",deposit_resp.3);
         println!("tx_b_prepare_sign_msg: {:?} ",deposit_resp.4);
 
-        let state_chain = state_entity::util::get_statechain(&mut wallet_sender, &deposit_resp.1).unwrap();
+        let state_chain = state_entity::api::get_statechain(&mut wallet_sender, &deposit_resp.1).unwrap();
         assert_eq!(state_chain.len(),1);
 
         let mut wallet_receiver = gen_wallet();
@@ -188,7 +189,7 @@ mod tests {
         );
 
         // check state chain is updated
-        let state_chain = state_entity::util::get_statechain(&mut wallet_sender, &deposit_resp.1).unwrap();
+        let state_chain = state_entity::api::get_statechain(&mut wallet_sender, &deposit_resp.1).unwrap();
         assert_eq!(state_chain.len(),2);
         assert_eq!(state_chain.last().unwrap().to_string(), receiver_addr.proof_key.to_string());
     }

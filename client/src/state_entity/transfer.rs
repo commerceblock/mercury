@@ -18,34 +18,18 @@
 //      e. Verify o2*S2 = P
 
 use super::super::Result;
+
+extern crate shared_lib;
+
 use crate::error::CError;
 use crate::wallet::wallet::{StateEntityAddress, Wallet};
-use crate::state_entity::util::{ get_statechain, cosign_tx_input, PrepareSignTxMessage };
+use crate::state_entity::{util::cosign_tx_input, api::get_statechain};
 use super::super::utilities::requests;
 
-use bitcoin::Transaction;
+use shared_lib::structs::{PrepareSignTxMessage, TransferMsg1, TransferMsg2, TransferMsg3, TransferMsg4, TransferMsg5};
+
 use curv::elliptic::curves::traits::{ECPoint, ECScalar};
 use curv::{FE, GE};
-
-/// Sender -> SE
-#[derive(Serialize, Debug)]
-pub struct TransferMsg1 {
-    shared_wallet_id: String,
-    new_state_chain: Vec<String>,
-}
-/// SE -> Sender
-#[derive(Deserialize, Debug)]
-pub struct TransferMsg2 {
-    x1: FE,
-}
-/// Sender -> Receiver
-#[derive(Deserialize, Debug)]
-pub struct TransferMsg3 {
-    shared_wallet_id: String,
-    t1: FE, // t1 = o1x1
-    new_backup_tx: Transaction,
-    state_chain: Vec<String>,
-}
 
 /// Transfer coins to new Owner from this wallet
 pub fn transfer_sender(
@@ -86,20 +70,6 @@ pub fn transfer_sender(
     Ok(transfer_msg3)
 }
 
-/// Receiver -> State Entity
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TransferMsg4 {
-    shared_wallet_id: String,
-    t2: FE, // t2 = t1*o2_inv = o1*x1*o2_inv
-    state_chain: Vec<String>,
-    o2_pub: GE
-}
-/// State Entity -> Receiver
-#[derive(Deserialize, Debug, Clone)]
-pub struct TransferMsg5 {
-    pub new_shared_wallet_id: String,
-    s2_pub: GE,
-}
 /// Transfer coins from old Owner to this wallet
 pub fn transfer_receiver(
     wallet: &mut Wallet,
@@ -170,15 +140,6 @@ pub fn try_o2(wallet: &mut Wallet, transfer_msg3: &TransferMsg3) -> Result<(FE,T
         })?;
     Ok((o2,transfer_msg5))
 
-}
-
-impl Default for TransferMsg5 {
-    fn default() -> TransferMsg5 {
-        TransferMsg5 {
-            new_shared_wallet_id: String::from(""),
-            s2_pub: GE::base_point2(),
-        }
-    }
 }
 
 #[cfg(test)]

@@ -50,7 +50,6 @@ pub mod auth;
 pub mod routes;
 pub mod server;
 pub mod storage;
-pub mod util;
 pub mod tests;
 pub mod error;
 

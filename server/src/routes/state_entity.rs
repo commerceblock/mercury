@@ -2,25 +2,32 @@
 //!
 //! State Entity implementation
 
-use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
+use super::super::Result;
+
+extern crate shared_lib;
 use crate::error::SEError;
-use crate::util::build_tx_b;
 use crate::routes::ecdsa;
+use super::super::auth::jwt::Claims;
+use super::super::storage::db;
+use super::super::Config;
+
+use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
+use shared_lib::util::build_tx_b;
+use shared_lib::structs::*;
+
+
 use bitcoin::{ Address, Amount, OutPoint, TxIn, Transaction };
 use bitcoin::hashes::sha256d;
 use bitcoin::util::bip143::SighashComponents;
 
 use curv::elliptic::curves::traits::{ ECScalar,ECPoint };
 use curv::{BigInt,FE,GE};
-use super::super::Result;
 use rocket_contrib::json::Json;
 use rocket::State;
 use std::str::FromStr;
 use uuid::Uuid;
 
-use super::super::auth::jwt::Claims;
-use super::super::storage::db;
-use super::super::Config;
+
 
 /// contains state chain id and data
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -41,7 +48,7 @@ pub struct UserSession {
     // pub pass: String
     /// User's public proof key
     pub proof_key: String,
-    /// If transfer() then  SE must know s2 value to create shared wallet
+    /// If transfer() then SE must know s2 value to create shared wallet
     pub s2: Option<FE>
 }
 /// User Session Data
@@ -114,12 +121,6 @@ pub fn get_statechain(
     Ok(Json(session_data.chain))
 }
 
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct DepositMsg1 {
-    pub proof_key: String,
-}
-
 /// Initiliase deposit protocol
 ///     - Generate and return shared wallet ID
 ///     - Can do auth or other DoS mitigation here
@@ -150,18 +151,6 @@ pub fn deposit_init(
         }
     )?;
     Ok(Json(user_id))
-}
-
-
-/// struct contains data necessary to caluculate tx input sighash
-#[derive(Serialize, Deserialize, Debug)]
-pub struct PrepareSignTxMessage {
-    pub spending_addr: String, // address which funding tx funds are sent to
-    pub input_txid: String,
-    pub input_vout: u32,
-    pub address: String,
-    pub amount: u64,
-    pub transfer: bool // is transfer? (create new or update state chain?)
 }
 
 /// prepare to sign backup transaction input
@@ -250,15 +239,6 @@ pub fn prepare_sign_backup(
     Ok(Json(String::from("")))
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TransferMsg1 {
-    shared_wallet_id: String,
-    new_state_chain: Vec<String>,
-}
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TransferMsg2 {
-    x1: FE,
-}
 /// Initiliase transfer protocol
 ///     - Authorisation of Owner and DoS protection
 ///     - Validate transfer parameters
@@ -300,20 +280,6 @@ pub fn transfer_sender(
     Ok(Json(TransferMsg2{x1}))
 }
 
-/// Receiver -> State Entity
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TransferMsg4 {
-    shared_wallet_id: String,
-    t2: FE, // t2 = t1*o2_inv = o1*x1*o2_inv
-    state_chain: Vec<String>,
-    o2_pub: GE
-}
-/// State Entity -> Receiver
-#[derive(Serialize, Debug)]
-pub struct TransferMsg5 {
-    new_shared_wallet_id: String,
-    s2_pub: GE,
-}
 /// Transfer shared wallet to new Owner
 ///     - check new Owner's state chain is correct
 ///     - perform 2P-ECDSA key rotation

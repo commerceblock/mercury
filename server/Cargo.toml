@@ -64,3 +64,6 @@ features =  ["ec_secp256k1"]
 
 [dependencies.serde_dynamodb]
 git = "https://github.com/KZen-networks/serde_dynamodb"
+
+[dependencies.shared]
+path = "../shared"

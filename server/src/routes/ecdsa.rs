@@ -8,8 +8,10 @@
 // version 3 of the License, or (at your option) any later version.
 
 use super::super::Result;
+
+extern crate shared_lib;
 use crate::routes::state_entity::{ check_user_auth, StateChainStruct, SessionData, StateChain };
-use crate::util::reverse_hex_str;
+use shared_lib::util::reverse_hex_str;
 use crate::error::SEError;
 
 use curv::cryptographic_primitives::proofs::sigma_dlog::*;

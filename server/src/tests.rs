@@ -8,25 +8,23 @@
 //
 #[cfg(test)]
 mod tests {
-
-    use crate::routes::state_entity::{DepositMsg1, PrepareSignTxMessage};
+    extern crate shared_lib;
     use super::super::routes::ecdsa;
     use super::super::server;
-    use rocket;
-    use rocket::http::ContentType;
-    use rocket::http::Status;
+    use shared_lib::structs::{DepositMsg1,PrepareSignTxMessage};
+    use rocket::http::{ContentType,Status};
     use rocket::local::Client;
-    use serde_json;
-    use std::env;
-    use std::time::Instant;
-    use floating_duration::TimeFormat;
-
     use curv::arithmetic::traits::Converter;
     use curv::cryptographic_primitives::twoparty::dh_key_exchange_variant_with_pok_comm::*;
     use curv::BigInt;
     use kms::chain_code::two_party as chain_code;
     use kms::ecdsa::two_party::*;
     use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
+
+    use serde_json;
+    use floating_duration::TimeFormat;
+    use std::time::Instant;
+    use std::env;
 
     fn key_gen(client: &Client) -> (String, MasterKey2) {
         time_test!();

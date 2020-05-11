@@ -2,56 +2,27 @@
 //!
 //! Utilities methods for state entity and mock classes
 
-use super::Result;
-use crate::error::SEError;
+type Result<T> = std::result::Result<T, UtilError>;
 
-use rand::rngs::OsRng;
-use bitcoin::util;
-use bitcoin::secp256k1::{ Secp256k1, key::SecretKey };
-use bitcoin::blockdata::transaction::{ TxIn, TxOut, Transaction };
+use bitcoin::{TxIn, TxOut, Transaction, Address, Amount};
 use bitcoin::blockdata::script::Builder;
 use bitcoin::blockdata::opcodes::OP_TRUE;
-use bitcoin::util::{ address::Address, amount::Amount };
-use bitcoin::network::constants::Network;
+
+use rocket::http::{ Status, ContentType };
+use rocket::Response;
+use rocket::Request;
+use rocket::response::Responder;
+
+use std::error;
+use std::fmt;
+use std::io::Cursor;
 
 
 /// network - move this to config
-pub const NETWORK: bitcoin::network::constants::Network = Network::Regtest;
 #[allow(dead_code)]
 pub const RBF: u32 = 0xffffffff - 2;
 const DUSTLIMIT: u64 = 100;
 const FEE: u64 = 1000;
-
-
-pub fn reverse_hex_str(hex_str: String) -> Result<String> {
-    if hex_str.len() % 2 != 0 {
-        return Err(SEError::SigningError(format!("Invalid sig hash - Odd number of characters. SigHash: {}",hex_str)))
-    }
-    let mut hex_str = hex_str.chars().rev().collect::<String>();
-    let mut result = String::with_capacity(hex_str.len());
-    unsafe {
-        let hex_vec = hex_str.as_mut_vec();
-        for i in (0..hex_vec.len()).step_by(2) {
-            result.push(char::from(hex_vec[i+1]));
-            result.push(char::from(hex_vec[i]));
-        }
-    }
-    Ok(result)
-}
-
-/// generate bitcoin::util::key key pair
-pub fn generate_keypair() -> (util::key::PrivateKey, util::key::PublicKey) {
-    let secp = Secp256k1::new();
-    let mut rng = OsRng::new().expect("OsRng");
-    let secret_key = SecretKey::new(&mut rng);
-    let priv_key = util::key::PrivateKey{
-        compressed: false,
-        network: NETWORK,
-        key: secret_key
-    };
-    let pub_key = util::key::PublicKey::from_private_key(&secp, &priv_key);
-    return (priv_key, pub_key)
-}
 
 /// build funding tx spending inputs to p2wpkh address P for amount A
 pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &Address, amount: &Amount) -> Result<Transaction> {
@@ -60,7 +31,7 @@ pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &Address, amount: &Amount) -> R
                 output: vec![
                     TxOut {
                         script_pubkey: p_address.script_pubkey(),
-                        value: amount.as_sat(),
+                        value: amount.as_sat()-FEE,
                     }
                 ],
                 lock_time: 0,
@@ -108,17 +79,92 @@ pub fn build_tx_b(txk_input: &TxIn, b_address: &Address, amount: &Amount) -> Res
     Ok(tx_0)
 }
 
+pub fn reverse_hex_str(hex_str: String) -> Result<String> {
+    if hex_str.len() % 2 != 0 {
+        return Err(UtilError::from(format!("Invalid sig hash - Odd number of characters. SigHash: {}",hex_str)))
+    }
+    let mut hex_str = hex_str.chars().rev().collect::<String>();
+    let mut result = String::with_capacity(hex_str.len());
+    unsafe {
+        let hex_vec = hex_str.as_mut_vec();
+        for i in (0..hex_vec.len()).step_by(2) {
+            result.push(char::from(hex_vec[i+1]));
+            result.push(char::from(hex_vec[i]));
+        }
+    }
+    Ok(result)
+}
+
+
+/// Shared library Util specific errors
+#[derive(Debug, Deserialize)]
+pub enum UtilError {
+    /// Generic error from string error message
+    Generic(String),
+    /// Invalid argument error
+    FormatError(String)
+}
+
+impl From<String> for UtilError {
+    fn from(e: String) -> UtilError {
+        UtilError::Generic(e)
+    }
+}
+
+impl fmt::Display for UtilError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            UtilError::Generic(ref e) => write!(f, "Error: {}", e),
+            UtilError::FormatError(ref e) => write!(f,"Format Error: {}",e),
+        }
+    }
+}
+
+impl error::Error for UtilError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match *self {
+            _ => None,
+        }
+    }
+}
+
+impl Responder<'static> for UtilError {
+    fn respond_to(self, _: &Request) -> ::std::result::Result<Response<'static>, Status> {
+        Response::build()
+            .header(ContentType::JSON)
+            .sized_body(Cursor::new(format!("{}", self)))
+            .ok()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json;
+    use rand::rngs::OsRng;
 
     use bitcoin::OutPoint;
+    use bitcoin::util;
     use bitcoin::blockdata::script::Script;
-    use bitcoin::secp256k1::{Secp256k1, Message};
+    use bitcoin::secp256k1::{Secp256k1, Message, key::SecretKey};
     use bitcoin::hashes::sha256d;
+    use bitcoin::network::constants::Network;
 
-    use crate::util::generate_keypair;
+    const NETWORK: bitcoin::network::constants::Network = Network::Regtest;
+
+    /// generate bitcoin::util::key key pair
+    fn generate_keypair() -> (util::key::PrivateKey, util::key::PublicKey) {
+        let secp = Secp256k1::new();
+        let mut rng = OsRng::new().expect("OsRng");
+        let secret_key = SecretKey::new(&mut rng);
+        let priv_key = util::key::PrivateKey{
+            compressed: false,
+            network: NETWORK,
+            key: secret_key
+        };
+        let pub_key = util::key::PublicKey::from_private_key(&secp, &priv_key);
+        return (priv_key, pub_key)
+    }
 
     #[test]
     fn transaction() {
@@ -162,5 +208,4 @@ mod tests {
         let sig = secp.sign(&message, &priv_key.key);
         assert!(secp.verify(&message, &sig, &pub_key.key).is_ok());
     }
-
 }

@@ -2,6 +2,8 @@
 //!
 //! Custom Error types for our crate
 
+use shared_lib::util::UtilError;
+
 use rocket::http::{ Status, ContentType };
 use rocket::Response;
 use rocket::Request;
@@ -13,17 +15,25 @@ use std::io::Cursor;
 /// State Entity library specific errors
 #[derive(Debug, Deserialize)]
 pub enum SEError {
+    /// Generic error from string error message
+    Generic(String),
     /// Athorisation failed
     AuthError,
     /// None or incorrect sig hash found for statechain
     SigningError(String),
-    /// Generic error from string error message
-    Generic(String),
+    /// Inherit error from Util
+    Util(String)
 }
 
 impl From<String> for SEError {
     fn from(e: String) -> SEError {
         SEError::Generic(e)
+    }
+}
+
+impl From<UtilError> for SEError {
+    fn from(e: UtilError) -> SEError {
+        SEError::Util(e.to_string())
     }
 }
 
@@ -33,6 +43,7 @@ impl fmt::Display for SEError {
             SEError::Generic(ref e) => write!(f, "Error: {}", e),
             SEError::AuthError => write!(f,"User authorisation failed"),
             SEError::SigningError(ref e) => write!(f,"Signing Error: {}",e),
+            SEError::Util(ref e) => write!(f,"Util Error: {}",e),
         }
     }
 }
