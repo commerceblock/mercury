@@ -4,11 +4,6 @@ Mercury is a client/server implementation of a state chain ([whitepaper](doc/sta
 
 Building
 -------
-The current 2P-ECDSA uses library multi-party-ecdsa v0.1.0, which depends on rust-paillier v0.1.0.
-You will notice that rust-paillier contains depreciated code and so will not build.
-We will eventually update the 2P-ECDSA but for now you must open your local version of the rust-paillier
-library (as directed to in the error message) and remove/comment the problem line of code.
-
 You will need to use an experimental branch of rust, use `rustup` to switch to
 the nightly branch, and use cargo to build:
 ```
