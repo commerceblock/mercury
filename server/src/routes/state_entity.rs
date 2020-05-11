@@ -3,9 +3,8 @@
 //! State Entity implementation
 
 use super::super::Result;
-
 extern crate shared_lib;
-use crate::error::SEError;
+use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::routes::ecdsa;
 use super::super::auth::jwt::Claims;
 use super::super::storage::db;
@@ -14,7 +13,6 @@ use super::super::Config;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 use shared_lib::util::build_tx_b;
 use shared_lib::structs::*;
-
 
 use bitcoin::{ Address, Amount, OutPoint, TxIn, Transaction };
 use bitcoin::hashes::sha256d;
@@ -117,7 +115,7 @@ pub fn get_statechain(
 ) -> Result<Json<Vec<String>>> {
     let session_data: StateChain =
         db::get(&state.db, &claim.sub, &id, &StateChainStruct::StateChain)?
-            .ok_or(SEError::Generic(format!("No data for such identifier: StateChain {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
     Ok(Json(session_data.chain))
 }
 
@@ -225,7 +223,7 @@ pub fn prepare_sign_backup(
     // if transfer() get and update SessionData for this user
     let mut session_data: SessionData =
         db::get(&state.db, &claim.sub, &id, &StateChainStruct::SessionData)?
-            .ok_or(SEError::Generic(format!("No data for such identifier: SessionData {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     session_data.sig_hash = sig_hash;
     db::insert(
@@ -258,7 +256,7 @@ pub fn transfer_sender(
     // get state_chain id
     let session_data: SessionData =
         db::get(&state.db, &claim.sub, &transfer_msg1.shared_wallet_id, &StateChainStruct::SessionData)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", transfer_msg1.shared_wallet_id)))?;
+            .ok_or(SEError::DBError(NoDataForID, transfer_msg1.shared_wallet_id.clone()))?;
 
     // Generate x1
     let x1: FE = ECScalar::new_random();
@@ -294,7 +292,7 @@ pub fn transfer_receiver(
     // Get TransferData for shared_wallet_id
     let transfer_data: TransferData =
         db::get(&state.db, &claim.sub, &id, &StateChainStruct::TransferData)?
-            .ok_or(SEError::Generic(format!("No data for such identifier: TransferData {:?}", &id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
     let new_state_chain = transfer_data.new_state_chain;
 
     // ensure updated state chains are the same
@@ -305,10 +303,10 @@ pub fn transfer_receiver(
 
     // Get Party1 (State Entity) private share
     let party_1_private: Party1Private = db::get(&state.db, &claim.sub, &id, &ecdsa::EcdsaStruct::Party1Private)?
-    .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+    .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
     // Get Party2 (Owner 1) public share
     let party_2_public: GE = db::get(&state.db, &claim.sub, &id, &ecdsa::EcdsaStruct::Party2Public)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     // decrypt t2
 
@@ -356,7 +354,7 @@ pub fn transfer_receiver(
     // update state chain
     let mut state_chain: StateChain =
         db::get(&state.db, &claim.sub, &transfer_data.state_chain_id, &StateChainStruct::StateChain)?
-            .ok_or(SEError::Generic(format!("No data for such identifier: TransferData {:?}", &transfer_data.state_chain_id)))?;
+            .ok_or(SEError::DBError(NoDataForID, transfer_data.state_chain_id.clone()))?;
 
     assert_eq!(state_chain.chain.len(), new_state_chain.len()-1);
     assert!(state_chain.backup_tx.is_some());

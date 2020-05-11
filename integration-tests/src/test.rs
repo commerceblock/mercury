@@ -34,55 +34,24 @@ mod tests {
         }
     }
 
-    //TODO: UPDATE TEST - ecdsa::sign now only works on Transactions
     // #[test]
-    // fn test_ecdsa() {
+    // fn test_schnorr() {
     //     spawn_server();
     //
-    //     let mut wallet = load_wallet();
-    //     let id = client_lib::state_entity::deposit::session_init(&mut wallet).unwrap();
-    //     let ps: ecdsa::PrivateShare = ecdsa::get_master_key(&id, &wallet.client_shim).unwrap();
+    //     let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
     //
-    //     for y in 0..10 {
-    //         let x_pos = BigInt::from(0);
-    //         let y_pos = BigInt::from(y);
-    //         println!("Deriving child_master_key at [x: {}, y:{}]", x_pos, y_pos);
+    //     let share: schnorr::Share = schnorr::generate_key(&client_shim).unwrap();
     //
-    //         let child_master_key = ps
-    //             .master_key
-    //             .get_child(vec![x_pos.clone(), y_pos.clone()]);
+    //     let msg: BigInt = BigInt::from(1234);  // arbitrary message
+    //     let signature = schnorr::sign(&client_shim, msg, &share)
+    //         .expect("Schnorr signature failed");
     //
-    //         let msg: BigInt = BigInt::from(12345);  // arbitrary message
-    //         let signature =
-    //             ecdsa::sign(&wallet.client_shim, msg, &child_master_key, x_pos, y_pos, &ps.id)
-    //                 .expect("ECDSA signature failed");
-    //
-    //         println!(
-    //             "signature = (r: {}, s: {})",
-    //             signature.r.to_hex(),
-    //             signature.s.to_hex()
-    //         );
-    //     }
+    //     println!(
+    //         "signature = (e: {:?}, s: {:?})",
+    //         signature.e,
+    //         signature.s
+    //     );
     // }
-
-    #[test]
-    fn test_schnorr() {
-        spawn_server();
-
-        let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
-
-        let share: schnorr::Share = schnorr::generate_key(&client_shim).unwrap();
-
-        let msg: BigInt = BigInt::from(1234);  // arbitrary message
-        let signature = schnorr::sign(&client_shim, msg, &share)
-            .expect("Schnorr signature failed");
-
-        println!(
-            "signature = (e: {:?}, s: {:?})",
-            signature.e,
-            signature.s
-        );
-    }
 
     fn run_deposit(wallet: &mut Wallet) -> (String, String, Transaction, Transaction, PrepareSignTxMessage)  {
         // make TxIns for funding transaction
@@ -95,7 +64,7 @@ mod tests {
             script_sig: bitcoin::Script::default(),
         }
         ];
-        // This addr should correspond to UTXOs being spent
+
         let funding_spend_addrs = vec!(wallet.get_new_bitcoin_address().unwrap());
         let resp = state_entity::deposit::deposit(
             wallet,
@@ -124,7 +93,7 @@ mod tests {
         let mut wallet = gen_wallet();
 
         if let Err(e) = state_entity::api::get_statechain(&mut wallet, &String::from("id")) {
-            assert!(e.to_string().contains(&String::from("No data for such identifier: StateChain id")))
+            assert!(e.to_string().contains(&String::from("No data for such identifier")))
         }
 
         let deposit = run_deposit(&mut wallet);

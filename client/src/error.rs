@@ -67,7 +67,7 @@ impl fmt::Display for CError {
             CError::Generic(ref e) => write!(f, "Error: {}", e),
             CError::StateEntityError(ref e) => write!(f, "State Entity Error: {}", e),
             CError::SchnorrError(ref e) => write!(f, "Schnorr Error: {}", e),
-            CError::WalletError(ref error, ref value) => write!(f, "Wallet Error: {} (value: {})", error.as_str(), value),
+            CError::WalletError(ref e, ref value) => write!(f, "Wallet Error: {} (value: {})", e.as_str(), value),
             CError::Bip32(ref e) => write!(f, "Bip32 Error: {}", e),
             CError::Reqwest(ref e) => write!(f, "Reqwest Error: {}", e),
         }

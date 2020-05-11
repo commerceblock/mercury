@@ -97,7 +97,6 @@ pub fn transfer_receiver(
                     return Err(e);
                 }
                 debug!("try o2 failure. Trying again...");
-                println!("try o2 failure. Trying again...");
             }
         }
     }
@@ -106,10 +105,11 @@ pub fn transfer_receiver(
     let shared_id = &transfer_msg5.new_shared_wallet_id;
     wallet.gen_shared_wallet_fixed_secret_key(shared_id,&o2)?;
 
-    // Check that the first address generated is the backup tx output address
-    let p_addr = wallet.gen_addr_for_shared_wallet(shared_id).unwrap();
-    println!("p_addr: {:?}",p_addr);
-    println!("new_backup_tx: {:?}",transfer_msg3.new_backup_tx);
+    // Check shared wallet master public key
+    if (transfer_msg5.s2_pub*o2).get_element()
+        != wallet.get_shared_wallet(&shared_id).unwrap().private_share.master_key.public.q.get_element() {
+            return Err(CError::StateEntityError(String::from("Transfer failed. Incorrect master public key generated.")))
+    }
 
     Ok(transfer_msg5)
 }

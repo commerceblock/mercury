@@ -1,15 +1,14 @@
-use crate::error::SEError;
 use super::super::Result;
-use rocket::State;
-use rocket_contrib::json::Json;
-
 use super::super::auth::jwt::Claims;
 use super::super::storage::db;
 use super::super::Config;
+use crate::error::{SEError,DBErrorType::NoDataForID};
 
 use uuid::Uuid;
 use multi_party_schnorr::protocols::thresholdsig::zilliqa_schnorr::*;
 use self::SchnorrStruct::*;
+use rocket::State;
+use rocket_contrib::json::Json;
 
 const PARTY1_INDEX: usize = 1;
 const PARTY2_INDEX: usize = 2;
@@ -92,25 +91,25 @@ pub fn keygen_second(
         &claim.sub,
         &id,
         &Party1Key)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
     let msg1: KeyGenBroadcastMessage1 = db::get(
         &state.db,
         &claim.sub,
         &id,
         &Party1KeyGenBroadcastMessage1)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
     let msg2: KeyGenBroadcastMessage2 = db::get(
         &state.db,
         &claim.sub,
         &id,
         &Party1KeyGenBroadcastMessage2)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
     let party2_msg1: KeyGenBroadcastMessage1 = db::get(
         &state.db,
         &claim.sub,
         &id,
         &Party2KeyGenBroadcastMessage1)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let (vss_scheme, secret_shares, _index) = key.phase1_verify_com_phase2_distribute(
         &PARAMS,
@@ -144,7 +143,7 @@ pub fn keygen_second(
 &claim.sub,
         &id,
         &Party1KeyGenBroadcastMessage2)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     Ok(Json(msg2))
 }
@@ -161,13 +160,13 @@ pub fn keygen_third(
 &claim.sub,
         &id,
         &Party1Key)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
     let party2_msg2: KeyGenBroadcastMessage2 = db::get(
         &state.db,
 &claim.sub,
         &id,
         &Party2KeyGenBroadcastMessage2)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
     let vss_scheme: VerifiableSS = db::get(
         &state.db,
 &claim.sub,
@@ -179,7 +178,7 @@ pub fn keygen_third(
 &claim.sub,
         &id,
         &Party1SecretShares)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let shared_key: SharedKeys = key.phase2_verify_vss_construct_keypair(
         &PARAMS,
@@ -226,13 +225,13 @@ pub fn sign(
 &claim.sub,
         &keygen_id,
         &Party1SharedKey)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", keygen_id)))?;
+        .ok_or(SEError::DBError(NoDataForID, keygen_id.clone()))?;
     let eph_shared_key: SharedKeys = db::get(
         &state.db,
 &claim.sub,
         &eph_keygen_id,
         &Party1SharedKey)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", keygen_id)))?;
+        .ok_or(SEError::DBError(NoDataForID, keygen_id.clone()))?;
 
     let local_sig = LocalSig::compute(
         &BigInt::to_vec(&party2_sign_msg1.message).as_slice(),
@@ -244,25 +243,25 @@ pub fn sign(
 &claim.sub,
         &keygen_id,
         &Party1VerifiableSecretShares)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", keygen_id)))?;
+        .ok_or(SEError::DBError(NoDataForID, keygen_id.clone()))?;
     let party2_vss_scheme: VerifiableSS = db::get(
         &state.db,
 &claim.sub,
         &keygen_id,
         &Party2VerifiableSecretShares)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", keygen_id)))?;
+        .ok_or(SEError::DBError(NoDataForID, keygen_id.clone()))?;
     let eph_vss_scheme: VerifiableSS = db::get(
         &state.db,
         &claim.sub,
         &eph_keygen_id,
         &Party1VerifiableSecretShares)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", keygen_id)))?;
+        .ok_or(SEError::DBError(NoDataForID, keygen_id.clone()))?;
     let party2_eph_vss_scheme: VerifiableSS = db::get(
         &state.db,
         &claim.sub,
         &eph_keygen_id,
         &Party2VerifiableSecretShares)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", keygen_id)))?;
+        .ok_or(SEError::DBError(NoDataForID, keygen_id.clone()))?;
 
     LocalSig::verify_local_sigs(
         &vec![local_sig, party2_sign_msg1.local_sig],

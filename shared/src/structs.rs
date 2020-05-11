@@ -1,6 +1,6 @@
-/// Structs
-///
-/// Struct definitions used in State entity protocols
+//! Structs
+//!
+//! Struct definitions used in State entity protocols
 
 use curv::{FE, GE};
 use bitcoin::Transaction;
@@ -18,7 +18,7 @@ pub struct PrepareSignTxMessage {
     pub transfer: bool
 }
 
-
+/// Client -> SE
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DepositMsg1 {
     pub proof_key: String,

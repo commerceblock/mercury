@@ -1,18 +1,9 @@
-#![allow(non_snake_case)]
-// Gotham-city
-//
-// Copyright 2018 by Kzen Networks (kzencorp.com)
-// Gotham city is free software: you can redistribute
-// it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either
-// version 3 of the License, or (at your option) any later version.
-
 use super::super::Result;
 
 extern crate shared_lib;
 use crate::routes::state_entity::{ check_user_auth, StateChainStruct, SessionData, StateChain };
 use shared_lib::util::reverse_hex_str;
-use crate::error::SEError;
+use crate::error::{SEError,DBErrorType::NoDataForID};
 
 use curv::cryptographic_primitives::proofs::sigma_dlog::*;
 use curv::cryptographic_primitives::twoparty::coin_flip_optimal_rounds;
@@ -201,9 +192,9 @@ pub fn second_message(
 
     let comm_witness: party_one::CommWitness =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::CommWitness)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
     let ec_key_pair: party_one::EcKeyPair = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::EcKeyPair)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let (kg_party_one_second_message, paillier_key_pair, party_one_private) =
         MasterKey1::key_gen_second_message(comm_witness, &ec_key_pair, &dlog_proof.0);
@@ -239,7 +230,7 @@ pub fn third_message(
 ) -> Result<Json<party_one::PDLFirstMessage>> {
     let party_one_private: party_one::Party1Private =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1Private)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let (party_one_third_message, party_one_pdl_decommit, alpha) =
         MasterKey1::key_gen_third_message(&party_2_pdl_first_message.0, &party_one_private);
@@ -278,18 +269,18 @@ pub fn fourth_message(
 ) -> Result<Json<party_one::PDLSecondMessage>> {
     let party_one_private: party_one::Party1Private =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1Private)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let party_one_pdl_decommit: party_one::PDLdecommit =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::PDLDecommit)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let party_2_pdl_first_message: party_two::PDLFirstMessage =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party2PDLFirstMsg)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let alpha: Alpha = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Alpha)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let res = MasterKey1::key_gen_fourth_message(
         &party_2_pdl_first_message,
@@ -350,7 +341,7 @@ pub fn chain_code_second_message(
     cc_party_two_first_message_d_log_proof: Json<DLogProof>,
 ) -> Result<Json<Party1SecondMessage>> {
     let cc_comm_witness: CommWitness = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::CCCommWitness)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let party1_cc = chain_code::party1::ChainCode1::chain_code_second_message(
         cc_comm_witness,
@@ -371,7 +362,7 @@ pub fn chain_code_compute_message(
 ) -> Result<Json<()>> {
     let cc_ec_key_pair_party1: EcKeyPair =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::CCEcKeyPair)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
     let party1_cc = chain_code::party1::ChainCode1::compute_chain_code(
         &cc_ec_key_pair_party1,
         &cc_party2_public,
@@ -384,25 +375,25 @@ pub fn chain_code_compute_message(
 
 pub fn master_key(state: State<Config>, claim: Claims, id: String) -> Result<()> {
     let party2_public: GE = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party2Public)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let paillier_key_pair: party_one::PaillierKeyPair =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::PaillierKeyPair)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let party1_cc: chain_code::party1::ChainCode1 =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::CC)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let party_one_private: party_one::Party1Private =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1Private)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let comm_witness: party_one::CommWitness =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::CommWitness)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
-    let masterKey = MasterKey1::set_master_key(
+    let master_key = MasterKey1::set_master_key(
         &party1_cc.chain_code,
         party_one_private,
         &comm_witness.public_share,
@@ -415,7 +406,7 @@ pub fn master_key(state: State<Config>, claim: Claims, id: String) -> Result<()>
         &claim.sub,
         &id,
         &EcdsaStruct::Party1MasterKey,
-        &masterKey,
+        &master_key,
     )
 }
 
@@ -510,7 +501,7 @@ pub fn sign_second(
     }
 
     let master_key: MasterKey1 = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1MasterKey)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let x: BigInt = request.x_pos_child_key.clone();
     let y: BigInt = request.y_pos_child_key.clone();
@@ -519,11 +510,11 @@ pub fn sign_second(
 
     let eph_ec_key_pair_party1: party_one::EphEcKeyPair =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::EphEcKeyPair)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::EphKeyGenFirstMsg)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let signature;
     match child_master_key.sign_second_message(
@@ -539,7 +530,7 @@ pub fn sign_second(
     // Add back up transaction to State Chain
     let session_data: SessionData =
         db::get(&state.db, &claim.sub, &id, &StateChainStruct::SessionData)?
-            .ok_or(SEError::Generic(format!("No data for such identifier: SessionData {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let mut backup_tx = session_data.backup_tx.clone();
     let mut v = BigInt::to_vec(&signature.r);     // make signature witness
@@ -555,7 +546,7 @@ pub fn sign_second(
     // update StateChain DB object
     let mut state_chain: StateChain =
         db::get(&state.db, &claim.sub, &session_data.state_chain_id, &StateChainStruct::StateChain)?
-            .ok_or(SEError::Generic(format!("No data for such identifier: StateChain {}", session_data.state_chain_id)))?;
+            .ok_or(SEError::DBError(NoDataForID, session_data.state_chain_id.clone()))?;
 
     state_chain.backup_tx = Some(backup_tx);
     db::insert(
@@ -571,7 +562,7 @@ pub fn sign_second(
 
 pub fn get_mk(state: &State<Config>, claim: Claims, id: &String) -> Result<MasterKey1> {
     db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1MasterKey)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?
+        .ok_or(SEError::DBError(NoDataForID, id.to_string()))?
 }
 
 #[post("/ecdsa/rotate/<id>/first", format = "json")]
@@ -619,10 +610,10 @@ pub fn rotate_second(
     let party_one_master_key = get_mk(&state, claim.clone(), &id)?;
 
     let m1: Secp256k1Scalar = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::RotateCommitMessage1M)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let r1: Secp256k1Scalar = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::RotateCommitMessage1R)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let (party1_second_message, random1) =
         Rotation1::key_rotate_second_message(&party2_first_message.0, &m1, &r1);
@@ -664,7 +655,7 @@ pub fn rotate_third(
 ) -> Result<Json<party_one::PDLFirstMessage>> {
     let party_one_private_new: party_one::Party1Private =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::RotatePrivateNew)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let (rotation_party_one_second_message, party_one_pdl_decommit, alpha) =
         MasterKey1::rotation_second_message(
@@ -714,26 +705,26 @@ pub fn rotate_fourth(
 
     let rotation_party_one_first_message: party1::RotationParty1Message1 =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::RotateFirstMsg)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let party_one_private_new: party_one::Party1Private =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::RotatePrivateNew)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let random1: kms::rotation::two_party::Rotation =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::RotateRandom1)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let rotation_party_two_first_message: party_two::PDLFirstMessage =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::RotateParty2First)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let party_one_pdl_decommit: party_one::PDLdecommit =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::RotatePdlDecom)?
-            .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let alpha: Alpha = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Alpha)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let result_rotate_party_two_second_message = party_one_master_key.rotation_third_message(
         &rotation_party_one_first_message,
@@ -764,6 +755,6 @@ pub fn rotate_fourth(
 #[post("/ecdsa/<id>/recover", format = "json")]
 pub fn recover(state: State<Config>, claim: Claims, id: String) -> Result<Json<u32>> {
     let pos_old: u32 = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::POS)?
-        .ok_or(SEError::Generic(format!("No data for such identifier {}", id)))?;
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
     Ok(Json(pos_old))
 }

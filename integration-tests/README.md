@@ -1,6 +1,6 @@
 # Integration tests
 
-Runs the Gotham-server and calls it using Gotham-client's API.<br>
+Runs the State Entity server and calls it using client's API.<br>
 Run it simply with:
 ```sh
 $ cargo test

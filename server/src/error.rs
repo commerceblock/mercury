@@ -19,9 +19,11 @@ pub enum SEError {
     Generic(String),
     /// Athorisation failed
     AuthError,
-    /// None or incorrect sig hash found for statechain
+    /// Error in co-signing
     SigningError(String),
-    /// Inherit error from Util
+    /// Storage error
+    DBError(DBErrorType, String),
+    /// Inherit errors from Util
     Util(String)
 }
 
@@ -37,11 +39,27 @@ impl From<UtilError> for SEError {
     }
 }
 
+/// Wallet error types
+#[derive(Debug, Deserialize)]
+pub enum DBErrorType {
+    /// No data found for identifier
+    NoDataForID
+}
+
+impl DBErrorType {
+    fn as_str(&self) -> &'static str {
+        match *self {
+            DBErrorType::NoDataForID => "No data for such identifier.",
+        }
+    }
+}
+
 impl fmt::Display for SEError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             SEError::Generic(ref e) => write!(f, "Error: {}", e),
             SEError::AuthError => write!(f,"User authorisation failed"),
+            SEError::DBError(ref e, ref value) => write!(f, "DB Error: {} (value: {})", e.as_str(), value),
             SEError::SigningError(ref e) => write!(f,"Signing Error: {}",e),
             SEError::Util(ref e) => write!(f,"Util Error: {}",e),
         }
