@@ -2,19 +2,18 @@
 //!
 //! Basic Bitcoin wallet functionality. Full key owned by this wallet.
 
-use crate::error::{ CError, WalletErrorType::SharedWalletNotFound };
+use super::super::Result;
+use crate::error::{ CError, WalletErrorType::SharedKeyNotFound};
 use crate::mocks::mock_electrum::MockElectrum;
-use crate::wallet::shared_wallet::SharedWallet;
+use crate::wallet::shared_key::SharedKey;
 use crate::ClientShim;
 
-use bitcoin::{ Network, Address };
+use bitcoin::{ Network, PublicKey, PrivateKey };
 use bitcoin::util::bip32::{ ExtendedPubKey, ExtendedPrivKey, ChildNumber };
-use bitcoin::util::key::{ PublicKey, PrivateKey };
 use bitcoin::util::bip143::SighashComponents;
 use bitcoin::secp256k1::{ All, Secp256k1, Message };
-
+use curv::FE;
 // use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
-use super::super::Result;
 use uuid::Uuid;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -57,6 +56,13 @@ impl AddressDerivation {
     }
 }
 
+/// Address generated for State Entity transfer protocol
+#[derive(Deserialize, Debug)]
+pub struct StateEntityAddress {
+    pub backup_addr: String,
+    pub proof_key: PublicKey,
+}
+
 /// Standard Bitcoin Wallet
 pub struct Wallet {
     pub id: String,
@@ -69,7 +75,7 @@ pub struct Wallet {
     pub master_pub_key: ExtendedPubKey,
     pub last_derived_pos: u32,
     pub addresses_derivation_map: HashMap<String, AddressDerivation>,
-    pub shared_wallets: Vec<SharedWallet> // vector of wallets co-owned with state entities
+    pub shared_keys: Vec<SharedKey> // vector of keys co-owned with state entities
 }
 impl Wallet {
     pub fn new(seed: &[u8], network: &String, client_shim: ClientShim) -> Wallet {
@@ -86,7 +92,7 @@ impl Wallet {
             master_pub_key,
             last_derived_pos: 0,
             addresses_derivation_map: HashMap::new(),
-            shared_wallets: vec!()
+            shared_keys: vec!()
         }
     }
 
@@ -98,12 +104,12 @@ impl Wallet {
             "master_priv_key": self.master_priv_key.to_string(),
             "master_pub_key": self.master_pub_key.to_string(),
             "last_derived_pos": self.last_derived_pos,
-            "shared_wallets": serde_json::to_string(&self.shared_wallets).unwrap()
+            "shared_keys": serde_json::to_string(&self.shared_keys).unwrap()
         })
     }
 
     /// load wallet from jon
-    pub fn from_json(json: serde_json::Value, network: &String, client_shim: ClientShim) -> Self {
+    pub fn from_json(json: serde_json::Value, network: &String, client_shim: ClientShim) -> Result<Self> {
         let secp = Secp256k1::new();
         let mut master_priv_key = ExtendedPrivKey::from_str(json["master_priv_key"].as_str().unwrap()).unwrap();
         master_priv_key.network = network.parse::<Network>().unwrap();
@@ -120,19 +126,19 @@ impl Wallet {
             master_pub_key,
             last_derived_pos: 0,
             addresses_derivation_map: HashMap::new(),
-            shared_wallets: vec!()
+            shared_keys: vec!()
         };
         for _ in 0..json["last_derived_pos"].as_u64().unwrap() {
-            wallet.get_new_bitcoin_address();
+            wallet.get_new_bitcoin_address()?;
         }
-        let shared_wallets_str = &json["shared_wallets"].as_str().unwrap();
-        if shared_wallets_str.len() != 2 { // is not empty
-            let shared_wallets:Vec<SharedWallet> = serde_json::from_str(shared_wallets_str).unwrap();
-            wallet.shared_wallets = shared_wallets;
+        let shared_keys_str = &json["shared_keys"].as_str().unwrap();
+        if shared_keys_str.len() != 2 { // is not empty
+            let shared_keys:Vec<SharedKey> = serde_json::from_str(shared_keys_str).unwrap();
+            wallet.shared_keys = shared_keys;
         }
 
         debug!("(wallet id: {}) Loaded wallet to memory", wallet.id);
-        wallet
+        Ok(wallet)
     }
 
     /// save to disk
@@ -146,20 +152,20 @@ impl Wallet {
     }
 
     /// load wallet from disk
-    pub fn load_from(filepath: &str, network: &String, client_shim: ClientShim) -> Wallet {
+    pub fn load_from(filepath: &str, network: &String, client_shim: ClientShim) -> Result<Wallet> {
         let data = fs::read_to_string(filepath).expect("Unable to load wallet!");
         let serde_json_data = serde_json::from_str(&data).unwrap();
-        let wallet: Wallet = Wallet::from_json(serde_json_data, network, client_shim);
+        let wallet: Wallet = Wallet::from_json(serde_json_data, network, client_shim)?;
         debug!("(wallet id: {}) Loaded wallet to memory", wallet.id);
-        wallet
+        Ok(wallet)
     }
-    pub fn load(network: &String, client_shim: ClientShim) -> Wallet {
-        Wallet::load_from(WALLET_FILENAME, network, client_shim)
+    pub fn load(network: &String, client_shim: ClientShim) -> Result<Wallet> {
+        Ok(Wallet::load_from(WALLET_FILENAME, network, client_shim)?)
     }
 
     /// generate new address
-    pub fn get_new_bitcoin_address(&mut self) -> bitcoin::Address {
-        let new_ext_priv_key = self.derive_new_key().unwrap();
+    pub fn get_new_bitcoin_address(&mut self) -> Result<bitcoin::Address> {
+        let new_ext_priv_key = self.derive_new_key()?;
         let new_ext_pub_key = ExtendedPubKey::from_private(&self.secp, &new_ext_priv_key);
 
         let address = self.to_p2wpkh_address(&new_ext_pub_key.public_key);
@@ -169,7 +175,21 @@ impl Wallet {
             .insert(address.to_string(),
                 AddressDerivation::new(self.last_derived_pos, new_ext_priv_key.private_key, new_ext_pub_key.public_key));
 
-        address
+        Ok(address)
+    }
+
+    pub fn get_new_state_entity_address(&mut self) -> Result<StateEntityAddress> {
+        let new_ext_priv_key = self.derive_new_key().unwrap();
+        let new_ext_pub_key = ExtendedPubKey::from_private(&self.secp, &new_ext_priv_key);
+        let proof_key_addr = self.to_p2wpkh_address(&new_ext_pub_key.public_key);
+        self.last_derived_pos += 1;
+        self.addresses_derivation_map
+            .insert(proof_key_addr.to_string(),
+                AddressDerivation::new(self.last_derived_pos, new_ext_priv_key.private_key, new_ext_pub_key.public_key));
+        Ok(StateEntityAddress{
+            backup_addr: self.get_new_bitcoin_address()?.to_string(),
+            proof_key: new_ext_pub_key.public_key
+        })
     }
 
     /// Derive new child key from master extended key
@@ -223,38 +243,38 @@ impl Wallet {
         return signed_transaction
     }
 
-    /// create new 2P-ECDSA wallet with state entity
-    pub fn gen_shared_wallet(&mut self, id: &String) -> Result<()> {
-        self.shared_wallets.push(SharedWallet::new(id, &self.client_shim, &self.network)?);
+    /// create new 2P-ECDSA key with state entity
+    pub fn gen_shared_key(&mut self, id: &String) -> Result<&SharedKey> {
+        let shared_key = SharedKey::new(id, &self.client_shim)?;
+        self.shared_keys.push(shared_key);
+        Ok(self.shared_keys.last().unwrap())
+    }
+
+    /// create new 2P-ECDSA key with predeinfed private key
+    pub fn gen_shared_key_fixed_secret_key(&mut self, id: &String, secret_key: &FE) -> Result<()> {
+        self.shared_keys.push(
+            SharedKey::new_fixed_secret_key(id, &self.client_shim, secret_key)?);
         Ok(())
     }
 
-    /// Get shared wallet by id. Return None if no shared wallet with given id.
-    pub fn get_shared_wallet(&self, id: &String) -> Option<&SharedWallet> {
-        for shared in &self.shared_wallets {
+    /// Get shared key by id. Return None if no shared key with given id.
+    pub fn get_shared_key(&self, id: &String) -> Result<&SharedKey> {
+        for shared in &self.shared_keys {
             if shared.id == *id {
-                return Some(shared);
+                return Ok(shared);
             }
         }
-        None
+        Err(CError::WalletError(SharedKeyNotFound))
     }
 
-    /// Get mutable reference to shared wallet by id. Return None if no shared wallet with given id.
-    pub fn get_shared_wallet_mut(&mut self, id: &String) -> Option<&mut SharedWallet> {
-        for shared in &mut self.shared_wallets {
+    /// Get mutable reference to shared key by id. Return None if no shared key with given id.
+    pub fn get_shared_key_mut(&mut self, id: &String) -> Result<&mut SharedKey> {
+        for shared in &mut self.shared_keys {
             if shared.id == *id {
-                return Some(shared);
+                return Ok(shared);
             }
         }
-        None
-    }
-
-    /// Generate address for shared wallet
-    pub fn gen_addr_for_shared_wallet(&mut self, id: &String) -> Result<Address> {
-        match self.get_shared_wallet_mut(id) {
-            Some(shared) => Ok(shared.get_new_bitcoin_address()),
-            None => Err(CError::WalletError(SharedWalletNotFound,id.to_string())),
-        }
+        Err(CError::WalletError(SharedKeyNotFound))
     }
 
     /// return balance of address
@@ -335,7 +355,7 @@ impl Wallet {
         )
     }
 
-    fn get_bitcoin_network(&self) -> Network {
+    pub fn get_bitcoin_network(&self) -> Network {
         self.network.parse::<Network>().unwrap()
     }
 }
@@ -352,7 +372,8 @@ pub fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state_entity::util::*;
+    extern crate shared_lib;
+    use shared_lib::util::{build_tx_0,RBF};
     use bitcoin::{ Amount, TxIn, OutPoint, Script };
     use bitcoin::hashes::sha256d;
 
@@ -368,16 +389,16 @@ mod tests {
 
     #[test]
     fn load_wallet_test() {
-        Wallet::load_from(TEST_WALLET_FILENAME,&"regtest".to_string(),ClientShim::new("http://localhost:8000".to_string(), None));
+        Wallet::load_from(TEST_WALLET_FILENAME,&"regtest".to_string(),ClientShim::new("http://localhost:8000".to_string(), None)).unwrap();
     }
 
     #[test]
     fn test_to_and_from_json() {
         let mut wallet = gen_wallet();
-        let addr1 = wallet.get_new_bitcoin_address();
-        let addr2 = wallet.get_new_bitcoin_address();
+        let addr1 = wallet.get_new_bitcoin_address().unwrap();
+        let addr2 = wallet.get_new_bitcoin_address().unwrap();
         let wallet_json = wallet.to_json();
-        let wallet_rebuilt = super::Wallet::from_json(wallet_json,&"regtest".to_string(),ClientShim::new("http://localhost:8000".to_string(), None));
+        let wallet_rebuilt = super::Wallet::from_json(wallet_json,&"regtest".to_string(),ClientShim::new("http://localhost:8000".to_string(), None)).unwrap();
         assert_eq!(wallet.id,wallet_rebuilt.id);
         assert_eq!(wallet.network,wallet_rebuilt.network);
         assert_eq!(wallet.master_priv_key.chain_code,wallet_rebuilt.master_priv_key.chain_code);
@@ -392,7 +413,7 @@ mod tests {
     #[test]
     fn test_basic_addr_generation() {
         let mut wallet = gen_wallet();
-        let addr1 = wallet.get_new_bitcoin_address();
+        let addr1 = wallet.get_new_bitcoin_address().unwrap();
         assert!(wallet.get_address(&addr1.to_string()).is_some());
         assert!(wallet.get_address(&String::from("test")).is_none());
         let _ = wallet.get_new_bitcoin_address();
@@ -408,7 +429,7 @@ mod tests {
         );
 
         let mut wallet = gen_wallet();
-        let addr = wallet.get_new_bitcoin_address();
+        let addr = wallet.get_new_bitcoin_address().unwrap();
 
         let inputs =  vec![
             TxIn {
@@ -436,13 +457,6 @@ mod tests {
         let _ = wallet.get_new_bitcoin_address();
         println!("balances: {:?}",wallet.get_all_addresses_balance());
         println!("list unspent: {:?}",wallet.list_unspent());
-    }
-    #[test]
-    fn test_gen_shared_addr_error() {
-        let mut wallet = gen_wallet();
-        if let Err(e) = wallet.gen_addr_for_shared_wallet(&"id".to_string()) {
-            assert_eq!(e.to_string(),"Wallet Error: No shared wallet found. (value: id)".to_string())
-        }
     }
 
 }

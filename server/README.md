@@ -6,7 +6,7 @@ Mercury Server is a RESTful web service exposing APIs for state chain functional
 ## Installation
 ### Launching the server
 ```bash
-git clone https://github.com/KZen-networks/gotham-city.git
+git clone https://github.com/commerceblock/mercury.git
 cd mercury/server
 cargo run --release
 ```
@@ -21,10 +21,10 @@ Optionally, it can use JWT with AWS Cognito as a service provider by setting pro
 ### Running tests
 #### Without timing output
 ```bash
-RUST_TEST_THREADS=1 cargo test --release
+RUST_TEST_THREADS=1 cargo test
 ```
 
 #### With timing output
 ```bash
-RUST_TEST_THREADS=1  cargo test --release -- --nocapture
+RUST_TEST_THREADS=1  cargo test -- --nocapture
 ```

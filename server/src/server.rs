@@ -1,12 +1,3 @@
-// Gotham-city
-//
-// Copyright 2018 by Kzen Networks (kzencorp.com)
-// Gotham city is free software: you can redistribute
-// it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either
-// version 3 of the License, or (at your option) any later version.
-//
-
 use config;
 use rocket;
 use rocket::{Request, Rocket};
@@ -82,6 +73,7 @@ pub fn get_server() -> Rocket {
             routes![
                 ping::ping,
                 ecdsa::first_message,
+                ecdsa::first_message_fixed,
                 ecdsa::second_message,
                 ecdsa::third_message,
                 ecdsa::fourth_message,
@@ -98,8 +90,11 @@ pub fn get_server() -> Rocket {
                 schnorr::keygen_second,
                 schnorr::keygen_third,
                 schnorr::sign,
-                state_entity::session_init,
-                state_entity::deposit_first
+                state_entity::get_statechain,
+                state_entity::deposit_init,
+                state_entity::prepare_sign_backup,
+                state_entity::transfer_sender,
+                state_entity::transfer_receiver
             ],
         )
         .manage(db_config)

@@ -1,31 +1,22 @@
-// Gotham-city
-//
-// Copyright 2018 by Kzen Networks (kzencorp.com)
-// Gotham city is free software: you can redistribute
-// it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either
-// version 3 of the License, or (at your option) any later version.
-//
 #[cfg(test)]
 mod tests {
-
+    extern crate shared_lib;
     use super::super::routes::ecdsa;
     use super::super::server;
-    use rocket;
-    use rocket::http::ContentType;
-    use rocket::http::Status;
+    use shared_lib::structs::{DepositMsg1,PrepareSignTxMessage};
+    use rocket::http::{ContentType,Status};
     use rocket::local::Client;
-    use serde_json;
-    use std::env;
-    use std::time::Instant;
-    use floating_duration::TimeFormat;
-
     use curv::arithmetic::traits::Converter;
     use curv::cryptographic_primitives::twoparty::dh_key_exchange_variant_with_pok_comm::*;
     use curv::BigInt;
     use kms::chain_code::two_party as chain_code;
     use kms::ecdsa::two_party::*;
     use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
+
+    use serde_json;
+    use floating_duration::TimeFormat;
+    use std::time::Instant;
+    use std::env;
 
     fn key_gen(client: &Client) -> (String, MasterKey2) {
         time_test!();
@@ -34,8 +25,11 @@ mod tests {
         let start = Instant::now();
 
         // get ID
+        let deposit_msg1 = DepositMsg1{proof_key: String::from("proof key")};
+        let body = serde_json::to_string(&deposit_msg1).unwrap();
         let mut response = client
-            .post("/init")
+            .post("/deposit/init")
+            .body(body)
             .header(ContentType::JSON)
             .dispatch();
         let id: String = serde_json::from_str(&response.body_string().unwrap()).unwrap();
@@ -267,14 +261,9 @@ mod tests {
         let sign_party_one_first_message: party_one::EphKeyGenFirstMsg =
             serde_json::from_str(&res_body).unwrap();
 
-        let x_pos = BigInt::from(0);
-        let y_pos = BigInt::from(21);
-
-        let child_party_two_master_key = master_key_2.get_child(vec![x_pos.clone(), y_pos.clone()]);
-
         let start = Instant::now();
 
-        let party_two_sign_message = child_party_two_master_key.sign_second_message(
+        let party_two_sign_message = master_key_2.sign_second_message(
             &eph_ec_key_pair_party2,
             eph_comm_witness.clone(),
             &sign_party_one_first_message,
@@ -286,8 +275,6 @@ mod tests {
         let request: ecdsa::SignSecondMsgRequest = ecdsa::SignSecondMsgRequest {
             message,
             party_two_sign_message,
-            x_pos_child_key: x_pos,
-            y_pos_child_key: y_pos,
         };
 
         let body = serde_json::to_string(&request).unwrap();
@@ -307,13 +294,14 @@ mod tests {
         );
 
         let res_body = response.body_string().unwrap();
+
         let signature_recid: party_one::SignatureRecid = serde_json::from_str(&res_body).unwrap();
 
         signature_recid
     }
 
     #[test]
-    fn key_gen_and_sign() {
+    fn deposit_key_gen_and_sign() {
         // Passthrough mode
         env::set_var("region", "");
         env::set_var("pool_id", "");
@@ -324,7 +312,32 @@ mod tests {
 
         let client = Client::new(server::get_server()).expect("valid rocket instance");
 
+        // key gen
         let (id, master_key_2): (String, MasterKey2) = key_gen(&client);
+
+        // prepare sign message
+        let tx_b_prepare_sign_msg = PrepareSignTxMessage {
+            spending_addr: String::from("bcrt1qjtsfty6z7v5jrj7s9qn4x9gv0np6h8273k3cy9"),
+            input_txid: String::from("a60c61baf75c3f01e82a4880310cb4c7bdec95aee1e50ca7293d2233d5d35cab"),
+            input_vout: 0,
+            address: String::from("bcrt1qz3rcytulyfvkwje88q4a7nvzuj3td9crhlvqnl"),
+            amount: 100000000,
+            transfer: false
+        };
+        let body = serde_json::to_string(&tx_b_prepare_sign_msg).unwrap();
+
+        let start = Instant::now();
+        let response = client
+            .post(format!("/prepare-sign/{}", id))
+            .body(body)
+            .header(ContentType::JSON)
+            .dispatch();
+        assert_eq!(response.status(), Status::Ok);
+
+        println!(
+            "{} Network/Server: prepare sign message",
+            TimeFormat(start.elapsed())
+        );
 
         let message = BigInt::from(12345);
 
@@ -342,9 +355,12 @@ mod tests {
     #[test]
     fn test_auth_token() {
         let client = Client::new(server::get_server()).expect("valid rocket instance");
-        // generate ID
+        // get ID
+        let deposit_msg1 = DepositMsg1{proof_key: String::from("proof key")};
+        let body = serde_json::to_string(&deposit_msg1).unwrap();
         let mut response = client
-            .post("/init")
+            .post("/deposit/init")
+            .body(body)
             .header(ContentType::JSON)
             .dispatch();
         let id: String = serde_json::from_str(&response.body_string().unwrap()).unwrap();
@@ -365,6 +381,6 @@ mod tests {
             .dispatch();
 
         let res = response.body_string().unwrap();
-        assert_eq!(res, "User authorisation failed".to_string());
+        assert_eq!(res, "Authentication Error: User authorisation failed".to_string());
     }
 }

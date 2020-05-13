@@ -1,12 +1,3 @@
-// Gotham-city
-//
-// Copyright 2018 by Kzen Networks (kzencorp.com)
-// Gotham city is free software: you can redistribute
-// it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either
-// version 3 of the License, or (at your option) any later version.
-//
-
 use super::jwt::{decode_header_from_token, get_claims, Claims};
 use super::PublicKey;
 use hex;
@@ -72,7 +63,7 @@ fn get_jwt_to_pems(region: &String, pool_id: &String) -> Result<String, ()> {
         .arg("jwt-to-pems.js")
         .arg(format!("--region={}", region))
         .arg(format!("--poolid={}", pool_id))
-        .current_dir("../gotham-utilities/server/cognito")
+        .current_dir("../utilities/server/cognito")
         .output()
     {
         Ok(o) => return Ok(String::from_utf8_lossy(&o.stdout).to_string()),

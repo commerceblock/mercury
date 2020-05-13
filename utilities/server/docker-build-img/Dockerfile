@@ -18,7 +18,7 @@ RUN apt-get install -y nodejs
 
 ADD . /
 
-WORKDIR /gotham-utilities/server/cognito
+WORKDIR /utilities/server/cognito
 RUN ["npm", "install"]
 
 # Rust
@@ -29,7 +29,7 @@ ENV rocket_address=0.0.0.0
 ENV rocket_port=8000
 
 EXPOSE 8000
-WORKDIR /gotham-server
+WORKDIR /server
 RUN ["/root/.cargo/bin/cargo", "build", "--release"]
 
 
@@ -38,7 +38,5 @@ RUN ["/root/.cargo/bin/cargo", "test", "--release", "--", "--nocapture"]
 
 # Server
 ENV db=AWS
-WORKDIR /gotham-server
+WORKDIR /server
 CMD ["/root/.cargo/bin/cargo", "run", "--release"]
-
-

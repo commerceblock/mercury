@@ -1,12 +1,3 @@
-// Gotham-city
-//
-// Copyright 2018 by Kzen Networks (kzencorp.com)
-// Gotham city is free software: you can redistribute
-// it and/or modify it under the terms of the GNU General Public
-// License as published by the Free Software Foundation, either
-// version 3 of the License, or (at your option) any later version.
-//
-
 #[macro_use]
 extern crate clap;
 use clap::App;
@@ -47,10 +38,10 @@ fn main() {
         // let _escrow = escrow::Escrow::new();
         // println!("Network: [{}], Escrow initiated", &network);
     } else if let Some(matches) = matches.subcommand_matches("wallet") {
-        let mut wallet: wallet::Wallet = wallet::Wallet::load(&network, client_shim);
+        let mut wallet: wallet::Wallet = wallet::Wallet::load(&network, client_shim).unwrap();
 
         if matches.is_present("new-address") {
-            let address = wallet.get_new_bitcoin_address();
+            let address = wallet.get_new_bitcoin_address().unwrap();
             println!("Network: [{}], Address: [{}]", network, address.to_string());
             wallet.save();
         } else if matches.is_present("get-balance") {

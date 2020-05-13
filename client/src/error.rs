@@ -6,17 +6,18 @@ use std::error;
 use std::fmt;
 use bitcoin::util::bip32::Error as Bip32Error;
 use reqwest::Error as ReqwestError;
-/// State Entity library specific errors
+
+/// Client specific errors
 #[derive(Debug, Deserialize)]
 pub enum CError {
-    /// Wallet
-    WalletError(WalletErrorType, String),
-    /// State entity Athorisation failed
-    StateEntityError(String),
-    /// Schnorr
-    SchnorrError(String),
     /// Generic error from string error message
     Generic(String),
+    /// Wallet
+    WalletError(WalletErrorType),
+    /// State entity errors
+    StateEntityError(String),
+    /// Schnorr error
+    SchnorrError(String),
     /// Inherit all errors from bip32
     Bip32(String),
     /// Inherit error from reqwest
@@ -26,6 +27,11 @@ pub enum CError {
 impl From<String> for CError {
     fn from(e: String) -> CError {
         CError::Generic(e)
+    }
+}
+impl From<&str> for CError {
+    fn from(e: &str) -> CError {
+        CError::Generic(e.to_string())
     }
 }
 
@@ -40,17 +46,17 @@ impl From<ReqwestError> for CError {
     }
 }
 
-/// Input parameter error types
+/// Wallet error types
 #[derive(Debug, Deserialize)]
 pub enum WalletErrorType {
     /// No shared wallet found for ID
-    SharedWalletNotFound
+    SharedKeyNotFound
 }
 
 impl WalletErrorType {
     fn as_str(&self) -> &'static str {
         match *self {
-            WalletErrorType::SharedWalletNotFound => "No shared wallet found.",
+            WalletErrorType::SharedKeyNotFound => "No shared key found.",
         }
     }
 }
@@ -58,10 +64,10 @@ impl WalletErrorType {
 impl fmt::Display for CError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            CError::Generic(ref e) => write!(f, "generic Error: {}", e),
+            CError::Generic(ref e) => write!(f, "Error: {}", e),
+            CError::WalletError(ref e) => write!(f, "Wallet Error: {}", e.as_str()),
             CError::StateEntityError(ref e) => write!(f, "State Entity Error: {}", e),
             CError::SchnorrError(ref e) => write!(f, "Schnorr Error: {}", e),
-            CError::WalletError(ref error, ref value) => write!(f, "Wallet Error: {} (value: {})", error.as_str(), value),
             CError::Bip32(ref e) => write!(f, "Bip32 Error: {}", e),
             CError::Reqwest(ref e) => write!(f, "Reqwest Error: {}", e),
         }

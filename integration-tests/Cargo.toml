@@ -19,5 +19,5 @@ path = "../server"
 [dependencies.client]
 path = "../client"
 
-[patch.crates-io]
-rust-gmp = { version = "0.5.0", features = ["serde_support"], git = "https://github.com/KZen-networks/rust-gmp" }
+[dependencies.shared]
+path = "../shared"
