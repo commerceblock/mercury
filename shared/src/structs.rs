@@ -28,7 +28,7 @@ pub struct DepositMsg1 {
 /// Sender -> SE
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMsg1 {
-    pub shared_wallet_id: String,
+    pub shared_key_id: String,
     pub new_state_chain: Vec<String>,
 }
 /// SE -> Sender
@@ -39,7 +39,7 @@ pub struct TransferMsg2 {
 /// Sender -> Receiver
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMsg3 {
-    pub shared_wallet_id: String,
+    pub shared_key_id: String,
     pub t1: FE, // t1 = o1x1
     pub new_backup_tx: Transaction,
     pub state_chain: Vec<String>,
@@ -48,7 +48,7 @@ pub struct TransferMsg3 {
 /// Receiver -> State Entity
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMsg4 {
-    pub shared_wallet_id: String,
+    pub shared_key_id: String,
     pub t2: FE, // t2 = t1*o2_inv = o1*x1*o2_inv
     pub state_chain: Vec<String>,
     pub o2_pub: GE
@@ -56,14 +56,14 @@ pub struct TransferMsg4 {
 /// State Entity -> Receiver
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferMsg5 {
-    pub new_shared_wallet_id: String,
+    pub new_shared_key_id: String,
     pub s2_pub: GE,
 }
 
 impl Default for TransferMsg5 {
     fn default() -> TransferMsg5 {
         TransferMsg5 {
-            new_shared_wallet_id: String::from(""),
+            new_shared_key_id: String::from(""),
             s2_pub: GE::base_point2(),
         }
     }

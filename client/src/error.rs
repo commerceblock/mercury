@@ -13,7 +13,7 @@ pub enum CError {
     /// Generic error from string error message
     Generic(String),
     /// Wallet
-    WalletError(WalletErrorType, String),
+    WalletError(WalletErrorType),
     /// State entity errors
     StateEntityError(String),
     /// Schnorr error
@@ -50,13 +50,13 @@ impl From<ReqwestError> for CError {
 #[derive(Debug, Deserialize)]
 pub enum WalletErrorType {
     /// No shared wallet found for ID
-    SharedWalletNotFound
+    SharedKeyNotFound
 }
 
 impl WalletErrorType {
     fn as_str(&self) -> &'static str {
         match *self {
-            WalletErrorType::SharedWalletNotFound => "No shared wallet found.",
+            WalletErrorType::SharedKeyNotFound => "No shared key found.",
         }
     }
 }
@@ -65,9 +65,9 @@ impl fmt::Display for CError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             CError::Generic(ref e) => write!(f, "Error: {}", e),
+            CError::WalletError(ref e) => write!(f, "Wallet Error: {}", e.as_str()),
             CError::StateEntityError(ref e) => write!(f, "State Entity Error: {}", e),
             CError::SchnorrError(ref e) => write!(f, "Schnorr Error: {}", e),
-            CError::WalletError(ref e, ref value) => write!(f, "Wallet Error: {} (value: {})", e.as_str(), value),
             CError::Bip32(ref e) => write!(f, "Bip32 Error: {}", e),
             CError::Reqwest(ref e) => write!(f, "Reqwest Error: {}", e),
         }

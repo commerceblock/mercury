@@ -1,9 +1,12 @@
 use super::super::Result;
+use super::super::auth::jwt::Claims;
+use super::super::storage::db;
+use super::super::Config;
 
-extern crate shared_lib;
 use crate::routes::state_entity::{ check_user_auth, StateChainStruct, SessionData, StateChain };
 use shared_lib::util::reverse_hex_str;
 use crate::error::{SEError,DBErrorType::NoDataForID};
+extern crate shared_lib;
 
 use curv::cryptographic_primitives::proofs::sigma_dlog::*;
 use curv::cryptographic_primitives::twoparty::coin_flip_optimal_rounds;
@@ -22,10 +25,6 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use std::string::ToString;
 use bitcoin::secp256k1::{ Signature };
-
-use super::super::auth::jwt::Claims;
-use super::super::storage::db;
-use super::super::Config;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 struct HDPos {
@@ -450,8 +449,6 @@ pub fn sign_first(
 pub struct SignSecondMsgRequest {
     pub message: BigInt,
     pub party_two_sign_message: party2::SignMessage,
-    pub x_pos_child_key: BigInt,
-    pub y_pos_child_key: BigInt,
 }
 #[post("/ecdsa/sign/<id>/second", format = "json", data = "<request>")]
 pub fn sign_second(
@@ -500,13 +497,8 @@ pub fn sign_second(
         }
     }
 
-    let master_key: MasterKey1 = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1MasterKey)?
+    let shared_key: MasterKey1 = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1MasterKey)?
         .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-
-    let x: BigInt = request.x_pos_child_key.clone();
-    let y: BigInt = request.y_pos_child_key.clone();
-
-    let child_master_key = master_key.get_child(vec![x, y]);
 
     let eph_ec_key_pair_party1: party_one::EphEcKeyPair =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::EphEcKeyPair)?
@@ -517,7 +509,7 @@ pub fn sign_second(
             .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let signature;
-    match child_master_key.sign_second_message(
+    match shared_key.sign_second_message(
         &request.party_two_sign_message,
         &eph_key_gen_first_message_party_two,
         &eph_ec_key_pair_party1,
@@ -540,7 +532,7 @@ pub fn sign_second(
         .serialize_der()
         .to_vec();
     sig_vec.push(01);
-    let pk_vec = child_master_key.public.q.get_element().serialize().to_vec();
+    let pk_vec = shared_key.public.q.get_element().serialize().to_vec();
     backup_tx.input[0].witness = vec![sig_vec, pk_vec];
 
     // update StateChain DB object

@@ -58,7 +58,7 @@ impl fmt::Display for SEError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             SEError::Generic(ref e) => write!(f, "Error: {}", e),
-            SEError::AuthError => write!(f,"User authorisation failed"),
+            SEError::AuthError => write!(f,"Authentication Error: User authorisation failed"),
             SEError::DBError(ref e, ref value) => write!(f, "DB Error: {} (value: {})", e.as_str(), value),
             SEError::SigningError(ref e) => write!(f,"Signing Error: {}",e),
             SEError::Util(ref e) => write!(f,"Util Error: {}",e),

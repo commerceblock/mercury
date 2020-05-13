@@ -48,19 +48,7 @@ fn _postb<T, V>(client_shim: &ClientShim, path: &str, body: T) -> Result<V>
     info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
 
     // catch State entity errors
-    if value.contains(&String::from("No data for such identifier")) {
-        return Err(CError::StateEntityError(value));
-    }
-    if value.contains(&String::from("Signing Error")) {
-        return Err(CError::StateEntityError(value));
-    }
-    if value.contains(&String::from("Invalid sig hash - Odd number of characters.")) {
-        return Err(CError::StateEntityError(value));
-    }
-    if value == String::from("User authorisation failed") {
-        return Err(CError::StateEntityError(value));
-    }
-    if value == String::from("Error: Invalid o2, try again.") {
+    if value.contains(&String::from("Error: ")) {
         return Err(CError::StateEntityError(value));
     }
 

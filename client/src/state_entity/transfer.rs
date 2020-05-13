@@ -18,9 +18,7 @@
 //      e. Verify o2*S2 = P
 
 use super::super::Result;
-
 extern crate shared_lib;
-
 use crate::error::CError;
 use crate::wallet::wallet::{StateEntityAddress, Wallet};
 use crate::state_entity::{util::cosign_tx_input, api::get_statechain};
@@ -34,7 +32,7 @@ use curv::{FE, GE};
 /// Transfer coins to new Owner from this wallet
 pub fn transfer_sender(
     wallet: &mut Wallet,
-    shared_wallet_id: &String,
+    shared_key_id: &String,
     state_chain_id: &String,
     receiver_addr: &StateEntityAddress,
     mut prev_tx_b_prepare_sign_msg: PrepareSignTxMessage
@@ -46,23 +44,23 @@ pub fn transfer_sender(
     // init transfer: perform auth and send new statechain
     let transfer_msg2: TransferMsg2 = requests::postb(&wallet.client_shim,&format!("/transfer/sender"),
         &TransferMsg1 {
-            shared_wallet_id: shared_wallet_id.to_string(),
+            shared_key_id: shared_key_id.to_string(),
             new_state_chain: state_chain.clone()
         })?;
 
     // sign new back up tx
     prev_tx_b_prepare_sign_msg.address = receiver_addr.backup_addr.clone();
-    let (_, new_tx_b_signed) = cosign_tx_input(wallet, &shared_wallet_id, &prev_tx_b_prepare_sign_msg)?;
+    let (_, new_tx_b_signed) = cosign_tx_input(wallet, &shared_key_id, &prev_tx_b_prepare_sign_msg)?;
 
     // get o1 priv key
-    let shared_wal = wallet.get_shared_wallet(&shared_wallet_id).expect("No shared wallet found for id");
-    let o1 = shared_wal.private_share.master_key.private.get_private_key();
+    let shared_key = wallet.get_shared_key(&shared_key_id)?;
+    let o1 = shared_key.share.private.get_private_key();
 
     // t1 = o1x1
     let t1 = o1 * transfer_msg2.x1;
 
     let transfer_msg3 = TransferMsg3 {
-        shared_wallet_id: shared_wallet_id.to_string(),
+        shared_key_id: shared_key_id.to_string(),
         t1, // should be encrypted
         new_backup_tx: new_tx_b_signed,
         state_chain
@@ -101,15 +99,17 @@ pub fn transfer_receiver(
         }
     }
 
-    // Make shared wallet with new private share
-    let shared_id = &transfer_msg5.new_shared_wallet_id;
-    wallet.gen_shared_wallet_fixed_secret_key(shared_id,&o2)?;
+    // Make shared key with new private share
+    let shared_id = &transfer_msg5.new_shared_key_id;
+    wallet.gen_shared_key_fixed_secret_key(shared_id,&o2)?;
 
-    // Check shared wallet master public key
+    // Check shared key master public key == private share * SE public share
     if (transfer_msg5.s2_pub*o2).get_element()
-        != wallet.get_shared_wallet(&shared_id).unwrap().private_share.master_key.public.q.get_element() {
+        != wallet.get_shared_key(&shared_id).unwrap().share.public.q.get_element() {
             return Err(CError::StateEntityError(String::from("Transfer failed. Incorrect master public key generated.")))
     }
+
+    // TODO when node is integrated: Should also check that funding tx output address is address derived from shared key.
 
     Ok(transfer_msg5)
 }
@@ -133,7 +133,7 @@ pub fn try_o2(wallet: &mut Wallet, transfer_msg3: &TransferMsg3) -> Result<(FE,T
 
     let transfer_msg5: TransferMsg5 = requests::postb(&wallet.client_shim,&format!("/transfer/receiver"),
         &TransferMsg4 {
-            shared_wallet_id: transfer_msg3.shared_wallet_id.clone(),
+            shared_key_id: transfer_msg3.shared_key_id.clone(),
             t2, // should be encrypted
             state_chain: transfer_msg3.state_chain.clone(),
             o2_pub

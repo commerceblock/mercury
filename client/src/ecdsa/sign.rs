@@ -13,16 +13,12 @@ use super::super::ClientShim;
 pub struct SignSecondMsgRequest {
     pub message: BigInt,
     pub party_two_sign_message: party2::SignMessage,
-    pub x_pos_child_key: BigInt,
-    pub y_pos_child_key: BigInt,
 }
 
 pub fn sign(
     client_shim: &ClientShim,
     message: BigInt,
     mk: &MasterKey2,
-    x_pos: BigInt,
-    y_pos: BigInt,
     id: &String,
 ) -> Result<party_one::SignatureRecid> {
     let (eph_key_gen_first_message_party_two, eph_comm_witness, eph_ec_key_pair_party2) =
@@ -43,8 +39,6 @@ pub fn sign(
         client_shim,
         message,
         party_two_sign_message,
-        x_pos,
-        y_pos,
         &id,
     )?;
 
@@ -55,15 +49,11 @@ fn get_signature(
     client_shim: &ClientShim,
     message: BigInt,
     party_two_sign_message: party2::SignMessage,
-    x_pos_child_key: BigInt,
-    y_pos_child_key: BigInt,
     id: &String,
 ) -> Result<party_one::SignatureRecid> {
     let request: SignSecondMsgRequest = SignSecondMsgRequest {
         message,
         party_two_sign_message,
-        x_pos_child_key,
-        y_pos_child_key,
     };
 
     let signature: party_one::SignatureRecid =

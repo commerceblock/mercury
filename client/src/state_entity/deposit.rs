@@ -9,10 +9,8 @@
 // 3. Co-op sign back-up tx
 
 use super::super::Result;
-
 extern crate shared_lib;
-
-use crate::wallet::wallet::Wallet;
+use crate::wallet::wallet::{to_bitcoin_public_key,Wallet};
 use crate::state_entity::util::cosign_tx_input;
 use super::super::utilities::requests;
 
@@ -20,6 +18,7 @@ use shared_lib::util::build_tx_0;
 use shared_lib::structs::{PrepareSignTxMessage,DepositMsg1};
 
 use bitcoin::{ Address, Amount, Transaction, TxIn };
+use curv::elliptic::curves::traits::ECPoint;
 
 
 /// Message to server initiating state entity protocol.
@@ -41,14 +40,18 @@ pub fn deposit(wallet: &mut Wallet, inputs: Vec<TxIn>, funding_spend_addrs: Vec<
     -> Result<(String, String, Transaction, Transaction, PrepareSignTxMessage)>
 {
     // init. Receive shared wallet ID
-    let shared_wallet_id: String = session_init(wallet)?;
+    let shared_key_id: String = session_init(wallet)?;
 
-    // 2P-ECDSA with state entity to create a SharedWallet
-    wallet.gen_shared_wallet(&shared_wallet_id)?;
+    // 2P-ECDSA with state entity to create a Shared key
+    let shared_key = wallet.gen_shared_key(&shared_key_id)?;
 
     // make funding tx
-    // co-owned address to send funds to (P_addr)
-    let p_addr = wallet.gen_addr_for_shared_wallet(&shared_wallet_id).unwrap();
+    // co-owned key address to send funds to (P_addr)
+    let pk = shared_key.share.public.q.get_element();
+    let p_addr = bitcoin::Address::p2wpkh(
+        &to_bitcoin_public_key(pk),
+        wallet.get_bitcoin_network()
+    );
     let tx_0 = build_tx_0(&inputs, &p_addr, &amount).unwrap();
     // sign
     let tx_0_signed = wallet.sign_tx(&tx_0, vec!(0), funding_spend_addrs, vec!(amount));
@@ -64,7 +67,7 @@ pub fn deposit(wallet: &mut Wallet, inputs: Vec<TxIn>, funding_spend_addrs: Vec<
         transfer: false
     };
 
-    let (state_chain_id, tx_b_signed) = cosign_tx_input(wallet, &shared_wallet_id, &tx_b_prepare_sign_msg)?;
+    let (state_chain_id, tx_b_signed) = cosign_tx_input(wallet, &shared_key_id, &tx_b_prepare_sign_msg)?;
 
-    Ok((shared_wallet_id, state_chain_id, tx_0_signed, tx_b_signed, tx_b_prepare_sign_msg))
+    Ok((shared_key_id, state_chain_id, tx_0_signed, tx_b_signed, tx_b_prepare_sign_msg))
 }

@@ -67,13 +67,6 @@ pub struct TransferData {
     pub new_state_chain: Vec<String>,
     pub x1: FE
 }
-/// Information to create new shared wallet with new Owner
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct TransferSessionData {
-    pub state_chain_id: String,
-    pub new_state_chain: Vec<String>,
-    pub x1: FE
-}
 
 #[derive(Debug)]
 pub enum StateChainStruct {
@@ -248,15 +241,15 @@ pub fn transfer_sender(
     transfer_msg1: Json<TransferMsg1>,
 ) -> Result<Json<TransferMsg2>> {
     // auth user
-    check_user_auth(&state, &claim, &transfer_msg1.shared_wallet_id)?;
+    check_user_auth(&state, &claim, &transfer_msg1.shared_key_id)?;
 
     // Verification/PoW/authoriation failed
     // Err(SEError::AuthError)
 
     // get state_chain id
     let session_data: SessionData =
-        db::get(&state.db, &claim.sub, &transfer_msg1.shared_wallet_id, &StateChainStruct::SessionData)?
-            .ok_or(SEError::DBError(NoDataForID, transfer_msg1.shared_wallet_id.clone()))?;
+        db::get(&state.db, &claim.sub, &transfer_msg1.shared_key_id, &StateChainStruct::SessionData)?
+            .ok_or(SEError::DBError(NoDataForID, transfer_msg1.shared_key_id.clone()))?;
 
     // Generate x1
     let x1: FE = ECScalar::new_random();
@@ -265,7 +258,7 @@ pub fn transfer_sender(
     db::insert(
         &state.db,
         &claim.sub,
-        &transfer_msg1.shared_wallet_id,
+        &transfer_msg1.shared_key_id,
         &StateChainStruct::TransferData,
         &TransferData {
             state_chain_id: session_data.state_chain_id.clone(),
@@ -288,8 +281,8 @@ pub fn transfer_receiver(
     claim: Claims,
     transfer_msg4: Json<TransferMsg4>,
 ) -> Result<Json<TransferMsg5>> {
-    let id = transfer_msg4.shared_wallet_id.clone();
-    // Get TransferData for shared_wallet_id
+    let id = transfer_msg4.shared_key_id.clone();
+    // Get TransferData for shared_key_id
     let transfer_data: TransferData =
         db::get(&state.db, &claim.sub, &id, &StateChainStruct::TransferData)?
             .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
@@ -338,14 +331,14 @@ pub fn transfer_receiver(
     }
 
     // create new UserSession to allow new owner to generate shared wallet
-    let new_shared_wallet_id = Uuid::new_v4().to_string();
+    let new_shared_key_id = Uuid::new_v4().to_string();
     db::insert(
         &state.db,
         &claim.sub,
-        &new_shared_wallet_id,
+        &new_shared_key_id,
         &StateChainStruct::UserSession,
         &UserSession {
-            id: new_shared_wallet_id.clone(),
+            id: new_shared_key_id.clone(),
             proof_key: new_state_chain.last().unwrap().clone(),
             s2: Some(s2)
         }
@@ -370,7 +363,7 @@ pub fn transfer_receiver(
 
     Ok(Json(
         TransferMsg5 {
-            new_shared_wallet_id,
+            new_shared_key_id,
             s2_pub,
         }
     ))

@@ -261,14 +261,9 @@ mod tests {
         let sign_party_one_first_message: party_one::EphKeyGenFirstMsg =
             serde_json::from_str(&res_body).unwrap();
 
-        let x_pos = BigInt::from(0);
-        let y_pos = BigInt::from(21);
-
-        let child_party_two_master_key = master_key_2.get_child(vec![x_pos.clone(), y_pos.clone()]);
-
         let start = Instant::now();
 
-        let party_two_sign_message = child_party_two_master_key.sign_second_message(
+        let party_two_sign_message = master_key_2.sign_second_message(
             &eph_ec_key_pair_party2,
             eph_comm_witness.clone(),
             &sign_party_one_first_message,
@@ -280,8 +275,6 @@ mod tests {
         let request: ecdsa::SignSecondMsgRequest = ecdsa::SignSecondMsgRequest {
             message,
             party_two_sign_message,
-            x_pos_child_key: x_pos,
-            y_pos_child_key: y_pos,
         };
 
         let body = serde_json::to_string(&request).unwrap();
@@ -388,6 +381,6 @@ mod tests {
             .dispatch();
 
         let res = response.body_string().unwrap();
-        assert_eq!(res, "User authorisation failed".to_string());
+        assert_eq!(res, "Authentication Error: User authorisation failed".to_string());
     }
 }

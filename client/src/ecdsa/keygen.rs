@@ -16,7 +16,7 @@ use kms::chain_code::two_party as chain_code;
 use kms::ecdsa::two_party::*;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
 
-use super::types::PrivateShare;
+use crate::wallet::shared_key::SharedKey;
 use super::super::utilities::requests;
 use super::super::ClientShim;
 use super::super::Result;
@@ -24,7 +24,7 @@ use super::super::Result;
 
 const KG_PATH_PRE: &str = "ecdsa/keygen";
 
-pub fn get_master_key(id: &String, client_shim: &ClientShim) -> Result<PrivateShare> {
+pub fn get_master_key(id: &String, client_shim: &ClientShim) -> Result<SharedKey> {
     let start = Instant::now();
 
     let (id, kg_party_one_first_message): (String, party_one::KeyGenFirstMsg) =
@@ -109,14 +109,14 @@ pub fn get_master_key(id: &String, client_shim: &ClientShim) -> Result<PrivateSh
 
     println!("(id: {}) Took: {}", id, TimeFormat(start.elapsed()));
 
-    Ok(PrivateShare { id, master_key })
+    Ok(SharedKey { id, share: master_key })
 }
 
 #[derive(Serialize, Debug)]
 pub struct SecrteKeyS2 {
     s2: FE,
 }
-pub fn get_master_key_with_fixed_secret(id: &String, client_shim: &ClientShim, secret_key: &FE) -> Result<PrivateShare> {
+pub fn get_master_key_with_fixed_secret(id: &String, client_shim: &ClientShim, secret_key: &FE) -> Result<SharedKey> {
     let start = Instant::now();
 
     let (id, kg_party_one_first_message): (String, party_one::KeyGenFirstMsg) =
@@ -201,7 +201,7 @@ pub fn get_master_key_with_fixed_secret(id: &String, client_shim: &ClientShim, s
 
     println!("(id: {}) Took: {}", id, TimeFormat(start.elapsed()));
 
-    Ok(PrivateShare { id, master_key })
+    Ok(SharedKey { id, share: master_key })
 }
 
 // // iOS bindings

@@ -17,12 +17,13 @@ mod tests {
     pub const TEST_WALLET_FILENAME: &str = "../client/test-assets/wallet.data";
 
     #[test]
-    fn test_session_init() {
+    fn test_gen_shared_key() {
         spawn_server();
         let mut wallet = load_wallet();
-        let res = client_lib::state_entity::deposit::session_init(&mut wallet);
-        assert!(res.is_ok());
-        println!("ID: {}",res.unwrap());
+        let init_res = client_lib::state_entity::deposit::session_init(&mut wallet);
+        assert!(init_res.is_ok());
+        let key_res = wallet.gen_shared_key(&init_res.unwrap());
+        assert!(key_res.is_ok());
     }
 
     #[test]
@@ -30,7 +31,7 @@ mod tests {
         spawn_server();
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
         if let Err(e) = ecdsa::get_master_key(&"Invalid id".to_string(), &client_shim) {
-            assert_eq!(e.to_string(),"State Entity Error: User authorisation failed".to_string());
+            assert_eq!(e.to_string(),"State Entity Error: Authentication Error: User authorisation failed".to_string());
         }
     }
 
@@ -74,8 +75,8 @@ mod tests {
         ).unwrap();
 
         return resp
-
     }
+
     #[test]
     fn test_deposit() {
         spawn_server();
@@ -140,8 +141,6 @@ mod tests {
                 deposit_resp.4     // backup tx prepare sign msg
         ).unwrap();
 
-        println!("tranfer_sender_resp: {:?} ",tranfer_sender_resp);
-
         let transfer_receiver_resp  =
             state_entity::transfer::transfer_receiver(
                 &mut wallet_receiver,
@@ -149,12 +148,10 @@ mod tests {
                 &receiver_addr
             ).unwrap();
 
-        println!("transfer_receiver_resp: {:?} ",transfer_receiver_resp);
-
-        // check shared wallets have the same master public key
+        // check shared keys have the same master public key
         assert_eq!(
-            wallet_sender.get_shared_wallet(&deposit_resp.0).unwrap().private_share.master_key.public.q,
-            wallet_receiver.get_shared_wallet(&transfer_receiver_resp.new_shared_wallet_id).unwrap().private_share.master_key.public.q
+            wallet_sender.get_shared_key(&deposit_resp.0).unwrap().share.public.q,
+            wallet_receiver.get_shared_key(&transfer_receiver_resp.new_shared_key_id).unwrap().share.public.q
         );
 
         // check state chain is updated
@@ -164,24 +161,21 @@ mod tests {
     }
 
     #[test]
-    fn test_wallet_load_with_shared_wallet() {
+    fn test_wallet_load_with_shared_key() {
         spawn_server();
 
         let mut wallet = load_wallet();
         let id = client_lib::state_entity::deposit::session_init(&mut wallet).unwrap();
-        wallet.gen_shared_wallet(&id.to_string()).unwrap();
+        wallet.gen_shared_key(&id.to_string()).unwrap();
 
         let wallet_json = wallet.to_json();
         let wallet_rebuilt = wallet::wallet::Wallet::from_json(wallet_json, &"regtest".to_string(), ClientShim::new("http://localhost:8000".to_string(), None)).unwrap();
 
-        let shared = wallet.shared_wallets.get(0).unwrap();
-        let shared_rebuilt = wallet_rebuilt.shared_wallets.get(0).unwrap();
+        let shared_key = wallet.shared_keys.get(0).unwrap();
+        let shared_key_rebuilt = wallet_rebuilt.shared_keys.get(0).unwrap();
 
-        assert_eq!(shared.id,shared_rebuilt.id);
-        assert_eq!(shared.network,shared_rebuilt.network);
-        assert_eq!(shared.private_share.id, shared_rebuilt.private_share.id);
-        assert_eq!(shared.private_share.master_key.public, shared_rebuilt.private_share.master_key.public);
-        assert_eq!(shared.last_derived_pos,shared_rebuilt.last_derived_pos);
+        assert_eq!(shared_key.id,shared_key_rebuilt.id);
+        assert_eq!(shared_key.share.public, shared_key_rebuilt.share.public);
     }
 
 
