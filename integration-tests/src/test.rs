@@ -7,6 +7,7 @@ mod tests {
 
     use client_lib::*;
     use client_lib::wallet::wallet::Wallet;
+
     use server_lib::server;
     use shared_lib::structs::PrepareSignTxMessage;
 
@@ -66,7 +67,7 @@ mod tests {
         }
         ];
 
-        let funding_spend_addrs = vec!(wallet.get_new_bitcoin_address().unwrap());
+        let funding_spend_addrs = vec!(wallet.keys.get_new_bitcoin_address().unwrap());
         let resp = state_entity::deposit::deposit(
             wallet,
             inputs,
@@ -118,7 +119,7 @@ mod tests {
             }
         ];
         // This addr should correspond to UTXOs being spent
-        let funding_spend_addrs = vec!(wallet_sender.get_new_bitcoin_address().unwrap());
+        let funding_spend_addrs = vec!(wallet_sender.keys.get_new_bitcoin_address().unwrap());
         let deposit_resp = state_entity::deposit::deposit(&mut wallet_sender, inputs, funding_spend_addrs, amount).unwrap();
         println!("Shared wallet id: {:?} ",deposit_resp.0);
         println!("state chain id: {:?} ",deposit_resp.1);
@@ -169,7 +170,7 @@ mod tests {
         wallet.gen_shared_key(&id.to_string()).unwrap();
 
         let wallet_json = wallet.to_json();
-        let wallet_rebuilt = wallet::wallet::Wallet::from_json(wallet_json, &"regtest".to_string(), ClientShim::new("http://localhost:8000".to_string(), None)).unwrap();
+        let wallet_rebuilt = wallet::wallet::Wallet::from_json(wallet_json, ClientShim::new("http://localhost:8000".to_string(), None)).unwrap();
 
         let shared_key = wallet.shared_keys.get(0).unwrap();
         let shared_key_rebuilt = wallet_rebuilt.shared_keys.get(0).unwrap();
@@ -196,6 +197,6 @@ mod tests {
         )
     }
     fn load_wallet() -> Wallet {
-        Wallet::load_from(TEST_WALLET_FILENAME,&"regtest".to_string(),ClientShim::new("http://localhost:8000".to_string(), None)).unwrap()
+        Wallet::load_from(TEST_WALLET_FILENAME,ClientShim::new("http://localhost:8000".to_string(), None)).unwrap()
     }
 }

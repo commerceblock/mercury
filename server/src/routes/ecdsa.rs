@@ -9,16 +9,13 @@ use crate::error::{SEError,DBErrorType::NoDataForID};
 extern crate shared_lib;
 
 use curv::cryptographic_primitives::proofs::sigma_dlog::*;
-use curv::cryptographic_primitives::twoparty::coin_flip_optimal_rounds;
 use curv::cryptographic_primitives::twoparty::dh_key_exchange_variant_with_pok_comm::{
     CommWitness, EcKeyPair, Party1FirstMessage, Party1SecondMessage,
 };
-use curv::elliptic::curves::secp256_k1::Secp256k1Scalar;
 use curv::elliptic::curves::traits::ECPoint;
 use curv::{BigInt, GE};
 use kms::chain_code::two_party as chain_code;
 use kms::ecdsa::two_party::*;
-use kms::rotation::two_party::party1::Rotation1;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
 use curv::arithmetic::traits::Converter;
 use rocket::State;
@@ -557,192 +554,6 @@ pub fn get_mk(state: &State<Config>, claim: Claims, id: &String) -> Result<Maste
         .ok_or(SEError::DBError(NoDataForID, id.to_string()))?
 }
 
-#[post("/ecdsa/rotate/<id>/first", format = "json")]
-pub fn rotate_first(
-    state: State<Config>,
-    claim: Claims,
-    id: String,
-) -> Result<Json<coin_flip_optimal_rounds::Party1FirstMessage>> {
-    let (party1_coin_flip_first_message, m1, r1) = Rotation1::key_rotate_first_message();
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::RotateCommitMessage1M,
-        &m1,
-    )?;
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::RotateCommitMessage1R,
-        &r1,
-    )?;
-    Ok(Json(party1_coin_flip_first_message))
-}
-
-#[post(
-    "/ecdsa/rotate/<id>/second",
-    format = "json",
-    data = "<party2_first_message>"
-)]
-pub fn rotate_second(
-    state: State<Config>,
-    id: String,
-    claim: Claims,
-    party2_first_message: Json<coin_flip_optimal_rounds::Party2FirstMessage>,
-) -> Result<
-    Json<
-        ((
-            coin_flip_optimal_rounds::Party1SecondMessage,
-            party1::RotationParty1Message1,
-        )),
-    >,
-> {
-    let party_one_master_key = get_mk(&state, claim.clone(), &id)?;
-
-    let m1: Secp256k1Scalar = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::RotateCommitMessage1M)?
-        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-
-    let r1: Secp256k1Scalar = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::RotateCommitMessage1R)?
-        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-
-    let (party1_second_message, random1) =
-        Rotation1::key_rotate_second_message(&party2_first_message.0, &m1, &r1);
-    db::insert(&state.db, &claim.sub, &id, &EcdsaStruct::RotateRandom1, &random1)?;
-
-    let (rotation_party_one_first_message, party_one_private_new) =
-        party_one_master_key.rotation_first_message(&random1);
-
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::RotateFirstMsg,
-        &rotation_party_one_first_message,
-    )?;
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::RotatePrivateNew,
-        &party_one_private_new,
-    )?;
-    Ok(Json((
-        party1_second_message,
-        rotation_party_one_first_message,
-    )))
-}
-
-#[post(
-    "/ecdsa/rotate/<id>/third",
-    format = "json",
-    data = "<rotation_party_two_first_message>"
-)]
-pub fn rotate_third(
-    state: State<Config>,
-    claim: Claims,
-    id: String,
-    rotation_party_two_first_message: Json<party_two::PDLFirstMessage>,
-) -> Result<Json<party_one::PDLFirstMessage>> {
-    let party_one_private_new: party_one::Party1Private =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::RotatePrivateNew)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-
-    let (rotation_party_one_second_message, party_one_pdl_decommit, alpha) =
-        MasterKey1::rotation_second_message(
-            &rotation_party_two_first_message.0,
-            &party_one_private_new,
-        );
-
-    db::insert(&state.db, &claim.sub, &id, &EcdsaStruct::Alpha, &Alpha { value: alpha })?;
-
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::RotatePdlDecom,
-        &party_one_pdl_decommit,
-    )?;
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::RotateParty2First,
-        &rotation_party_two_first_message.0,
-    )?;
-    db::insert(
-        &state.db,
-        &id,
-        &claim.sub,
-        &EcdsaStruct::RotateParty1Second,
-        &rotation_party_one_second_message,
-    )?;
-
-    Ok(Json(rotation_party_one_second_message))
-}
-
-#[post(
-    "/ecdsa/rotate/<id>/fourth",
-    format = "json",
-    data = "<rotation_party_two_second_message>"
-)]
-pub fn rotate_fourth(
-    state: State<Config>,
-    claim: Claims,
-    id: String,
-    rotation_party_two_second_message: Json<party_two::PDLSecondMessage>,
-) -> Result<Json<party_one::PDLSecondMessage>> {
-    let party_one_master_key = get_mk(&state, claim.clone(), &id)?;
-
-    let rotation_party_one_first_message: party1::RotationParty1Message1 =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::RotateFirstMsg)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-
-    let party_one_private_new: party_one::Party1Private =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::RotatePrivateNew)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-
-    let random1: kms::rotation::two_party::Rotation =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::RotateRandom1)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-
-    let rotation_party_two_first_message: party_two::PDLFirstMessage =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::RotateParty2First)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-
-    let party_one_pdl_decommit: party_one::PDLdecommit =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::RotatePdlDecom)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-
-    let alpha: Alpha = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Alpha)?
-        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-
-    let result_rotate_party_two_second_message = party_one_master_key.rotation_third_message(
-        &rotation_party_one_first_message,
-        party_one_private_new,
-        &random1,
-        &rotation_party_two_first_message,
-        &rotation_party_two_second_message.0,
-        party_one_pdl_decommit,
-        alpha.value,
-    );
-    if result_rotate_party_two_second_message.is_err() {
-        panic!("rotation failed");
-    }
-    let (rotation_party_one_third_message, party_one_master_key_rotated) =
-        result_rotate_party_two_second_message.unwrap();
-
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::Party1MasterKey,
-        &party_one_master_key_rotated,
-    )?;
-
-    Ok(Json(rotation_party_one_third_message))
-}
 
 #[post("/ecdsa/<id>/recover", format = "json")]
 pub fn recover(state: State<Config>, claim: Claims, id: String) -> Result<Json<u32>> {

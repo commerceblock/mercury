@@ -14,6 +14,7 @@ use crate::wallet::wallet::{to_bitcoin_public_key,Wallet};
 use crate::state_entity::util::cosign_tx_input;
 use super::super::utilities::requests;
 
+
 use shared_lib::util::build_tx_0;
 use shared_lib::structs::{PrepareSignTxMessage,DepositMsg1};
 
@@ -25,11 +26,10 @@ use curv::elliptic::curves::traits::ECPoint;
 /// Shared wallet ID returned
 pub fn session_init(wallet: &mut Wallet) -> Result<String> {
     // generate proof key
-    let proof_key_addr = wallet.get_new_bitcoin_address()?;
-    let proof_key = wallet.addresses_derivation_map.get(&proof_key_addr.to_string()).unwrap().public_key.to_string();
+    let proof_key = wallet.se_proof_keys.get_new_key()?;
     requests::postb(&wallet.client_shim,&format!("/deposit/init"),
         &DepositMsg1 {
-            proof_key
+            proof_key: proof_key.to_string()
         }
     )
 }
@@ -57,7 +57,7 @@ pub fn deposit(wallet: &mut Wallet, inputs: Vec<TxIn>, funding_spend_addrs: Vec<
     let tx_0_signed = wallet.sign_tx(&tx_0, vec!(0), funding_spend_addrs, vec!(amount));
 
     // make backup tx PrepareSignTxMessage: Data required to build Back up tx
-    let backup_receive_addr = wallet.get_new_bitcoin_address()?;
+    let backup_receive_addr = wallet.se_backup_keys.get_new_bitcoin_address()?;
     let tx_b_prepare_sign_msg = PrepareSignTxMessage {
         spending_addr: p_addr.to_string(), // address which funding tx funds are sent to
         input_txid: tx_0_signed.txid().to_string(),

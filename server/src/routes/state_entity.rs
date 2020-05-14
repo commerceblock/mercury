@@ -154,7 +154,7 @@ pub fn prepare_sign_backup(
     prepare_sign_msg: Json<PrepareSignTxMessage>,
 ) -> Result<Json<String>> {
     // auth user
-    check_user_auth(&state, &claim, &id)?;
+    let user_session = check_user_auth(&state, &claim, &id)?;
 
     // rebuild tx_b sig hash to verify co-sign will be signing the correct data
     let txin = TxIn {
@@ -205,7 +205,7 @@ pub fn prepare_sign_backup(
             &StateChainStruct::StateChain,
             &StateChain {
                 id: state_chain_id.clone(),
-                chain: vec!(id),
+                chain: vec!(user_session.proof_key.clone()),
                 backup_tx: None
             }
         )?;

@@ -49,7 +49,9 @@ impl From<ReqwestError> for CError {
 /// Wallet error types
 #[derive(Debug, Deserialize)]
 pub enum WalletErrorType {
-    /// No shared wallet found for ID
+    /// No key found in wallet derivaton
+    KeyNotFound,
+    /// No shared key found for ID
     SharedKeyNotFound
 }
 
@@ -57,6 +59,7 @@ impl WalletErrorType {
     fn as_str(&self) -> &'static str {
         match *self {
             WalletErrorType::SharedKeyNotFound => "No shared key found.",
+            WalletErrorType::KeyNotFound => "No key found in wallet derivation path.",
         }
     }
 }

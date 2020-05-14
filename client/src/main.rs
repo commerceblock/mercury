@@ -4,6 +4,7 @@ use clap::App;
 
 use client_lib::ClientShim;
 use client_lib::wallet::wallet;
+
 // use std::time::Instant;
 // use floating_duration::TimeFormat;
 
@@ -38,10 +39,10 @@ fn main() {
         // let _escrow = escrow::Escrow::new();
         // println!("Network: [{}], Escrow initiated", &network);
     } else if let Some(matches) = matches.subcommand_matches("wallet") {
-        let mut wallet: wallet::Wallet = wallet::Wallet::load(&network, client_shim).unwrap();
+        let mut wallet: wallet::Wallet = wallet::Wallet::load(client_shim).unwrap();
 
         if matches.is_present("new-address") {
-            let address = wallet.get_new_bitcoin_address().unwrap();
+            let address = wallet.keys.get_new_bitcoin_address().unwrap();
             println!("Network: [{}], Address: [{}]", network, address.to_string());
             wallet.save();
         } else if matches.is_present("get-balance") {

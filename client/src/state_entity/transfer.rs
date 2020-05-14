@@ -25,9 +25,10 @@ use crate::state_entity::{util::cosign_tx_input, api::get_statechain};
 use super::super::utilities::requests;
 
 use shared_lib::structs::{PrepareSignTxMessage, TransferMsg1, TransferMsg2, TransferMsg3, TransferMsg4, TransferMsg5};
-
+use bitcoin::PublicKey;
 use curv::elliptic::curves::traits::{ECPoint, ECScalar};
 use curv::{FE, GE};
+use std::str::FromStr;
 
 /// Transfer coins to new Owner from this wallet
 pub fn transfer_sender(
@@ -37,8 +38,11 @@ pub fn transfer_sender(
     receiver_addr: &StateEntityAddress,
     mut prev_tx_b_prepare_sign_msg: PrepareSignTxMessage
 ) -> Result<TransferMsg3> {
-    // first sign state chain (simply append receivers proof key for now)
+    // first sign state chain
     let mut state_chain: Vec<String> = get_statechain(wallet, state_chain_id)?;
+    // get proof key for signing
+    let _proof_key_derivation = wallet.se_proof_keys.get_key_derivation(&PublicKey::from_str(state_chain.last().unwrap()).unwrap());
+    // (simply append receivers proof key for now)
     state_chain.push(receiver_addr.proof_key.to_string());
 
     // init transfer: perform auth and send new statechain
