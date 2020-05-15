@@ -88,59 +88,23 @@ impl db::MPCStruct for EcdsaStruct {
     }
 }
 
-#[post("/ecdsa/keygen/<id>/first", format="json")]
+#[post("/ecdsa/keygen/<id>/first/<protocol>", format="json")]
 pub fn first_message(
     state: State<Config>,
     claim: Claims,
-    id: String
-) -> Result<Json<(String, party_one::KeyGenFirstMsg)>> {
-    // check authorisation id is in DB (and check password?)
-    check_user_auth(&state, &claim, &id)?;
-
-    // Generate shared key
-    let (key_gen_first_msg, comm_witness, ec_key_pair) = MasterKey1::key_gen_first_message();
-
-    //save pos 0
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::POS,
-        &HDPos { pos: 0u32 },
-    )?;
-
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::KeyGenFirstMsg,
-        &key_gen_first_msg,
-    )?;
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::CommWitness,
-        &comm_witness,
-    )?;
-    db::insert(&state.db, &claim.sub, &id, &EcdsaStruct::EcKeyPair, &ec_key_pair)?;
-
-    Ok(Json((id, key_gen_first_msg)))
-}
-
-/// For transfer protocol. Servers secret key s2 must be grabbed from db rather than
-/// randomly generated.
-#[post("/ecdsa/keygen/<id>/first-fixed", format="json")]
-pub fn first_message_fixed(
-    state: State<Config>,
-    claim: Claims,
     id: String,
+    protocol: String,
 ) -> Result<Json<(String, party_one::KeyGenFirstMsg)>> {
     // check authorisation id is in DB (and check password?)
     let user_session = check_user_auth(&state, &claim, &id)?;
 
     // Generate shared key
-    let (key_gen_first_msg, comm_witness, ec_key_pair) = MasterKey1::key_gen_first_message_predefined(user_session.s2.unwrap());
+    let (key_gen_first_msg, comm_witness, ec_key_pair) =
+        if protocol == String::from("deposit") {
+            MasterKey1::key_gen_first_message()
+        } else {
+            MasterKey1::key_gen_first_message_predefined(user_session.s2.unwrap())
+        };
 
     //save pos 0
     db::insert(
@@ -169,6 +133,7 @@ pub fn first_message_fixed(
 
     Ok(Json((id, key_gen_first_msg)))
 }
+
 
 #[post("/ecdsa/keygen/<id>/second", format = "json", data = "<dlog_proof>")]
 pub fn second_message(
@@ -489,9 +454,8 @@ pub fn sign_second(
 
         if sig_hash.unwrap().sig_hash.to_string() != message_sig_hash {
             return Err(SEError::SigningError(String::from("Message to be signed does not match verified sig hash.")))
-        } else {
-            debug!("Sig hash in message matches verified sig hash.")
         }
+        debug!("Sig hash in message matches verified sig hash.")
     }
 
     let shared_key: MasterKey1 = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1MasterKey)?
@@ -516,7 +480,7 @@ pub fn sign_second(
         Err(_) => panic!("validation failed")
     };
 
-    // Add back up transaction to State Chain
+    // Add signed back up transaction to State Chain
     let session_data: SessionData =
         db::get(&state.db, &claim.sub, &id, &StateChainStruct::SessionData)?
             .ok_or(SEError::DBError(NoDataForID, id.clone()))?;

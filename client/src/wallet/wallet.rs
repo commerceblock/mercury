@@ -3,7 +3,7 @@
 //! Basic Bitcoin wallet functionality. Full key owned by this wallet.
 
 use super::super::Result;
-use super::key_paths::{ KeyPathWithAddresses, KeyPath};
+use super::key_paths::{ funding_txid_to_int, KeyPathWithAddresses, KeyPath};
 use crate::error::{ CError, WalletErrorType};
 use crate::mocks::mock_electrum::MockElectrum;
 use crate::wallet::shared_key::SharedKey;
@@ -12,8 +12,8 @@ use crate::ClientShim;
 use bitcoin::{ Network, PublicKey };
 use bitcoin::util::bip32::{ ExtendedPrivKey, ChildNumber };
 use bitcoin::util::bip143::SighashComponents;
-use bitcoin::secp256k1::{ All, Secp256k1, Message };
-use curv::FE;
+use bitcoin::secp256k1::{ All, Secp256k1, Message, key::SecretKey };
+
 // use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
 use uuid::Uuid;
 use std::str::FromStr;
@@ -65,6 +65,7 @@ pub struct Wallet {
     pub keys: KeyPathWithAddresses, // Keys for general usage
     pub se_backup_keys: KeyPathWithAddresses, // keys for use in State Entity back up transactions
     pub se_proof_keys: KeyPath, // for use as State Entity proof keys
+    pub se_key_shares: KeyPath, // for derivation of private key shares used in shared_keys
 
     pub shared_keys: Vec<SharedKey> // vector of keys co-owned with state entities
 }
@@ -82,6 +83,9 @@ impl Wallet {
         let se_proof_keys_master_ext_key = master_priv_key.ckd_priv(&secp, ChildNumber::from_hardened_idx(2).unwrap()).unwrap();
         let se_proof_keys = KeyPath::new(se_proof_keys_master_ext_key);
 
+        let se_key_shares_master_ext_key = master_priv_key.ckd_priv(&secp, ChildNumber::from_hardened_idx(3).unwrap()).unwrap();
+        let se_key_shares = KeyPath::new(se_key_shares_master_ext_key);
+
         Wallet {
             id: Uuid::new_v4().to_string(),
             network: network.to_string(),
@@ -92,19 +96,43 @@ impl Wallet {
             keys,
             se_backup_keys,
             se_proof_keys,
+            se_key_shares,
             shared_keys: vec!()
         }
     }
 
     /// serialize wallet to json
     pub fn to_json(&self) -> serde_json::Value {
+        // get all encoded child indices for KeyPaths used in state entity protocols
+        let mut se_backup_keys_pos_encoded = Vec::new();
+        for (_, addr_derivation) in &self.se_backup_keys.addresses_derivation_map {
+            if addr_derivation.pos > self.se_backup_keys.last_derived_pos {
+                se_backup_keys_pos_encoded.push(addr_derivation.pos);
+            }
+        }
+        let mut se_proof_keys_pos_encoded = Vec::new();
+        for (_, key_derivation) in &self.se_proof_keys.key_derivation_map {
+            if key_derivation.pos > self.se_proof_keys.last_derived_pos {
+                se_proof_keys_pos_encoded.push(key_derivation.pos);
+            }
+        }
+        let mut se_key_shares_pos_encoded = Vec::new();
+        for (_, key_derivation) in &self.se_key_shares.key_derivation_map {
+            if key_derivation.pos > self.se_key_shares.last_derived_pos {
+                se_key_shares_pos_encoded.push(key_derivation.pos);
+            }
+        }
         json!({
             "id": self.id,
             "network": self.network,
             "master_priv_key": self.master_priv_key.to_string(),
-            "keys_pos": self.keys.last_derived_pos,
-            "se_backup_keys_pos": self.se_backup_keys.last_derived_pos,
-            "se_proof_keys_pos": self.se_proof_keys.last_derived_pos,
+            "keys_last_derived_pos": self.keys.last_derived_pos,
+            "se_backup_keys_last_derived_pos": self.se_backup_keys.last_derived_pos,
+            "se_backup_keys_pos_encoded": serde_json::to_string(&se_backup_keys_pos_encoded).unwrap(),
+            "se_proof_keys_last_derivation_pos": self.se_proof_keys.last_derived_pos,
+            "se_proof_keys_pos_encoded": serde_json::to_string(&se_proof_keys_pos_encoded).unwrap(),
+            "se_key_shares_last_derivation_pos": self.se_key_shares.last_derived_pos,
+            "se_key_shares_pos_encoded": serde_json::to_string(&se_key_shares_pos_encoded).unwrap(),
             "shared_keys": serde_json::to_string(&self.shared_keys).unwrap()
         })
     }
@@ -133,6 +161,10 @@ impl Wallet {
         se_proof_keys_master_ext_key.network = network.parse::<Network>().unwrap();
         let se_proof_keys = KeyPath::new(se_proof_keys_master_ext_key);
 
+        // se_key_shares
+        let mut se_key_shares_master_ext_key = master_priv_key.ckd_priv(&secp, ChildNumber::from_hardened_idx(3).unwrap()).unwrap();
+        se_key_shares_master_ext_key.network = network.parse::<Network>().unwrap();
+        let se_key_shares = KeyPath::new(se_key_shares_master_ext_key);
 
         let mut wallet = Wallet {
             id: json["id"].as_str().unwrap().to_string(),
@@ -144,18 +176,46 @@ impl Wallet {
             keys: keys,
             se_backup_keys,
             se_proof_keys,
+            se_key_shares,
             shared_keys: vec!()
         };
 
         // re-derive keys which have been previously derived
-        for _ in 0..json["keys_pos"].as_u64().unwrap() {
-            wallet.keys.get_new_bitcoin_address()?;
+        for _ in 0..json["keys_last_derived_pos"].as_u64().unwrap() {
+            wallet.keys.get_new_address()?;
         }
-        for _ in 0..json["se_backup_keys_pos"].as_u64().unwrap() {
-            wallet.se_backup_keys.get_new_bitcoin_address()?;
+        for _ in 0..json["se_backup_keys_last_derived_pos"].as_u64().unwrap() {
+            wallet.se_backup_keys.get_new_address()?;
         }
-        for _ in 0..json["se_proof_keys_pos"].as_u64().unwrap() {
+        for _ in 0..json["se_proof_keys_last_derivation_pos"].as_u64().unwrap() {
             wallet.se_proof_keys.get_new_key()?;
+        }
+        for _ in 0..json["se_key_shares_last_derivation_pos"].as_u64().unwrap() {
+            wallet.se_key_shares.get_new_key()?;
+        }
+
+        let se_backup_keys_pos_str = json["se_backup_keys_pos_encoded"].as_str().unwrap();
+        if se_backup_keys_pos_str.len() != 2 { // is not empty
+            let se_backup_keys_pos:Vec<u32> = serde_json::from_str(se_backup_keys_pos_str).unwrap();
+            for pos in se_backup_keys_pos {
+                wallet.se_backup_keys.get_new_address_encoded_id(pos)?;
+            }
+        }
+
+        let se_proof_keys_pos_str = json["se_proof_keys_pos_encoded"].as_str().unwrap();
+        if se_proof_keys_pos_str.len() != 2 { // is not empty
+            let se_proof_keys_pos:Vec<u32> = serde_json::from_str(se_proof_keys_pos_str).unwrap();
+            for pos in se_proof_keys_pos {
+                wallet.se_proof_keys.get_new_key_encoded_id(pos)?;
+            }
+        }
+
+        let se_key_shares_pos_str = json["se_key_shares_pos_encoded"].as_str().unwrap();
+        if se_key_shares_pos_str.len() != 2 { // is not empty
+            let se_key_shares_pos:Vec<u32> = serde_json::from_str(se_key_shares_pos_str).unwrap();
+            for pos in se_key_shares_pos {
+                wallet.se_key_shares.get_new_key_encoded_id(pos)?;
+            }
         }
 
         let shared_keys_str = &json["shared_keys"].as_str().unwrap();
@@ -190,9 +250,13 @@ impl Wallet {
         Ok(Wallet::load_from(WALLET_FILENAME, client_shim)?)
     }
 
-    pub fn get_new_state_entity_address(&mut self) -> Result<StateEntityAddress> {
-        let backup_addr = self.se_backup_keys.get_new_bitcoin_address()?;
-        let proof_key = self.se_proof_keys.get_new_key()?;
+    pub fn get_new_state_entity_address(&mut self, funding_txid: &String) -> Result<StateEntityAddress> {
+        let backup_addr = self.se_backup_keys.get_new_address_encoded_id(
+            funding_txid_to_int(funding_txid)?
+        )?;
+        let proof_key = self.se_proof_keys.get_new_key_encoded_id(
+            funding_txid_to_int(funding_txid)?
+        )?;
         Ok(StateEntityAddress{
             backup_addr: backup_addr.to_string(),
             proof_key
@@ -244,15 +308,18 @@ impl Wallet {
 
     /// create new 2P-ECDSA key with state entity
     pub fn gen_shared_key(&mut self, id: &String) -> Result<&SharedKey> {
-        let shared_key = SharedKey::new(id, &self.client_shim)?;
+        let key_share_pub = self.se_key_shares.get_new_key()?;
+        let key_share_priv = self.se_key_shares.get_key_derivation(&key_share_pub).unwrap().private_key.key;
+
+        let shared_key = SharedKey::new(id, &self.client_shim, &key_share_priv, false)?;
         self.shared_keys.push(shared_key);
         Ok(self.shared_keys.last().unwrap())
     }
 
     /// create new 2P-ECDSA key with predeinfed private key
-    pub fn gen_shared_key_fixed_secret_key(&mut self, id: &String, secret_key: &FE) -> Result<()> {
+    pub fn gen_shared_key_fixed_secret_key(&mut self, id: &String, secret_key: &SecretKey) -> Result<()> {
         self.shared_keys.push(
-            SharedKey::new_fixed_secret_key(id, &self.client_shim, secret_key)?);
+            SharedKey::new(id, &self.client_shim, secret_key, true)?);
         Ok(())
     }
 
@@ -389,12 +456,14 @@ mod tests {
     fn test_to_and_from_json() {
         let mut wallet = gen_wallet();
 
-        let addr1 = wallet.keys.get_new_bitcoin_address().unwrap();
-        let addr2 = wallet.keys.get_new_bitcoin_address().unwrap();
-        let backup_addr1 = wallet.se_backup_keys.get_new_bitcoin_address().unwrap();
-        let backup_addr2 = wallet.se_backup_keys.get_new_bitcoin_address().unwrap();
+        let addr1 = wallet.keys.get_new_address().unwrap();
+        let addr2 = wallet.keys.get_new_address().unwrap();
+        let backup_addr1 = wallet.se_backup_keys.get_new_address().unwrap();
+        let backup_addr2 = wallet.se_backup_keys.get_new_address().unwrap();
         let proof_key1 = wallet.se_proof_keys.get_new_key().unwrap();
         let proof_key2 = wallet.se_proof_keys.get_new_key().unwrap();
+        let key_shares1 = wallet.se_key_shares.get_new_key_encoded_id(9999999).unwrap();
+        let key_shares2 = wallet.se_key_shares.get_new_key().unwrap();
 
 
         let wallet_json = wallet.to_json();
@@ -417,9 +486,17 @@ mod tests {
 
         assert_eq!(wallet.se_proof_keys.ext_priv_key.private_key.to_bytes(),wallet_rebuilt.se_proof_keys.ext_priv_key.private_key.to_bytes());
         assert_eq!(wallet.se_proof_keys.last_derived_pos,wallet_rebuilt.se_proof_keys.last_derived_pos);
-        assert!(wallet_rebuilt.se_proof_keys.keys_derivation_map.contains_key(&proof_key1));
-        assert!(wallet_rebuilt.se_proof_keys.keys_derivation_map.contains_key(&proof_key2));
+        assert!(wallet_rebuilt.se_proof_keys.key_derivation_map.contains_key(&proof_key1));
+        assert!(wallet_rebuilt.se_proof_keys.key_derivation_map.contains_key(&proof_key2));
+        assert_eq!(wallet_rebuilt.se_proof_keys.get_key_derivation(&proof_key1).unwrap().pos, 1);
+        assert_eq!(wallet_rebuilt.se_proof_keys.get_key_derivation(&proof_key2).unwrap().pos, 2);
 
+        assert_eq!(wallet.se_key_shares.ext_priv_key.private_key.to_bytes(),wallet_rebuilt.se_key_shares.ext_priv_key.private_key.to_bytes());
+        assert_eq!(wallet.se_key_shares.last_derived_pos,wallet_rebuilt.se_key_shares.last_derived_pos);
+        assert!(wallet_rebuilt.se_key_shares.key_derivation_map.contains_key(&key_shares1));
+        assert!(wallet_rebuilt.se_key_shares.key_derivation_map.contains_key(&key_shares2));
+        assert_eq!(wallet_rebuilt.se_key_shares.get_key_derivation(&key_shares1).unwrap().pos, 9999999);
+        assert_eq!(wallet_rebuilt.se_key_shares.get_key_derivation(&key_shares2).unwrap().pos, 1);
     }
 
     #[test]
@@ -430,7 +507,7 @@ mod tests {
         );
 
         let mut wallet = gen_wallet();
-        let addr = wallet.keys.get_new_bitcoin_address().unwrap();
+        let addr = wallet.keys.get_new_address().unwrap();
 
         let inputs =  vec![
             TxIn {
@@ -455,8 +532,8 @@ mod tests {
     #[test]
     fn test_mocks() {
         let mut wallet = gen_wallet();
-        let _ = wallet.keys.get_new_bitcoin_address();
-        let _ = wallet.keys.get_new_bitcoin_address();
+        let _ = wallet.keys.get_new_address();
+        let _ = wallet.keys.get_new_address();
         println!("balances: {:?}",wallet.get_all_addresses_balance());
         println!("list unspent: {:?}",wallet.list_unspent());
     }

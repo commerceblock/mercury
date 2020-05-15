@@ -6,6 +6,8 @@ use std::error;
 use std::fmt;
 use bitcoin::util::bip32::Error as Bip32Error;
 use reqwest::Error as ReqwestError;
+use std::num::ParseIntError;
+
 
 /// Client specific errors
 #[derive(Debug, Deserialize)]
@@ -21,7 +23,9 @@ pub enum CError {
     /// Inherit all errors from bip32
     Bip32(String),
     /// Inherit error from reqwest
-    Reqwest(String)
+    Reqwest(String),
+    /// Inherit error from parseInt
+    ParseInt(String)
 }
 
 impl From<String> for CError {
@@ -43,6 +47,11 @@ impl From<Bip32Error> for CError {
 impl From<ReqwestError> for CError {
     fn from(e: ReqwestError) -> CError {
         CError::Reqwest(e.to_string())
+    }
+}
+impl From<ParseIntError> for CError {
+    fn from(e: ParseIntError) -> CError {
+        CError::ParseInt(e.to_string())
     }
 }
 
@@ -73,6 +82,7 @@ impl fmt::Display for CError {
             CError::SchnorrError(ref e) => write!(f, "Schnorr Error: {}", e),
             CError::Bip32(ref e) => write!(f, "Bip32 Error: {}", e),
             CError::Reqwest(ref e) => write!(f, "Reqwest Error: {}", e),
+            CError::ParseInt(ref e) => write!(f, "ParseInt Error: {}", e),
         }
     }
 }

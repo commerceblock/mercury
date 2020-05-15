@@ -11,8 +11,11 @@ mod tests {
     use server_lib::server;
     use shared_lib::structs::PrepareSignTxMessage;
 
-    use bitcoin::{ Amount, TxIn, Transaction, OutPoint };
+    use bitcoin::{ Amount, TxIn, Transaction, OutPoint, PublicKey };
     use bitcoin::hashes::sha256d;
+    use curv::elliptic::curves::traits::ECScalar;
+    use curv::FE;
+
     use std::{thread, time};
 
     pub const TEST_WALLET_FILENAME: &str = "../client/test-assets/wallet.data";
@@ -31,7 +34,8 @@ mod tests {
     fn test_failed_auth() {
         spawn_server();
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
-        if let Err(e) = ecdsa::get_master_key(&"Invalid id".to_string(), &client_shim) {
+        let secret_key: FE = ECScalar::new_random();
+        if let Err(e) = ecdsa::get_master_key(&"Invalid id".to_string(), &client_shim, &secret_key, false) {
             assert_eq!(e.to_string(),"State Entity Error: Authentication Error: User authorisation failed".to_string());
         }
     }
@@ -55,7 +59,7 @@ mod tests {
     //     );
     // }
 
-    fn run_deposit(wallet: &mut Wallet) -> (String, String, Transaction, Transaction, PrepareSignTxMessage)  {
+    fn run_deposit(wallet: &mut Wallet) -> (String, String, Transaction, Transaction, PrepareSignTxMessage, PublicKey)  {
         // make TxIns for funding transaction
         let amount = Amount::ONE_BTC;
         let inputs =  vec![
@@ -67,7 +71,7 @@ mod tests {
         }
         ];
 
-        let funding_spend_addrs = vec!(wallet.keys.get_new_bitcoin_address().unwrap());
+        let funding_spend_addrs = vec!(wallet.keys.get_new_address().unwrap());
         let resp = state_entity::deposit::deposit(
             wallet,
             inputs,
@@ -101,7 +105,7 @@ mod tests {
         let deposit = run_deposit(&mut wallet);
 
         let state_chain = state_entity::api::get_statechain(&mut wallet, &String::from(deposit.1.clone())).unwrap();
-        assert_eq!(state_chain, vec!(deposit.0));
+        assert_eq!(state_chain.chain, vec!(deposit.5.to_string()));
     }
 
     #[test]
@@ -119,7 +123,7 @@ mod tests {
             }
         ];
         // This addr should correspond to UTXOs being spent
-        let funding_spend_addrs = vec!(wallet_sender.keys.get_new_bitcoin_address().unwrap());
+        let funding_spend_addrs = vec!(wallet_sender.keys.get_new_address().unwrap());
         let deposit_resp = state_entity::deposit::deposit(&mut wallet_sender, inputs, funding_spend_addrs, amount).unwrap();
         println!("Shared wallet id: {:?} ",deposit_resp.0);
         println!("state chain id: {:?} ",deposit_resp.1);
@@ -128,10 +132,11 @@ mod tests {
         println!("tx_b_prepare_sign_msg: {:?} ",deposit_resp.4);
 
         let state_chain = state_entity::api::get_statechain(&mut wallet_sender, &deposit_resp.1).unwrap();
-        assert_eq!(state_chain.len(),1);
+        assert_eq!(state_chain.chain.len(),1);
 
         let mut wallet_receiver = gen_wallet();
-        let receiver_addr = wallet_receiver.get_new_state_entity_address().unwrap();
+        let funding_txid = deposit_resp.2.input.get(0).unwrap().previous_output.txid.to_string();
+        let receiver_addr = wallet_receiver.get_new_state_entity_address(&funding_txid).unwrap();
 
         let tranfer_sender_resp =
             state_entity::transfer::transfer_sender(
@@ -157,8 +162,8 @@ mod tests {
 
         // check state chain is updated
         let state_chain = state_entity::api::get_statechain(&mut wallet_sender, &deposit_resp.1).unwrap();
-        assert_eq!(state_chain.len(),2);
-        assert_eq!(state_chain.last().unwrap().to_string(), receiver_addr.proof_key.to_string());
+        assert_eq!(state_chain.chain.len(),2);
+        assert_eq!(state_chain.chain.last().unwrap().to_string(), receiver_addr.proof_key.to_string());
     }
 
     #[test]

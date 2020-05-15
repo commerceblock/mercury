@@ -6,6 +6,14 @@ use curv::{FE, GE};
 use bitcoin::Transaction;
 
 
+/// /api/statechain return struct
+#[derive(Serialize, Deserialize, Debug)]
+pub struct StateChainData {
+    pub funding_txid: String,
+    pub chain: Vec<String>
+}
+
+
 /// Struct contains data necessary to caluculate tx input's sighash. This is required
 /// whenever Client and Server co-sign a transaction.
 #[derive(Serialize, Deserialize, Debug)]
@@ -15,15 +23,15 @@ pub struct PrepareSignTxMessage {
     pub input_vout: u32,
     pub address: String,
     pub amount: u64,
-    pub transfer: bool
+    pub transfer: bool,
+    pub proof_key: Option<String>
 }
 
 /// Client -> SE
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DepositMsg1 {
-    pub proof_key: String,
+    pub auth: String,
 }
-
 
 /// Sender -> SE
 #[derive(Serialize, Deserialize, Debug)]
@@ -43,6 +51,7 @@ pub struct TransferMsg3 {
     pub t1: FE, // t1 = o1x1
     pub new_backup_tx: Transaction,
     pub state_chain: Vec<String>,
+    pub state_chain_id: String,
 }
 
 /// Receiver -> State Entity

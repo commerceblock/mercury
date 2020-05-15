@@ -21,10 +21,11 @@ use super::super::Result;
 extern crate shared_lib;
 use crate::error::CError;
 use crate::wallet::wallet::{StateEntityAddress, Wallet};
+use crate::wallet::key_paths::funding_txid_to_int;
 use crate::state_entity::{util::cosign_tx_input, api::get_statechain};
 use super::super::utilities::requests;
 
-use shared_lib::structs::{PrepareSignTxMessage, TransferMsg1, TransferMsg2, TransferMsg3, TransferMsg4, TransferMsg5};
+use shared_lib::structs::{StateChainData, PrepareSignTxMessage, TransferMsg1, TransferMsg2, TransferMsg3, TransferMsg4, TransferMsg5};
 use bitcoin::PublicKey;
 use curv::elliptic::curves::traits::{ECPoint, ECScalar};
 use curv::{FE, GE};
@@ -39,7 +40,8 @@ pub fn transfer_sender(
     mut prev_tx_b_prepare_sign_msg: PrepareSignTxMessage
 ) -> Result<TransferMsg3> {
     // first sign state chain
-    let mut state_chain: Vec<String> = get_statechain(wallet, state_chain_id)?;
+    let state_chain_data: StateChainData = get_statechain(wallet, state_chain_id)?;
+    let mut state_chain = state_chain_data.chain;
     // get proof key for signing
     let _proof_key_derivation = wallet.se_proof_keys.get_key_derivation(&PublicKey::from_str(state_chain.last().unwrap()).unwrap());
     // (simply append receivers proof key for now)
@@ -67,7 +69,8 @@ pub fn transfer_sender(
         shared_key_id: shared_key_id.to_string(),
         t1, // should be encrypted
         new_backup_tx: new_tx_b_signed,
-        state_chain
+        state_chain,
+        state_chain_id: state_chain_id.to_string()
     };
     Ok(transfer_msg3)
 }
@@ -78,6 +81,9 @@ pub fn transfer_receiver(
     transfer_msg3: &TransferMsg3,
     se_addr: &StateEntityAddress
 ) -> Result<TransferMsg5> {
+    // get statechain data (will Err if statechain not yet finalized)
+    let state_chain_data: StateChainData = get_statechain(wallet, &transfer_msg3.state_chain_id)?;
+
     // verify state chain represents this address as new owner
     if se_addr.proof_key.to_string() != transfer_msg3.state_chain.last().ok_or("State chain empty")?.to_string() {
         return Err(CError::Generic(String::from("State Chain verification failed.")))
@@ -87,8 +93,9 @@ pub fn transfer_receiver(
     let mut done = false;
     let mut transfer_msg5 = TransferMsg5::default();
     let mut o2 = FE::zero();
+    let mut num_tries = 0;
     while !done {
-        match try_o2(wallet, transfer_msg3) {
+        match try_o2(wallet, &state_chain_data, transfer_msg3, &num_tries) {
             Ok(success_resp) => {
                 o2 = success_resp.0.clone();
                 transfer_msg5 = success_resp.1.clone();
@@ -98,6 +105,7 @@ pub fn transfer_receiver(
                 if !e.to_string().contains(&String::from("Error: Invalid o2, try again.")) {
                     return Err(e);
                 }
+                num_tries = num_tries + 1;
                 debug!("try o2 failure. Trying again...");
             }
         }
@@ -105,7 +113,7 @@ pub fn transfer_receiver(
 
     // Make shared key with new private share
     let shared_id = &transfer_msg5.new_shared_key_id;
-    wallet.gen_shared_key_fixed_secret_key(shared_id,&o2)?;
+    wallet.gen_shared_key_fixed_secret_key(shared_id,&o2.get_element())?;
 
     // Check shared key master public key == private share * SE public share
     if (transfer_msg5.s2_pub*o2).get_element()
@@ -121,9 +129,16 @@ pub fn transfer_receiver(
 // Constraint on s2 size means that some (most) o2 values are not valid for the lindell_2017 protocol.
 // We must generate random o2, test if the resulting s2 is valid and try again if not.
 /// Carry out transfer_receiver() protocol with a randomly generated o2 value.
-pub fn try_o2(wallet: &mut Wallet, transfer_msg3: &TransferMsg3) -> Result<(FE,TransferMsg5)>{
+pub fn try_o2(wallet: &mut Wallet, state_chain_data: &StateChainData, transfer_msg3: &TransferMsg3, num_tries: &u32) -> Result<(FE,TransferMsg5)>{
     // generate o2 private key and corresponding 02 public key
-    let o2: FE = ECScalar::new_random();
+    let mut encoded_txid = num_tries.to_string();
+    encoded_txid.push_str(&state_chain_data.funding_txid);
+    let key_share_pub = wallet.se_key_shares.get_new_key_encoded_id(
+        funding_txid_to_int(&encoded_txid)?
+    )?;
+    let key_share_priv = wallet.se_key_shares.get_key_derivation(&key_share_pub).unwrap().private_key.key;
+    let mut o2: FE = ECScalar::zero();
+    o2.set_element(key_share_priv);
 
     let g: GE = ECPoint::generator();
     let o2_pub: GE = g * o2;
@@ -139,7 +154,7 @@ pub fn try_o2(wallet: &mut Wallet, transfer_msg3: &TransferMsg3) -> Result<(FE,T
         &TransferMsg4 {
             shared_key_id: transfer_msg3.shared_key_id.clone(),
             t2, // should be encrypted
-            state_chain: transfer_msg3.state_chain.clone(),
+            state_chain: transfer_msg3.state_chain.to_vec(),
             o2_pub
         })?;
     Ok((o2,transfer_msg5))
