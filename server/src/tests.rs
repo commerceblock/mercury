@@ -25,7 +25,7 @@ mod tests {
         let start = Instant::now();
 
         // get ID
-        let deposit_msg1 = DepositMsg1{proof_key: String::from("proof key")};
+        let deposit_msg1 = DepositMsg1{auth: String::from("auth")};
         let body = serde_json::to_string(&deposit_msg1).unwrap();
         let mut response = client
             .post("/deposit/init")
@@ -37,7 +37,7 @@ mod tests {
         println!("{} id generated: {:?}", TimeFormat(start.elapsed()), id);
 
         let mut response = client
-            .post(format!("/ecdsa/keygen/{}/first",id))
+            .post(format!("/ecdsa/keygen/{}/first/deposit",id))
             .header(ContentType::JSON)
             .dispatch();
         assert_eq!(response.status(), Status::Ok);
@@ -294,7 +294,6 @@ mod tests {
         );
 
         let res_body = response.body_string().unwrap();
-
         let signature_recid: party_one::SignatureRecid = serde_json::from_str(&res_body).unwrap();
 
         signature_recid
@@ -322,6 +321,7 @@ mod tests {
             input_vout: 0,
             address: String::from("bcrt1qz3rcytulyfvkwje88q4a7nvzuj3td9crhlvqnl"),
             amount: 100000000,
+            proof_key: Some(String::from("proofkey")),
             transfer: false
         };
         let body = serde_json::to_string(&tx_b_prepare_sign_msg).unwrap();
@@ -332,6 +332,7 @@ mod tests {
             .body(body)
             .header(ContentType::JSON)
             .dispatch();
+
         assert_eq!(response.status(), Status::Ok);
 
         println!(
@@ -356,7 +357,7 @@ mod tests {
     fn test_auth_token() {
         let client = Client::new(server::get_server()).expect("valid rocket instance");
         // get ID
-        let deposit_msg1 = DepositMsg1{proof_key: String::from("proof key")};
+        let deposit_msg1 = DepositMsg1{auth: String::from("auth")};
         let body = serde_json::to_string(&deposit_msg1).unwrap();
         let mut response = client
             .post("/deposit/init")
@@ -366,7 +367,7 @@ mod tests {
         let id: String = serde_json::from_str(&response.body_string().unwrap()).unwrap();
 
         let mut response = client
-            .post(format!("/ecdsa/keygen/{}/first",id))
+            .post(format!("/ecdsa/keygen/{}/first/deposit",id))
             .header(ContentType::JSON)
             .dispatch();
         assert_eq!(response.status(), Status::Ok);
@@ -376,7 +377,7 @@ mod tests {
 
         // use incorrect ID
         let mut response = client
-            .post(format!("/ecdsa/keygen/{}/first","invalidID".to_string()))
+            .post(format!("/ecdsa/keygen/{}/first/deposit","invalidID".to_string()))
             .header(ContentType::JSON)
             .dispatch();
 

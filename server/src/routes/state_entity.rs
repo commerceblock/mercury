@@ -44,14 +44,16 @@ pub struct UserSession {
     pub id: String,
     /// User's password
     // pub pass: String
-    /// User's public proof key
-    pub proof_key: String,
+    /// User's authorisation
+    pub auth: String,
     /// If transfer() then SE must know s2 value to create shared wallet
     pub s2: Option<FE>
 }
 /// User Session Data
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct SessionData {
+    /// users proof key
+    pub proof_key: String,
     /// back up tx's sig hash
     pub sig_hash: sha256d::Hash,
     /// back up tx
@@ -105,43 +107,16 @@ pub fn get_statechain(
     state: State<Config>,
     claim: Claims,
     id: String,
-) -> Result<Json<Vec<String>>> {
+) -> Result<Json<StateChainData>> {
     let session_data: StateChain =
         db::get(&state.db, &claim.sub, &id, &StateChainStruct::StateChain)?
             .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-    Ok(Json(session_data.chain))
-}
-
-/// Initiliase deposit protocol
-///     - Generate and return shared wallet ID
-///     - Can do auth or other DoS mitigation here
-///     - Input
-#[post("/deposit/init", format = "json", data = "<msg1>")]
-pub fn deposit_init(
-    state: State<Config>,
-    claim: Claims,
-    msg1: Json<DepositMsg1>,
-) -> Result<Json<String>> {
-    // generate shared wallet ID (user ID)
-    let user_id = Uuid::new_v4().to_string();
-
-    // Verification/PoW/authoriation failed
-    // Err(SEError::AuthError)
-
-    // create DB entry for newly generated ID signalling that user has passed some
-    // verification. For now use ID as 'password' to interact with state entity
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &user_id,
-        &StateChainStruct::UserSession,
-        &UserSession {
-            id: user_id.clone(),
-            proof_key: msg1.proof_key.clone(),
-            s2: None
+    Ok(Json({
+        StateChainData {
+            funding_txid: session_data.backup_tx.unwrap().input.get(0).unwrap().previous_output.txid.to_string(),
+            chain: session_data.chain
         }
-    )?;
-    Ok(Json(user_id))
+    }))
 }
 
 /// prepare to sign backup transaction input
@@ -183,6 +158,11 @@ pub fn prepare_sign_backup(
 
     // if deposit()
     if prepare_sign_msg.transfer == false {
+        if prepare_sign_msg.proof_key.is_none() {
+            return Err(SEError::Generic(String::from("No proof key provided")));
+        }
+        let proof_key = prepare_sign_msg.proof_key.as_ref().unwrap().clone();
+
         // store SessionData for user: sig_hash with back up tx and state chain id
         let state_chain_id = Uuid::new_v4().to_string();
         db::insert(
@@ -191,6 +171,7 @@ pub fn prepare_sign_backup(
             &id,
             &StateChainStruct::SessionData,
             &SessionData {
+                proof_key: proof_key.clone(),
                 sig_hash: sig_hash.clone(),
                 backup_tx: tx_b.clone(),
                 state_chain_id: state_chain_id.clone()
@@ -205,7 +186,7 @@ pub fn prepare_sign_backup(
             &StateChainStruct::StateChain,
             &StateChain {
                 id: state_chain_id.clone(),
-                chain: vec!(id),
+                chain: vec!(proof_key),
                 backup_tx: None
             }
         )?;
@@ -230,6 +211,39 @@ pub fn prepare_sign_backup(
     Ok(Json(String::from("")))
 }
 
+
+/// Initiliase deposit protocol
+///     - Generate and return shared wallet ID
+///     - Can do auth or other DoS mitigation here
+///     - Input
+#[post("/deposit/init", format = "json", data = "<deposit_msg1>")]
+pub fn deposit_init(
+    state: State<Config>,
+    claim: Claims,
+    deposit_msg1: Json<DepositMsg1>,
+) -> Result<Json<String>> {
+    // generate shared wallet ID (user ID)
+    let user_id = Uuid::new_v4().to_string();
+
+    // Verification/PoW/authoriation failed
+    // Err(SEError::AuthError)
+
+    // create DB entry for newly generated ID signalling that user has passed some
+    // verification. For now use ID as 'password' to interact with state entity
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &user_id,
+        &StateChainStruct::UserSession,
+        &UserSession {
+            id: user_id.clone(),
+            auth: deposit_msg1.auth.clone(),
+            s2: None
+        }
+    )?;
+    Ok(Json(user_id))
+}
+
 /// Initiliase transfer protocol
 ///     - Authorisation of Owner and DoS protection
 ///     - Validate transfer parameters
@@ -250,6 +264,8 @@ pub fn transfer_sender(
     let session_data: SessionData =
         db::get(&state.db, &claim.sub, &transfer_msg1.shared_key_id, &StateChainStruct::SessionData)?
             .ok_or(SEError::DBError(NoDataForID, transfer_msg1.shared_key_id.clone()))?;
+
+    // TODO: verify funding tx confirmation
 
     // Generate x1
     let x1: FE = ECScalar::new_random();
@@ -339,7 +355,7 @@ pub fn transfer_receiver(
         &StateChainStruct::UserSession,
         &UserSession {
             id: new_shared_key_id.clone(),
-            proof_key: new_state_chain.last().unwrap().clone(),
+            auth: String::from("auth"),
             s2: Some(s2)
         }
     )?;

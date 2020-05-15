@@ -73,7 +73,6 @@ pub fn get_server() -> Rocket {
             routes![
                 ping::ping,
                 ecdsa::first_message,
-                ecdsa::first_message_fixed,
                 ecdsa::second_message,
                 ecdsa::third_message,
                 ecdsa::fourth_message,
@@ -81,10 +80,6 @@ pub fn get_server() -> Rocket {
                 ecdsa::chain_code_second_message,
                 ecdsa::sign_first,
                 ecdsa::sign_second,
-                ecdsa::rotate_first,
-                ecdsa::rotate_second,
-                ecdsa::rotate_third,
-                ecdsa::rotate_fourth,
                 ecdsa::recover,
                 schnorr::keygen_first,
                 schnorr::keygen_second,
