@@ -3,11 +3,8 @@ use crate::error::SEError;
 use rocksdb;
 use serde;
 
-use super::aws;
-
 pub enum DB {
-    Local(rocksdb::DB),
-    AWS(rusoto_dynamodb::DynamoDbClient, String),
+    Local(rocksdb::DB)
 }
 
 pub trait MPCStruct {
@@ -31,17 +28,10 @@ where
     T: serde::ser::Serialize,
 {
     match db {
-        DB::AWS(dynamodb_client, env) => {
-            let table_name = name.to_table_name(env);
-            match aws::dynamodb::insert(&dynamodb_client, user_id, id, &table_name, v) {
-                Err(e) => Err(SEError::Generic(e.to_string())),
-                Ok(_) => Ok(())
-            }
-        }
         DB::Local(rocksdb_client) => {
             let identifier = idify(user_id, id, name);
             let v_string = serde_json::to_string(&v).unwrap();
-            match rocksdb_client.put(identifier.as_ref(), v_string.as_ref()) {
+            match rocksdb_client.put(&identifier, &v_string) {
                 Err(e) => Err(SEError::Generic(e.to_string())),
                 Ok(_) => Ok(())
             }
@@ -53,36 +43,121 @@ pub fn get<T>(db: &DB, user_id: &str, id: &str, name: &dyn MPCStruct) -> Result<
 where
     T: serde::de::DeserializeOwned,
 {
+    let identifier = idify(user_id, id, name);
+    debug!("Getting from db ({})", identifier);
+
     match db {
-        DB::AWS(dynamodb_client, env) => {
-            let table_name = name.to_table_name(env);
-            println!("table_name = {}", table_name);
-            let require_customer_id = name.require_customer_id();
-            println!("require_customer_id = {}", require_customer_id);
-            println!("user_id = {}", user_id);
-            println!("id = {}", id);
-            match aws::dynamodb::get(&dynamodb_client, user_id, id, table_name, require_customer_id) {
-                Err(e) => Err(SEError::Generic(e.to_string())),
+        DB::Local(rocksdb_client) => {
+            match rocksdb_client.get(&identifier) {
+                Err(e) => return Err(SEError::Generic(e.to_string())),
                 Ok(res) => {
-                    println!("res.is_none() = {}", res.is_none());
-                    Ok(res)
+                    match res {
+                        Some(vec) => return Ok(serde_json::from_slice(&vec).unwrap()),
+                        None => return Ok(None),
+                    }
                 }
             }
         }
-        DB::Local(rocksdb_client) => {
-            let identifier = idify(user_id, id, name);
-            debug!("Getting from db ({})", identifier);
+    }
+}
 
-            let db_option: Option<rocksdb::DBVector>;
-            match rocksdb_client.get(identifier.as_ref()) {
-                Err(e) => return Err(SEError::Generic(e.to_string())),
-                Ok(res) => db_option = res
-            };
-            let vec_option: Option<Vec<u8>> = db_option.map(|v| v.to_vec());
-            match vec_option {
-                Some(vec) => Ok(serde_json::from_slice(&vec).unwrap()),
-                None => Ok(None),
+fn idify_root(id: &str) -> String {
+    format!("{}_{}", id, String::from("root"))
+}
+
+pub fn update_root(db: &DB, new_root: String) -> Result<()> {
+        // Get previous ID
+        let mut id: String;
+        match get_by_identifier(db, &String::from("rootid")) {
+            Err(e) => return Err(SEError::Generic(e.to_string())),
+            Ok(res) => {
+                match res {
+                    None => id = String::from("0"),
+                    Some(res) => id = res
+                }
+            }
+        };
+
+        // update id
+        id = (id.parse::<u32>().unwrap() + 1).to_string();
+
+        let identifier = idify_root(&id);
+        insert_by_identifier(&db, &identifier, new_root.clone())?;
+
+        //update root id
+        insert_by_identifier(&db, &String::from("rootid"), id.clone())?;
+
+        debug!("Updated root at id {} with value: {}", id, new_root);
+
+        Ok(())
+}
+
+
+fn insert_by_identifier(db: &DB, identifier: &String, item: String) -> Result<()> {
+    match db {
+        DB::Local(rocksdb_client) => {
+            let item_string = serde_json::to_string(&item).unwrap();
+            match rocksdb_client.put(&identifier, &item_string) {
+                Err(e) => Err(SEError::Generic(e.to_string())),
+                Ok(_) => Ok(())
             }
         }
+    }
+}
+
+fn get_by_identifier<T>(db: &DB, identifier: &String) -> Result<Option<T>>
+where
+    T: serde::de::DeserializeOwned,
+{
+    match db {
+        DB::Local(rocksdb_client) => {
+            match rocksdb_client.get(identifier) {
+                Err(e) => return Err(SEError::Generic(e.to_string())),
+                Ok(res) => {
+                    match res {
+                        Some(vec) => return Ok(serde_json::from_slice(&vec).unwrap()),
+                        None => return Ok(None),
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_db_get_insert() {
+        let db = DB::Local(rocksdb::DB::open_default("/tmp/statechain").unwrap());
+
+        let root = String::from("12345");
+        let id = String::from("0");
+        let insert_res = insert_by_identifier(&db, &id, root.clone());
+        assert!(insert_res.is_ok());
+
+        let get_res: Option<String> = get_by_identifier(&db, &id).unwrap();
+        assert_eq!(get_res, Some(root));
+
+        let get_res2: Option<String> = get_by_identifier(&db, &String::from("1")).unwrap();
+        assert!(get_res2.is_none());
+    }
+
+    #[test]
+    fn test_db_root_update() {
+        let db = DB::Local(rocksdb::DB::open_default("/tmp/statechain").unwrap());
+        let root1 = String::from("12345");
+        let root2 = String::from("182372345");
+
+        let _ = update_root(&db, root1.clone());
+        let _ = update_root(&db, root2.clone());
+
+        let root2_id: String = get_by_identifier(&db, &String::from("rootid")).unwrap().unwrap();
+        assert_eq!(root2, get_by_identifier::<String>(&db, &idify_root(&root2_id)).unwrap().unwrap());
+        let root1_id = (root2_id.parse::<u32>().unwrap() - 1).to_string();
+        assert_eq!(root1, get_by_identifier::<String>(&db, &idify_root(&root1_id)).unwrap().unwrap());
     }
 }
