@@ -11,6 +11,8 @@ use rocket::response::Responder;
 use std::error;
 use std::fmt;
 use std::io::Cursor;
+use monotree::Errors as MonotreeErrors;
+
 
 /// State Entity library specific errors
 #[derive(Debug, Deserialize)]
@@ -24,7 +26,9 @@ pub enum SEError {
     /// Storage error
     DBError(DBErrorType, String),
     /// Inherit errors from Util
-    Util(String)
+    Util(String),
+    /// Inherit errors from Monotree
+    SMTError(String)
 }
 
 impl From<String> for SEError {
@@ -38,6 +42,13 @@ impl From<UtilError> for SEError {
         SEError::Util(e.to_string())
     }
 }
+
+impl From<MonotreeErrors> for SEError {
+    fn from(e: MonotreeErrors) -> SEError {
+        SEError::SMTError(e.to_string())
+    }
+}
+
 
 /// Wallet error types
 #[derive(Debug, Deserialize)]
@@ -62,6 +73,7 @@ impl fmt::Display for SEError {
             SEError::DBError(ref e, ref value) => write!(f, "DB Error: {} (value: {})", e.as_str(), value),
             SEError::SigningError(ref e) => write!(f,"Signing Error: {}",e),
             SEError::Util(ref e) => write!(f,"Util Error: {}",e),
+            SEError::SMTError(ref e) => write!(f,"SMT Error: {}",e),
         }
     }
 }

@@ -1,17 +1,14 @@
+use super::routes::*;
+use super::storage::db;
+use super::Config;
+
 use config;
 use rocket;
 use rocket::{Request, Rocket};
 use rocksdb;
 
-use rusoto_core::Region;
-use rusoto_dynamodb::DynamoDbClient;
-
-use super::routes::*;
-use super::storage::db;
-use super::Config;
-
 use std::collections::HashMap;
-use std::str::FromStr;
+
 
 #[derive(Deserialize)]
 pub struct AuthConfig {
@@ -61,7 +58,7 @@ fn not_found(req: &Request) -> String {
 pub fn get_server() -> Rocket {
     let settings = get_settings_as_map();
     let db_config = Config {
-        db: get_db(settings.clone()),
+        db: get_db(settings.clone())
     };
 
     let auth_config = AuthConfig::load(settings.clone());
