@@ -1,13 +1,12 @@
 use super::super::Result;
 use crate::error::SEError;
-use rocksdb;
+use rocksdb::DB;
 use serde;
 
-pub enum DB {
-    Local(rocksdb::DB)
-}
-
 static ROOTID: &str = "rootid";
+pub static DB_LOC: &str = "./db";
+pub static DB_SC_LOC: &str = "./db-statechain";
+
 
 pub trait MPCStruct {
     fn to_string(&self) -> String;
@@ -55,15 +54,11 @@ fn insert_by_identifier<T>(db: &DB, identifier: &str, item: T) -> Result<()>
 where
     T: serde::ser::Serialize,
 {
-    match db {
-        DB::Local(rocksdb_client) => {
-            let item_string = serde_json::to_string(&item).unwrap();
+    let item_string = serde_json::to_string(&item).unwrap();
 
-            match rocksdb_client.put(&identifier, &item_string) {
-                Err(e) => Err(SEError::Generic(e.to_string())),
-                Ok(_) => Ok(())
-            }
-        }
+    match db.put(&identifier, &item_string) {
+        Err(e) => Err(SEError::Generic(e.to_string())),
+        Ok(_) => Ok(())
     }
 }
 
@@ -71,16 +66,12 @@ fn get_by_identifier<T>(db: &DB, identifier: &str) -> Result<Option<T>>
 where
     T: serde::de::DeserializeOwned,
 {
-    match db {
-        DB::Local(rocksdb_client) => {
-            match rocksdb_client.get(identifier) {
-                Err(e) => return Err(SEError::Generic(e.to_string())),
-                Ok(res) => {
-                    match res {
-                        Some(vec) => return  Ok(serde_json::from_slice(&vec).unwrap()),
-                        None => return Ok(None)
-                    }
-                }
+    match db.get(identifier) {
+        Err(e) => return Err(SEError::Generic(e.to_string())),
+        Ok(res) => {
+            match res {
+                Some(vec) => return  Ok(serde_json::from_slice(&vec).unwrap()),
+                None => return Ok(None)
             }
         }
     }
@@ -132,7 +123,7 @@ mod tests {
 
     #[test]
     fn test_db_get_insert() {
-        let db = DB::Local(rocksdb::DB::open_default("/tmp/db-statechain").unwrap());
+        let db = rocksdb::DB::open_default("/tmp/db-statechain").unwrap();
 
         let root = String::from("12345");
         let id = String::from("0");
@@ -148,7 +139,7 @@ mod tests {
 
     #[test]
     fn test_db_root_update() {
-        let db = DB::Local(rocksdb::DB::open_default("/tmp/db-statechain").unwrap());
+        let db = rocksdb::DB::open_default("/tmp/db-statechain").unwrap();
         let root1: [u8;32] = [1;32];
         let root2: [u8;32] = [2;32];
 

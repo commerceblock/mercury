@@ -21,7 +21,7 @@ use curv::arithmetic::traits::Converter;
 use rocket::State;
 use rocket_contrib::json::Json;
 use std::string::ToString;
-use bitcoin::secp256k1::{ Signature };
+use bitcoin::secp256k1::Signature;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 struct HDPos {

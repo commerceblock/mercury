@@ -14,7 +14,7 @@ use bitcoin::{ Address, Amount, OutPoint, Transaction, TxIn };
 use bitcoin::util::bip143::SighashComponents;
 use bitcoin::secp256k1::Signature;
 use bitcoin::hashes::sha256d;
-use curv::{BigInt};
+use curv::BigInt;
 use curv::arithmetic::traits::Converter;
 use curv::elliptic::curves::traits::ECPoint;
 
