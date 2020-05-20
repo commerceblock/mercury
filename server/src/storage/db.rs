@@ -3,11 +3,15 @@ use crate::error::SEError;
 use rocksdb;
 use serde;
 
+
 pub enum DB {
     Local(rocksdb::DB)
 }
 
 static ROOTID: &str = "rootid";
+pub static DB_LOC: &str = "./db";
+pub static DB_SC_LOC: &str = "./db-statechain";
+
 
 pub trait MPCStruct {
     fn to_string(&self) -> String;

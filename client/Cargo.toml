@@ -31,6 +31,7 @@ bitcoin = { version = "0.20", features = [ "use-serde" ] }
 config = "0.9"
 floating-duration = "0.1.2"
 rand = "0.6.5"
+monotree = "0.1.3"
 
 [dependencies.zk-paillier]
 git = "https://github.com/KZen-networks/zk-paillier"

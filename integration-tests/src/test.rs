@@ -87,10 +87,25 @@ mod tests {
         spawn_server();
         let mut wallet = gen_wallet();
 
-        let desposit = run_deposit(&mut wallet);
-        println!("Shared wallet id: {:?} ",desposit.0);
-        println!("Funding transaction: {:?} ",desposit.1);
-        println!("Back up transaction: {:?} ",desposit.2);
+        let deposit = run_deposit(&mut wallet);
+
+        let funding_tx = deposit.2;
+        let backup_tx = deposit.3;
+        let proof_key = deposit.5;
+
+        // Get SMT inclusion proof and verify
+        let root = state_entity::api::get_smt_root(&mut wallet).unwrap();
+        let proof = state_entity::api::get_smt_proof(&mut wallet, &root, &funding_tx.txid().to_string()).unwrap();
+        let result = state_entity::transfer::verify_statechain_smt(
+            &root,
+            &proof_key.to_string(),
+            &proof
+        );
+        assert!(result);
+
+        println!("Shared wallet id: {:?} ",deposit.0);
+        println!("Funding transaction: {:?} ",funding_tx);
+        println!("Back up transaction: {:?} ",backup_tx);
     }
 
     #[test]
@@ -130,9 +145,20 @@ mod tests {
         println!("Funding transaction: {:?} ",deposit_resp.2);
         println!("Back up transaction: {:?} ",deposit_resp.3);
         println!("tx_b_prepare_sign_msg: {:?} ",deposit_resp.4);
+        println!("proof_key: {:?} ",deposit_resp.5);
 
         let state_chain = state_entity::api::get_statechain(&mut wallet_sender, &deposit_resp.1).unwrap();
         assert_eq!(state_chain.chain.len(),1);
+
+        // Get SMT inclusion proof and verify
+        let root = state_entity::api::get_smt_root(&mut wallet_sender).unwrap();
+        let proof = state_entity::api::get_smt_proof(&mut wallet_sender, &root, &deposit_resp.2.txid().to_string()).unwrap();
+        let result = state_entity::transfer::verify_statechain_smt(
+            &root,
+            &deposit_resp.5.to_string(),
+            &proof
+        );
+        assert!(result);
 
         let mut wallet_receiver = gen_wallet();
         let funding_txid = deposit_resp.2.input.get(0).unwrap().previous_output.txid.to_string();
@@ -164,6 +190,16 @@ mod tests {
         let state_chain = state_entity::api::get_statechain(&mut wallet_sender, &deposit_resp.1).unwrap();
         assert_eq!(state_chain.chain.len(),2);
         assert_eq!(state_chain.chain.last().unwrap().to_string(), receiver_addr.proof_key.to_string());
+
+        // Get SMT inclusion proof and verify
+        let root = state_entity::api::get_smt_root(&mut wallet_receiver).unwrap();
+        let proof = state_entity::api::get_smt_proof(&mut wallet_receiver, &root, &deposit_resp.2.txid().to_string()).unwrap();
+        let result = state_entity::transfer::verify_statechain_smt(
+            &root,
+            &receiver_addr.proof_key.to_string(),
+            &proof
+        );
+        assert!(result);
     }
 
     #[test]

@@ -29,7 +29,20 @@ use shared_lib::structs::{StateChainData, PrepareSignTxMessage, TransferMsg1, Tr
 use bitcoin::PublicKey;
 use curv::elliptic::curves::traits::{ECPoint, ECScalar};
 use curv::{FE, GE};
+
+use monotree::tree::verify_proof;
+use monotree::hasher::{Hasher,Blake2b};
+use monotree::{Proof,Hash};
+
 use std::str::FromStr;
+use std::convert::TryInto;
+
+
+pub fn verify_statechain_smt(root: &Option<Hash>, proof_key: &String, proof: &Option<Proof>) -> bool {
+    let entry: &[u8; 32] = proof_key[..32].as_bytes().try_into().unwrap();
+    let hasher = Blake2b::new();
+    verify_proof(&hasher, root.as_ref(), &entry, proof.as_ref())
+}
 
 /// Transfer coins to new Owner from this wallet
 pub fn transfer_sender(

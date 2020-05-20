@@ -83,6 +83,8 @@ pub fn get_server() -> Rocket {
                 schnorr::keygen_third,
                 schnorr::sign,
                 state_entity::get_statechain,
+                state_entity::get_smt_root,
+                state_entity::get_smt_proof,
                 state_entity::deposit_init,
                 state_entity::prepare_sign_backup,
                 state_entity::transfer_sender,
@@ -119,5 +121,5 @@ fn get_db(_settings: HashMap<String, String>) -> db::DB {
     //     .unwrap_or(&"dev".to_string())
     //     .to_string();
 
-    db::DB::Local(rocksdb::DB::open_default("./db").unwrap())
+    db::DB::Local(rocksdb::DB::open_default(db::DB_LOC).unwrap())
 }
