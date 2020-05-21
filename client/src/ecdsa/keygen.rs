@@ -113,7 +113,12 @@ pub fn get_master_key(id: &String, client_shim: &ClientShim, secret_key: &FE, is
 
     println!("(id: {}) Took: {}", id, TimeFormat(start.elapsed()));
 
-    Ok(SharedKey { id: id.to_string(), share: master_key })
+    Ok(SharedKey {
+        id: id.to_string(),
+        share: master_key,
+        proof_key: None,
+        smt_proof: None
+    })
 }
 
 

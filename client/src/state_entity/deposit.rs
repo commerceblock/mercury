@@ -10,14 +10,14 @@
 
 use super::super::Result;
 extern crate shared_lib;
-use crate::wallet::wallet::{to_bitcoin_public_key,Wallet};
-use crate::wallet::key_paths::funding_txid_to_int;
-use crate::state_entity::util::cosign_tx_input;
-use super::super::utilities::requests;
-
-
 use shared_lib::util::build_tx_0;
 use shared_lib::structs::{PrepareSignTxMessage,DepositMsg1};
+
+use crate::wallet::wallet::{to_bitcoin_public_key,Wallet};
+use crate::wallet::key_paths::funding_txid_to_int;
+use crate::utilities::requests;
+use crate::state_entity::util::{cosign_tx_input,verify_statechain_smt};
+use super::api::{get_smt_proof, get_smt_root};
 
 use bitcoin::{ Address, Amount, Transaction, TxIn, PublicKey };
 use curv::elliptic::curves::traits::ECPoint;
@@ -75,6 +75,17 @@ pub fn deposit(wallet: &mut Wallet, inputs: Vec<TxIn>, funding_spend_addrs: Vec<
 
     // Broadcast funding transcation
 
+    // verify proof key inclusion in SE sparse merkle tree
+    let root = get_smt_root(wallet)?;
+    let proof = get_smt_proof(wallet, &root, &tx_0_signed.txid().to_string())?;
+    assert!(verify_statechain_smt(
+        &root,
+        &proof_key.to_string(),
+        &proof
+    ));
+
+    // add proof data to Shared key
+    wallet.update_shared_key(&shared_key_id, &proof_key, &root, &proof)?;
 
     Ok((shared_key_id, state_chain_id, tx_0_signed, tx_b_signed, tx_b_prepare_sign_msg, proof_key))
 }

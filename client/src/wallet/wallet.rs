@@ -13,6 +13,7 @@ use bitcoin::{ Network, PublicKey };
 use bitcoin::util::bip32::{ ExtendedPrivKey, ChildNumber };
 use bitcoin::util::bip143::SighashComponents;
 use bitcoin::secp256k1::{ All, Secp256k1, Message, key::SecretKey };
+use monotree::{Proof,Hash};
 
 // use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
 use uuid::Uuid;
@@ -168,12 +169,12 @@ impl Wallet {
 
         let mut wallet = Wallet {
             id: json["id"].as_str().unwrap().to_string(),
-            network: network,
+            network,
             secp,
             electrumx_client: MockElectrum::new(),
             client_shim,
             master_priv_key,
-            keys: keys,
+            keys,
             se_backup_keys,
             se_proof_keys,
             se_key_shares,
@@ -320,6 +321,13 @@ impl Wallet {
     pub fn gen_shared_key_fixed_secret_key(&mut self, id: &String, secret_key: &SecretKey) -> Result<()> {
         self.shared_keys.push(
             SharedKey::new(id, &self.client_shim, secret_key, true)?);
+        Ok(())
+    }
+
+    // update shared key with proof data
+    pub fn update_shared_key(&mut self, shared_key_id: &String, proof_key: &PublicKey, root: &Option<Hash>, proof: &Option<Proof>) -> Result<()> {
+        let shared_key = self.get_shared_key_mut(shared_key_id)?;
+        shared_key.add_proof_data(proof_key, root, proof);
         Ok(())
     }
 
