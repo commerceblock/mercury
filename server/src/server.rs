@@ -1,17 +1,13 @@
+use super::routes::*;
+use super::storage::db;
+use super::Config;
+
 use config;
 use rocket;
 use rocket::{Request, Rocket};
 use rocksdb;
 
-use rusoto_core::Region;
-use rusoto_dynamodb::DynamoDbClient;
-
-use super::routes::*;
-use super::storage::db;
-use super::Config;
-
 use std::collections::HashMap;
-use std::str::FromStr;
 
 #[derive(Deserialize)]
 pub struct AuthConfig {
@@ -61,7 +57,7 @@ fn not_found(req: &Request) -> String {
 pub fn get_server() -> Rocket {
     let settings = get_settings_as_map();
     let db_config = Config {
-        db: get_db(settings.clone()),
+        db: get_db(settings.clone())
     };
 
     let auth_config = AuthConfig::load(settings.clone());
@@ -86,6 +82,8 @@ pub fn get_server() -> Rocket {
                 schnorr::keygen_third,
                 schnorr::sign,
                 state_entity::get_statechain,
+                state_entity::get_smt_root,
+                state_entity::get_smt_proof,
                 state_entity::deposit_init,
                 state_entity::prepare_sign_backup,
                 state_entity::transfer_sender,
@@ -111,31 +109,16 @@ fn get_settings_as_map() -> HashMap<String, String> {
     settings.try_into::<HashMap<String, String>>().unwrap()
 }
 
-fn get_db(settings: HashMap<String, String>) -> db::DB {
-    let db_type_string = settings
-        .get("db")
-        .unwrap_or(&"local".to_string())
-        .to_uppercase();
-    let db_type = db_type_string.as_str();
-    let env = settings
-        .get("env")
-        .unwrap_or(&"dev".to_string())
-        .to_string();
+fn get_db(_settings: HashMap<String, String>) -> rocksdb::DB {
+    // let db_type_string = settings
+    //     .get("db")
+    //     .unwrap_or(&"local".to_string())
+    //     .to_uppercase();
+    // let db_type = db_type_string.as_str();
+    // let env = settings
+    //     .get("env")
+    //     .unwrap_or(&"dev".to_string())
+    //     .to_string();
 
-    match db_type {
-        "AWS" => {
-            let region_option = settings.get("aws_region");
-            match region_option {
-                Some(s) => {
-                    let region_res = Region::from_str(&s);
-                    match region_res {
-                        Ok(region) => db::DB::AWS(DynamoDbClient::new(region), env),
-                        Err(_e) => panic!("Set 'DB = AWS' but 'region' is not a valid value"),
-                    }
-                }
-                None => panic!("Set 'DB = AWS' but 'region' is empty"),
-            }
-        }
-        _ => db::DB::Local(rocksdb::DB::open_default("./db").unwrap()),
-    }
+    rocksdb::DB::open_default(db::DB_LOC).unwrap()
 }

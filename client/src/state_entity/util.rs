@@ -14,11 +14,17 @@ use bitcoin::{ Address, Amount, OutPoint, Transaction, TxIn };
 use bitcoin::util::bip143::SighashComponents;
 use bitcoin::secp256k1::Signature;
 use bitcoin::hashes::sha256d;
-use curv::{BigInt};
+use curv::BigInt;
 use curv::arithmetic::traits::Converter;
 use curv::elliptic::curves::traits::ECPoint;
 
+use monotree::tree::verify_proof;
+use monotree::hasher::{Hasher,Blake2b};
+use monotree::{Proof,Hash};
+
 use std::str::FromStr;
+use std::convert::TryInto;
+
 
 /// Sign a transaction input with state entity shared wallet
 pub fn cosign_tx_input(wallet: &mut Wallet, shared_key_id: &String, prepare_sign_msg: &PrepareSignTxMessage) -> Result<(String, Transaction)> {
@@ -76,4 +82,10 @@ pub fn cosign_tx_input(wallet: &mut Wallet, shared_key_id: &String, prepare_sign
 
     tx_signed.input[0].witness = vec![sig_vec, pk_vec];
     Ok((state_chain_id, tx_signed))
+}
+
+pub fn verify_statechain_smt(root: &Option<Hash>, proof_key: &String, proof: &Option<Proof>) -> bool {
+    let entry: &[u8; 32] = proof_key[..32].as_bytes().try_into().unwrap();
+    let hasher = Blake2b::new();
+    verify_proof(&hasher, root.as_ref(), &entry, proof.as_ref())
 }

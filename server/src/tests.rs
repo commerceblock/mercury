@@ -321,7 +321,7 @@ mod tests {
             input_vout: 0,
             address: String::from("bcrt1qz3rcytulyfvkwje88q4a7nvzuj3td9crhlvqnl"),
             amount: 100000000,
-            proof_key: Some(String::from("proofkey")),
+            proof_key: Some(String::from("dec95aee1e50caf01e82a4880313ca60c61baf75c7b0cb47293d2233d5d35cab")),
             transfer: false
         };
         let body = serde_json::to_string(&tx_b_prepare_sign_msg).unwrap();

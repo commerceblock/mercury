@@ -4,11 +4,14 @@
 
 use super::super::Result;
 extern crate shared_lib;
+
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::routes::ecdsa;
+use crate::storage::db::get_root;
 use super::super::auth::jwt::Claims;
 use super::super::storage::db;
 use super::super::Config;
+use super::super::state_chain::{update_statechain_smt,gen_proof_smt};
 
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 use shared_lib::util::build_tx_b;
@@ -20,6 +23,7 @@ use bitcoin::util::bip143::SighashComponents;
 
 use curv::elliptic::curves::traits::{ ECScalar,ECPoint };
 use curv::{BigInt,FE,GE};
+use monotree::{Hash, Proof};
 use rocket_contrib::json::Json;
 use rocket::State;
 use std::str::FromStr;
@@ -102,21 +106,37 @@ pub fn check_user_auth(
 }
 
 
-#[post("/api/statechain/<id>", format = "json")]
+#[post("/api/statechain/<state_chain_id>", format = "json")]
 pub fn get_statechain(
     state: State<Config>,
     claim: Claims,
-    id: String,
+    state_chain_id: String,
 ) -> Result<Json<StateChainData>> {
     let session_data: StateChain =
-        db::get(&state.db, &claim.sub, &id, &StateChainStruct::StateChain)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+        db::get(&state.db, &claim.sub, &state_chain_id, &StateChainStruct::StateChain)?
+            .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
     Ok(Json({
         StateChainData {
             funding_txid: session_data.backup_tx.unwrap().input.get(0).unwrap().previous_output.txid.to_string(),
             chain: session_data.chain
         }
     }))
+}
+
+#[post("/api/proof", format = "json", data = "<smt_proof_msg>")]
+pub fn get_smt_proof(
+    smt_proof_msg: Json<SmtProofMsg>,
+) -> Result<Json<Option<Proof>>> {
+    let proof = gen_proof_smt(&smt_proof_msg.root, &smt_proof_msg.funding_txid)?;
+    Ok(Json(proof))
+}
+
+/// Get root as API for now. Will be via Mainstay in the future.
+#[post("/api/root", format = "json")]
+pub fn get_smt_root(
+    state: State<Config>,
+) -> Result<Json<Option<Hash>>> {
+    Ok(Json(get_root(&state.db).unwrap()))
 }
 
 /// prepare to sign backup transaction input
@@ -132,9 +152,10 @@ pub fn prepare_sign_backup(
     check_user_auth(&state, &claim, &id)?;
 
     // rebuild tx_b sig hash to verify co-sign will be signing the correct data
+    let funding_txid = &prepare_sign_msg.input_txid;
     let txin = TxIn {
         previous_output: OutPoint {
-            txid: sha256d::Hash::from_str(&prepare_sign_msg.input_txid).unwrap(),
+            txid: sha256d::Hash::from_str(funding_txid).unwrap(),
             vout: prepare_sign_msg.input_vout
         },
         sequence: 0xFFFFFFFF,
@@ -186,10 +207,14 @@ pub fn prepare_sign_backup(
             &StateChainStruct::StateChain,
             &StateChain {
                 id: state_chain_id.clone(),
-                chain: vec!(proof_key),
+                chain: vec!(proof_key.clone()),
                 backup_tx: None
             }
         )?;
+
+        // update sparse merkle tree with new StateChain entry
+        let sc_smt_proof = update_statechain_smt(&state.db, &funding_txid, &proof_key);
+        debug!("deposit: added to statechain. proof: {:?}", sc_smt_proof);
 
         return Ok(Json(state_chain_id));
     };
@@ -376,6 +401,12 @@ pub fn transfer_receiver(
         &StateChainStruct::StateChain,
         &state_chain
     )?;
+
+    // update sparse merkle tree with new StateChain entry
+    let funding_txid = state_chain.backup_tx.unwrap().input.get(0).unwrap().previous_output.txid.to_string();
+    let proof_key = state_chain.chain.last().unwrap();
+    let sc_smt_proof = update_statechain_smt(&state.db, &funding_txid, &proof_key);
+    debug!("transfer: added to statechain. proof: {:?}", sc_smt_proof);
 
     Ok(Json(
         TransferMsg5 {

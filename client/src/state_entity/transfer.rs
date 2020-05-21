@@ -2,7 +2,6 @@
 //!
 //! Transfer coins in state entity to new owner
 
-
 // transfer() messages:
 // 0. Receiver communicates address to Sender (B2 and C2)
 // 1. Sender Initialises transfer protocol with State Entity
@@ -19,17 +18,20 @@
 
 use super::super::Result;
 extern crate shared_lib;
+use shared_lib::structs::{StateChainData, PrepareSignTxMessage, TransferMsg1, TransferMsg2, TransferMsg3, TransferMsg4, TransferMsg5};
+
 use crate::error::CError;
 use crate::wallet::wallet::{StateEntityAddress, Wallet};
 use crate::wallet::key_paths::funding_txid_to_int;
-use crate::state_entity::{util::cosign_tx_input, api::get_statechain};
+use crate::state_entity::util::{cosign_tx_input,verify_statechain_smt};
+use crate::state_entity::api::{get_smt_proof, get_smt_root, get_statechain};
 use super::super::utilities::requests;
 
-use shared_lib::structs::{StateChainData, PrepareSignTxMessage, TransferMsg1, TransferMsg2, TransferMsg3, TransferMsg4, TransferMsg5};
 use bitcoin::PublicKey;
 use curv::elliptic::curves::traits::{ECPoint, ECScalar};
 use curv::{FE, GE};
 use std::str::FromStr;
+
 
 /// Transfer coins to new Owner from this wallet
 pub fn transfer_sender(
@@ -117,11 +119,24 @@ pub fn transfer_receiver(
 
     // Check shared key master public key == private share * SE public share
     if (transfer_msg5.s2_pub*o2).get_element()
-        != wallet.get_shared_key(&shared_id).unwrap().share.public.q.get_element() {
+        != wallet.get_shared_key(&shared_id)?.share.public.q.get_element() {
             return Err(CError::StateEntityError(String::from("Transfer failed. Incorrect master public key generated.")))
     }
 
     // TODO when node is integrated: Should also check that funding tx output address is address derived from shared key.
+
+
+    // verify proof key inclusion in SE sparse merkle tree
+    let root = get_smt_root(wallet)?;
+    let proof = get_smt_proof(wallet, &root, &state_chain_data.funding_txid)?;
+    assert!(verify_statechain_smt(
+        &root,
+        &se_addr.proof_key.to_string(),
+        &proof
+    ));
+
+    // add proof key and SMT inclusion proofs to local SharedKey data
+    wallet.update_shared_key(&shared_id, &se_addr.proof_key, &root, &proof)?;
 
     Ok(transfer_msg5)
 }

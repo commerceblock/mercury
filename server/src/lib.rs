@@ -15,7 +15,6 @@ extern crate zk_paillier;
 #[macro_use]
 extern crate failure;
 
-#[macro_use]
 extern crate error_chain;
 
 #[macro_use]
@@ -42,11 +41,12 @@ pub mod auth;
 pub mod routes;
 pub mod server;
 pub mod storage;
+pub mod state_chain;
 pub mod tests;
 pub mod error;
 
 type Result<T> = std::result::Result<T, error::SEError>;
 
 pub struct Config {
-    pub db: storage::db::DB,
+    pub db: rocksdb::DB,
 }

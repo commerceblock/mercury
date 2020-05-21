@@ -13,6 +13,13 @@ pub struct StateChainData {
     pub chain: Vec<String>
 }
 
+/// /api/statechain post struct
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SmtProofMsg {
+    pub root: Option<[u8;32]>,
+    pub funding_txid: String
+}
+
 
 /// Struct contains data necessary to caluculate tx input's sighash. This is required
 /// whenever Client and Server co-sign a transaction.
