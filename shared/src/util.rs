@@ -3,10 +3,12 @@
 //! Utilities methods for state entity and mock classes
 
 type Result<T> = std::result::Result<T, UtilError>;
+use crate::structs::PrepareSignTxMessage;
 
-use bitcoin::{TxIn, TxOut, Transaction, Address, Amount};
+use bitcoin::{TxIn, TxOut, Transaction, Address, Amount, OutPoint};
+use bitcoin::hashes::sha256d::Hash;
 use bitcoin::blockdata::script::Builder;
-use bitcoin::blockdata::opcodes::OP_TRUE;
+use bitcoin::{util::bip143::SighashComponents, blockdata::opcodes::OP_TRUE};
 
 use rocket::http::{ Status, ContentType };
 use rocket::Response;
@@ -15,7 +17,7 @@ use rocket::response::Responder;
 
 use std::error;
 use std::fmt;
-use std::io::Cursor;
+use std::{str::FromStr, io::Cursor};
 
 
 /// network - move this to config
@@ -23,6 +25,35 @@ use std::io::Cursor;
 pub const RBF: u32 = 0xffffffff - 2;
 const DUSTLIMIT: u64 = 100;
 const FEE: u64 = 1000;
+
+
+/// rebuild backup tx and return sig hash from PrepareSignTxMessage data
+pub fn rebuild_backup_tx(prepare_sign_msg: &PrepareSignTxMessage) -> Result<(Transaction, Hash)> {
+    let txin = TxIn {
+        previous_output: OutPoint {
+            txid: Hash::from_str(&prepare_sign_msg.input_txid).unwrap(),
+            vout: prepare_sign_msg.input_vout
+        },
+        sequence: 0xFFFFFFFF,
+        witness: Vec::new(),
+        script_sig: bitcoin::Script::default(),
+    };
+
+    let tx_b = build_tx_b(
+        &txin,
+        &Address::from_str(&prepare_sign_msg.address).unwrap(),
+        &Amount::from_sat(prepare_sign_msg.amount)
+    ).unwrap();
+
+    let comp = SighashComponents::new(&tx_b);
+    let sig_hash = comp.sighash_all(
+        &txin,
+        &Address::from_str(&prepare_sign_msg.spending_addr).unwrap().script_pubkey(),
+        prepare_sign_msg.amount
+    );
+    Ok((tx_b, sig_hash))
+}
+
 
 /// build funding tx spending inputs to p2wpkh address P for amount A
 pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &Address, amount: &Amount) -> Result<Transaction> {

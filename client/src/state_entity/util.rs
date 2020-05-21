@@ -8,12 +8,10 @@ use super::super::utilities::requests;
 use super::super::Result;
 use crate::wallet::wallet::Wallet;
 use crate::ecdsa;
-use shared_lib::{util::build_tx_b,structs::PrepareSignTxMessage};
+use shared_lib::{util::rebuild_backup_tx,structs::PrepareSignTxMessage};
 
-use bitcoin::{ Address, Amount, OutPoint, Transaction, TxIn };
-use bitcoin::util::bip143::SighashComponents;
+use bitcoin::Transaction;
 use bitcoin::secp256k1::Signature;
-use bitcoin::hashes::sha256d;
 use curv::BigInt;
 use curv::arithmetic::traits::Converter;
 use curv::elliptic::curves::traits::ECPoint;
@@ -22,7 +20,6 @@ use monotree::tree::verify_proof;
 use monotree::hasher::{Hasher,Blake2b};
 use monotree::{Proof,Hash};
 
-use std::str::FromStr;
 use std::convert::TryInto;
 
 
@@ -34,29 +31,9 @@ pub fn cosign_tx_input(wallet: &mut Wallet, shared_key_id: &String, prepare_sign
 
     // Co-sign back-up tx
     // get sigHash and transform into message to be signed
-    let txin = TxIn {
-        previous_output: OutPoint {
-            txid: sha256d::Hash::from_str(&prepare_sign_msg.input_txid).unwrap(),
-            vout: prepare_sign_msg.input_vout
-        },
-        sequence: 0xFFFFFFFF,
-        witness: Vec::new(),
-        script_sig: bitcoin::Script::default(),
-    };
+    let (tx_b, sig_hash) = rebuild_backup_tx(&prepare_sign_msg)?;
 
-    let tx = build_tx_b(
-        &txin,
-        &Address::from_str(&prepare_sign_msg.address).unwrap(),
-        &Amount::from_sat(prepare_sign_msg.amount)
-    ).unwrap();
-
-    let mut tx_signed = tx.clone();
-    let comp = SighashComponents::new(&tx);
-    let sig_hash = comp.sighash_all(
-        &tx.input[0],
-        &Address::from_str(&prepare_sign_msg.spending_addr).unwrap().script_pubkey(),
-        prepare_sign_msg.amount
-    );
+    let mut tx_signed = tx_b.clone();
 
     let shared_key = wallet.get_shared_key(&shared_key_id)?;
     let mk = &shared_key.share;

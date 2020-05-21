@@ -5,6 +5,9 @@
 use super::super::Result;
 extern crate shared_lib;
 
+use shared_lib::util::rebuild_backup_tx;
+use shared_lib::structs::*;
+
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::routes::ecdsa;
 use crate::storage::db::get_root;
@@ -14,21 +17,16 @@ use super::super::Config;
 use super::super::state_chain::{update_statechain_smt,gen_proof_smt};
 
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
-use shared_lib::util::build_tx_b;
-use shared_lib::structs::*;
 
-use bitcoin::{ Address, Amount, OutPoint, TxIn, Transaction };
+use bitcoin::Transaction;
 use bitcoin::hashes::sha256d;
-use bitcoin::util::bip143::SighashComponents;
 
 use curv::elliptic::curves::traits::{ ECScalar,ECPoint };
 use curv::{BigInt,FE,GE};
 use monotree::{Hash, Proof};
 use rocket_contrib::json::Json;
 use rocket::State;
-use std::str::FromStr;
 use uuid::Uuid;
-
 
 
 /// contains state chain id and data
@@ -62,7 +60,7 @@ pub struct SessionData {
     pub sig_hash: sha256d::Hash,
     /// back up tx
     pub backup_tx: Transaction,
-    /// ID of state chain that this back up tx is for
+    /// ID of state chain that data is for
     pub state_chain_id: String
 }
 
@@ -152,29 +150,7 @@ pub fn prepare_sign_backup(
     check_user_auth(&state, &claim, &id)?;
 
     // rebuild tx_b sig hash to verify co-sign will be signing the correct data
-    let funding_txid = &prepare_sign_msg.input_txid;
-    let txin = TxIn {
-        previous_output: OutPoint {
-            txid: sha256d::Hash::from_str(funding_txid).unwrap(),
-            vout: prepare_sign_msg.input_vout
-        },
-        sequence: 0xFFFFFFFF,
-        witness: Vec::new(),
-        script_sig: bitcoin::Script::default(),
-    };
-
-    let tx_b = build_tx_b(
-        &txin,
-        &Address::from_str(&prepare_sign_msg.address).unwrap(),
-        &Amount::from_sat(prepare_sign_msg.amount)
-    ).unwrap();
-
-    let comp = SighashComponents::new(&tx_b);
-    let sig_hash = comp.sighash_all(
-        &txin,
-        &Address::from_str(&prepare_sign_msg.spending_addr).unwrap().script_pubkey(),
-        prepare_sign_msg.amount
-    );
+    let (tx_b, sig_hash) = rebuild_backup_tx(&prepare_sign_msg)?;
 
 
     // if deposit()
@@ -213,8 +189,8 @@ pub fn prepare_sign_backup(
         )?;
 
         // update sparse merkle tree with new StateChain entry
-        let sc_smt_proof = update_statechain_smt(&state.db, &funding_txid, &proof_key);
-        debug!("deposit: added to statechain. proof: {:?}", sc_smt_proof);
+        let sc_smt_proof = update_statechain_smt(&state.db, &prepare_sign_msg.input_txid, &proof_key);
+        debug!("deposit: added to statechain and sparse merkle tree. proof: {:?}", sc_smt_proof);
 
         return Ok(Json(state_chain_id));
     };

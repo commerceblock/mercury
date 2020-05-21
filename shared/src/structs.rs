@@ -69,6 +69,7 @@ pub struct TransferMsg4 {
     pub state_chain: Vec<String>,
     pub o2_pub: GE
 }
+
 /// State Entity -> Receiver
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferMsg5 {

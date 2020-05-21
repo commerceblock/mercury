@@ -3,7 +3,9 @@ mod tests {
     extern crate shared_lib;
     use super::super::routes::ecdsa;
     use super::super::server;
-    use shared_lib::structs::{DepositMsg1,PrepareSignTxMessage};
+    use shared_lib::util::rebuild_backup_tx;
+    use shared_lib::structs::{DepositMsg1,PrepareSignTxMessage}
+    ;
     use rocket::http::{ContentType,Status};
     use rocket::local::Client;
     use curv::arithmetic::traits::Converter;
@@ -340,9 +342,10 @@ mod tests {
             TimeFormat(start.elapsed())
         );
 
-        let message = BigInt::from(12345);
+        // try sign with sig hash corresponding to PrepareSignTxMessage data
+        let (_,sig_hash) = rebuild_backup_tx(&tx_b_prepare_sign_msg).unwrap();
 
-        let signature: party_one::SignatureRecid = sign(&client, id, master_key_2, message);
+        let signature: party_one::SignatureRecid = sign(&client, id, master_key_2, BigInt::from_hex(&hex::encode(&sig_hash[..])));
 
         println!(
             "s = (r: {}, s: {}, recid: {})",

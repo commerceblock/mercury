@@ -423,40 +423,39 @@ pub fn sign_second(
     check_user_auth(&state, &claim, &id)?;
 
     // checksighash matches message to be signed
-    if request.message.to_string() != BigInt::from(12345).to_string() { // allow through for testing
-        let sig_hash: Option<SessionData> = db::get(
-            &state.db,
-            &claim.sub,
-            &id,
-            &StateChainStruct::SessionData)?;
-        match sig_hash {
-            Some(_) => debug!("Sig hash found in DB for this id."),
-            None => return Err(SEError::SigningError(String::from("No sig hash found for state chain session.")))
-        };
 
-        // check message to sign is correct sig hash
-        let mut message_hex = request.message.to_hex();
-        let message_sig_hash;
-        match reverse_hex_str(message_hex.clone()) {
-            Ok(res) => message_sig_hash = res,
-            Err(e) => {
-                // Try for case in which sighash begins with leading 0's and so conversion to hex from
-                // BigInt is incorrect
-                let num_zeros = 64 - message_hex.len();
-                if num_zeros < 1 { return Err(SEError::from(e)) };
-                let temp = message_hex.clone();
-                message_hex = format!("{:0width$}",0 ,width = num_zeros);
-                message_hex.push_str(&temp);
-                // try reverse again
-                message_sig_hash = reverse_hex_str(message_hex.clone())?;
-            }
-        }
+    let sig_hash: Option<SessionData> = db::get(
+        &state.db,
+        &claim.sub,
+        &id,
+        &StateChainStruct::SessionData)?;
+    match sig_hash {
+        Some(_) => debug!("Sig hash found in DB for this id."),
+        None => return Err(SEError::SigningError(String::from("No sig hash found for state chain session.")))
+    };
 
-        if sig_hash.unwrap().sig_hash.to_string() != message_sig_hash {
-            return Err(SEError::SigningError(String::from("Message to be signed does not match verified sig hash.")))
+    // check message to sign is correct sig hash
+    let mut message_hex = request.message.to_hex();
+    let message_sig_hash;
+    match reverse_hex_str(message_hex.clone()) {
+        Ok(res) => message_sig_hash = res,
+        Err(e) => {
+            // Try for case in which sighash begins with leading 0's and so conversion to hex from
+            // BigInt is incorrect
+            let num_zeros = 64 - message_hex.len();
+            if num_zeros < 1 { return Err(SEError::from(e)) };
+            let temp = message_hex.clone();
+            message_hex = format!("{:0width$}",0 ,width = num_zeros);
+            message_hex.push_str(&temp);
+            // try reverse again
+            message_sig_hash = reverse_hex_str(message_hex.clone())?;
         }
-        debug!("Sig hash in message matches verified sig hash.")
     }
+
+    if sig_hash.unwrap().sig_hash.to_string() != message_sig_hash {
+        return Err(SEError::SigningError(String::from("Message to be signed does not match verified sig hash.")))
+    }
+    debug!("Sig hash in message matches verified sig hash.");
 
     let shared_key: MasterKey1 = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1MasterKey)?
         .ok_or(SEError::DBError(NoDataForID, id.clone()))?;

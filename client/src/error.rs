@@ -2,6 +2,8 @@
 //!
 //! Custom Error types for client
 
+use shared_lib::util::UtilError;
+
 use std::error;
 use std::fmt;
 use bitcoin::util::bip32::Error as Bip32Error;
@@ -22,6 +24,8 @@ pub enum CError {
     SchnorrError(String),
     /// Inherit all errors from bip32
     Bip32(String),
+    /// Inherit errors from Util
+    Util(String),
     /// Inherit error from reqwest
     Reqwest(String),
     /// Inherit error from parseInt
@@ -44,6 +48,13 @@ impl From<Bip32Error> for CError {
         CError::Bip32(e.to_string())
     }
 }
+
+impl From<UtilError> for CError {
+    fn from(e: UtilError) -> CError {
+        CError::Util(e.to_string())
+    }
+}
+
 impl From<ReqwestError> for CError {
     fn from(e: ReqwestError) -> CError {
         CError::Reqwest(e.to_string())
@@ -81,6 +92,7 @@ impl fmt::Display for CError {
             CError::StateEntityError(ref e) => write!(f, "State Entity Error: {}", e),
             CError::SchnorrError(ref e) => write!(f, "Schnorr Error: {}", e),
             CError::Bip32(ref e) => write!(f, "Bip32 Error: {}", e),
+            CError::Util(ref e) => write!(f,"Util Error: {}",e),
             CError::Reqwest(ref e) => write!(f, "Reqwest Error: {}", e),
             CError::ParseInt(ref e) => write!(f, "ParseInt Error: {}", e),
         }
