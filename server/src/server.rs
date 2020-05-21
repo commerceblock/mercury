@@ -9,7 +9,6 @@ use rocksdb;
 
 use std::collections::HashMap;
 
-
 #[derive(Deserialize)]
 pub struct AuthConfig {
     pub issuer: String,
