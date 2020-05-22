@@ -1,5 +1,6 @@
 use super::Result;
-use crate::storage::db::{get_root,update_root, DB_SC_LOC};
+use crate::storage::db::{get_current_root,update_root, DB_SC_LOC};
+use shared_lib::Root;
 
 use monotree::tree::verify_proof;
 use monotree::{Monotree, Proof, Hash};
@@ -9,18 +10,17 @@ use monotree::hasher::{Hasher,Blake2b};
 use rocksdb::DB;
 use std::convert::TryInto;
 
-
 /// insert new statechain entry into Sparse Merkle Tree and return proof
 pub fn update_statechain_smt(db: &DB, funding_txid: &String, proof_key: &String) -> Result<()> {
     let key: &Hash = funding_txid[..32].as_bytes().try_into().unwrap();
     let entry: &Hash = proof_key[..32].as_bytes().try_into().unwrap();
 
     // get current root
-    let root = get_root(db)?;
+    let root = get_current_root::<Root>(&db)?;
 
     // update smt
     let mut tree = Monotree::<RocksDB, Blake2b>::new(DB_SC_LOC);
-    let new_root = tree.insert(root.as_ref(), key, entry)?;
+    let new_root = tree.insert(root.value.as_ref(), key, entry)?;
 
     // update root in DB
     update_root(db, new_root.unwrap())?;
@@ -32,6 +32,7 @@ pub fn update_statechain_smt(db: &DB, funding_txid: &String, proof_key: &String)
 pub fn gen_proof_smt(root: &Option<Hash>, funding_txid: &String) -> Result<Option<Proof>> {
     let key: &Hash = funding_txid[..32].as_bytes().try_into().unwrap();
     let mut tree = Monotree::<RocksDB, Blake2b>::new(DB_SC_LOC);
+
     // generate inclusion proof
     let proof = tree.get_merkle_proof(root.as_ref(), key)?;
     Ok(proof)
@@ -57,17 +58,18 @@ mod tests {
         let proof_key = String::from("03b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3");
 
         update_statechain_smt(&db, &funding_txid, &proof_key).unwrap();
-        let root = get_root(&db).unwrap();
+        let root = get_current_root::<Root>(&db).unwrap();
 
-        let sc_smt_proof1 = gen_proof_smt(&root, &funding_txid).unwrap();
-        assert!(verify_statechain_smt(&root, &proof_key, &sc_smt_proof1));
+        let sc_smt_proof1 = gen_proof_smt(&root.value, &funding_txid).unwrap();
+
+        assert!(verify_statechain_smt(&root.value, &proof_key, &sc_smt_proof1));
 
         // update with new proof key and try again
         let proof_key = String::from("13b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3");
         update_statechain_smt(&db, &funding_txid, &proof_key).unwrap();
-        let root = get_root(&db).unwrap();
+        let root = get_current_root::<Root>(&db).unwrap();
 
-        let sc_smt_proof2 = gen_proof_smt(&root, &funding_txid).unwrap();
-        assert!(verify_statechain_smt(&root, &proof_key, &sc_smt_proof2));
+        let sc_smt_proof2 = gen_proof_smt(&root.value, &funding_txid).unwrap();
+        assert!(verify_statechain_smt(&root.value, &proof_key, &sc_smt_proof2));
     }
 }

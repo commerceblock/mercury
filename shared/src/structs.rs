@@ -4,6 +4,7 @@
 
 use curv::{FE, GE};
 use bitcoin::Transaction;
+use crate::Root;
 
 
 /// /api/statechain return struct
@@ -16,7 +17,7 @@ pub struct StateChainData {
 /// /api/statechain post struct
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SmtProofMsg {
-    pub root: Option<[u8;32]>,
+    pub root: Root,
     pub funding_txid: String
 }
 

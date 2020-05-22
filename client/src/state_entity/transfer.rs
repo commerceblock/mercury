@@ -130,7 +130,7 @@ pub fn transfer_receiver(
     let root = get_smt_root(wallet)?;
     let proof = get_smt_proof(wallet, &root, &state_chain_data.funding_txid)?;
     assert!(verify_statechain_smt(
-        &root,
+        &root.value,
         &se_addr.proof_key.to_string(),
         &proof
     ));

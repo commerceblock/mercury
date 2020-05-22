@@ -6,11 +6,12 @@ use super::super::Result;
 extern crate shared_lib;
 
 use shared_lib::util::rebuild_backup_tx;
+use shared_lib::Root;
 use shared_lib::structs::*;
 
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::routes::ecdsa;
-use crate::storage::db::get_root;
+use crate::storage::db::{get_root, get_current_root};
 use super::super::auth::jwt::Claims;
 use super::super::storage::db;
 use super::super::Config;
@@ -23,7 +24,7 @@ use bitcoin::hashes::sha256d;
 
 use curv::elliptic::curves::traits::{ ECScalar,ECPoint };
 use curv::{BigInt,FE,GE};
-use monotree::{Hash, Proof};
+use monotree::Proof;
 use rocket_contrib::json::Json;
 use rocket::State;
 use uuid::Uuid;
@@ -33,8 +34,8 @@ use uuid::Uuid;
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct StateChain {
     pub id: String,
-    /// chain of transitory key history (owners)
-    pub chain: Vec<String>, // Chain of owners. String for now as unsure on data type at the moment.
+    /// chain of transitory key history (owners  Proof keys)
+    pub chain: Vec<String>,
     /// current back-up transaction
     pub backup_tx: Option<Transaction>
 }
@@ -103,7 +104,7 @@ pub fn check_user_auth(
     .ok_or(SEError::AuthError)
 }
 
-
+/// Api call for statechain info: return funding txid and state chain list of proof keys and signatures
 #[post("/api/statechain/<state_chain_id>", format = "json")]
 pub fn get_statechain(
     state: State<Config>,
@@ -121,20 +122,26 @@ pub fn get_statechain(
     }))
 }
 
+/// Api call for generating sparse merkle tree inclusion proof for some key in a tree with some root
 #[post("/api/proof", format = "json", data = "<smt_proof_msg>")]
 pub fn get_smt_proof(
+    state: State<Config>,
     smt_proof_msg: Json<SmtProofMsg>,
 ) -> Result<Json<Option<Proof>>> {
-    let proof = gen_proof_smt(&smt_proof_msg.root, &smt_proof_msg.funding_txid)?;
-    Ok(Json(proof))
+    // ensure root exists
+    if get_root::<[u8;32]>(&state.db, &smt_proof_msg.root.id)?.is_none() {
+        return Err(SEError::DBError(NoDataForID, format!("Root id: {}",smt_proof_msg.root.id.to_string())));
+    }
+
+    Ok(Json(gen_proof_smt(&smt_proof_msg.root.value, &smt_proof_msg.funding_txid)?))
 }
 
 /// Get root as API for now. Will be via Mainstay in the future.
 #[post("/api/root", format = "json")]
 pub fn get_smt_root(
     state: State<Config>,
-) -> Result<Json<Option<Hash>>> {
-    Ok(Json(get_root(&state.db).unwrap()))
+) -> Result<Json<Root>> {
+    Ok(Json(get_current_root::<Root>(&state.db)?))
 }
 
 /// prepare to sign backup transaction input

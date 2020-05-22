@@ -422,26 +422,19 @@ pub fn sign_second(
     // check authorisation id is in DB (and check password?)
     check_user_auth(&state, &claim, &id)?;
 
-    // checksighash matches message to be signed
+    // Get session data for this user
+    let session_data: SessionData = db::get(&state.db, &claim.sub, &id, &StateChainStruct::SessionData)?
+        .ok_or(SEError::SigningError(String::from("No sig hash found for state chain session.")))?;
+    debug!("Session data and Sig hash found in DB for id {}",id);
 
-    let sig_hash: Option<SessionData> = db::get(
-        &state.db,
-        &claim.sub,
-        &id,
-        &StateChainStruct::SessionData)?;
-    match sig_hash {
-        Some(_) => debug!("Sig hash found in DB for this id."),
-        None => return Err(SEError::SigningError(String::from("No sig hash found for state chain session.")))
-    };
-
-    // check message to sign is correct sig hash
+    // check sighash matches message to be signed
     let mut message_hex = request.message.to_hex();
     let message_sig_hash;
     match reverse_hex_str(message_hex.clone()) {
         Ok(res) => message_sig_hash = res,
         Err(e) => {
-            // Try for case in which sighash begins with leading 0's and so conversion to hex from
-            // BigInt is incorrect
+            // Try for case in which sighash begins with 0's and so conversion to hex from
+            // BigInt is too short
             let num_zeros = 64 - message_hex.len();
             if num_zeros < 1 { return Err(SEError::from(e)) };
             let temp = message_hex.clone();
@@ -452,7 +445,7 @@ pub fn sign_second(
         }
     }
 
-    if sig_hash.unwrap().sig_hash.to_string() != message_sig_hash {
+    if session_data.sig_hash.to_string() != message_sig_hash {
         return Err(SEError::SigningError(String::from("Message to be signed does not match verified sig hash.")))
     }
     debug!("Sig hash in message matches verified sig hash.");
@@ -478,11 +471,6 @@ pub fn sign_second(
         Ok(sig) => signature = sig,
         Err(_) => panic!("validation failed")
     };
-
-    // Add signed back up transaction to State Chain
-    let session_data: SessionData =
-        db::get(&state.db, &claim.sub, &id, &StateChainStruct::SessionData)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let mut backup_tx = session_data.backup_tx.clone();
     let mut v = BigInt::to_vec(&signature.r);     // make signature witness

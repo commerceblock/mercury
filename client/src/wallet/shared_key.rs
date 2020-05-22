@@ -2,7 +2,7 @@
 //!
 //! Key shares of co-owned keys between user and server.
 
-
+use shared_lib::Root;
 use super::super::ecdsa;
 use super::super::ClientShim;
 use super::super::Result;
@@ -12,11 +12,11 @@ use curv::elliptic::curves::traits::ECScalar;
 use curv::FE;
 use bitcoin::PublicKey;
 use bitcoin::secp256k1::key::SecretKey;
-use monotree::{Proof,Hash};
+use monotree::Proof;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct InclusionProofSMT {
-    pub root: Option<Hash>,
+    pub root: Root,
     pub proof: Option<Proof>
 }
 #[derive(Serialize, Deserialize)]
@@ -34,7 +34,7 @@ impl SharedKey {
         ecdsa::get_master_key(id, client_shim, &key_share_priv, is_transfer)
     }
 
-    pub fn add_proof_data(&mut self, proof_key: &PublicKey, root: &Option<Hash>, proof: &Option<Proof>) {
+    pub fn add_proof_data(&mut self, proof_key: &PublicKey, root: &Root, proof: &Option<Proof>) {
         self.proof_key = Some(proof_key.clone());
         self.smt_proof = Some(InclusionProofSMT {
             root: root.clone(), proof: proof.clone()

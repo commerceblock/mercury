@@ -3,6 +3,8 @@
 //! Basic Bitcoin wallet functionality. Full key owned by this wallet.
 
 use super::super::Result;
+use shared_lib::Root;
+
 use super::key_paths::{ funding_txid_to_int, KeyPathWithAddresses, KeyPath};
 use crate::error::{ CError, WalletErrorType};
 use crate::mocks::mock_electrum::MockElectrum;
@@ -13,13 +15,14 @@ use bitcoin::{ Network, PublicKey };
 use bitcoin::util::bip32::{ ExtendedPrivKey, ChildNumber };
 use bitcoin::util::bip143::SighashComponents;
 use bitcoin::secp256k1::{ All, Secp256k1, Message, key::SecretKey };
-use monotree::{Proof,Hash};
+use monotree::Proof;
 
 // use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
 use uuid::Uuid;
 use std::str::FromStr;
 use serde_json::json;
 use std::fs;
+
 
 const WALLET_FILENAME: &str = "wallet/wallet.data";
 
@@ -325,7 +328,7 @@ impl Wallet {
     }
 
     // update shared key with proof data
-    pub fn update_shared_key(&mut self, shared_key_id: &String, proof_key: &PublicKey, root: &Option<Hash>, proof: &Option<Proof>) -> Result<()> {
+    pub fn update_shared_key(&mut self, shared_key_id: &String, proof_key: &PublicKey, root: &Root, proof: &Option<Proof>) -> Result<()> {
         let shared_key = self.get_shared_key_mut(shared_key_id)?;
         shared_key.add_proof_data(proof_key, root, proof);
         Ok(())

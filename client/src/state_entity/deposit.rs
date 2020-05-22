@@ -79,7 +79,7 @@ pub fn deposit(wallet: &mut Wallet, inputs: Vec<TxIn>, funding_spend_addrs: Vec<
     let root = get_smt_root(wallet)?;
     let proof = get_smt_proof(wallet, &root, &tx_0_signed.txid().to_string())?;
     assert!(verify_statechain_smt(
-        &root,
+        &root.value,
         &proof_key.to_string(),
         &proof
     ));
