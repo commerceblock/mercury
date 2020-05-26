@@ -17,8 +17,8 @@
 //      e. Verify o2*S2 = P
 
 use super::super::Result;
-extern crate shared_lib;
-use shared_lib::structs::{StateChainData, PrepareSignTxMessage, TransferMsg1, TransferMsg2, TransferMsg3, TransferMsg4, TransferMsg5};
+use shared_lib::structs::{StateChainDataAPI, PrepareSignTxMessage, TransferMsg1, TransferMsg2, TransferMsg3, TransferMsg4, TransferMsg5};
+use shared_lib::state_chain::StateChainSig;
 
 use crate::error::CError;
 use crate::wallet::wallet::{StateEntityAddress, Wallet};
@@ -42,18 +42,21 @@ pub fn transfer_sender(
     mut prev_tx_b_prepare_sign_msg: PrepareSignTxMessage
 ) -> Result<TransferMsg3> {
     // first sign state chain
-    let state_chain_data: StateChainData = get_statechain(wallet, state_chain_id)?;
-    let mut state_chain = state_chain_data.chain;
+    let state_chain_data: StateChainDataAPI = get_statechain(wallet, state_chain_id)?;
+    let state_chain = state_chain_data.chain;
     // get proof key for signing
-    let _proof_key_derivation = wallet.se_proof_keys.get_key_derivation(&PublicKey::from_str(state_chain.last().unwrap()).unwrap());
-    // (simply append receivers proof key for now)
-    state_chain.push(receiver_addr.proof_key.to_string());
+    let proof_key_derivation = wallet.se_proof_keys.get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().proof_key).unwrap());
+    let state_chain_sig = StateChainSig::new(
+        &proof_key_derivation.unwrap().private_key.key,
+        &String::from("TRANSFER"),
+        &receiver_addr.proof_key.to_string()
+    )?;
 
     // init transfer: perform auth and send new statechain
     let transfer_msg2: TransferMsg2 = requests::postb(&wallet.client_shim,&format!("/transfer/sender"),
         &TransferMsg1 {
             shared_key_id: shared_key_id.to_string(),
-            new_state_chain: state_chain.clone()
+            state_chain_sig: state_chain_sig.clone()
         })?;
 
     // sign new back up tx
@@ -71,7 +74,7 @@ pub fn transfer_sender(
         shared_key_id: shared_key_id.to_string(),
         t1, // should be encrypted
         new_backup_tx: new_tx_b_signed,
-        state_chain,
+        state_chain_sig,
         state_chain_id: state_chain_id.to_string()
     };
     Ok(transfer_msg3)
@@ -84,12 +87,15 @@ pub fn transfer_receiver(
     se_addr: &StateEntityAddress
 ) -> Result<TransferMsg5> {
     // get statechain data (will Err if statechain not yet finalized)
-    let state_chain_data: StateChainData = get_statechain(wallet, &transfer_msg3.state_chain_id)?;
+    let state_chain_data: StateChainDataAPI = get_statechain(wallet, &transfer_msg3.state_chain_id)?;
 
     // verify state chain represents this address as new owner
-    if se_addr.proof_key.to_string() != transfer_msg3.state_chain.last().ok_or("State chain empty")?.to_string() {
-        return Err(CError::Generic(String::from("State Chain verification failed.")))
+    let prev_owner_proof_key = state_chain_data.chain.last().unwrap().proof_key.clone();
+    match transfer_msg3.state_chain_sig.verify(&prev_owner_proof_key) {
+        Ok(_) => debug!("State chain signature is valid."),
+        Err(_) => return Err(CError::Generic(String::from("State Chain verification failed.")))
     }
+
 
     // check try_o2() comments and docs for justification of below code
     let mut done = false;
@@ -144,7 +150,7 @@ pub fn transfer_receiver(
 // Constraint on s2 size means that some (most) o2 values are not valid for the lindell_2017 protocol.
 // We must generate random o2, test if the resulting s2 is valid and try again if not.
 /// Carry out transfer_receiver() protocol with a randomly generated o2 value.
-pub fn try_o2(wallet: &mut Wallet, state_chain_data: &StateChainData, transfer_msg3: &TransferMsg3, num_tries: &u32) -> Result<(FE,TransferMsg5)>{
+pub fn try_o2(wallet: &mut Wallet, state_chain_data: &StateChainDataAPI, transfer_msg3: &TransferMsg3, num_tries: &u32) -> Result<(FE,TransferMsg5)>{
     // generate o2 private key and corresponding 02 public key
     let mut encoded_txid = num_tries.to_string();
     encoded_txid.push_str(&state_chain_data.funding_txid);
@@ -169,7 +175,7 @@ pub fn try_o2(wallet: &mut Wallet, state_chain_data: &StateChainData, transfer_m
         &TransferMsg4 {
             shared_key_id: transfer_msg3.shared_key_id.clone(),
             t2, // should be encrypted
-            state_chain: transfer_msg3.state_chain.to_vec(),
+            state_chain_sig: transfer_msg3.state_chain_sig.clone(),
             o2_pub
         })?;
     Ok((o2,transfer_msg5))

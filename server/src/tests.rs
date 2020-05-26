@@ -4,7 +4,7 @@ mod tests {
     use super::super::routes::ecdsa;
     use super::super::server;
     use shared_lib::{Root, util::rebuild_backup_tx};
-    use shared_lib::structs::{DepositMsg1,PrepareSignTxMessage, SmtProofMsg}
+    use shared_lib::structs::{DepositMsg1,PrepareSignTxMessage, SmtProofMsgAPI}
     ;
     use rocket::http::{ContentType,Status};
     use rocket::local::Client;
@@ -403,7 +403,7 @@ mod tests {
 
         // get_smt_proof
         // None root
-        let smt_proof_msg = SmtProofMsg {
+        let smt_proof_msg = SmtProofMsgAPI {
             root: Root {id:0, value: None},
             funding_txid: String::from("c1562f7f15d6b8a51ea2e7035b9cdb8c6c0c41fecb62d459a3a6bf738ff0db0e")
         };
@@ -426,7 +426,7 @@ mod tests {
         let res = response.body_string().unwrap();
         let current_root: Root = serde_json::from_str(&res).unwrap();
 
-        let smt_proof_msg = SmtProofMsg {
+        let smt_proof_msg = SmtProofMsgAPI {
             root: Root {id: current_root.id+1, value: Some([1;32])},
             funding_txid: String::from("c1562f7f15d6b8a51ea2e7035b9cdb8c6c0c41fecb62d459a3a6bf738ff0db0e")
         };

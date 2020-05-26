@@ -8,6 +8,7 @@ extern crate shared_lib;
 use shared_lib::util::rebuild_backup_tx;
 use shared_lib::Root;
 use shared_lib::structs::*;
+use shared_lib::state_chain::StateChainSig;
 
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::routes::ecdsa;
@@ -15,7 +16,7 @@ use crate::storage::db::{get_root, get_current_root};
 use super::super::auth::jwt::Claims;
 use super::super::storage::db;
 use super::super::Config;
-use super::super::state_chain::{update_statechain_smt,gen_proof_smt};
+use super::super::state_chain::{update_statechain_smt,gen_proof_smt, StateChain};
 
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 
@@ -28,17 +29,6 @@ use monotree::Proof;
 use rocket_contrib::json::Json;
 use rocket::State;
 use uuid::Uuid;
-
-
-/// contains state chain id and data
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct StateChain {
-    pub id: String,
-    /// chain of transitory key history (owners  Proof keys)
-    pub chain: Vec<String>,
-    /// current back-up transaction
-    pub backup_tx: Option<Transaction>
-}
 
 /// User ID
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -69,12 +59,12 @@ pub struct SessionData {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct TransferData {
     pub state_chain_id: String,
-    pub new_state_chain: Vec<String>,
+    pub state_chain_sig: StateChainSig,
     pub x1: FE
 }
 
 #[derive(Debug)]
-pub enum StateChainStruct {
+pub enum StateEntityStruct {
     UserSession,
     SessionData,
 
@@ -83,7 +73,7 @@ pub enum StateChainStruct {
     TransferData
 }
 
-impl db::MPCStruct for StateChainStruct {
+impl db::MPCStruct for StateEntityStruct {
     fn to_string(&self) -> String {
         format!("StateChain{:?}", self)
     }
@@ -100,7 +90,7 @@ pub fn check_user_auth(
         &state.db,
         &claim.sub,
         &id,
-        &StateChainStruct::UserSession).unwrap()
+        &StateEntityStruct::UserSession).unwrap()
     .ok_or(SEError::AuthError)
 }
 
@@ -110,14 +100,14 @@ pub fn get_statechain(
     state: State<Config>,
     claim: Claims,
     state_chain_id: String,
-) -> Result<Json<StateChainData>> {
-    let session_data: StateChain =
-        db::get(&state.db, &claim.sub, &state_chain_id, &StateChainStruct::StateChain)?
+) -> Result<Json<StateChainDataAPI>> {
+    let state_chain: StateChain =
+        db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
             .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
     Ok(Json({
-        StateChainData {
-            funding_txid: session_data.backup_tx.unwrap().input.get(0).unwrap().previous_output.txid.to_string(),
-            chain: session_data.chain
+        StateChainDataAPI {
+            funding_txid: state_chain.backup_tx.unwrap().input.get(0).unwrap().previous_output.txid.to_string(),
+            chain: state_chain.chain
         }
     }))
 }
@@ -126,7 +116,7 @@ pub fn get_statechain(
 #[post("/api/proof", format = "json", data = "<smt_proof_msg>")]
 pub fn get_smt_proof(
     state: State<Config>,
-    smt_proof_msg: Json<SmtProofMsg>,
+    smt_proof_msg: Json<SmtProofMsgAPI>,
 ) -> Result<Json<Option<Proof>>> {
     // ensure root exists
     if get_root::<[u8;32]>(&state.db, &smt_proof_msg.root.id)?.is_none() {
@@ -167,31 +157,28 @@ pub fn prepare_sign_backup(
         }
         let proof_key = prepare_sign_msg.proof_key.as_ref().unwrap().clone();
 
+        // create StateChain and store
+        let state_chain = StateChain::new(&proof_key);
+
+        db::insert(
+            &state.db,
+            &claim.sub,
+            &state_chain.id,
+            &StateEntityStruct::StateChain,
+            &state_chain
+        )?;
+
         // store SessionData for user: sig_hash with back up tx and state chain id
-        let state_chain_id = Uuid::new_v4().to_string();
         db::insert(
             &state.db,
             &claim.sub,
             &id,
-            &StateChainStruct::SessionData,
+            &StateEntityStruct::SessionData,
             &SessionData {
                 proof_key: proof_key.clone(),
                 sig_hash: sig_hash.clone(),
                 backup_tx: tx_b.clone(),
-                state_chain_id: state_chain_id.clone()
-            }
-        )?;
-
-        // create StateChain DB object
-        db::insert(
-            &state.db,
-            &claim.sub,
-            &state_chain_id,
-            &StateChainStruct::StateChain,
-            &StateChain {
-                id: state_chain_id.clone(),
-                chain: vec!(proof_key.clone()),
-                backup_tx: None
+                state_chain_id: state_chain.id.clone()
             }
         )?;
 
@@ -199,12 +186,12 @@ pub fn prepare_sign_backup(
         let sc_smt_proof = update_statechain_smt(&state.db, &prepare_sign_msg.input_txid, &proof_key);
         debug!("deposit: added to statechain and sparse merkle tree. proof: {:?}", sc_smt_proof);
 
-        return Ok(Json(state_chain_id));
+        return Ok(Json(state_chain.id));
     };
 
     // if transfer() get and update SessionData for this user
     let mut session_data: SessionData =
-        db::get(&state.db, &claim.sub, &id, &StateChainStruct::SessionData)?
+        db::get(&state.db, &claim.sub, &id, &StateEntityStruct::SessionData)?
             .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     session_data.sig_hash = sig_hash;
@@ -212,7 +199,7 @@ pub fn prepare_sign_backup(
         &state.db,
         &claim.sub,
         &id,
-        &StateChainStruct::SessionData,
+        &StateEntityStruct::SessionData,
         &session_data
     )?;
 
@@ -242,7 +229,7 @@ pub fn deposit_init(
         &state.db,
         &claim.sub,
         &user_id,
-        &StateChainStruct::UserSession,
+        &StateEntityStruct::UserSession,
         &UserSession {
             id: user_id.clone(),
             auth: deposit_msg1.auth.clone(),
@@ -270,7 +257,7 @@ pub fn transfer_sender(
 
     // get state_chain id
     let session_data: SessionData =
-        db::get(&state.db, &claim.sub, &transfer_msg1.shared_key_id, &StateChainStruct::SessionData)?
+        db::get(&state.db, &claim.sub, &transfer_msg1.shared_key_id, &StateEntityStruct::SessionData)?
             .ok_or(SEError::DBError(NoDataForID, transfer_msg1.shared_key_id.clone()))?;
 
     // TODO: verify funding tx confirmation
@@ -283,10 +270,10 @@ pub fn transfer_sender(
         &state.db,
         &claim.sub,
         &transfer_msg1.shared_key_id,
-        &StateChainStruct::TransferData,
+        &StateEntityStruct::TransferData,
         &TransferData {
             state_chain_id: session_data.state_chain_id.clone(),
-            new_state_chain: transfer_msg1.new_state_chain.clone(),
+            state_chain_sig: transfer_msg1.state_chain_sig.clone(),
             x1
         }
     )?;
@@ -308,14 +295,14 @@ pub fn transfer_receiver(
     let id = transfer_msg4.shared_key_id.clone();
     // Get TransferData for shared_key_id
     let transfer_data: TransferData =
-        db::get(&state.db, &claim.sub, &id, &StateChainStruct::TransferData)?
+        db::get(&state.db, &claim.sub, &id, &StateEntityStruct::TransferData)?
             .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-    let new_state_chain = transfer_data.new_state_chain;
+    let state_chain_sig = transfer_data.state_chain_sig;
 
-    // ensure updated state chains are the same
-    if new_state_chain != transfer_msg4.state_chain {
-        debug!("Transfer protocol failed. Receiver state chain and State Entity state chain do not match.");
-        return Err(SEError::Generic(format!("State chain provided does not match state chain at id {}",transfer_data.state_chain_id)));
+    // ensure state_chain_sigs are the same
+    if state_chain_sig != transfer_msg4.state_chain_sig {
+        debug!("Transfer protocol failed. Receiver state chain siganture and State Entity state chain siganture do not match.");
+        return Err(SEError::Generic(format!("State chain siganture provided does not match state chain at id {}",transfer_data.state_chain_id)));
     }
 
     // Get Party1 (State Entity) private share
@@ -360,7 +347,7 @@ pub fn transfer_receiver(
         &state.db,
         &claim.sub,
         &new_shared_key_id,
-        &StateChainStruct::UserSession,
+        &StateEntityStruct::UserSession,
         &UserSession {
             id: new_shared_key_id.clone(),
             auth: String::from("auth"),
@@ -370,24 +357,25 @@ pub fn transfer_receiver(
 
     // update state chain
     let mut state_chain: StateChain =
-        db::get(&state.db, &claim.sub, &transfer_data.state_chain_id, &StateChainStruct::StateChain)?
+        db::get(&state.db, &claim.sub, &transfer_data.state_chain_id, &StateEntityStruct::StateChain)?
             .ok_or(SEError::DBError(NoDataForID, transfer_data.state_chain_id.clone()))?;
 
-    assert_eq!(state_chain.chain.len(), new_state_chain.len()-1);
     assert!(state_chain.backup_tx.is_some());
-    state_chain.chain = new_state_chain;
+    state_chain.add(state_chain_sig)?;
 
     db::insert(
         &state.db,
         &claim.sub,
         &transfer_data.state_chain_id,
-        &StateChainStruct::StateChain,
+        &StateEntityStruct::StateChain,
         &state_chain
     )?;
 
     // update sparse merkle tree with new StateChain entry
     let funding_txid = state_chain.backup_tx.unwrap().input.get(0).unwrap().previous_output.txid.to_string();
-    let proof_key = state_chain.chain.last().unwrap();
+    let proof_key = state_chain.chain.last()
+        .ok_or(SEError::Generic(String::from("StateChain empty")))?
+        .proof_key.clone();
     let sc_smt_proof = update_statechain_smt(&state.db, &funding_txid, &proof_key);
     debug!("transfer: added to statechain. proof: {:?}", sc_smt_proof);
 

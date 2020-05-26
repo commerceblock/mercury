@@ -3,10 +3,10 @@ use super::super::auth::jwt::Claims;
 use super::super::storage::db;
 use super::super::Config;
 
-use crate::routes::state_entity::{ check_user_auth, StateChainStruct, SessionData, StateChain };
-use shared_lib::util::reverse_hex_str;
+use crate::routes::state_entity::{ check_user_auth, StateEntityStruct, SessionData };
+use crate::state_chain::StateChain;
 use crate::error::{SEError,DBErrorType::NoDataForID};
-extern crate shared_lib;
+use shared_lib::util::reverse_hex_str;
 
 use curv::cryptographic_primitives::proofs::sigma_dlog::*;
 use curv::cryptographic_primitives::twoparty::dh_key_exchange_variant_with_pok_comm::{
@@ -423,7 +423,7 @@ pub fn sign_second(
     check_user_auth(&state, &claim, &id)?;
 
     // Get session data for this user
-    let session_data: SessionData = db::get(&state.db, &claim.sub, &id, &StateChainStruct::SessionData)?
+    let session_data: SessionData = db::get(&state.db, &claim.sub, &id, &StateEntityStruct::SessionData)?
         .ok_or(SEError::SigningError(String::from("No sig hash found for state chain session.")))?;
     debug!("Session data and Sig hash found in DB for id {}",id);
 
@@ -485,7 +485,7 @@ pub fn sign_second(
 
     // update StateChain DB object
     let mut state_chain: StateChain =
-        db::get(&state.db, &claim.sub, &session_data.state_chain_id, &StateChainStruct::StateChain)?
+        db::get(&state.db, &claim.sub, &session_data.state_chain_id, &StateEntityStruct::StateChain)?
             .ok_or(SEError::DBError(NoDataForID, session_data.state_chain_id.clone()))?;
 
     state_chain.backup_tx = Some(backup_tx);
@@ -493,7 +493,7 @@ pub fn sign_second(
         &state.db,
         &claim.sub,
         &session_data.state_chain_id,
-        &StateChainStruct::StateChain,
+        &StateEntityStruct::StateChain,
         &state_chain
     )?;
 

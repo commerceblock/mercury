@@ -1,14 +1,70 @@
-use super::Result;
-use crate::storage::db::{get_current_root,update_root, DB_SC_LOC};
-use shared_lib::Root;
+//! State Chain
+//!
+//! State chain is the data structure used to track ownership of a UTXO co-owned by the State Entity.
+//! An owner provides a key (we call proof key) which gets appended to the state chain once their
+//! ownership is confirmed.
+//! Then, to pass ownership over to a new proof key the current owner signs a StateChainSig struct
+//! which includes the new owners proof key. This new proof key is then appended to the state chain
+//! as before. Thus ownership can be verified by ensuring the newest proof key has been signed for by the
+//! previous proof key.
+//! To withdraw, and hence bring an end to the State Chain, the StateChainSig struct contains the
+//! withdrawal address.
 
+
+use super::Result;
+use crate::{error::SEError, storage::db::{get_current_root,update_root, DB_SC_LOC}};
+use shared_lib::Root;
+use shared_lib::state_chain::{State, StateChainSig};
+
+use bitcoin::Transaction;
 use monotree::tree::verify_proof;
-use monotree::{Monotree, Proof, Hash};
+use monotree::{Hash, Monotree, Proof};
 use monotree::database::RocksDB;
 use monotree::hasher::{Hasher,Blake2b};
 
 use rocksdb::DB;
+use uuid::Uuid;
 use std::convert::TryInto;
+
+/// A list of States in which each State signs for the next State.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct StateChain {
+    pub id: String,
+    /// chain of transitory key history (owners  Proof keys)
+    pub chain: Vec<State>,
+    /// current back-up transaction
+    pub backup_tx: Option<Transaction>
+}
+
+impl StateChain {
+    pub fn new(proof_key: &String) -> Self {
+        StateChain {
+            id: Uuid::new_v4().to_string(),
+            chain: vec!( State {
+                proof_key: proof_key.clone(),
+                next_state: None
+            }),
+            backup_tx: None
+        }
+    }
+
+    pub fn add(&mut self, state_chain_sig: StateChainSig) -> Result<()> {
+        let prev_proof_key = self.chain.last()
+            .ok_or(SEError::Generic(String::from("StateChain empty")))?
+            .proof_key.clone();
+        // verify previous state has signature and signs for new proof_key
+        state_chain_sig.verify(&prev_proof_key)?;
+
+        // add to chain
+        Ok(self.chain.push(State {
+            proof_key: state_chain_sig.data.clone(),
+            next_state: None
+        }))
+    }
+}
+
+
+
 
 /// insert new statechain entry into Sparse Merkle Tree and return proof
 pub fn update_statechain_smt(db: &DB, funding_txid: &String, proof_key: &String) -> Result<()> {
@@ -28,7 +84,7 @@ pub fn update_statechain_smt(db: &DB, funding_txid: &String, proof_key: &String)
     Ok(())
 }
 
-// Method can run as a seperate proof generation daemon
+// Method can run as a seperate proof generation daemon. Must check root exists before calling.
 pub fn gen_proof_smt(root: &Option<Hash>, funding_txid: &String) -> Result<Option<Proof>> {
     let key: &Hash = funding_txid[..32].as_bytes().try_into().unwrap();
     let mut tree = Monotree::<RocksDB, Blake2b>::new(DB_SC_LOC);
@@ -50,6 +106,34 @@ mod tests {
 
     use super::*;
     use crate::storage::db::DB_LOC;
+    use shared_lib::state_chain::StateChainSig;
+
+    use bitcoin::secp256k1::{SecretKey, Secp256k1, PublicKey};
+
+
+    #[test]
+    fn test_add_to_state_chain() {
+        let secp = Secp256k1::new();
+        let proof_key1_priv = SecretKey::from_slice(&[1;32]).unwrap();
+        let proof_key1_pub = PublicKey::from_secret_key(&secp, &proof_key1_priv);
+
+        let mut state_chain = StateChain::new(&proof_key1_pub.to_string());
+        assert_eq!(state_chain.chain.len(),1);
+        // StateChainSig.verify called in function below
+        let new_state_sig = StateChainSig::new(
+            &proof_key1_priv,
+            &String::from("TRANSFER"),
+            &String::from("03b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3"),
+        ).unwrap();
+
+        //add to state chain
+        let _ = state_chain.add(new_state_sig.clone());
+        assert_eq!(state_chain.chain.len(),2);
+
+        // try add again (signature no longer valid for proof key "03b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3")
+        let fail = state_chain.add(new_state_sig);
+        assert!(fail.is_err());
+    }
 
     #[test]
     fn test_update_and_prove_sc_smt() {

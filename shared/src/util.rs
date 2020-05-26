@@ -2,13 +2,14 @@
 //!
 //! Utilities methods for state entity and mock classes
 
-type Result<T> = std::result::Result<T, UtilError>;
+use super::Result;
 use crate::structs::PrepareSignTxMessage;
 
 use bitcoin::{TxIn, TxOut, Transaction, Address, Amount, OutPoint};
 use bitcoin::hashes::sha256d::Hash;
 use bitcoin::blockdata::script::Builder;
 use bitcoin::{util::bip143::SighashComponents, blockdata::opcodes::OP_TRUE};
+use bitcoin::secp256k1::Error as SecpError;
 
 use rocket::http::{ Status, ContentType };
 use rocket::Response;
@@ -112,7 +113,7 @@ pub fn build_tx_b(txk_input: &TxIn, b_address: &Address, amount: &Amount) -> Res
 
 pub fn reverse_hex_str(hex_str: String) -> Result<String> {
     if hex_str.len() % 2 != 0 {
-        return Err(UtilError::from(format!("Invalid sig hash - Odd number of characters. SigHash: {}",hex_str)))
+        return Err(SharedLibError::from(format!("Invalid sig hash - Odd number of characters. SigHash: {}",hex_str)))
     }
     let mut hex_str = hex_str.chars().rev().collect::<String>();
     let mut result = String::with_capacity(hex_str.len());
@@ -127,31 +128,37 @@ pub fn reverse_hex_str(hex_str: String) -> Result<String> {
 }
 
 
-/// Shared library Util specific errors
+/// Shared library specific errors
 #[derive(Debug, Deserialize)]
-pub enum UtilError {
+pub enum SharedLibError {
     /// Generic error from string error message
     Generic(String),
     /// Invalid argument error
     FormatError(String)
 }
 
-impl From<String> for UtilError {
-    fn from(e: String) -> UtilError {
-        UtilError::Generic(e)
+impl From<String> for SharedLibError {
+    fn from(e: String) -> SharedLibError {
+        SharedLibError::Generic(e)
     }
 }
 
-impl fmt::Display for UtilError {
+impl From<SecpError> for SharedLibError {
+    fn from(e: SecpError) -> SharedLibError {
+        SharedLibError::Generic(e.to_string())
+    }
+}
+
+impl fmt::Display for SharedLibError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            UtilError::Generic(ref e) => write!(f, "Error: {}", e),
-            UtilError::FormatError(ref e) => write!(f,"Format Error: {}",e),
+            SharedLibError::Generic(ref e) => write!(f, "Error: {}", e),
+            SharedLibError::FormatError(ref e) => write!(f,"Format Error: {}",e),
         }
     }
 }
 
-impl error::Error for UtilError {
+impl error::Error for SharedLibError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match *self {
             _ => None,
@@ -159,7 +166,7 @@ impl error::Error for UtilError {
     }
 }
 
-impl Responder<'static> for UtilError {
+impl Responder<'static> for SharedLibError {
     fn respond_to(self, _: &Request) -> ::std::result::Result<Response<'static>, Status> {
         Response::build()
             .header(ContentType::JSON)

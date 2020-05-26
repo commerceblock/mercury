@@ -120,7 +120,7 @@ mod tests {
         let deposit = run_deposit(&mut wallet);
 
         let state_chain = state_entity::api::get_statechain(&mut wallet, &String::from(deposit.1.clone())).unwrap();
-        assert_eq!(state_chain.chain, vec!(deposit.5.to_string()));
+        assert_eq!(state_chain.chain.last().unwrap().proof_key, deposit.5.to_string());
     }
 
     #[test]
@@ -188,7 +188,7 @@ mod tests {
         // check state chain is updated
         let state_chain = state_entity::api::get_statechain(&mut wallet_sender, &deposit_resp.1).unwrap();
         assert_eq!(state_chain.chain.len(),2);
-        assert_eq!(state_chain.chain.last().unwrap().to_string(), receiver_addr.proof_key.to_string());
+        assert_eq!(state_chain.chain.last().unwrap().proof_key.to_string(), receiver_addr.proof_key.to_string());
 
         // Get SMT inclusion proof and verify
         let root = state_entity::api::get_smt_root(&mut wallet_receiver).unwrap();

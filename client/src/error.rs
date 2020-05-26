@@ -2,7 +2,7 @@
 //!
 //! Custom Error types for client
 
-use shared_lib::util::UtilError;
+use shared_lib::util::SharedLibError;
 
 use std::error;
 use std::fmt;
@@ -24,8 +24,8 @@ pub enum CError {
     SchnorrError(String),
     /// Inherit all errors from bip32
     Bip32(String),
-    /// Inherit errors from Util
-    Util(String),
+    /// Inherit errors from SharedLibError
+    SharedLib(String),
     /// Inherit error from reqwest
     Reqwest(String),
     /// Inherit error from parseInt
@@ -49,9 +49,9 @@ impl From<Bip32Error> for CError {
     }
 }
 
-impl From<UtilError> for CError {
-    fn from(e: UtilError) -> CError {
-        CError::Util(e.to_string())
+impl From<SharedLibError> for CError {
+    fn from(e: SharedLibError) -> CError {
+        CError::SharedLib(e.to_string())
     }
 }
 
@@ -92,7 +92,7 @@ impl fmt::Display for CError {
             CError::StateEntityError(ref e) => write!(f, "State Entity Error: {}", e),
             CError::SchnorrError(ref e) => write!(f, "Schnorr Error: {}", e),
             CError::Bip32(ref e) => write!(f, "Bip32 Error: {}", e),
-            CError::Util(ref e) => write!(f,"Util Error: {}",e),
+            CError::SharedLib(ref e) => write!(f,"Util Error: {}",e),
             CError::Reqwest(ref e) => write!(f, "Reqwest Error: {}", e),
             CError::ParseInt(ref e) => write!(f, "ParseInt Error: {}", e),
         }

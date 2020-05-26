@@ -5,22 +5,26 @@
 use curv::{FE, GE};
 use bitcoin::Transaction;
 use crate::Root;
+use crate::state_chain::{State, StateChainSig};
 
+
+// API structs
 
 /// /api/statechain return struct
 #[derive(Serialize, Deserialize, Debug)]
-pub struct StateChainData {
+pub struct StateChainDataAPI {
     pub funding_txid: String,
-    pub chain: Vec<String>
+    pub chain: Vec<State>
 }
-
 /// /api/statechain post struct
 #[derive(Serialize, Deserialize, Debug)]
-pub struct SmtProofMsg {
+pub struct SmtProofMsgAPI {
     pub root: Root,
     pub funding_txid: String
 }
 
+
+// deposit algorithm structs
 
 /// Struct contains data necessary to caluculate tx input's sighash. This is required
 /// whenever Client and Server co-sign a transaction.
@@ -41,11 +45,14 @@ pub struct DepositMsg1 {
     pub auth: String,
 }
 
+
+// trasnfer algorithm structs
+
 /// Sender -> SE
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMsg1 {
     pub shared_key_id: String,
-    pub new_state_chain: Vec<String>,
+    pub state_chain_sig: StateChainSig,
 }
 /// SE -> Sender
 #[derive(Serialize, Deserialize, Debug)]
@@ -58,7 +65,7 @@ pub struct TransferMsg3 {
     pub shared_key_id: String,
     pub t1: FE, // t1 = o1x1
     pub new_backup_tx: Transaction,
-    pub state_chain: Vec<String>,
+    pub state_chain_sig: StateChainSig,
     pub state_chain_id: String,
 }
 
@@ -67,7 +74,7 @@ pub struct TransferMsg3 {
 pub struct TransferMsg4 {
     pub shared_key_id: String,
     pub t2: FE, // t2 = t1*o2_inv = o1*x1*o2_inv
-    pub state_chain: Vec<String>,
+    pub state_chain_sig: StateChainSig,
     pub o2_pub: GE
 }
 
