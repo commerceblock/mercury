@@ -79,19 +79,16 @@ impl db::MPCStruct for StateEntityStruct {
     }
 }
 
-/// check if user has passed authentication
-pub fn check_user_auth(
-    state: &State<Config>,
-    claim: &Claims,
-    id: &String
-) -> Result<UserSession> {
-    // check authorisation id is in DB (and check password?)
-    db::get(
-        &state.db,
-        &claim.sub,
-        &id,
-        &StateEntityStruct::UserSession).unwrap()
-    .ok_or(SEError::AuthError)
+// Api call for state entity public info
+#[post("/api/fee", format = "json")]
+pub fn get_state_entity_fees(
+    state: State<Config>,
+) -> Result<Json<StateEntityFeeInfoAPI>> {
+    Ok(Json(StateEntityFeeInfoAPI {
+        address: state.fee_address.clone(),
+        deposit: state.fee_deposit,
+        withdraw: state.fee_withdraw,
+    }))
 }
 
 /// Api call for statechain info: return funding txid and state chain list of proof keys and signatures
@@ -132,6 +129,22 @@ pub fn get_smt_root(
     state: State<Config>,
 ) -> Result<Json<Root>> {
     Ok(Json(get_current_root::<Root>(&state.db)?))
+}
+
+
+/// check if user has passed authentication
+pub fn check_user_auth(
+    state: &State<Config>,
+    claim: &Claims,
+    id: &String
+) -> Result<UserSession> {
+    // check authorisation id is in DB (and check password?)
+    db::get(
+        &state.db,
+        &claim.sub,
+        &id,
+        &StateEntityStruct::UserSession).unwrap()
+    .ok_or(SEError::AuthError)
 }
 
 /// prepare to sign backup transaction input

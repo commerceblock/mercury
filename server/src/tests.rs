@@ -4,7 +4,7 @@ mod tests {
     use super::super::routes::ecdsa;
     use super::super::server;
     use shared_lib::{Root, util::rebuild_backup_tx};
-    use shared_lib::structs::{DepositMsg1,PrepareSignTxMessage, SmtProofMsgAPI}
+    use shared_lib::structs::{DepositMsg1,PrepareSignTxMessage, SmtProofMsgAPI, StateEntityFeeInfoAPI}
     ;
     use rocket::http::{ContentType,Status};
     use rocket::local::Client;
@@ -439,6 +439,22 @@ mod tests {
 
         let res = response.body_string().unwrap();
         assert_eq!(res, format!("DB Error: No data for such identifier. (value: Root id: {})",smt_proof_msg.root.id));
+    }
+
+    #[test]
+    fn test_get_state_entity_fees() {
+        let client = Client::new(server::get_server()).expect("valid rocket instance");
+
+        let mut response = client
+            .post("/api/fee")
+            .header(ContentType::JSON)
+            .dispatch();
+
+        let resp: StateEntityFeeInfoAPI = serde_json::from_str(&response.body_string().unwrap()).unwrap();
+        assert_eq!(resp.address, "bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x".to_string());
+        assert_eq!(resp.deposit, 100);
+        assert_eq!(resp.withdraw, 100);
+
     }
 
 }

@@ -10,6 +10,14 @@ use crate::state_chain::{State, StateChainSig};
 
 // API structs
 
+/// /api/info return struct
+#[derive(Serialize, Deserialize, Debug)]
+pub struct StateEntityFeeInfoAPI {
+    pub address: String,  // Receive address for fee payments
+    pub deposit: u64, // satoshis
+    pub withdraw: u64 // satoshis
+}
+
 /// /api/statechain return struct
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StateChainDataAPI {

@@ -1,40 +1,41 @@
 use super::routes::*;
 use super::storage::db;
-use super::Config;
+use super::{Config, AuthConfig};
 
 use config;
 use rocket;
 use rocket::{Request, Rocket};
 use rocksdb;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
-#[derive(Deserialize)]
-pub struct AuthConfig {
-    pub issuer: String,
-    pub audience: String,
-    pub region: String,
-    pub pool_id: String,
+
+impl Config {
+    pub fn load(settings: HashMap<String, String>) -> Config {
+        let db = get_db(settings.clone());
+        let fee_address = settings.get("fee_address").unwrap().to_string();
+        if let Err(e) = bitcoin::Address::from_str(&fee_address) {
+            panic!("Invalid fee address: {}",e)
+        };
+        Config {
+            db,
+            fee_address,
+            fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
+            fee_withdraw: settings.get("fee_withdraw").unwrap().parse::<u64>().unwrap()
+        }
+    }
 }
 
 impl AuthConfig {
     pub fn load(settings: HashMap<String, String>) -> AuthConfig {
-        let issuer = settings.get("issuer").unwrap_or(&"".to_string()).to_owned();
-        let audience = settings
-            .get("audience")
-            .unwrap_or(&"".to_string())
-            .to_owned();
-        let region = settings.get("region").unwrap_or(&"".to_string()).to_owned();
-        let pool_id = settings
-            .get("pool_id")
-            .unwrap_or(&"".to_string())
-            .to_owned();
-
         AuthConfig {
-            issuer,
-            audience,
-            region,
-            pool_id,
+            issuer: settings.get("issuer").unwrap_or(&"".to_string()).to_owned(),
+            audience: settings.get("audience")
+                .unwrap_or(&"".to_string()).to_owned(),
+            region: settings.get("region")
+                .unwrap_or(&"".to_string()).to_owned(),
+            pool_id: settings.get("pool_id")
+                .unwrap_or(&"".to_string()).to_owned(),
         }
     }
 }
@@ -56,10 +57,8 @@ fn not_found(req: &Request) -> String {
 
 pub fn get_server() -> Rocket {
     let settings = get_settings_as_map();
-    let db_config = Config {
-        db: get_db(settings.clone())
-    };
 
+    let config = Config::load(settings.clone());
     let auth_config = AuthConfig::load(settings.clone());
 
     rocket::ignite()
@@ -84,13 +83,14 @@ pub fn get_server() -> Rocket {
                 state_entity::get_statechain,
                 state_entity::get_smt_root,
                 state_entity::get_smt_proof,
+                state_entity::get_state_entity_fees,
                 state_entity::deposit_init,
                 state_entity::prepare_sign_backup,
                 state_entity::transfer_sender,
                 state_entity::transfer_receiver
             ],
         )
-        .manage(db_config)
+        .manage(config)
         .manage(auth_config)
 }
 
@@ -110,11 +110,6 @@ fn get_settings_as_map() -> HashMap<String, String> {
 }
 
 fn get_db(_settings: HashMap<String, String>) -> rocksdb::DB {
-    // let db_type_string = settings
-    //     .get("db")
-    //     .unwrap_or(&"local".to_string())
-    //     .to_uppercase();
-    // let db_type = db_type_string.as_str();
     // let env = settings
     //     .get("env")
     //     .unwrap_or(&"dev".to_string())
