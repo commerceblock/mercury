@@ -61,7 +61,7 @@ mod tests {
 
     fn run_deposit(wallet: &mut Wallet) -> (String, String, Transaction, Transaction, PrepareSignTxMessage, PublicKey)  {
         // make TxIns for funding transaction
-        let amount = Amount::ONE_BTC;
+        let amount = Amount::ONE_BTC.as_sat();
         let inputs =  vec![
         TxIn {
             previous_output: OutPoint { txid: sha256d::Hash::default(), vout: 0 },
@@ -74,9 +74,9 @@ mod tests {
         let funding_spend_addrs = vec!(wallet.keys.get_new_address().unwrap());
         let resp = state_entity::deposit::deposit(
             wallet,
-            inputs,
-            funding_spend_addrs,
-            amount
+            &inputs,
+            &funding_spend_addrs,
+            &amount
         ).unwrap();
 
         return resp
@@ -128,7 +128,7 @@ mod tests {
         spawn_server();
         let mut wallet_sender = gen_wallet();
         // deposit
-        let amount = Amount::ONE_BTC;
+        let amount = Amount::ONE_BTC.as_sat();
         let inputs =  vec![
             TxIn {
                 previous_output: OutPoint { txid: sha256d::Hash::default(), vout: 0 },
@@ -139,7 +139,7 @@ mod tests {
         ];
         // This addr should correspond to UTXOs being spent
         let funding_spend_addrs = vec!(wallet_sender.keys.get_new_address().unwrap());
-        let deposit_resp = state_entity::deposit::deposit(&mut wallet_sender, inputs, funding_spend_addrs, amount).unwrap();
+        let deposit_resp = state_entity::deposit::deposit(&mut wallet_sender, &inputs, &funding_spend_addrs, &amount).unwrap();
         println!("Shared wallet id: {:?} ",deposit_resp.0);
         println!("state chain id: {:?} ",deposit_resp.1);
         println!("Funding transaction: {:?} ",deposit_resp.2);

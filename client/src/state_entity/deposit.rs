@@ -17,9 +17,9 @@ use crate::wallet::wallet::{to_bitcoin_public_key,Wallet};
 use crate::wallet::key_paths::funding_txid_to_int;
 use crate::utilities::requests;
 use crate::state_entity::util::{cosign_tx_input,verify_statechain_smt};
-use super::api::{get_smt_proof, get_smt_root};
+use super::api::{get_smt_proof, get_smt_root, get_statechain_fee_info};
 
-use bitcoin::{ Address, Amount, Transaction, TxIn, PublicKey };
+use bitcoin::{ Address, Transaction, TxIn, PublicKey };
 use curv::elliptic::curves::traits::ECPoint;
 
 
@@ -35,7 +35,7 @@ pub fn session_init(wallet: &mut Wallet) -> Result<String> {
 
 /// Deposit coins into state entity. Requires list of inputs and spending addresses of those inputs
 /// for funding transaction.
-pub fn deposit(wallet: &mut Wallet, inputs: Vec<TxIn>, funding_spend_addrs: Vec<Address>, amount: Amount)
+pub fn deposit(wallet: &mut Wallet, inputs: &Vec<TxIn>, funding_spend_addrs: &Vec<Address>, amount: &u64)
     -> Result<(String, String, Transaction, Transaction, PrepareSignTxMessage, PublicKey)>
 {
     // init. Receive shared wallet ID
@@ -51,9 +51,11 @@ pub fn deposit(wallet: &mut Wallet, inputs: Vec<TxIn>, funding_spend_addrs: Vec<
         &to_bitcoin_public_key(pk),
         wallet.get_bitcoin_network()
     );
-    let tx_0 = build_tx_0(&inputs, &p_addr, &amount).unwrap();
+    // get state entity fee info
+    let se_fee_info = get_statechain_fee_info(wallet)?;
+    let tx_0 = build_tx_0(inputs, &p_addr.to_string(), amount, &se_fee_info.deposit, &se_fee_info.address).unwrap();
     // sign
-    let tx_0_signed = wallet.sign_tx(&tx_0, vec!(0), funding_spend_addrs, vec!(amount));
+    let tx_0_signed = wallet.sign_tx(&tx_0, &vec!(0), funding_spend_addrs, &vec!(amount.clone()));
 
     // generate proof key
     let proof_key = wallet.se_proof_keys.get_new_key_encoded_id(
@@ -66,9 +68,9 @@ pub fn deposit(wallet: &mut Wallet, inputs: Vec<TxIn>, funding_spend_addrs: Vec<
         input_txid: tx_0_signed.txid().to_string(),
         input_vout: 0,
         address: backup_receive_addr.to_string(),
-        amount: amount.as_sat(),
-        proof_key: Some(proof_key.to_string()),
-        transfer: false
+        amount: amount.to_owned(),
+        transfer: false,
+        proof_key: Some(proof_key.to_string())
     };
 
     let (state_chain_id, tx_b_signed) = cosign_tx_input(wallet, &shared_key_id, &tx_b_prepare_sign_msg)?;

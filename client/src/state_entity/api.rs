@@ -3,13 +3,18 @@
 //! API calls availble for Client to State Entity
 
 use super::super::Result;
-use shared_lib::structs::{StateChainDataAPI, SmtProofMsgAPI};
+use shared_lib::structs::{StateChainDataAPI, SmtProofMsgAPI, StateEntityFeeInfoAPI};
 use shared_lib::Root;
 
 use crate::wallet::wallet::Wallet;
 use super::super::utilities::requests;
 
 use monotree::Proof;
+
+/// Get state chain fee
+pub fn get_statechain_fee_info(wallet: &mut Wallet) -> Result<StateEntityFeeInfoAPI> {
+    requests::post(&wallet.client_shim,&format!("api/fee/"))
+}
 
 /// Get state chain by ID
 pub fn get_statechain(wallet: &mut Wallet, state_chain_id: &String) -> Result<StateChainDataAPI> {
