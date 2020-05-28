@@ -10,7 +10,7 @@ use serde_json;
 use std::collections::HashMap;
 use std::process::Command;
 
-use super::super::server::AuthConfig;
+use super::super::AuthConfig;
 use super::passthrough;
 
 const ALGORITHM: Algorithm = Algorithm::RS256;

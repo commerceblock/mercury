@@ -5,16 +5,17 @@
 use super::super::Result;
 extern crate shared_lib;
 
-use shared_lib::util::rebuild_backup_tx;
+use shared_lib::util::{rebuild_backup_tx,rebuild_withdraw_tx};
+use shared_lib::Root;
 use shared_lib::structs::*;
+use shared_lib::state_chain::*;
 
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::routes::ecdsa;
-use crate::storage::db::get_root;
+use crate::storage::db::{get_root, get_current_root};
 use super::super::auth::jwt::Claims;
 use super::super::storage::db;
 use super::super::Config;
-use super::super::state_chain::{update_statechain_smt,gen_proof_smt};
 
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 
@@ -23,23 +24,14 @@ use bitcoin::hashes::sha256d;
 
 use curv::elliptic::curves::traits::{ ECScalar,ECPoint };
 use curv::{BigInt,FE,GE};
-use monotree::{Hash, Proof};
+use monotree::Proof;
 use rocket_contrib::json::Json;
 use rocket::State;
 use uuid::Uuid;
+use db::{DB_SC_LOC, update_root};
 
-
-/// contains state chain id and data
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct StateChain {
-    pub id: String,
-    /// chain of transitory key history (owners)
-    pub chain: Vec<String>, // Chain of owners. String for now as unsure on data type at the moment.
-    /// current back-up transaction
-    pub backup_tx: Option<Transaction>
-}
-
-/// User ID
+/// UserSession represents a User in a particular state chain session. This can be used for authentication and DoS protections.
+/// The same client in 2 state chain sessions would have 2 unrelated UserSessions.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct UserSession {
     /// User's identification
@@ -48,45 +40,102 @@ pub struct UserSession {
     // pub pass: String
     /// User's authorisation
     pub auth: String,
-    /// If transfer() then SE must know s2 value to create shared wallet
-    pub s2: Option<FE>
-}
-/// User Session Data
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct SessionData {
     /// users proof key
     pub proof_key: String,
-    /// back up tx's sig hash
-    pub sig_hash: sha256d::Hash,
-    /// back up tx
-    pub backup_tx: Transaction,
+    /// back up tx for this user session
+    pub backup_tx: Option<Transaction>,
+    /// withdraw tx for end of user session and end of state chain
+    pub withdraw_tx: Option<Transaction>,
     /// ID of state chain that data is for
-    pub state_chain_id: String
+    pub state_chain_id: Option<String>,
+    /// If UserSession created for transfer() then SE must know s2 value to create shared wallet
+    pub s2: Option<FE>,
+    /// sig hash of tx to be signed. This value is checked in co-signing to ensure that message being
+    /// signed is the sig hash of a tx that SE has verified.
+    /// Used when signing both backup and withdraw tx.
+    pub sig_hash: Option<sha256d::Hash>
 }
 
 /// TransferData provides new Owner's data for UserSession and SessionData structs
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct TransferData {
     pub state_chain_id: String,
-    pub new_state_chain: Vec<String>,
+    pub state_chain_sig: StateChainSig,
     pub x1: FE
 }
 
 #[derive(Debug)]
-pub enum StateChainStruct {
+pub enum StateEntityStruct {
     UserSession,
     SessionData,
 
     StateChain,
 
-    TransferData
+    TransferData,
+    WithdrawData
 }
 
-impl db::MPCStruct for StateChainStruct {
+impl db::MPCStruct for StateEntityStruct {
     fn to_string(&self) -> String {
         format!("StateChain{:?}", self)
     }
 }
+
+// Api call for state entity public info
+#[post("/api/fee", format = "json")]
+pub fn get_state_entity_fees(
+    state: State<Config>,
+) -> Result<Json<StateEntityFeeInfoAPI>> {
+    Ok(Json(StateEntityFeeInfoAPI {
+        address: state.fee_address.clone(),
+        deposit: state.fee_deposit,
+        withdraw: state.fee_withdraw,
+    }))
+}
+
+/// Api call for statechain info: return funding txid and state chain list of proof keys and signatures
+#[post("/api/statechain/<state_chain_id>", format = "json")]
+pub fn get_statechain(
+    state: State<Config>,
+    claim: Claims,
+    state_chain_id: String,
+) -> Result<Json<StateChainDataAPI>> {
+    let state_chain: StateChain =
+        db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
+            .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
+    let funding_tx_outpoint = state_chain.backup_tx.unwrap().input.get(0).unwrap().previous_output;
+    Ok(Json({
+        StateChainDataAPI {
+            amount: state_chain.amount,
+            funding_txid: funding_tx_outpoint.txid.to_string(),
+            funding_tx_vout: funding_tx_outpoint.vout,
+            chain: state_chain.chain
+        }
+    }))
+}
+
+/// Api call for generating sparse merkle tree inclusion proof for some key in a tree with some root
+#[post("/api/proof", format = "json", data = "<smt_proof_msg>")]
+pub fn get_smt_proof(
+    state: State<Config>,
+    smt_proof_msg: Json<SmtProofMsgAPI>,
+) -> Result<Json<Option<Proof>>> {
+    // ensure root exists
+    if get_root::<[u8;32]>(&state.db, &smt_proof_msg.root.id)?.is_none() {
+        return Err(SEError::DBError(NoDataForID, format!("Root id: {}",smt_proof_msg.root.id.to_string())));
+    }
+
+    Ok(Json(gen_proof_smt(DB_SC_LOC, &smt_proof_msg.root.value, &smt_proof_msg.funding_txid)?))
+}
+
+/// Get root as API for now. Will be via Mainstay in the future.
+#[post("/api/root", format = "json")]
+pub fn get_smt_root(
+    state: State<Config>,
+) -> Result<Json<Root>> {
+    Ok(Json(get_current_root::<Root>(&state.db)?))
+}
+
 
 /// check if user has passed authentication
 pub fn check_user_auth(
@@ -99,117 +148,126 @@ pub fn check_user_auth(
         &state.db,
         &claim.sub,
         &id,
-        &StateChainStruct::UserSession).unwrap()
+        &StateEntityStruct::UserSession).unwrap()
     .ok_or(SEError::AuthError)
 }
 
 
-#[post("/api/statechain/<state_chain_id>", format = "json")]
-pub fn get_statechain(
-    state: State<Config>,
-    claim: Claims,
-    state_chain_id: String,
-) -> Result<Json<StateChainData>> {
-    let session_data: StateChain =
-        db::get(&state.db, &claim.sub, &state_chain_id, &StateChainStruct::StateChain)?
-            .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
-    Ok(Json({
-        StateChainData {
-            funding_txid: session_data.backup_tx.unwrap().input.get(0).unwrap().previous_output.txid.to_string(),
-            chain: session_data.chain
-        }
-    }))
-}
 
-#[post("/api/proof", format = "json", data = "<smt_proof_msg>")]
-pub fn get_smt_proof(
-    smt_proof_msg: Json<SmtProofMsg>,
-) -> Result<Json<Option<Proof>>> {
-    let proof = gen_proof_smt(&smt_proof_msg.root, &smt_proof_msg.funding_txid)?;
-    Ok(Json(proof))
-}
-
-/// Get root as API for now. Will be via Mainstay in the future.
-#[post("/api/root", format = "json")]
-pub fn get_smt_root(
-    state: State<Config>,
-) -> Result<Json<Option<Hash>>> {
-    Ok(Json(get_root(&state.db).unwrap()))
-}
-
-/// prepare to sign backup transaction input
+/// prepare to co-sign a transaction input
 ///     - calculate and store tx sighash for validation before performing ecdsa::sign
 #[post("/prepare-sign/<id>", format = "json", data = "<prepare_sign_msg>")]
-pub fn prepare_sign_backup(
+pub fn prepare_sign_tx(
     state: State<Config>,
     claim: Claims,
     id: String,
-    prepare_sign_msg: Json<PrepareSignTxMessage>,
+    prepare_sign_msg: Json<PrepareSignMessage>,
 ) -> Result<Json<String>> {
     // auth user
     check_user_auth(&state, &claim, &id)?;
 
-    // rebuild tx_b sig hash to verify co-sign will be signing the correct data
-    let (tx_b, sig_hash) = rebuild_backup_tx(&prepare_sign_msg)?;
+    let prepare_sign_msg: PrepareSignMessage = prepare_sign_msg.into_inner();
 
+    // Are we signing a backup tx or a withdraw tx?
+    match prepare_sign_msg {
+        // back up case
+        PrepareSignMessage::BackUpTx(prepare_sign_msg) => {
+            // rebuild tx_b sig hash to verify co-sign will be signing the correct data
+            let (tx_b, sig_hash) = rebuild_backup_tx(&prepare_sign_msg)?;
 
-    // if deposit()
-    if prepare_sign_msg.transfer == false {
-        if prepare_sign_msg.proof_key.is_none() {
-            return Err(SEError::Generic(String::from("No proof key provided")));
+            // Is this for deposit() or transfer()?
+            match prepare_sign_msg.protocol {
+                Protocol::Deposit => {
+                    if prepare_sign_msg.proof_key.is_none() {
+                        return Err(SEError::Generic(String::from("No proof key provided")));
+                    }
+                    let proof_key = prepare_sign_msg.proof_key.as_ref().unwrap().clone();
+
+                    // create StateChain and store
+                    let state_chain = StateChain::new(proof_key.clone(), tx_b.output.last().unwrap().value);
+                    db::insert(
+                        &state.db,
+                        &claim.sub,
+                        &state_chain.id,
+                        &StateEntityStruct::StateChain,
+                        &state_chain
+                    )?;
+
+                    // update UserSession data with sig hash, back up tx and state chain id
+                    let mut user_session: UserSession =
+                        db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
+                            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+
+                    user_session.sig_hash = Some(sig_hash.clone());
+                    user_session.backup_tx = Some(tx_b.clone());
+                    user_session.state_chain_id = Some(state_chain.id.to_owned());
+
+                    db::insert(
+                        &state.db,
+                        &claim.sub,
+                        &id,
+                        &StateEntityStruct::UserSession,
+                        &user_session
+                    )?;
+
+                    // update sparse merkle tree with new StateChain entry
+                    let root = get_current_root::<Root>(&state.db)?;
+                    let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &prepare_sign_msg.input_txid, &proof_key)?;
+                    update_root(&state.db, new_root.unwrap())?;
+
+                    debug!("Deposit: Added to statechain and sparse merkle tree. proof.");
+
+                    return Ok(Json(state_chain.id));
+
+                }
+                Protocol::Transfer => {
+                    // Get and update UserSession for this user
+                    let mut user_session: UserSession =
+                        db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
+                            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+
+                    user_session.sig_hash = Some(sig_hash);
+
+                    db::insert(
+                        &state.db,
+                        &claim.sub,
+                        &id,
+                        &StateEntityStruct::UserSession,
+                        &user_session
+                    )?;
+
+                    return Ok(Json(String::from("")));
+                }
+                Protocol::Withdraw => {
+                    return Err(SEError::Generic(String::from("Cannot sign backup tx template for Withdraw protocol.")));
+                }
+            }
         }
-        let proof_key = prepare_sign_msg.proof_key.as_ref().unwrap().clone();
 
-        // store SessionData for user: sig_hash with back up tx and state chain id
-        let state_chain_id = Uuid::new_v4().to_string();
-        db::insert(
-            &state.db,
-            &claim.sub,
-            &id,
-            &StateChainStruct::SessionData,
-            &SessionData {
-                proof_key: proof_key.clone(),
-                sig_hash: sig_hash.clone(),
-                backup_tx: tx_b.clone(),
-                state_chain_id: state_chain_id.clone()
-            }
-        )?;
+        // Withdraw tx case
+        PrepareSignMessage::WithdrawTx(prepare_sign_msg) => {
+            // rebuild tx_b sig hash to verify co-sign will be signing the correct data
+            let (tx_w, sig_hash) = rebuild_withdraw_tx(&prepare_sign_msg)?;
 
-        // create StateChain DB object
-        db::insert(
-            &state.db,
-            &claim.sub,
-            &state_chain_id,
-            &StateChainStruct::StateChain,
-            &StateChain {
-                id: state_chain_id.clone(),
-                chain: vec!(proof_key.clone()),
-                backup_tx: None
-            }
-        )?;
+            // Get and update UserSession for this user
+            let mut user_session: UserSession =
+                db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
+                    .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
-        // update sparse merkle tree with new StateChain entry
-        let sc_smt_proof = update_statechain_smt(&state.db, &prepare_sign_msg.input_txid, &proof_key);
-        debug!("deposit: added to statechain and sparse merkle tree. proof: {:?}", sc_smt_proof);
+            user_session.sig_hash = Some(sig_hash);
+            user_session.withdraw_tx = Some(tx_w);
 
-        return Ok(Json(state_chain_id));
-    };
+            db::insert(
+                &state.db,
+                &claim.sub,
+                &id,
+                &StateEntityStruct::UserSession,
+                &user_session
+            )?;
 
-    // if transfer() get and update SessionData for this user
-    let mut session_data: SessionData =
-        db::get(&state.db, &claim.sub, &id, &StateChainStruct::SessionData)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-
-    session_data.sig_hash = sig_hash;
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &StateChainStruct::SessionData,
-        &session_data
-    )?;
-
-    Ok(Json(String::from("")))
+            return Ok(Json(String::from("")));
+        }
+    }
 }
 
 
@@ -235,11 +293,16 @@ pub fn deposit_init(
         &state.db,
         &claim.sub,
         &user_id,
-        &StateChainStruct::UserSession,
+        &StateEntityStruct::UserSession,
         &UserSession {
             id: user_id.clone(),
             auth: deposit_msg1.auth.clone(),
-            s2: None
+            proof_key: deposit_msg1.proof_key.to_owned(),
+            state_chain_id: None,
+            backup_tx: None,
+            withdraw_tx: None,
+            sig_hash: None,
+            s2: None,
         }
     )?;
     Ok(Json(user_id))
@@ -262,9 +325,12 @@ pub fn transfer_sender(
     // Err(SEError::AuthError)
 
     // get state_chain id
-    let session_data: SessionData =
-        db::get(&state.db, &claim.sub, &transfer_msg1.shared_key_id, &StateChainStruct::SessionData)?
+    let user_session: UserSession =
+        db::get(&state.db, &claim.sub, &transfer_msg1.shared_key_id, &StateEntityStruct::UserSession)?
             .ok_or(SEError::DBError(NoDataForID, transfer_msg1.shared_key_id.clone()))?;
+    if user_session.state_chain_id.is_none() {
+        return Err(SEError::Generic(String::from("Transfer Error: User does not own a state chain.")));
+    }
 
     // TODO: verify funding tx confirmation
 
@@ -276,10 +342,10 @@ pub fn transfer_sender(
         &state.db,
         &claim.sub,
         &transfer_msg1.shared_key_id,
-        &StateChainStruct::TransferData,
+        &StateEntityStruct::TransferData,
         &TransferData {
-            state_chain_id: session_data.state_chain_id.clone(),
-            new_state_chain: transfer_msg1.new_state_chain.clone(),
+            state_chain_id: user_session.state_chain_id.unwrap(),
+            state_chain_sig: transfer_msg1.state_chain_sig.to_owned(),
             x1
         }
     )?;
@@ -301,14 +367,14 @@ pub fn transfer_receiver(
     let id = transfer_msg4.shared_key_id.clone();
     // Get TransferData for shared_key_id
     let transfer_data: TransferData =
-        db::get(&state.db, &claim.sub, &id, &StateChainStruct::TransferData)?
+        db::get(&state.db, &claim.sub, &id, &StateEntityStruct::TransferData)?
             .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-    let new_state_chain = transfer_data.new_state_chain;
+    let state_chain_sig = transfer_data.state_chain_sig;
 
-    // ensure updated state chains are the same
-    if new_state_chain != transfer_msg4.state_chain {
-        debug!("Transfer protocol failed. Receiver state chain and State Entity state chain do not match.");
-        return Err(SEError::Generic(format!("State chain provided does not match state chain at id {}",transfer_data.state_chain_id)));
+    // ensure state_chain_sigs are the same
+    if state_chain_sig != transfer_msg4.state_chain_sig {
+        debug!("Transfer protocol failed. Receiver state chain siganture and State Entity state chain siganture do not match.");
+        return Err(SEError::Generic(format!("State chain siganture provided does not match state chain at id {}",transfer_data.state_chain_id)));
     }
 
     // Get Party1 (State Entity) private share
@@ -353,36 +419,46 @@ pub fn transfer_receiver(
         &state.db,
         &claim.sub,
         &new_shared_key_id,
-        &StateChainStruct::UserSession,
+        &StateEntityStruct::UserSession,
         &UserSession {
             id: new_shared_key_id.clone(),
             auth: String::from("auth"),
-            s2: Some(s2)
+            proof_key: state_chain_sig.data.to_owned(),
+            backup_tx: None,
+            withdraw_tx: None,
+            sig_hash: None,
+            state_chain_id: Some(transfer_data.state_chain_id.to_owned()),
+            s2: Some(s2),
         }
     )?;
 
     // update state chain
     let mut state_chain: StateChain =
-        db::get(&state.db, &claim.sub, &transfer_data.state_chain_id, &StateChainStruct::StateChain)?
+        db::get(&state.db, &claim.sub, &transfer_data.state_chain_id, &StateEntityStruct::StateChain)?
             .ok_or(SEError::DBError(NoDataForID, transfer_data.state_chain_id.clone()))?;
 
-    assert_eq!(state_chain.chain.len(), new_state_chain.len()-1);
     assert!(state_chain.backup_tx.is_some());
-    state_chain.chain = new_state_chain;
+    state_chain.add(state_chain_sig)?;
 
     db::insert(
         &state.db,
         &claim.sub,
         &transfer_data.state_chain_id,
-        &StateChainStruct::StateChain,
+        &StateEntityStruct::StateChain,
         &state_chain
     )?;
 
     // update sparse merkle tree with new StateChain entry
     let funding_txid = state_chain.backup_tx.unwrap().input.get(0).unwrap().previous_output.txid.to_string();
-    let proof_key = state_chain.chain.last().unwrap();
-    let sc_smt_proof = update_statechain_smt(&state.db, &funding_txid, &proof_key);
-    debug!("transfer: added to statechain. proof: {:?}", sc_smt_proof);
+    let proof_key = state_chain.chain.last()
+        .ok_or(SEError::Generic(String::from("StateChain empty")))?
+        .data.clone();
+
+    let root = get_current_root::<Root>(&state.db)?;
+    let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &funding_txid, &proof_key)?;
+    update_root(&state.db, new_root.unwrap())?;
+
+    debug!("transfer: added to statechain. proof.");
 
     Ok(Json(
         TransferMsg5 {
@@ -390,4 +466,52 @@ pub fn transfer_receiver(
             s2_pub,
         }
     ))
+}
+
+
+#[post("/withdraw", format = "json", data = "<withdraw_msg1>")]
+pub fn withdraw(
+    state: State<Config>,
+    claim: Claims,
+    withdraw_msg1: Json<WithdrawMsg1>,
+) -> Result<Json<Transaction>> {
+    // auth user
+    check_user_auth(&state, &claim, &withdraw_msg1.shared_key_id)?;
+
+    // get session data and confirm co-signing of withdraw tx has been performed
+    let user_session: UserSession =
+        db::get(&state.db, &claim.sub, &withdraw_msg1.shared_key_id, &StateEntityStruct::UserSession)?
+            .ok_or(SEError::DBError(NoDataForID, withdraw_msg1.shared_key_id.clone()))?;
+    if user_session.withdraw_tx.is_none() {
+        return Err(SEError::Generic(String::from("Withdraw Error: No withdraw tx has been signed.")));
+    }
+
+    // Add new State to State Chain - End the chain.
+    let state_chain_id = user_session.state_chain_id.unwrap();
+    let mut state_chain: StateChain =
+        db::get(&state.db, &claim.sub, &state_chain_id.to_owned(), &StateEntityStruct::StateChain)?
+            .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_owned()))?;
+
+    state_chain.add(withdraw_msg1.state_chain_sig.to_owned())?;
+
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &state_chain_id,
+        &StateEntityStruct::StateChain,
+        &state_chain
+    )?;
+
+
+    // update sparse merkle tree
+    let withdraw_tx = user_session.withdraw_tx.unwrap();
+    let funding_txid = withdraw_tx.input.get(0).unwrap().previous_output.txid.to_string();
+
+    let root = get_current_root::<Root>(&state.db)?;
+    let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &funding_txid, &withdraw_msg1.address)?;
+    update_root(&state.db, new_root.unwrap())?;
+
+    debug!("withdraw: Ended statechain and updated sparse merkle tree.");
+
+    Ok(Json(withdraw_tx))
 }

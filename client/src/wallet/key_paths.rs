@@ -6,7 +6,7 @@
 
 use super::super::Result;
 use crate::wallet::wallet::to_bitcoin_public_key;
-use crate::error::{ CError };
+use crate::error::CError;
 use bitcoin::{PrivateKey,PublicKey};
 use std::collections::HashMap;
 use bitcoin::secp256k1::{ All, Secp256k1 };

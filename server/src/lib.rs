@@ -26,8 +26,6 @@ extern crate serde_json;
 extern crate log;
 
 #[cfg(test)]
-#[macro_use]
-extern crate time_test;
 extern crate floating_duration;
 
 extern crate crypto;
@@ -41,7 +39,6 @@ pub mod auth;
 pub mod routes;
 pub mod server;
 pub mod storage;
-pub mod state_chain;
 pub mod tests;
 pub mod error;
 
@@ -49,4 +46,15 @@ type Result<T> = std::result::Result<T, error::SEError>;
 
 pub struct Config {
     pub db: rocksdb::DB,
+    pub fee_address: String, // Receive address for fee payments
+    pub fee_deposit: u64, // satoshis
+    pub fee_withdraw: u64 // satoshis
+}
+
+#[derive(Deserialize)]
+pub struct AuthConfig {
+    pub issuer: String,
+    pub audience: String,
+    pub region: String,
+    pub pool_id: String,
 }

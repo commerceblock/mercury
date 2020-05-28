@@ -2,7 +2,7 @@
 //!
 //! Custom Error types for our crate
 
-use shared_lib::util::UtilError;
+use shared_lib::error::SharedLibError;
 
 use rocket::http::{ Status, ContentType };
 use rocket::Response;
@@ -12,6 +12,7 @@ use std::error;
 use std::fmt;
 use std::io::Cursor;
 use monotree::Errors as MonotreeErrors;
+use bitcoin::secp256k1::Error as SecpError;
 
 
 /// State Entity library specific errors
@@ -26,7 +27,7 @@ pub enum SEError {
     /// Storage error
     DBError(DBErrorType, String),
     /// Inherit errors from Util
-    Util(String),
+    SharedLibError(String),
     /// Inherit errors from Monotree
     SMTError(String)
 }
@@ -37,15 +38,21 @@ impl From<String> for SEError {
     }
 }
 
-impl From<UtilError> for SEError {
-    fn from(e: UtilError) -> SEError {
-        SEError::Util(e.to_string())
+impl From<SharedLibError> for SEError {
+    fn from(e: SharedLibError) -> SEError {
+        SEError::SharedLibError(e.to_string())
     }
 }
 
 impl From<MonotreeErrors> for SEError {
     fn from(e: MonotreeErrors) -> SEError {
         SEError::SMTError(e.to_string())
+    }
+}
+
+impl From<SecpError> for SEError {
+    fn from(e: SecpError) -> SEError {
+        SEError::SigningError(e.to_string())
     }
 }
 
@@ -72,7 +79,7 @@ impl fmt::Display for SEError {
             SEError::AuthError => write!(f,"Authentication Error: User authorisation failed"),
             SEError::DBError(ref e, ref value) => write!(f, "DB Error: {} (value: {})", e.as_str(), value),
             SEError::SigningError(ref e) => write!(f,"Signing Error: {}",e),
-            SEError::Util(ref e) => write!(f,"Util Error: {}",e),
+            SEError::SharedLibError(ref e) => write!(f,"SharedLibError Error: {}",e),
             SEError::SMTError(ref e) => write!(f,"SMT Error: {}",e),
         }
     }

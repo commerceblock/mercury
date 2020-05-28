@@ -2,49 +2,111 @@
 //!
 //! Struct definitions used in State entity protocols
 
-use curv::{FE, GE};
-use bitcoin::Transaction;
+use curv::{FE, GE, BigInt};
+use kms::ecdsa::two_party::party2;
+use crate::Root;
+use crate::state_chain::{State, StateChainSig};
 
+
+
+/// State Entity protocols
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Protocol {
+    Deposit,
+    Transfer,
+    Withdraw
+}
+
+
+// API structs
+
+/// /api/info return struct
+#[derive(Serialize, Deserialize, Debug)]
+pub struct StateEntityFeeInfoAPI {
+    pub address: String,  // Receive address for fee payments
+    pub deposit: u64, // satoshis
+    pub withdraw: u64 // satoshis
+}
 
 /// /api/statechain return struct
 #[derive(Serialize, Deserialize, Debug)]
-pub struct StateChainData {
+pub struct StateChainDataAPI {
     pub funding_txid: String,
-    pub chain: Vec<String>
+    pub funding_tx_vout: u32,
+    pub amount: u64,
+    pub chain: Vec<State>
 }
-
 /// /api/statechain post struct
 #[derive(Serialize, Deserialize, Debug)]
-pub struct SmtProofMsg {
-    pub root: Option<[u8;32]>,
+pub struct SmtProofMsgAPI {
+    pub root: Root,
     pub funding_txid: String
 }
 
 
-/// Struct contains data necessary to caluculate tx input's sighash. This is required
-/// whenever Client and Server co-sign a transaction.
-#[derive(Serialize, Deserialize, Debug)]
-pub struct PrepareSignTxMessage {
-    pub spending_addr: String,
+// PrepareSignTx structs
+
+/// Used for sending tx data to State Entity for verification before signing
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum PrepareSignMessage {
+    BackUpTx(BackUpTxPSM),
+    WithdrawTx(WithdrawTxPSM)
+}
+
+/// Struct contains data necessary to caluculate backup tx input's sighash. This is required
+/// for Client and Server co-sign a backup transaction.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BackUpTxPSM {
+    pub protocol: Protocol,
+    pub spending_addr: String,  // address which funding tx funds are sent to
     pub input_txid: String,
     pub input_vout: u32,
     pub address: String,
     pub amount: u64,
-    pub transfer: bool,
     pub proof_key: Option<String>
 }
+
+/// Same as above but for Withdraw transaction.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WithdrawTxPSM {
+    pub spending_addr: String,  // address which funding tx funds are sent to
+    pub input_txid: String,
+    pub input_vout: u32,
+    pub address: String,
+    pub amount: u64,
+    pub se_fee: u64,
+    pub se_fee_addr: String
+}
+
+
+// co-signing algorithm structs
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SignSecondMsgRequest {
+    pub protocol: Protocol,
+    pub message: BigInt,
+    pub party_two_sign_message: party2::SignMessage,
+}
+
+
+// deposit algorithm structs
+
 
 /// Client -> SE
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DepositMsg1 {
     pub auth: String,
+    pub proof_key: String
 }
+
+
+// trasnfer algorithm structs
 
 /// Sender -> SE
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMsg1 {
     pub shared_key_id: String,
-    pub new_state_chain: Vec<String>,
+    pub state_chain_sig: StateChainSig,
 }
 /// SE -> Sender
 #[derive(Serialize, Deserialize, Debug)]
@@ -56,8 +118,7 @@ pub struct TransferMsg2 {
 pub struct TransferMsg3 {
     pub shared_key_id: String,
     pub t1: FE, // t1 = o1x1
-    pub new_backup_tx: Transaction,
-    pub state_chain: Vec<String>,
+    pub state_chain_sig: StateChainSig,
     pub state_chain_id: String,
 }
 
@@ -66,7 +127,7 @@ pub struct TransferMsg3 {
 pub struct TransferMsg4 {
     pub shared_key_id: String,
     pub t2: FE, // t2 = t1*o2_inv = o1*x1*o2_inv
-    pub state_chain: Vec<String>,
+    pub state_chain_sig: StateChainSig,
     pub o2_pub: GE
 }
 
@@ -84,4 +145,14 @@ impl Default for TransferMsg5 {
             s2_pub: GE::base_point2(),
         }
     }
+}
+
+
+// withdraw algorithm structs
+/// Owner -> State Entity
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WithdrawMsg1 {
+    pub shared_key_id: String,
+    pub state_chain_sig: StateChainSig,
+    pub address: String,
 }

@@ -2,23 +2,16 @@
 //!
 //! Utilities methods for state entity and mock classes
 
-type Result<T> = std::result::Result<T, UtilError>;
-use crate::structs::PrepareSignTxMessage;
+use super::Result;
+use crate::structs::{BackUpTxPSM, WithdrawTxPSM};
+use crate::error::SharedLibError;
 
-use bitcoin::{TxIn, TxOut, Transaction, Address, Amount, OutPoint};
+use bitcoin::{TxIn, TxOut, Transaction, Address, OutPoint};
 use bitcoin::hashes::sha256d::Hash;
 use bitcoin::blockdata::script::Builder;
 use bitcoin::{util::bip143::SighashComponents, blockdata::opcodes::OP_TRUE};
 
-use rocket::http::{ Status, ContentType };
-use rocket::Response;
-use rocket::Request;
-use rocket::response::Responder;
-
-use std::error;
-use std::fmt;
-use std::{str::FromStr, io::Cursor};
-
+use std::str::FromStr;
 
 /// network - move this to config
 #[allow(dead_code)]
@@ -27,92 +20,9 @@ const DUSTLIMIT: u64 = 100;
 const FEE: u64 = 1000;
 
 
-/// rebuild backup tx and return sig hash from PrepareSignTxMessage data
-pub fn rebuild_backup_tx(prepare_sign_msg: &PrepareSignTxMessage) -> Result<(Transaction, Hash)> {
-    let txin = TxIn {
-        previous_output: OutPoint {
-            txid: Hash::from_str(&prepare_sign_msg.input_txid).unwrap(),
-            vout: prepare_sign_msg.input_vout
-        },
-        sequence: 0xFFFFFFFF,
-        witness: Vec::new(),
-        script_sig: bitcoin::Script::default(),
-    };
-
-    let tx_b = build_tx_b(
-        &txin,
-        &Address::from_str(&prepare_sign_msg.address).unwrap(),
-        &Amount::from_sat(prepare_sign_msg.amount)
-    ).unwrap();
-
-    let comp = SighashComponents::new(&tx_b);
-    let sig_hash = comp.sighash_all(
-        &txin,
-        &Address::from_str(&prepare_sign_msg.spending_addr).unwrap().script_pubkey(),
-        prepare_sign_msg.amount
-    );
-    Ok((tx_b, sig_hash))
-}
-
-
-/// build funding tx spending inputs to p2wpkh address P for amount A
-pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &Address, amount: &Amount) -> Result<Transaction> {
-    let tx_0 = Transaction {
-                input: inputs.to_vec(),
-                output: vec![
-                    TxOut {
-                        script_pubkey: p_address.script_pubkey(),
-                        value: amount.as_sat()-FEE,
-                    }
-                ],
-                lock_time: 0,
-                version: 2,
-            };
-    Ok(tx_0)
-}
-
-/// build kick-off transaction spending funding tx to:
-///     - amount A-D to p2wpkh address P, and
-///     - amount D to script OP_TRUE
-pub fn build_tx_k(funding_tx_in: &TxIn, p_address: &Address, amount: &Amount) -> Result<Transaction> {
-    let script = Builder::new().push_opcode(OP_TRUE).into_script();
-    let tx_k = Transaction {
-                input: vec![funding_tx_in.clone()],
-                output: vec![
-                    TxOut {
-                        script_pubkey: p_address.script_pubkey(),
-                        value: amount.as_sat()-DUSTLIMIT,
-                    },
-                    TxOut {
-                        script_pubkey: script,
-                        value: DUSTLIMIT,
-                    }
-                ],
-                lock_time: 0,
-                version: 2,
-            };
-    Ok(tx_k)
-}
-
-/// build backup tx spending P output of txK to given backup address
-pub fn build_tx_b(txk_input: &TxIn, b_address: &Address, amount: &Amount) -> Result<Transaction> {
-    let tx_0 = Transaction {
-                input: vec![txk_input.clone()],
-                output: vec![
-                    TxOut {
-                        script_pubkey: b_address.script_pubkey(),
-                        value: amount.as_sat()-FEE,
-                    }
-                ],
-                lock_time: 0,
-                version: 2,
-            };
-    Ok(tx_0)
-}
-
 pub fn reverse_hex_str(hex_str: String) -> Result<String> {
     if hex_str.len() % 2 != 0 {
-        return Err(UtilError::from(format!("Invalid sig hash - Odd number of characters. SigHash: {}",hex_str)))
+        return Err(SharedLibError::from(format!("Invalid sig hash - Odd number of characters. SigHash: {}",hex_str)))
     }
     let mut hex_str = hex_str.chars().rev().collect::<String>();
     let mut result = String::with_capacity(hex_str.len());
@@ -126,47 +36,148 @@ pub fn reverse_hex_str(hex_str: String) -> Result<String> {
     Ok(result)
 }
 
+/// rebuild backup tx and return sig hash from PrepareSignMessage data
+pub fn rebuild_backup_tx(prepare_sign_msg: &BackUpTxPSM) -> Result<(Transaction, Hash)> {
+    let txin = TxIn {
+        previous_output: OutPoint {
+            txid: Hash::from_str(&prepare_sign_msg.input_txid).unwrap(),
+            vout: prepare_sign_msg.input_vout
+        },
+        sequence: 0xFFFFFFFF,
+        witness: Vec::new(),
+        script_sig: bitcoin::Script::default(),
+    };
 
-/// Shared library Util specific errors
-#[derive(Debug, Deserialize)]
-pub enum UtilError {
-    /// Generic error from string error message
-    Generic(String),
-    /// Invalid argument error
-    FormatError(String)
+    let tx_b = build_tx_b(
+        &txin,
+        &prepare_sign_msg.address,
+        &prepare_sign_msg.amount
+    )? ;
+
+    let comp = SighashComponents::new(&tx_b);
+    let sig_hash = comp.sighash_all(
+        &txin,
+        &Address::from_str(&prepare_sign_msg.spending_addr).unwrap().script_pubkey(),
+        prepare_sign_msg.amount
+    );
+    Ok((tx_b, sig_hash))
 }
 
-impl From<String> for UtilError {
-    fn from(e: String) -> UtilError {
-        UtilError::Generic(e)
-    }
+
+/// rebuild withdraw tx and return sig hash from PrepareSignMessage data
+pub fn rebuild_withdraw_tx(prepare_sign_msg: &WithdrawTxPSM) -> Result<(Transaction, Hash)> {
+    let txin = TxIn {
+        previous_output: OutPoint {
+            txid: Hash::from_str(&prepare_sign_msg.input_txid).unwrap(),
+            vout: prepare_sign_msg.input_vout
+        },
+        sequence: 0xFFFFFFFF,
+        witness: Vec::new(),
+        script_sig: bitcoin::Script::default(),
+    };
+
+    let tx_w = build_tx_w(
+        &txin,
+        &prepare_sign_msg.address,
+        &prepare_sign_msg.amount,
+        &prepare_sign_msg.se_fee,
+        &prepare_sign_msg.se_fee_addr
+    )?;
+
+    let comp = SighashComponents::new(&tx_w);
+    let sig_hash = comp.sighash_all(
+        &txin,
+        &Address::from_str(&prepare_sign_msg.spending_addr).unwrap().script_pubkey(),
+        prepare_sign_msg.amount
+    );
+    Ok((tx_w, sig_hash))
 }
 
-impl fmt::Display for UtilError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            UtilError::Generic(ref e) => write!(f, "Error: {}", e),
-            UtilError::FormatError(ref e) => write!(f,"Format Error: {}",e),
-        }
-    }
+
+/// build funding tx spending inputs to p2wpkh address P for amount A
+pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &String, amount: &u64, fee: &u64, fee_addr: &String) -> Result<Transaction> {
+    let tx_0 = Transaction {
+                version: 2,
+                lock_time: 0,
+                input: inputs.to_vec(),
+                output: vec![
+                    TxOut {
+                        script_pubkey: Address::from_str(p_address)?.script_pubkey(),
+                        value: amount-FEE,
+                    },
+                    TxOut {
+                        script_pubkey: Address::from_str(fee_addr)?.script_pubkey(),
+                        value: *fee,
+                    }
+                ],
+            };
+    Ok(tx_0)
 }
 
-impl error::Error for UtilError {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match *self {
-            _ => None,
-        }
-    }
+
+/// build kick-off transaction spending funding tx to:
+///     - amount A-D to p2wpkh address P, and
+///     - amount D to script OP_TRUE
+pub fn build_tx_k(funding_tx_in: &TxIn, p_address: &Address, amount: &u64) -> Result<Transaction> {
+    let script = Builder::new().push_opcode(OP_TRUE).into_script();
+    let tx_k = Transaction {
+                input: vec![funding_tx_in.clone()],
+                output: vec![
+                    TxOut {
+                        script_pubkey: p_address.script_pubkey(),
+                        value: amount-DUSTLIMIT,
+                    },
+                    TxOut {
+                        script_pubkey: script,
+                        value: DUSTLIMIT,
+                    }
+                ],
+                lock_time: 0,
+                version: 2,
+            };
+    Ok(tx_k)
 }
 
-impl Responder<'static> for UtilError {
-    fn respond_to(self, _: &Request) -> ::std::result::Result<Response<'static>, Status> {
-        Response::build()
-            .header(ContentType::JSON)
-            .sized_body(Cursor::new(format!("{}", self)))
-            .ok()
-    }
+/// build backup tx spending P output of txK to given backup address
+pub fn build_tx_b(txk_input: &TxIn, b_address: &String, amount: &u64) -> Result<Transaction> {
+    let tx_b = Transaction {
+                input: vec![txk_input.clone()],
+                output: vec![
+                    TxOut {
+                        script_pubkey: Address::from_str(b_address)?.script_pubkey(),
+                        value: amount-FEE,
+                    }
+                ],
+                lock_time: 0,
+                version: 2,
+            };
+    Ok(tx_b)
 }
+
+
+/// build withdraw tx spending funding tx to:
+///     - amount-fee to receive address, and
+///     - amount 'fee' to State Entity fee address 'fee_addr'
+pub fn build_tx_w(funding_tx_in: &TxIn, rec_address: &String, amount: &u64, fee: &u64, fee_addr: &String) -> Result<Transaction> {
+    let tx_0 = Transaction {
+                version: 2,
+                lock_time: 0,
+                input: vec![funding_tx_in.clone()],
+                output: vec![
+                    TxOut {
+                        script_pubkey: Address::from_str(rec_address)?.script_pubkey(),
+                        value: amount-*fee-FEE,
+                    },
+                    TxOut {
+                        script_pubkey: Address::from_str(fee_addr)?.script_pubkey(),
+                        value: *fee,
+                    }
+                ],
+            };
+    Ok(tx_0)
+}
+
+
 
 #[cfg(test)]
 mod tests {
@@ -174,12 +185,10 @@ mod tests {
     use serde_json;
     use rand::rngs::OsRng;
 
-    use bitcoin::OutPoint;
+    use bitcoin::{Amount,OutPoint, Script, Network};
     use bitcoin::util;
-    use bitcoin::blockdata::script::Script;
     use bitcoin::secp256k1::{Secp256k1, Message, key::SecretKey};
     use bitcoin::hashes::sha256d;
-    use bitcoin::network::constants::Network;
 
     const NETWORK: bitcoin::network::constants::Network = Network::Regtest;
 
@@ -211,12 +220,14 @@ mod tests {
                 script_sig: Script::new(),
             }
         ];
-        let amount = Amount::ONE_BTC;
-        let tx_0 = build_tx_0(&inputs, &addr, &amount).unwrap();
+        let amount = Amount::ONE_BTC.as_sat();
+        let fee = 100;
+        let fee_addr = String::from("bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x");
+        let tx_0 = build_tx_0(&inputs, &addr.to_string(), &amount, &fee, &fee_addr).unwrap();
         println!("{}", serde_json::to_string_pretty(&tx_0).unwrap());
 
         // Compute sighash
-        let sighash = tx_0.signature_hash(0, &addr.script_pubkey(), amount.as_sat() as u32);
+        let sighash = tx_0.signature_hash(0, &addr.script_pubkey(), amount as u32);
         // Makes signature.
         let msg = Message::from_slice(&sighash[..]).unwrap();
         let signature = secp.sign(&msg, &priv_key.key).serialize_der().to_vec();
@@ -226,7 +237,7 @@ mod tests {
         let tx_k = build_tx_k(tx_0.input.get(0).unwrap(), &addr, &amount).unwrap();
         println!("{}", serde_json::to_string_pretty(&tx_k).unwrap());
 
-        let tx_1 = build_tx_b(&tx_k.input.get(0).unwrap(), &addr, &amount).unwrap();
+        let tx_1 = build_tx_b(&tx_k.input.get(0).unwrap(), &addr.to_string(), &amount).unwrap();
         println!("{}", serde_json::to_string_pretty(&tx_1).unwrap());
     }
 

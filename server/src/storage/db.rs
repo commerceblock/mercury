@@ -2,6 +2,7 @@ use super::super::Result;
 use crate::error::SEError;
 use rocksdb::DB;
 use serde;
+use shared_lib::Root;
 
 static ROOTID: &str = "rootid";
 pub static DB_LOC: &str = "./db";
@@ -45,7 +46,7 @@ where
 }
 
 
-fn idify_root(id: &str) -> String {
+fn idify_root(id: &u32) -> String {
     format!("{}_{}", id, String::from("root"))
 }
 
@@ -55,7 +56,6 @@ where
     T: serde::ser::Serialize,
 {
     let item_string = serde_json::to_string(&item).unwrap();
-
     match db.put(&identifier, &item_string) {
         Err(e) => Err(SEError::Generic(e.to_string())),
         Ok(_) => Ok(())
@@ -70,7 +70,7 @@ where
         Err(e) => return Err(SEError::Generic(e.to_string())),
         Ok(res) => {
             match res {
-                Some(vec) => return  Ok(serde_json::from_slice(&vec).unwrap()),
+                Some(vec) => return Ok(serde_json::from_slice(&vec).unwrap()),
                 None => return Ok(None)
             }
         }
@@ -78,18 +78,16 @@ where
 }
 
 
-// Update state chain root value
+/// Update state chain root value
 pub fn update_root(db: &DB, new_root: [u8;32]) -> Result<()> {
         // Get previous ID
-        let mut id: String;
-        match get_by_identifier(db, ROOTID)? {
-            None => id = String::from("0"),
-            Some(id_option) => id = id_option
-        }
+        let mut id = match get_by_identifier(db, ROOTID)? {
+            None =>  0,
+            Some(id_option) => id_option
+        };
 
         // update id
-        id = (id.parse::<u32>().unwrap() + 1).to_string();
-
+        id = id + 1;
         let identifier = idify_root(&id);
         insert_by_identifier(&db, &identifier, new_root.clone())?;
 
@@ -100,19 +98,29 @@ pub fn update_root(db: &DB, new_root: [u8;32]) -> Result<()> {
         Ok(())
 }
 
-// get current statechain root value
-pub fn get_root<T>(db: &DB) -> Result<Option<T>>
+/// get root with id
+pub fn get_root<T>(db: &DB, id: &u32) -> Result<Option<T>>
+where
+    T: serde::de::DeserializeOwned,
+{
+    get_by_identifier(db, &idify_root(&id))
+}
+
+/// get current statechain Root. This should be done via Mainstay in the future
+pub fn get_current_root<T>(db: &DB) -> Result<Root>
 where
     T: serde::de::DeserializeOwned,
 {
     // Get previous ID
-    let id: String;
-    match get_by_identifier(db, ROOTID)? {
-        None => id = String::from("0"),
-        Some(id_option) => id = id_option
-    }
+    let id = match get_by_identifier(db, ROOTID)? {
+        None =>  0,
+        Some(id_option) => id_option
+    };
 
-    get_by_identifier(db, &idify_root(&id))
+    Ok(Root {
+        id,
+        value: get_root(db, &id)?
+    })
 }
 
 
@@ -146,12 +154,17 @@ mod tests {
         let _ = update_root(&db, root1.clone());
         let _ = update_root(&db, root2.clone());
 
-        let root2_id: String = get_by_identifier(&db, ROOTID).unwrap().unwrap();
+        let root2_id: u32 = get_by_identifier(&db, ROOTID).unwrap().unwrap();
         assert_eq!(root2, get_by_identifier::<[u8;32]>(&db, &idify_root(&root2_id)).unwrap().unwrap());
-        let root1_id = (root2_id.parse::<u32>().unwrap() - 1).to_string();
+        let root1_id = root2_id - 1;
         assert_eq!(root1, get_by_identifier::<[u8;32]>(&db, &idify_root(&root1_id)).unwrap().unwrap());
 
-        let new_root: [u8; 32] = get_root(&db).unwrap().unwrap();
-        assert_eq!(root2, new_root);
+        let new_root = get_current_root::<[u8;32]>(&db).unwrap();
+        assert_eq!(root2, new_root.value.unwrap());
+
+        // remove them after incase of messing up other tests
+        let _ = db.delete(&idify_root(&root2_id));
+        let _ = db.delete(&idify_root(&root1_id));
+
     }
 }

@@ -3,10 +3,12 @@ use super::super::auth::jwt::Claims;
 use super::super::storage::db;
 use super::super::Config;
 
-use crate::routes::state_entity::{ check_user_auth, StateChainStruct, SessionData, StateChain };
 use shared_lib::util::reverse_hex_str;
+use shared_lib::structs::{Protocol,SignSecondMsgRequest};
+use shared_lib::state_chain::StateChain;
+
+use crate::routes::state_entity::{ check_user_auth, StateEntityStruct, UserSession };
 use crate::error::{SEError,DBErrorType::NoDataForID};
-extern crate shared_lib;
 
 use curv::cryptographic_primitives::proofs::sigma_dlog::*;
 use curv::cryptographic_primitives::twoparty::dh_key_exchange_variant_with_pok_comm::{
@@ -20,8 +22,8 @@ use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
 use curv::arithmetic::traits::Converter;
 use rocket::State;
 use rocket_contrib::json::Json;
+use bitcoin::{Transaction, secp256k1::Signature};
 use std::string::ToString;
-use bitcoin::secp256k1::Signature;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 struct HDPos {
@@ -406,42 +408,38 @@ pub fn sign_first(
     Ok(Json(sign_party_one_first_message))
 }
 
-// Added here because the attribute data takes only a single struct
-#[derive(Serialize, Deserialize)]
-pub struct SignSecondMsgRequest {
-    pub message: BigInt,
-    pub party_two_sign_message: party2::SignMessage,
-}
 #[post("/ecdsa/sign/<id>/second", format = "json", data = "<request>")]
 pub fn sign_second(
     state: State<Config>,
     claim: Claims,
     id: String,
     request: Json<SignSecondMsgRequest>,
-) -> Result<Json<party_one::SignatureRecid>> {
+) -> Result<Json<String>> {
     // check authorisation id is in DB (and check password?)
     check_user_auth(&state, &claim, &id)?;
 
-    // checksighash matches message to be signed
+    // Get UserSession for this user and check sig hash, backup tx and state chain id exists
+    let user_session: UserSession = db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
+        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+    if user_session.sig_hash.is_none() {
+        return Err(SEError::SigningError(String::from("No sig_hash found for state chain session.")));
+    }
+    if user_session.backup_tx.is_none() {
+        return Err(SEError::SigningError(String::from("No backup_tx found for state chain session.")));
+    }
+    if user_session.state_chain_id.is_none() {
+        return Err(SEError::SigningError(String::from("No state_chain_id found for state chain session.")));
+    }
+    debug!("Session data and Sig hash found in DB for id {}",id);
 
-    let sig_hash: Option<SessionData> = db::get(
-        &state.db,
-        &claim.sub,
-        &id,
-        &StateChainStruct::SessionData)?;
-    match sig_hash {
-        Some(_) => debug!("Sig hash found in DB for this id."),
-        None => return Err(SEError::SigningError(String::from("No sig hash found for state chain session.")))
-    };
-
-    // check message to sign is correct sig hash
+    // check sighash matches message to be signed
     let mut message_hex = request.message.to_hex();
     let message_sig_hash;
     match reverse_hex_str(message_hex.clone()) {
         Ok(res) => message_sig_hash = res,
         Err(e) => {
-            // Try for case in which sighash begins with leading 0's and so conversion to hex from
-            // BigInt is incorrect
+            // Try for case in which sighash begins with 0's and so conversion to hex from
+            // BigInt is too short
             let num_zeros = 64 - message_hex.len();
             if num_zeros < 1 { return Err(SEError::from(e)) };
             let temp = message_hex.clone();
@@ -452,7 +450,7 @@ pub fn sign_second(
         }
     }
 
-    if sig_hash.unwrap().sig_hash.to_string() != message_sig_hash {
+    if user_session.sig_hash.unwrap().to_string() != message_sig_hash {
         return Err(SEError::SigningError(String::from("Message to be signed does not match verified sig hash.")))
     }
     debug!("Sig hash in message matches verified sig hash.");
@@ -476,40 +474,80 @@ pub fn sign_second(
         &request.message,
     ) {
         Ok(sig) => signature = sig,
-        Err(_) => panic!("validation failed")
+        Err(_) => return Err(SEError::SigningError(String::from("Signature validation failed.")))
     };
 
-    // Add signed back up transaction to State Chain
-    let session_data: SessionData =
-        db::get(&state.db, &claim.sub, &id, &StateChainStruct::SessionData)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+    // Get transaction which is being signed.
+    let mut tx: Transaction = match request.protocol {
+        Protocol::Withdraw => {
+            user_session.withdraw_tx.unwrap().to_owned()
+        },
+        _ => { // despoit() and transfer() both sign backup_tx
+            user_session.backup_tx.unwrap().to_owned()
+        }
+    };
 
-    let mut backup_tx = session_data.backup_tx.clone();
+    // Add signature to tx
     let mut v = BigInt::to_vec(&signature.r);     // make signature witness
     v.extend(BigInt::to_vec(&signature.s));
     let mut sig_vec = Signature::from_compact(&v[..])
-        .unwrap()
-        .serialize_der()
-        .to_vec();
+    .unwrap().serialize_der().to_vec();
     sig_vec.push(01);
     let pk_vec = shared_key.public.q.get_element().serialize().to_vec();
-    backup_tx.input[0].witness = vec![sig_vec, pk_vec];
+    tx.input[0].witness = vec![sig_vec, pk_vec];
 
-    // update StateChain DB object
-    let mut state_chain: StateChain =
-        db::get(&state.db, &claim.sub, &session_data.state_chain_id, &StateChainStruct::StateChain)?
-            .ok_or(SEError::DBError(NoDataForID, session_data.state_chain_id.clone()))?;
 
-    state_chain.backup_tx = Some(backup_tx);
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &session_data.state_chain_id,
-        &StateChainStruct::StateChain,
-        &state_chain
-    )?;
+    match request.protocol {
+        Protocol::Withdraw => {
+            // store signed withdraw tx in UserSession DB object
+            let mut user_session: UserSession = db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
+                .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
-    Ok(Json(signature))
+            user_session.withdraw_tx = Some(tx);
+
+            db::insert(
+                &state.db,
+                &claim.sub,
+                &id,
+                &StateEntityStruct::UserSession,
+                &user_session
+            )?;
+        },
+        _ => { // despoit() and transfer() both sign backup_tx
+
+            // store signed backup tx in UserSession DB object
+            let mut user_session: UserSession = db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
+                .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+
+            user_session.backup_tx = Some(tx.to_owned());
+
+            db::insert(
+                &state.db,
+                &claim.sub,
+                &id,
+                &StateEntityStruct::UserSession,
+                &user_session
+            )?;
+
+            // Store backup tx in State Chain DB object
+            let state_chain_id = user_session.state_chain_id.unwrap();
+            let mut state_chain: StateChain =
+            db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
+                .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
+
+            state_chain.backup_tx = Some(tx);
+
+            db::insert(
+                &state.db,
+                &claim.sub,
+                &state_chain_id,
+                &StateEntityStruct::StateChain,
+                &state_chain
+            )?;
+        }
+    };
+
+    Ok(Json(String::from("")))
 }
 
 pub fn get_mk(state: &State<Config>, claim: Claims, id: &String) -> Result<MasterKey1> {
