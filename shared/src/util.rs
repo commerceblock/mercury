@@ -3,7 +3,7 @@
 //! Utilities methods for state entity and mock classes
 
 use super::Result;
-use crate::structs::PrepareSignTxMessage;
+use crate::structs::{BackUpTxPSM, WithdrawTxPSM};
 
 use bitcoin::{TxIn, TxOut, Transaction, Address, OutPoint};
 use bitcoin::hashes::sha256d::Hash;
@@ -28,8 +28,24 @@ const DUSTLIMIT: u64 = 100;
 const FEE: u64 = 1000;
 
 
-/// rebuild backup tx and return sig hash from PrepareSignTxMessage data
-pub fn rebuild_backup_tx(prepare_sign_msg: &PrepareSignTxMessage) -> Result<(Transaction, Hash)> {
+pub fn reverse_hex_str(hex_str: String) -> Result<String> {
+    if hex_str.len() % 2 != 0 {
+        return Err(SharedLibError::from(format!("Invalid sig hash - Odd number of characters. SigHash: {}",hex_str)))
+    }
+    let mut hex_str = hex_str.chars().rev().collect::<String>();
+    let mut result = String::with_capacity(hex_str.len());
+    unsafe {
+        let hex_vec = hex_str.as_mut_vec();
+        for i in (0..hex_vec.len()).step_by(2) {
+            result.push(char::from(hex_vec[i+1]));
+            result.push(char::from(hex_vec[i]));
+        }
+    }
+    Ok(result)
+}
+
+/// rebuild backup tx and return sig hash from PrepareSignMessage data
+pub fn rebuild_backup_tx(prepare_sign_msg: &BackUpTxPSM) -> Result<(Transaction, Hash)> {
     let txin = TxIn {
         previous_output: OutPoint {
             txid: Hash::from_str(&prepare_sign_msg.input_txid).unwrap(),
@@ -42,9 +58,9 @@ pub fn rebuild_backup_tx(prepare_sign_msg: &PrepareSignTxMessage) -> Result<(Tra
 
     let tx_b = build_tx_b(
         &txin,
-        &Address::from_str(&prepare_sign_msg.address).unwrap(),
+        &prepare_sign_msg.address,
         &prepare_sign_msg.amount
-    ).unwrap();
+    )? ;
 
     let comp = SighashComponents::new(&tx_b);
     let sig_hash = comp.sighash_all(
@@ -53,6 +69,36 @@ pub fn rebuild_backup_tx(prepare_sign_msg: &PrepareSignTxMessage) -> Result<(Tra
         prepare_sign_msg.amount
     );
     Ok((tx_b, sig_hash))
+}
+
+
+/// rebuild withdraw tx and return sig hash from PrepareSignMessage data
+pub fn rebuild_withdraw_tx(prepare_sign_msg: &WithdrawTxPSM) -> Result<(Transaction, Hash)> {
+    let txin = TxIn {
+        previous_output: OutPoint {
+            txid: Hash::from_str(&prepare_sign_msg.input_txid).unwrap(),
+            vout: prepare_sign_msg.input_vout
+        },
+        sequence: 0xFFFFFFFF,
+        witness: Vec::new(),
+        script_sig: bitcoin::Script::default(),
+    };
+
+    let tx_w = build_tx_w(
+        &txin,
+        &prepare_sign_msg.address,
+        &prepare_sign_msg.amount,
+        &prepare_sign_msg.se_fee,
+        &prepare_sign_msg.se_fee_addr
+    )?;
+
+    let comp = SighashComponents::new(&tx_w);
+    let sig_hash = comp.sighash_all(
+        &txin,
+        &Address::from_str(&prepare_sign_msg.spending_addr).unwrap().script_pubkey(),
+        prepare_sign_msg.amount
+    );
+    Ok((tx_w, sig_hash))
 }
 
 
@@ -75,6 +121,7 @@ pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &String, amount: &u64, fee: &u6
             };
     Ok(tx_0)
 }
+
 
 /// build kick-off transaction spending funding tx to:
 ///     - amount A-D to p2wpkh address P, and
@@ -100,37 +147,43 @@ pub fn build_tx_k(funding_tx_in: &TxIn, p_address: &Address, amount: &u64) -> Re
 }
 
 /// build backup tx spending P output of txK to given backup address
-pub fn build_tx_b(txk_input: &TxIn, b_address: &Address, amount: &u64) -> Result<Transaction> {
-    let tx_0 = Transaction {
+pub fn build_tx_b(txk_input: &TxIn, b_address: &String, amount: &u64) -> Result<Transaction> {
+    let tx_b = Transaction {
                 input: vec![txk_input.clone()],
                 output: vec![
                     TxOut {
-                        script_pubkey: b_address.script_pubkey(),
+                        script_pubkey: Address::from_str(b_address)?.script_pubkey(),
                         value: amount-FEE,
                     }
                 ],
                 lock_time: 0,
                 version: 2,
             };
+    Ok(tx_b)
+}
+
+
+/// build withdraw tx spending funding tx to:
+///     - amount-fee to receive address, and
+///     - amount 'fee' to State Entity fee address 'fee_addr'
+pub fn build_tx_w(funding_tx_in: &TxIn, rec_address: &String, amount: &u64, fee: &u64, fee_addr: &String) -> Result<Transaction> {
+    let tx_0 = Transaction {
+                version: 2,
+                lock_time: 0,
+                input: vec![funding_tx_in.clone()],
+                output: vec![
+                    TxOut {
+                        script_pubkey: Address::from_str(rec_address)?.script_pubkey(),
+                        value: amount-*fee-FEE,
+                    },
+                    TxOut {
+                        script_pubkey: Address::from_str(fee_addr)?.script_pubkey(),
+                        value: *fee,
+                    }
+                ],
+            };
     Ok(tx_0)
 }
-
-pub fn reverse_hex_str(hex_str: String) -> Result<String> {
-    if hex_str.len() % 2 != 0 {
-        return Err(SharedLibError::from(format!("Invalid sig hash - Odd number of characters. SigHash: {}",hex_str)))
-    }
-    let mut hex_str = hex_str.chars().rev().collect::<String>();
-    let mut result = String::with_capacity(hex_str.len());
-    unsafe {
-        let hex_vec = hex_str.as_mut_vec();
-        for i in (0..hex_vec.len()).step_by(2) {
-            result.push(char::from(hex_vec[i+1]));
-            result.push(char::from(hex_vec[i]));
-        }
-    }
-    Ok(result)
-}
-
 
 /// Shared library specific errors
 #[derive(Debug, Deserialize)]
@@ -243,7 +296,7 @@ mod tests {
         let tx_k = build_tx_k(tx_0.input.get(0).unwrap(), &addr, &amount).unwrap();
         println!("{}", serde_json::to_string_pretty(&tx_k).unwrap());
 
-        let tx_1 = build_tx_b(&tx_k.input.get(0).unwrap(), &addr, &amount).unwrap();
+        let tx_1 = build_tx_b(&tx_k.input.get(0).unwrap(), &addr.to_string(), &amount).unwrap();
         println!("{}", serde_json::to_string_pretty(&tx_1).unwrap());
     }
 

@@ -23,6 +23,7 @@ pub struct InclusionProofSMT {
 pub struct SharedKey {
     pub id: String,
     pub share: MasterKey2,
+    pub state_chain_id: Option<String>,
     pub proof_key: Option<PublicKey>,
     pub smt_proof: Option<InclusionProofSMT>
 }

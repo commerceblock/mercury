@@ -13,21 +13,71 @@
 //! Tests for this code can be found in server/src/state_chain
 
 use super::Result;
+use crate::util::SharedLibError;
 use bitcoin::secp256k1::{Signature, SecretKey, Message, Secp256k1, PublicKey};
 use bitcoin::hashes::{sha256d,Hash};
+use bitcoin::Transaction;
+use uuid::Uuid;
 
 use std::str::FromStr;
+
+/// A list of States in which each State signs for the next State.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct StateChain {
+    pub id: String,
+    /// chain of transitory key history
+    pub chain: Vec<State>,
+    /// current back-up transaction
+    pub backup_tx: Option<Transaction>,
+    /// Amount
+    pub amount: u64 // 0 means state chain is ended.
+}
+
+impl StateChain {
+    pub fn new(data: String, amount: u64) -> Self {
+        StateChain {
+            id: Uuid::new_v4().to_string(),
+            chain: vec!( State {
+                data,
+                next_state: None
+            }),
+            backup_tx: None,
+            amount
+        }
+    }
+
+    pub fn add(&mut self, state_chain_sig: StateChainSig) -> Result<()> {
+        let mut tip = self.chain.last()
+            .ok_or(SharedLibError::Generic(String::from("StateChain empty")))?.clone();
+
+        // verify previous state has signature and signs for new proof_key
+        let prev_proof_key = tip.data.clone();
+        state_chain_sig.verify(&prev_proof_key)?;
+
+        // add sig to current tip
+        tip.next_state = Some(state_chain_sig.clone());
+        self.chain.pop();
+        self.chain.push(tip);
+
+        // add new tip to chain
+        Ok(self.chain.push(State {
+            data: state_chain_sig.data,
+            next_state: None
+        }))
+    }
+}
+
 
 /// each State in the Chain of States
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct State {
-    pub proof_key: String,
+    pub data: String,   // proof key or address
     pub next_state: Option<StateChainSig> // signature representing passing of ownership
 }
 /// Data necessary to create ownership transfer signatures
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct StateChainSig {
-    purpose: String, // "TRANSFER" or "WITHDRAW"
+    pub purpose: String, // "TRANSFER" or "WITHDRAW"
     pub data: String, // proof key or address
     sig: String
 }
@@ -40,7 +90,7 @@ impl StateChainSig {
         Ok(Message::from_slice(&hash)?)
     }
 
-    /// generate signature for passing state chain ownership
+    /// generate signature for change of state chain ownership
     pub fn new(proof_key_priv: &SecretKey, purpose: &String, data: &String) -> Result<Self> {
         let secp = Secp256k1::new();
         let message = StateChainSig::to_message(purpose, data)?;

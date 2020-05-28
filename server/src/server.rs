@@ -85,9 +85,10 @@ pub fn get_server() -> Rocket {
                 state_entity::get_smt_proof,
                 state_entity::get_state_entity_fees,
                 state_entity::deposit_init,
-                state_entity::prepare_sign_backup,
+                state_entity::prepare_sign_tx,
                 state_entity::transfer_sender,
-                state_entity::transfer_receiver
+                state_entity::transfer_receiver,
+                state_entity::withdraw
             ],
         )
         .manage(config)

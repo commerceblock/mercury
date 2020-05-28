@@ -26,8 +26,6 @@ extern crate serde_json;
 extern crate log;
 
 #[cfg(test)]
-#[macro_use]
-extern crate time_test;
 extern crate floating_duration;
 
 extern crate crypto;

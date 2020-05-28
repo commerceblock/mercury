@@ -328,8 +328,9 @@ impl Wallet {
     }
 
     // update shared key with proof data
-    pub fn update_shared_key(&mut self, shared_key_id: &String, proof_key: &PublicKey, root: &Root, proof: &Option<Proof>) -> Result<()> {
+    pub fn update_shared_key(&mut self, shared_key_id: &String, state_chain_id: &String, proof_key: &PublicKey, root: &Root, proof: &Option<Proof>) -> Result<()> {
         let shared_key = self.get_shared_key_mut(shared_key_id)?;
+        shared_key.state_chain_id = Some(state_chain_id.to_string());
         shared_key.add_proof_data(proof_key, root, proof);
         Ok(())
     }

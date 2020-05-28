@@ -12,64 +12,21 @@
 
 
 use super::Result;
-use crate::{error::SEError, storage::db::{get_current_root,update_root, DB_SC_LOC}};
+use crate::storage::db::{get_current_root,update_root, DB_SC_LOC};
 use shared_lib::Root;
-use shared_lib::state_chain::{State, StateChainSig};
 
-use bitcoin::Transaction;
 use monotree::tree::verify_proof;
 use monotree::{Hash, Monotree, Proof};
 use monotree::database::RocksDB;
 use monotree::hasher::{Hasher,Blake2b};
 
 use rocksdb::DB;
-use uuid::Uuid;
 use std::convert::TryInto;
 
-/// A list of States in which each State signs for the next State.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct StateChain {
-    pub id: String,
-    /// chain of transitory key history (owners  Proof keys)
-    pub chain: Vec<State>,
-    /// current back-up transaction
-    pub backup_tx: Option<Transaction>
-}
-
-impl StateChain {
-    pub fn new(proof_key: &String) -> Self {
-        StateChain {
-            id: Uuid::new_v4().to_string(),
-            chain: vec!( State {
-                proof_key: proof_key.clone(),
-                next_state: None
-            }),
-            backup_tx: None
-        }
-    }
-
-    pub fn add(&mut self, state_chain_sig: StateChainSig) -> Result<()> {
-        let prev_proof_key = self.chain.last()
-            .ok_or(SEError::Generic(String::from("StateChain empty")))?
-            .proof_key.clone();
-        // verify previous state has signature and signs for new proof_key
-        state_chain_sig.verify(&prev_proof_key)?;
-
-        // add to chain
-        Ok(self.chain.push(State {
-            proof_key: state_chain_sig.data.clone(),
-            next_state: None
-        }))
-    }
-}
-
-
-
-
 /// insert new statechain entry into Sparse Merkle Tree and return proof
-pub fn update_statechain_smt(db: &DB, funding_txid: &String, proof_key: &String) -> Result<()> {
+pub fn update_statechain_smt(db: &DB, funding_txid: &String, entry: &String) -> Result<()> {
     let key: &Hash = funding_txid[..32].as_bytes().try_into().unwrap();
-    let entry: &Hash = proof_key[..32].as_bytes().try_into().unwrap();
+    let entry: &Hash = entry[..32].as_bytes().try_into().unwrap();
 
     // get current root
     let root = get_current_root::<Root>(&db)?;
@@ -106,7 +63,7 @@ mod tests {
 
     use super::*;
     use crate::storage::db::DB_LOC;
-    use shared_lib::state_chain::StateChainSig;
+    use shared_lib::state_chain::{StateChain,StateChainSig};
 
     use bitcoin::secp256k1::{SecretKey, Secp256k1, PublicKey};
 
@@ -117,7 +74,7 @@ mod tests {
         let proof_key1_priv = SecretKey::from_slice(&[1;32]).unwrap();
         let proof_key1_pub = PublicKey::from_secret_key(&secp, &proof_key1_priv);
 
-        let mut state_chain = StateChain::new(&proof_key1_pub.to_string());
+        let mut state_chain = StateChain::new(proof_key1_pub.to_string(), 1000);
         assert_eq!(state_chain.chain.len(),1);
         // StateChainSig.verify called in function below
         let new_state_sig = StateChainSig::new(
@@ -126,7 +83,7 @@ mod tests {
             &String::from("03b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3"),
         ).unwrap();
 
-        //add to state chain
+        // add to state chain
         let _ = state_chain.add(new_state_sig.clone());
         assert_eq!(state_chain.chain.len(),2);
 

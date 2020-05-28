@@ -1,26 +1,22 @@
-use curv::BigInt;
-use kms::ecdsa::two_party::party2;
-use kms::ecdsa::two_party::MasterKey2;
-use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one;
-use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_two;
-
+use shared_lib::structs::{Protocol,SignSecondMsgRequest};
 use super::super::utilities::requests;
 use super::super::Result;
 use super::super::ClientShim;
 
+use kms::ecdsa::two_party::MasterKey2;
+use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one;
+use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_two;
+use curv::BigInt;
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SignSecondMsgRequest {
-    pub message: BigInt,
-    pub party_two_sign_message: party2::SignMessage,
-}
 
+/// co-sign message with shared key
 pub fn sign(
     client_shim: &ClientShim,
     message: BigInt,
     mk: &MasterKey2,
+    protocol: Protocol,
     id: &String,
-) -> Result<party_one::SignatureRecid> {
+) -> Result<()> {
     let (eph_key_gen_first_message_party_two, eph_comm_witness, eph_ec_key_pair_party2) =
         MasterKey2::sign_first_message();
 
@@ -35,32 +31,17 @@ pub fn sign(
         &message,
     );
 
-    let signature = get_signature(
-        client_shim,
-        message,
-        party_two_sign_message,
-        &id,
-    )?;
-
-    Ok(signature)
-}
-
-fn get_signature(
-    client_shim: &ClientShim,
-    message: BigInt,
-    party_two_sign_message: party2::SignMessage,
-    id: &String,
-) -> Result<party_one::SignatureRecid> {
     let request: SignSecondMsgRequest = SignSecondMsgRequest {
+        protocol,
         message,
         party_two_sign_message,
     };
 
-    let signature: party_one::SignatureRecid =
-        requests::postb(client_shim, &format!("/ecdsa/sign/{}/second", id), &request)?;
+    requests::postb::<&SignSecondMsgRequest,String>(client_shim, &format!("/ecdsa/sign/{}/second", id), &request)?;
 
-    Ok(signature)
+    Ok(())
 }
+
 
 // use super::super::utilities::error_to_c_string;
 // // iOS bindings

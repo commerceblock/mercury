@@ -2,10 +2,20 @@
 //!
 //! Struct definitions used in State entity protocols
 
-use curv::{FE, GE};
-use bitcoin::Transaction;
+use curv::{FE, GE, BigInt};
+use kms::ecdsa::two_party::party2;
 use crate::Root;
 use crate::state_chain::{State, StateChainSig};
+
+
+
+/// State Entity protocols
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Protocol {
+    Deposit,
+    Transfer,
+    Withdraw
+}
 
 
 // API structs
@@ -22,6 +32,8 @@ pub struct StateEntityFeeInfoAPI {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StateChainDataAPI {
     pub funding_txid: String,
+    pub funding_tx_vout: u32,
+    pub amount: u64,
     pub chain: Vec<State>
 }
 /// /api/statechain post struct
@@ -32,25 +44,59 @@ pub struct SmtProofMsgAPI {
 }
 
 
-// deposit algorithm structs
+// PrepareSignTx structs
 
-/// Struct contains data necessary to caluculate tx input's sighash. This is required
-/// whenever Client and Server co-sign a transaction.
-#[derive(Serialize, Deserialize, Debug)]
-pub struct PrepareSignTxMessage {
-    pub spending_addr: String,
+/// Used for sending tx data to State Entity for verification before signing
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum PrepareSignMessage {
+    BackUpTx(BackUpTxPSM),
+    WithdrawTx(WithdrawTxPSM)
+}
+
+/// Struct contains data necessary to caluculate backup tx input's sighash. This is required
+/// for Client and Server co-sign a backup transaction.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BackUpTxPSM {
+    pub protocol: Protocol,
+    pub spending_addr: String,  // address which funding tx funds are sent to
     pub input_txid: String,
     pub input_vout: u32,
     pub address: String,
     pub amount: u64,
-    pub transfer: bool,
     pub proof_key: Option<String>
 }
+
+/// Same as above but for Withdraw transaction.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WithdrawTxPSM {
+    pub spending_addr: String,  // address which funding tx funds are sent to
+    pub input_txid: String,
+    pub input_vout: u32,
+    pub address: String,
+    pub amount: u64,
+    pub se_fee: u64,
+    pub se_fee_addr: String
+}
+
+
+// co-signing algorithm structs
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SignSecondMsgRequest {
+    pub protocol: Protocol,
+    pub message: BigInt,
+    pub party_two_sign_message: party2::SignMessage,
+}
+
+
+// deposit algorithm structs
+
 
 /// Client -> SE
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DepositMsg1 {
     pub auth: String,
+    pub proof_key: String
 }
 
 
@@ -72,7 +118,6 @@ pub struct TransferMsg2 {
 pub struct TransferMsg3 {
     pub shared_key_id: String,
     pub t1: FE, // t1 = o1x1
-    pub new_backup_tx: Transaction,
     pub state_chain_sig: StateChainSig,
     pub state_chain_id: String,
 }
@@ -100,4 +145,14 @@ impl Default for TransferMsg5 {
             s2_pub: GE::base_point2(),
         }
     }
+}
+
+
+// withdraw algorithm structs
+/// Owner -> State Entity
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WithdrawMsg1 {
+    pub shared_key_id: String,
+    pub state_chain_sig: StateChainSig,
+    pub address: String,
 }

@@ -116,6 +116,7 @@ pub fn get_master_key(id: &String, client_shim: &ClientShim, secret_key: &FE, is
     Ok(SharedKey {
         id: id.to_string(),
         share: master_key,
+        state_chain_id: None,
         proof_key: None,
         smt_proof: None
     })
