@@ -4,22 +4,14 @@
 
 use super::Result;
 use crate::structs::{BackUpTxPSM, WithdrawTxPSM};
+use crate::error::SharedLibError;
 
 use bitcoin::{TxIn, TxOut, Transaction, Address, OutPoint};
 use bitcoin::hashes::sha256d::Hash;
 use bitcoin::blockdata::script::Builder;
 use bitcoin::{util::bip143::SighashComponents, blockdata::opcodes::OP_TRUE};
-use bitcoin::secp256k1::Error as SecpError;
-use bitcoin::util::address::Error as AddressError;
 
-use rocket::http::{ Status, ContentType };
-use rocket::Response;
-use rocket::Request;
-use rocket::response::Responder;
-
-use std::error;
-use std::fmt;
-use std::{str::FromStr, io::Cursor};
+use std::str::FromStr;
 
 /// network - move this to config
 #[allow(dead_code)]
@@ -185,58 +177,7 @@ pub fn build_tx_w(funding_tx_in: &TxIn, rec_address: &String, amount: &u64, fee:
     Ok(tx_0)
 }
 
-/// Shared library specific errors
-#[derive(Debug, Deserialize)]
-pub enum SharedLibError {
-    /// Generic error from string error message
-    Generic(String),
-    /// Invalid argument error
-    FormatError(String)
-}
 
-impl From<AddressError> for SharedLibError {
-    fn from(e: AddressError) -> SharedLibError {
-        SharedLibError::Generic(e.to_string())
-    }
-}
-
-impl From<String> for SharedLibError {
-    fn from(e: String) -> SharedLibError {
-        SharedLibError::Generic(e)
-    }
-}
-
-impl From<SecpError> for SharedLibError {
-    fn from(e: SecpError) -> SharedLibError {
-        SharedLibError::Generic(e.to_string())
-    }
-}
-
-impl fmt::Display for SharedLibError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            SharedLibError::Generic(ref e) => write!(f, "Error: {}", e),
-            SharedLibError::FormatError(ref e) => write!(f,"Format Error: {}",e),
-        }
-    }
-}
-
-impl error::Error for SharedLibError {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match *self {
-            _ => None,
-        }
-    }
-}
-
-impl Responder<'static> for SharedLibError {
-    fn respond_to(self, _: &Request) -> ::std::result::Result<Response<'static>, Status> {
-        Response::build()
-            .header(ContentType::JSON)
-            .sized_body(Cursor::new(format!("{}", self)))
-            .ok()
-    }
-}
 
 #[cfg(test)]
 mod tests {

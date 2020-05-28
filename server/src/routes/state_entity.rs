@@ -8,7 +8,7 @@ extern crate shared_lib;
 use shared_lib::util::{rebuild_backup_tx,rebuild_withdraw_tx};
 use shared_lib::Root;
 use shared_lib::structs::*;
-use shared_lib::state_chain::{StateChain, StateChainSig};
+use shared_lib::state_chain::*;
 
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::routes::ecdsa;
@@ -16,7 +16,6 @@ use crate::storage::db::{get_root, get_current_root};
 use super::super::auth::jwt::Claims;
 use super::super::storage::db;
 use super::super::Config;
-use super::super::state_chain::{update_statechain_smt,gen_proof_smt};
 
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 
@@ -29,6 +28,7 @@ use monotree::Proof;
 use rocket_contrib::json::Json;
 use rocket::State;
 use uuid::Uuid;
+use db::{DB_SC_LOC, update_root};
 
 /// UserSession represents a User in a particular state chain session. This can be used for authentication and DoS protections.
 /// The same client in 2 state chain sessions would have 2 unrelated UserSessions.
@@ -125,7 +125,7 @@ pub fn get_smt_proof(
         return Err(SEError::DBError(NoDataForID, format!("Root id: {}",smt_proof_msg.root.id.to_string())));
     }
 
-    Ok(Json(gen_proof_smt(&smt_proof_msg.root.value, &smt_proof_msg.funding_txid)?))
+    Ok(Json(gen_proof_smt(DB_SC_LOC, &smt_proof_msg.root.value, &smt_proof_msg.funding_txid)?))
 }
 
 /// Get root as API for now. Will be via Mainstay in the future.
@@ -211,8 +211,11 @@ pub fn prepare_sign_tx(
                     )?;
 
                     // update sparse merkle tree with new StateChain entry
-                    let sc_smt_proof = update_statechain_smt(&state.db, &prepare_sign_msg.input_txid, &proof_key);
-                    debug!("Deposit: Added to statechain and sparse merkle tree. proof: {:?}", sc_smt_proof);
+                    let root = get_current_root::<Root>(&state.db)?;
+                    let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &prepare_sign_msg.input_txid, &proof_key)?;
+                    update_root(&state.db, new_root.unwrap())?;
+
+                    debug!("Deposit: Added to statechain and sparse merkle tree. proof.");
 
                     return Ok(Json(state_chain.id));
 
@@ -450,8 +453,12 @@ pub fn transfer_receiver(
     let proof_key = state_chain.chain.last()
         .ok_or(SEError::Generic(String::from("StateChain empty")))?
         .data.clone();
-    let sc_smt_proof = update_statechain_smt(&state.db, &funding_txid, &proof_key);
-    debug!("transfer: added to statechain. proof: {:?}", sc_smt_proof);
+
+    let root = get_current_root::<Root>(&state.db)?;
+    let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &funding_txid, &proof_key)?;
+    update_root(&state.db, new_root.unwrap())?;
+
+    debug!("transfer: added to statechain. proof.");
 
     Ok(Json(
         TransferMsg5 {
@@ -499,8 +506,12 @@ pub fn withdraw(
     // update sparse merkle tree
     let withdraw_tx = user_session.withdraw_tx.unwrap();
     let funding_txid = withdraw_tx.input.get(0).unwrap().previous_output.txid.to_string();
-    let sc_smt_proof = update_statechain_smt(&state.db, &funding_txid, &withdraw_msg1.address);
-    debug!("withdraw: Ended statechain and updated sparse merkle tree. proof: {:?}", sc_smt_proof);
+
+    let root = get_current_root::<Root>(&state.db)?;
+    let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &funding_txid, &withdraw_msg1.address)?;
+    update_root(&state.db, new_root.unwrap())?;
+
+    debug!("withdraw: Ended statechain and updated sparse merkle tree.");
 
     Ok(Json(withdraw_tx))
 }

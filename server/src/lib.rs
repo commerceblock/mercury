@@ -39,7 +39,6 @@ pub mod auth;
 pub mod routes;
 pub mod server;
 pub mod storage;
-pub mod state_chain;
 pub mod tests;
 pub mod error;
 

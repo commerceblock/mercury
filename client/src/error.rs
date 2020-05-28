@@ -2,7 +2,7 @@
 //!
 //! Custom Error types for client
 
-use shared_lib::util::SharedLibError;
+use shared_lib::error::SharedLibError;
 
 use std::error;
 use std::fmt;

@@ -2,7 +2,7 @@
 //!
 //! Custom Error types for our crate
 
-use shared_lib::util::SharedLibError;
+use shared_lib::error::SharedLibError;
 
 use rocket::http::{ Status, ContentType };
 use rocket::Response;

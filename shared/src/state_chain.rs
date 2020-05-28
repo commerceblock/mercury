@@ -10,16 +10,21 @@
 //! To withdraw, and hence bring an end to the State Chain, the StateChainSig struct contains the
 //! withdrawal address.
 
-//! Tests for this code can be found in server/src/state_chain
-
 use super::Result;
-use crate::util::SharedLibError;
+use crate::error::SharedLibError;
+
 use bitcoin::secp256k1::{Signature, SecretKey, Message, Secp256k1, PublicKey};
 use bitcoin::hashes::{sha256d,Hash};
 use bitcoin::Transaction;
 use uuid::Uuid;
 
+use monotree::tree::verify_proof;
+use monotree::{Monotree, Proof};
+use monotree::database::RocksDB;
+use monotree::hasher::{Hasher,Blake2b};
+
 use std::str::FromStr;
+use std::convert::TryInto;
 
 /// A list of States in which each State signs for the next State.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -111,5 +116,91 @@ impl StateChainSig {
             &Signature::from_str(&self.sig).unwrap(),
             &PublicKey::from_str(&pk).unwrap()
         )?)
+    }
+}
+
+
+/// insert new statechain entry into Sparse Merkle Tree and return proof
+pub fn update_statechain_smt(sc_db_loc: &str, root: &Option<monotree::Hash>, funding_txid: &String, entry: &String) -> Result<Option<monotree::Hash>> {
+    let key: &monotree::Hash = funding_txid[..32].as_bytes().try_into().unwrap();
+    let entry: &monotree::Hash = entry[..32].as_bytes().try_into().unwrap();
+
+    // update smt
+    let mut tree = Monotree::<RocksDB, Blake2b>::new(sc_db_loc);
+    let new_root = tree.insert(root.as_ref(), key, entry)?;
+
+    Ok(new_root)
+}
+
+// Method can run as a seperate proof generation daemon. Must check root exists before calling.
+pub fn gen_proof_smt(sc_db_loc: &str, root: &Option<monotree::Hash>, funding_txid: &String) -> Result<Option<Proof>> {
+    let key: &monotree::Hash = funding_txid[..32].as_bytes().try_into().unwrap();
+    let mut tree = Monotree::<RocksDB, Blake2b>::new(sc_db_loc);
+
+    // generate inclusion proof
+    let proof = tree.get_merkle_proof(root.as_ref(), key)?;
+    Ok(proof)
+}
+
+pub fn verify_statechain_smt(root: &Option<monotree::Hash>, proof_key: &String, proof: &Option<Proof>) -> bool {
+    let entry: &monotree::Hash = proof_key[..32].as_bytes().try_into().unwrap();
+    let hasher = Blake2b::new();
+    verify_proof(&hasher, root.as_ref(), &entry, proof.as_ref())
+}
+
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    use bitcoin::secp256k1::{SecretKey, Secp256k1, PublicKey};
+
+    pub static DB_LOC: &str = "./db";
+
+    #[test]
+    fn test_add_to_state_chain() {
+        let secp = Secp256k1::new();
+        let proof_key1_priv = SecretKey::from_slice(&[1;32]).unwrap();
+        let proof_key1_pub = PublicKey::from_secret_key(&secp, &proof_key1_priv);
+
+        let mut state_chain = StateChain::new(proof_key1_pub.to_string(), 1000);
+        assert_eq!(state_chain.chain.len(),1);
+        // StateChainSig.verify called in function below
+        let new_state_sig = StateChainSig::new(
+            &proof_key1_priv,
+            &String::from("TRANSFER"),
+            &String::from("03b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3"),
+        ).unwrap();
+
+        // add to state chain
+        let _ = state_chain.add(new_state_sig.clone());
+        assert_eq!(state_chain.chain.len(),2);
+
+        // try add again (signature no longer valid for proof key "03b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3")
+        let fail = state_chain.add(new_state_sig);
+        assert!(fail.is_err());
+    }
+
+    #[test]
+    fn test_update_and_prove_sc_smt() {
+        let funding_txid = String::from("c1562f7f15d6b8a51ea2e7035b9cdb8c6c0c41fecb62d459a3a6bf738ff0db0e");
+        let proof_key = String::from("03b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3");
+
+        let root = None;
+
+        let root = update_statechain_smt(DB_LOC, &root, &funding_txid, &proof_key).unwrap();
+
+        let sc_smt_proof1 = gen_proof_smt(DB_LOC, &root, &funding_txid).unwrap();
+
+        assert!(verify_statechain_smt(&root, &proof_key, &sc_smt_proof1));
+
+        // update with new proof key and try again
+        let proof_key = String::from("13b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3");
+        let root = update_statechain_smt(DB_LOC, &root, &funding_txid, &proof_key).unwrap();
+
+
+        let sc_smt_proof2 = gen_proof_smt(DB_LOC, &root, &funding_txid).unwrap();
+        assert!(verify_statechain_smt(&root, &proof_key, &sc_smt_proof2));
     }
 }
