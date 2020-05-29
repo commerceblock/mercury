@@ -4,9 +4,7 @@ use clap::App;
 
 use client_lib::ClientShim;
 use client_lib::wallet::wallet;
-
-// use std::time::Instant;
-// use floating_duration::TimeFormat;
+use client_lib::state_entity;
 
 use std::collections::HashMap;
 fn main() {
@@ -36,8 +34,6 @@ fn main() {
         wallet.save();
         println!("Network: [{}], Wallet saved to disk", &network);
 
-        // let _escrow = escrow::Escrow::new();
-        // println!("Network: [{}], Escrow initiated", &network);
     } else if let Some(matches) = matches.subcommand_matches("wallet") {
         let mut wallet: wallet::Wallet = wallet::Wallet::load(client_shim).unwrap();
 
@@ -53,7 +49,6 @@ fn main() {
             );
         } else if matches.is_present("list-unspent") {
             let unspent = wallet.list_unspent();
-            println!("unspent: {:?}",unspent);
             let hashes: Vec<String> = unspent.into_iter().map(|u| u.tx_hash).collect();
 
             println!(
@@ -61,6 +56,19 @@ fn main() {
                 network,
                 hashes.join("\n")
             );
+        } else if matches.is_present("deposit") {
+            if let Some(matches) = matches.subcommand_matches("deposit") {
+            let amount: &str = matches.value_of("amount").unwrap();
+            let (shared_key_id, state_chain_id, _, _, _) = state_entity::deposit::deposit(
+                &mut wallet,
+                &amount.to_string().parse::<u64>().unwrap(),
+            ).unwrap();
+            wallet.save();
+            println!(
+                "Network: [{}], Deposited {} satoshi's. Shared Key ID: {}. State Chain ID: {}",
+                network, amount, shared_key_id, state_chain_id
+            );
+        }
         } else if matches.is_present("backup") {
             println!("Backup not currently implemented.")
             // let escrow = escrow::Escrow::load();

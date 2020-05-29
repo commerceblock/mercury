@@ -24,7 +24,6 @@ extern crate itertools;
 extern crate uuid;
 
 pub mod ecdsa;
-pub mod escrow;
 pub mod wallet;
 pub mod schnorr;
 pub mod state_entity;

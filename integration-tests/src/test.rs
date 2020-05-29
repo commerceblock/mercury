@@ -11,8 +11,7 @@ mod tests {
     use server_lib::server;
     use shared_lib::structs::PrepareSignMessage;
 
-    use bitcoin::{ Amount, TxIn, Transaction, OutPoint, PublicKey };
-    use bitcoin::hashes::sha256d;
+    use bitcoin::{ Amount, Transaction, PublicKey };
     use curv::elliptic::curves::traits::ECScalar;
     use curv::FE;
 
@@ -27,7 +26,7 @@ mod tests {
         let proof_key = wallet.se_proof_keys.get_new_key().unwrap();
         let init_res = client_lib::state_entity::deposit::session_init(&mut wallet, &proof_key.to_string());
         assert!(init_res.is_ok());
-        let key_res = wallet.gen_shared_key(&init_res.unwrap());
+        let key_res = wallet.gen_shared_key(&init_res.unwrap(), &1000);
         assert!(key_res.is_ok());
     }
 
@@ -36,7 +35,7 @@ mod tests {
         spawn_server();
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
         let secret_key: FE = ECScalar::new_random();
-        let err = ecdsa::get_master_key(&"Invalid id".to_string(), &client_shim, &secret_key, false);
+        let err = ecdsa::get_master_key(&"Invalid id".to_string(), &client_shim, &secret_key, &1000, false);
         assert!(err.is_err());
     }
 
@@ -62,20 +61,9 @@ mod tests {
     fn run_deposit(wallet: &mut Wallet) -> (String, String, Transaction, PrepareSignMessage, PublicKey)  {
         // make TxIns for funding transaction
         let amount = Amount::ONE_BTC.as_sat();
-        let inputs =  vec![
-        TxIn {
-            previous_output: OutPoint { txid: sha256d::Hash::default(), vout: 0 },
-            sequence: 0xffffffff - 2,
-            witness: Vec::new(),
-            script_sig: bitcoin::Script::default(),
-        }
-        ];
 
-        let funding_spend_addrs = vec!(wallet.keys.get_new_address().unwrap());
         let resp = state_entity::deposit::deposit(
             wallet,
-            &inputs,
-            &funding_spend_addrs,
             &amount
         ).unwrap();
 
@@ -227,11 +215,17 @@ mod tests {
         thread::sleep(five_seconds);
     }
     fn gen_wallet() -> Wallet {
-        Wallet::new(
+        let mut wallet = Wallet::new(
             &[0xcd; 32],
             &"regtest".to_string(),
             ClientShim::new("http://localhost:8000".to_string(), None)
-        )
+        );
+
+        // generate some addresses
+        let _ = wallet.keys.get_new_address();
+        let _ = wallet.keys.get_new_address();
+
+        wallet
     }
     fn load_wallet() -> Wallet {
         Wallet::load_from(TEST_WALLET_FILENAME,ClientShim::new("http://localhost:8000".to_string(), None)).unwrap()

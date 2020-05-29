@@ -24,7 +24,7 @@ use super::super::Result;
 
 const KG_PATH_PRE: &str = "ecdsa/keygen";
 
-pub fn get_master_key(id: &String, client_shim: &ClientShim, secret_key: &FE, is_transfer: bool) -> Result<SharedKey> {
+pub fn get_master_key(id: &String, client_shim: &ClientShim, secret_key: &FE, value: &u64, is_transfer: bool) -> Result<SharedKey> {
     let start = Instant::now();
 
     let (id, kg_party_one_first_message): (String, party_one::KeyGenFirstMsg)
@@ -117,6 +117,7 @@ pub fn get_master_key(id: &String, client_shim: &ClientShim, secret_key: &FE, is
         id: id.to_string(),
         share: master_key,
         state_chain_id: None,
+        value: value.to_owned(),
         proof_key: None,
         smt_proof: None
     })

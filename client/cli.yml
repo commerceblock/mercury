@@ -29,6 +29,15 @@ subcommands:
               short: u
               help: List unspent transactions (tx hash)
       subcommands:
+        - deposit:
+            about: Deposit to State Entity
+            version: "1.0"
+            args:
+              - amount:
+                  short: a
+                  required: true
+                  value_name: amount
+                  help: Amount in Satoshis
         - send:
             about: Send a transaction
             version: "1.0"

@@ -37,8 +37,8 @@ pub struct GetBalanceResponse {
 pub struct GetListUnspentResponse {
     pub height: usize,
     pub tx_hash: String,
-    pub tx_pos: usize,
-    pub value: usize,
+    pub tx_pos: u32,
+    pub value: u64,
     pub address: String,
 }
 
@@ -311,19 +311,19 @@ impl Wallet {
     }
 
     /// create new 2P-ECDSA key with state entity
-    pub fn gen_shared_key(&mut self, id: &String) -> Result<&SharedKey> {
+    pub fn gen_shared_key(&mut self, id: &String, value: &u64) -> Result<&SharedKey> {
         let key_share_pub = self.se_key_shares.get_new_key()?;
         let key_share_priv = self.se_key_shares.get_key_derivation(&key_share_pub).unwrap().private_key.key;
 
-        let shared_key = SharedKey::new(id, &self.client_shim, &key_share_priv, false)?;
+        let shared_key = SharedKey::new(id, &self.client_shim, &key_share_priv, value, false)?;
         self.shared_keys.push(shared_key);
         Ok(self.shared_keys.last().unwrap())
     }
 
     /// create new 2P-ECDSA key with predeinfed private key
-    pub fn gen_shared_key_fixed_secret_key(&mut self, id: &String, secret_key: &SecretKey) -> Result<()> {
+    pub fn gen_shared_key_fixed_secret_key(&mut self, id: &String, secret_key: &SecretKey, value: &u64) -> Result<()> {
         self.shared_keys.push(
-            SharedKey::new(id, &self.client_shim, secret_key, true)?);
+            SharedKey::new(id, &self.client_shim, secret_key, value, true)?);
         Ok(())
     }
 
@@ -406,7 +406,6 @@ impl Wallet {
         response
     }
 
-    /* PRIVATE */
     fn list_unspent_for_addresss(&self, address: String) -> Vec<GetListUnspentResponse> {
         let resp = self.electrumx_client.get_list_unspent(&address).unwrap();
         resp.into_iter()

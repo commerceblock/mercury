@@ -125,7 +125,7 @@ pub fn transfer_receiver(
 
     // Make shared key with new private share
     let shared_id = &transfer_msg5.new_shared_key_id;
-    wallet.gen_shared_key_fixed_secret_key(shared_id,&o2.get_element())?;
+    wallet.gen_shared_key_fixed_secret_key(shared_id, &o2.get_element(), &state_chain_data.amount)?;
 
     // Check shared key master public key == private share * SE public share
     if (transfer_msg5.s2_pub*o2).get_element()

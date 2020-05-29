@@ -23,16 +23,17 @@ pub struct InclusionProofSMT {
 pub struct SharedKey {
     pub id: String,
     pub share: MasterKey2,
+    pub value: u64, //Satoshis
     pub state_chain_id: Option<String>,
     pub proof_key: Option<PublicKey>,
     pub smt_proof: Option<InclusionProofSMT>
 }
 
 impl SharedKey {
-    pub fn new(id: &String, client_shim: &ClientShim, secret_key: &SecretKey, is_transfer: bool) -> Result<SharedKey> {
+    pub fn new(id: &String, client_shim: &ClientShim, secret_key: &SecretKey, value: &u64, is_transfer: bool) -> Result<SharedKey> {
         let mut key_share_priv: FE = ECScalar::zero();  // convert to curv lib
         key_share_priv.set_element(*secret_key);
-        ecdsa::get_master_key(id, client_shim, &key_share_priv, is_transfer)
+        ecdsa::get_master_key(id, client_shim, &key_share_priv, value, is_transfer)
     }
 
     pub fn add_proof_data(&mut self, proof_key: &PublicKey, root: &Root, proof: &Option<Proof>) {
