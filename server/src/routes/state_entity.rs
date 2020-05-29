@@ -183,6 +183,7 @@ pub fn prepare_sign_tx(
 
                     // create StateChain and store
                     let state_chain = StateChain::new(proof_key.clone(), tx_b.output.last().unwrap().value);
+
                     db::insert(
                         &state.db,
                         &claim.sub,
@@ -208,16 +209,11 @@ pub fn prepare_sign_tx(
                         &user_session
                     )?;
 
-                    // update sparse merkle tree with new StateChain entry
-                    let root = get_current_root::<Root>(&state.db)?;
-                    let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &prepare_sign_msg.input.txid.to_string(), &proof_key)?;
-                    update_root(&state.db, new_root.unwrap())?;
-
-                    debug!("Deposit: Added to statechain and sparse merkle tree. proof.");
+                    debug!("Deposit: Statechain created and backup tx ready for signing.");
 
                     return Ok(Json(state_chain.id));
-
                 }
+
                 Protocol::Transfer => {
                     // Get and update UserSession for this user
                     let mut user_session: UserSession =
@@ -233,6 +229,8 @@ pub fn prepare_sign_tx(
                         &StateEntityStruct::UserSession,
                         &user_session
                     )?;
+
+                    debug!("Transfer: Backup tx ready for signing.");
 
                     return Ok(Json(String::from("")));
                 }
@@ -286,6 +284,8 @@ pub fn prepare_sign_tx(
                 &user_session
             )?;
 
+            debug!("Withdraw: Withdraw tx ready for signing.");
+
             return Ok(Json(String::from("")));
         }
     }
@@ -326,6 +326,9 @@ pub fn deposit_init(
             s2: None,
         }
     )?;
+
+    debug!("Deposit: Protocol initiated. UserId generated: {}",user_id);
+
     Ok(Json(user_id))
 }
 
@@ -365,11 +368,13 @@ pub fn transfer_sender(
         &transfer_msg1.shared_key_id,
         &StateEntityStruct::TransferData,
         &TransferData {
-            state_chain_id: user_session.state_chain_id.unwrap(),
+            state_chain_id: user_session.state_chain_id.clone().unwrap(),
             state_chain_sig: transfer_msg1.state_chain_sig.to_owned(),
             x1
         }
     )?;
+
+    debug!("Transfer: Sender side complete. For State Chain: {}",user_session.state_chain_id.unwrap());
 
     // TODO encrypt x1 with Senders proof key
     Ok(Json(TransferMsg2{x1}))
@@ -479,7 +484,7 @@ pub fn transfer_receiver(
     let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &funding_txid, &proof_key)?;
     update_root(&state.db, new_root.unwrap())?;
 
-    debug!("transfer: added to statechain. proof.");
+    debug!("Transfer: Receiver side complete. For State Chain: {}",transfer_data.state_chain_id);
 
     Ok(Json(
         TransferMsg5 {
@@ -536,7 +541,6 @@ pub fn withdraw(
         &user_session
     )?;
 
-
     // update sparse merkle tree
     let withdraw_tx = user_session.withdraw_tx.unwrap();
     let funding_txid = withdraw_tx.input.get(0).unwrap().previous_output.txid.to_string();
@@ -545,10 +549,7 @@ pub fn withdraw(
     let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &funding_txid, &withdraw_msg1.address)?;
     update_root(&state.db, new_root.unwrap())?;
 
-
-
-
-    debug!("withdraw: Ended statechain and updated sparse merkle tree.");
+    debug!("Withdraw: Complete. State Chain: {}",state_chain_id);
 
     Ok(Json(withdraw_tx))
 }

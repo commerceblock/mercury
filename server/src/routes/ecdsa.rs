@@ -5,7 +5,7 @@ use super::super::Config;
 
 use shared_lib::util::reverse_hex_str;
 use shared_lib::structs::{Protocol,SignSecondMsgRequest};
-use shared_lib::state_chain::StateChain;
+use shared_lib::{Root, state_chain::{update_statechain_smt, StateChain}};
 
 use crate::routes::state_entity::{ check_user_auth, StateEntityStruct, UserSession };
 use crate::error::{SEError,DBErrorType::NoDataForID};
@@ -24,6 +24,7 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use bitcoin::{Transaction, secp256k1::Signature};
 use std::string::ToString;
+use db::{update_root, get_current_root, DB_SC_LOC};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 struct HDPos {
@@ -430,7 +431,6 @@ pub fn sign_second(
     if user_session.state_chain_id.is_none() {
         return Err(SEError::SigningError(String::from("No state_chain_id found for state chain session.")));
     }
-    debug!("Session data and Sig hash found in DB for id {}",id);
 
     // check sighash matches message to be signed
     let mut message_hex = request.message.to_hex();
@@ -453,7 +453,6 @@ pub fn sign_second(
     if user_session.sig_hash.unwrap().to_string() != message_sig_hash {
         return Err(SEError::SigningError(String::from("Message to be signed does not match verified sig hash.")))
     }
-    debug!("Sig hash in message matches verified sig hash.");
 
     let shared_key: MasterKey1 = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1MasterKey)?
         .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
@@ -512,6 +511,9 @@ pub fn sign_second(
                 &StateEntityStruct::UserSession,
                 &user_session
             )?;
+
+            debug!("Withdraw: Tx signed and stored.");
+
         },
         _ => { // despoit() and transfer() both sign backup_tx
 
@@ -535,7 +537,7 @@ pub fn sign_second(
             db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
                 .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
 
-            state_chain.backup_tx = Some(tx);
+            state_chain.backup_tx = Some(tx.clone());
 
             db::insert(
                 &state.db,
@@ -544,6 +546,23 @@ pub fn sign_second(
                 &StateEntityStruct::StateChain,
                 &state_chain
             )?;
+
+            // deposit() update sparse merkle tree
+            if let Protocol::Deposit = request.protocol {
+                // update sparse merkle tree with new StateChain entry
+                let root = get_current_root::<Root>(&state.db)?;
+                let new_root = update_statechain_smt(
+                    DB_SC_LOC,
+                    &root.value,
+                    &tx.input.get(0).unwrap().previous_output.txid.to_string(),
+                    &user_session.proof_key
+                )?;
+                update_root(&state.db, new_root.unwrap())?;
+
+                debug!("Deposit: Added to sparse merkle tree. State Chain: {}", state_chain_id);
+            }
+
+            debug!("Deposit/Transfer: Backup Tx signed and stored. State Chain: {}", state_chain_id);
         }
     };
 
