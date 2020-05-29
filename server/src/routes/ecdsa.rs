@@ -420,7 +420,7 @@ pub fn sign_second(
     check_user_auth(&state, &claim, &id)?;
 
     // Get UserSession for this user and check sig hash, backup tx and state chain id exists
-    let user_session: UserSession = db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
+    let mut user_session: UserSession = db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
         .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
     if user_session.sig_hash.is_none() {
         return Err(SEError::SigningError(String::from("No sig_hash found for state chain session.")));
@@ -479,10 +479,10 @@ pub fn sign_second(
     // Get transaction which is being signed.
     let mut tx: Transaction = match request.protocol {
         Protocol::Withdraw => {
-            user_session.withdraw_tx.unwrap().to_owned()
+            user_session.withdraw_tx.clone().unwrap().to_owned()
         },
         _ => { // despoit() and transfer() both sign backup_tx
-            user_session.backup_tx.unwrap().to_owned()
+            user_session.backup_tx.clone().unwrap().to_owned()
         }
     };
 
@@ -499,9 +499,6 @@ pub fn sign_second(
     match request.protocol {
         Protocol::Withdraw => {
             // store signed withdraw tx in UserSession DB object
-            let mut user_session: UserSession = db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
-                .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-
             user_session.withdraw_tx = Some(tx);
 
             db::insert(
@@ -513,14 +510,10 @@ pub fn sign_second(
             )?;
 
             debug!("Withdraw: Tx signed and stored.");
-
         },
         _ => { // despoit() and transfer() both sign backup_tx
 
             // store signed backup tx in UserSession DB object
-            let mut user_session: UserSession = db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
-                .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-
             user_session.backup_tx = Some(tx.to_owned());
 
             db::insert(
