@@ -7,6 +7,7 @@ use client_lib::wallet::wallet;
 use client_lib::state_entity;
 
 use std::collections::HashMap;
+use wallet::GetBalanceResponse;
 fn main() {
     let yaml = load_yaml!("../cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
@@ -39,20 +40,32 @@ fn main() {
 
         if matches.is_present("new-address") {
             let address = wallet.keys.get_new_address().unwrap();
-            println!("Network: [{}], Address: [{}]", network, address.to_string());
+            println!("\nNetwork: [{}] \n\nAddress: [{}]", network, address.to_string());
             wallet.save();
         } else if matches.is_present("get-balance") {
-            let balance = wallet.get_balance();
-            println!(
-                "Network: [{}], Balance: [balance: {}, pending: {}]",
-                network, balance.confirmed, balance.unconfirmed
-            );
+            println!("\nNetwork: [{}]",network);
+            let addr_balances: Vec<GetBalanceResponse> = wallet.get_all_addresses_balance();
+            let state_chain_balances: Vec<GetBalanceResponse> = wallet.get_state_chain_balances();
+
+            if addr_balances.len() > 0 {
+                println!("\nAddress:\t\t\t\t\tConfirmed:\tUnconfirmed:");
+                for addr in addr_balances.into_iter() {
+                    println!("{}\t{}\t\t{}", addr.address, addr.confirmed, addr.unconfirmed);
+                }
+            }
+
+            if state_chain_balances.len() > 0 {
+                println!("\nState Chain ID:\t\t\t\t\tConfirmed:\tUnconfirmed:");
+                for addr in state_chain_balances.into_iter() {
+                    println!("{}\t\t{}\t\t{}", addr.address, addr.confirmed, addr.unconfirmed);
+                }
+            }
         } else if matches.is_present("list-unspent") {
             let unspent = wallet.list_unspent();
             let hashes: Vec<String> = unspent.into_iter().map(|u| u.tx_hash).collect();
 
             println!(
-                "Network: [{}], Unspent tx hashes: [\n{}\n]",
+                "\nNetwork: [{}] \n\nUnspent tx hashes: \n{}\n",
                 network,
                 hashes.join("\n")
             );
@@ -65,7 +78,7 @@ fn main() {
             ).unwrap();
             wallet.save();
             println!(
-                "Network: [{}], Deposited {} satoshi's. Shared Key ID: {}. State Chain ID: {}",
+                "\nNetwork: [{}], \n\nDeposited {} satoshi's. \nShared Key ID: {} \nState Chain ID: {}",
                 network, amount, shared_key_id, state_chain_id
             );
         }

@@ -365,6 +365,15 @@ impl Wallet {
         }
     }
 
+    fn balance_not_zero(&self, addr: &GetBalanceResponse) -> bool {
+        if addr.confirmed == 0 {
+            if addr.unconfirmed == 0 {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /// return list of all addresses derived from keys in wallet
     fn get_all_wallet_addresses(&self) -> Vec<bitcoin::Address> {
         let mut addresses = self.keys.get_all_addresses();
@@ -372,12 +381,14 @@ impl Wallet {
         addresses
     }
 
-    fn get_all_addresses_balance(&self) -> Vec<GetBalanceResponse> {
-        let response: Vec<GetBalanceResponse> = self
+    pub fn get_all_addresses_balance(&self) -> Vec<GetBalanceResponse> {
+        let mut response: Vec<GetBalanceResponse> = self
             .get_all_wallet_addresses()
             .into_iter()
             .map(|a| self.get_address_balance(&a))
             .collect();
+
+        response.retain(|x| self.balance_not_zero(x)); // remove 0 balances
         response
     }
 
@@ -392,6 +403,20 @@ impl Wallet {
             aggregated_balance.confirmed += b.confirmed;
         }
         aggregated_balance
+    }
+
+    /// Return balances of shared keys
+    pub fn get_state_chain_balances(&self) -> Vec<GetBalanceResponse> {
+        let mut state_chain_balances: Vec<GetBalanceResponse> = vec!();
+        for shared_key in &self.shared_keys {
+            state_chain_balances.push(
+                GetBalanceResponse {
+                    address: shared_key.id.to_owned(),
+                    confirmed: shared_key.value,
+                    unconfirmed: 0,
+                })
+        }
+        state_chain_balances
     }
 
 

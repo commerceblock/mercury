@@ -43,7 +43,7 @@ where
     println!("item #2 = {:?}", item);
 
     let put_item_input = PutItemInput {
-        item: item,
+        item,
         table_name: table_name.to_string(),
         ..Default::default()
     };

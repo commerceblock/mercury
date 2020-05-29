@@ -15,6 +15,8 @@ cargo build --release
 ```
 
 ## Using the CLI
+The wallet is currently exposed to a Mock Electrum server. The first 2 addresses generated have funds.
+
 ```bash
 ../target/release/cli --help            
 ```
@@ -54,11 +56,11 @@ USAGE:
     cli wallet [FLAGS] [SUBCOMMAND]
 
 FLAGS:
-    -b               Total balance
-    -h, --help       Prints help information
-    -u               List unspent transactions (tx hash)
     -a               Generate a new address
+    -u               List unspent transactions (tx hash)
+    -b               Total balance
     -V, --version    Prints version information
+    -h, --help       Prints help information
 
 SUBCOMMANDS:
     help    Prints this message or the help of the given subcommand(s)
@@ -71,7 +73,9 @@ SUBCOMMANDS:
 
 * Output:
 ```text
-Network: [testnet], Address: [tb1quxl4c4cyl3586s7tuql7tqqsv233sumxz0588a]
+Network: [regtest]
+
+Address: [bcrt1qq0znj64a5zukv7yew52zjzmdndch3r0vxu8668]
 ```
 
 ### Get total balance
@@ -81,7 +85,13 @@ Network: [testnet], Address: [tb1quxl4c4cyl3586s7tuql7tqqsv233sumxz0588a]
 
 * Output:
 ```text
-Network: [testnet], Balance: [balance: 1100000, pending: 0]
+Network: [regtest]
+
+Address:					Confirmed:	Unconfirmed:
+bcrt1qsuqsurhgfduhqw6ejquw54482sqpkfc22gytyh	100000		0
+
+State Chain ID:					Confirmed:	Unconfirmed:
+1b4cc310-458d-40e8-8a1b-b91c2cc67397		100		0
 ```
 
 ### Get list unspent
@@ -91,25 +101,31 @@ Network: [testnet], Balance: [balance: 1100000, pending: 0]
 
 * Output:
 ```text
-Network: [testnet], Unspent tx hashes: [
-bc32ff53c1b9f71d7a6a5e3f5ec7bc8d20afe50214110a0718c9004be33d57d6
-53bc8eca351446f0ec2c13a978243b726a132792305a6758bfc75c67209f9d6b
+Network: [regtest]
+
+Unspent tx hashes:
+e0a97cb38e7e73617ef75a57eaf2841eb06833407c0eae08029bd04ea7e6115a
+40bf39ffdf4322e4d30ed783feec5bd9eb2804b81f23ebd5e24ea2aa2365a326
 ]
 ```
 
-### Send a transaction
+### Deposit to State entity
 ```bash
-../target/release/cli wallet send -t [ADDRESS] -a [BTC_AMOUNT]
+../target/release/cli wallet deposit -a [SATOSHI_AMOUNT]
 ```
 
 * Example:
 ```bash
-../target/release/cli wallet send -t tb1quxl4c4cyl3586s7tuql7tqqsv233sumxz0588a -a 0.0001
+../target/release/cli wallet deposit -a 100
 ```
 
 * Output:
 ```text
-Network: [testnet], Sent 0.0001 BTC to address tb1quxl4c4cyl3586s7tuql7tqqsv233sumxz0588a. Transaction ID: 44545bf81fc8aebcde855c2e33a5f83a17a93f76164330e1ee9e366e8e039444
+Network: [regtest]
+
+Deposited 100 satoshi's.
+Shared Key ID: 9f197560-cc8a-4abd-8377-247e6208544e
+State Chain ID: c7c57bc7-db45-474f-86f6-109205eb6b99
 ```
 
 * Explorer:
