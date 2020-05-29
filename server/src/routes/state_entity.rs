@@ -103,12 +103,10 @@ pub fn get_statechain(
     let state_chain: StateChain =
         db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
             .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
-    let funding_tx_outpoint = state_chain.backup_tx.unwrap().input.get(0).unwrap().previous_output;
     Ok(Json({
         StateChainDataAPI {
             amount: state_chain.amount,
-            funding_txid: funding_tx_outpoint.txid.to_string(),
-            funding_tx_vout: funding_tx_outpoint.vout,
+            utxo: state_chain.backup_tx.unwrap().input.get(0).unwrap().previous_output,
             chain: state_chain.chain
         }
     }))
@@ -212,7 +210,7 @@ pub fn prepare_sign_tx(
 
                     // update sparse merkle tree with new StateChain entry
                     let root = get_current_root::<Root>(&state.db)?;
-                    let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &prepare_sign_msg.input_txid, &proof_key)?;
+                    let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &prepare_sign_msg.input.txid.to_string(), &proof_key)?;
                     update_root(&state.db, new_root.unwrap())?;
 
                     debug!("Deposit: Added to statechain and sparse merkle tree. proof.");
@@ -246,14 +244,37 @@ pub fn prepare_sign_tx(
 
         // Withdraw tx case
         PrepareSignMessage::WithdrawTx(prepare_sign_msg) => {
-            // rebuild tx_b sig hash to verify co-sign will be signing the correct data
-            let (tx_w, sig_hash) = rebuild_withdraw_tx(&prepare_sign_msg)?;
+            // Check fee info
+            if prepare_sign_msg.se_fee != state.fee_withdraw {
+                return Err(SEError::Generic(String::from("Incorrect State Entity fee.")));
+            }
+            if prepare_sign_msg.se_fee_addr != state.fee_address {
+                return Err(SEError::Generic(String::from("Incorrect State Entity fee address.")));
+            }
 
-            // Get and update UserSession for this user
+            // Get user session for this user
             let mut user_session: UserSession =
                 db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
                     .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
+            // Check funding txid UTXO info
+            let state_chain_id = user_session.state_chain_id.clone() // check exists
+                .ok_or(SEError::Generic(String::from("No state chain session found for this user.")))?;
+            let state_chain: StateChain =
+                db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
+                    .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
+
+            let backup_tx_input = state_chain.backup_tx // check exists
+                .ok_or(SEError::Generic(String::from("No backup tx found for state chain session.")))?
+                .input.get(0).unwrap().previous_output;
+            if prepare_sign_msg.input != backup_tx_input {
+                return Err(SEError::Generic(String::from("Incorrect withdraw transacton input.")));
+            }
+
+            // rebuild tx_b and sig hash to verify co-signing is performed on expected message
+            let (tx_w, sig_hash) = rebuild_withdraw_tx(&prepare_sign_msg)?;
+
+            // update UserSession with withdraw tx info
             user_session.sig_hash = Some(sig_hash);
             user_session.withdraw_tx = Some(tx_w);
 
@@ -479,7 +500,7 @@ pub fn withdraw(
     check_user_auth(&state, &claim, &withdraw_msg1.shared_key_id)?;
 
     // get session data and confirm co-signing of withdraw tx has been performed
-    let user_session: UserSession =
+    let mut user_session: UserSession =
         db::get(&state.db, &claim.sub, &withdraw_msg1.shared_key_id, &StateEntityStruct::UserSession)?
             .ok_or(SEError::DBError(NoDataForID, withdraw_msg1.shared_key_id.clone()))?;
     if user_session.withdraw_tx.is_none() {
@@ -487,7 +508,9 @@ pub fn withdraw(
     }
 
     // Add new State to State Chain - End the chain.
-    let state_chain_id = user_session.state_chain_id.unwrap();
+    let state_chain_id = user_session.state_chain_id
+        .ok_or(SEError::Generic(String::from("No state chain session found for this user.")))?;
+
     let mut state_chain: StateChain =
         db::get(&state.db, &claim.sub, &state_chain_id.to_owned(), &StateEntityStruct::StateChain)?
             .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_owned()))?;
@@ -502,6 +525,17 @@ pub fn withdraw(
         &state_chain
     )?;
 
+    // Remove state_chain_id from user session to signal end of session
+    user_session.state_chain_id = None;
+
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &withdraw_msg1.shared_key_id,
+        &StateEntityStruct::UserSession,
+        &user_session
+    )?;
+
 
     // update sparse merkle tree
     let withdraw_tx = user_session.withdraw_tx.unwrap();
@@ -510,6 +544,9 @@ pub fn withdraw(
     let root = get_current_root::<Root>(&state.db)?;
     let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &funding_txid, &withdraw_msg1.address)?;
     update_root(&state.db, new_root.unwrap())?;
+
+
+
 
     debug!("withdraw: Ended statechain and updated sparse merkle tree.");
 

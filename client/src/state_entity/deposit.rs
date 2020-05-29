@@ -18,7 +18,7 @@ use crate::utilities::requests;
 use crate::state_entity::util::{cosign_tx_input,verify_statechain_smt};
 use super::api::{get_smt_proof, get_smt_root, get_statechain_fee_info};
 
-use bitcoin::{ Address, Transaction, TxIn, PublicKey };
+use bitcoin::{ Address, Transaction, TxIn, PublicKey, OutPoint};
 use curv::elliptic::curves::traits::ECPoint;
 
 
@@ -66,8 +66,10 @@ pub fn deposit(wallet: &mut Wallet, inputs: &Vec<TxIn>, funding_spend_addrs: &Ve
     let tx_b_prepare_sign_msg = BackUpTxPSM {
         protocol: Protocol::Deposit,
         spending_addr: p_addr.to_string(), // address which funding tx funds are sent to
-        input_txid: tx_0_signed.txid().to_string(),
-        input_vout: 0,
+        input: OutPoint {
+            txid: tx_0_signed.txid(),
+            vout: 0
+        },
         address: backup_receive_addr.to_string(),
         amount: amount.to_owned(),
         proof_key: Some(proof_key.to_string())

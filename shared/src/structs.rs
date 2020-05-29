@@ -2,10 +2,11 @@
 //!
 //! Struct definitions used in State entity protocols
 
-use curv::{FE, GE, BigInt};
-use kms::ecdsa::two_party::party2;
 use crate::Root;
 use crate::state_chain::{State, StateChainSig};
+use curv::{FE, GE, BigInt};
+use kms::ecdsa::two_party::party2;
+use bitcoin::OutPoint;
 
 
 
@@ -31,8 +32,7 @@ pub struct StateEntityFeeInfoAPI {
 /// /api/statechain return struct
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StateChainDataAPI {
-    pub funding_txid: String,
-    pub funding_tx_vout: u32,
+    pub utxo: OutPoint,
     pub amount: u64,
     pub chain: Vec<State>
 }
@@ -59,8 +59,7 @@ pub enum PrepareSignMessage {
 pub struct BackUpTxPSM {
     pub protocol: Protocol,
     pub spending_addr: String,  // address which funding tx funds are sent to
-    pub input_txid: String,
-    pub input_vout: u32,
+    pub input: OutPoint,
     pub address: String,
     pub amount: u64,
     pub proof_key: Option<String>
@@ -70,8 +69,7 @@ pub struct BackUpTxPSM {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WithdrawTxPSM {
     pub spending_addr: String,  // address which funding tx funds are sent to
-    pub input_txid: String,
-    pub input_vout: u32,
+    pub input: OutPoint,
     pub address: String,
     pub amount: u64,
     pub se_fee: u64,

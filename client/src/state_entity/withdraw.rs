@@ -55,8 +55,7 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
     let rec_address = wallet.keys.get_new_address()?; // receiving address of withdrawn funds
     let tx_prepare_sign_msg = WithdrawTxPSM {
         spending_addr: p_addr.to_string(),
-        input_txid: sc_info.funding_txid,
-        input_vout: sc_info.funding_tx_vout,
+        input: sc_info.utxo,
         address: rec_address.to_string(),
         amount: sc_info.amount,
         se_fee: se_fee_info.withdraw,
@@ -84,6 +83,6 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
         })?;
 
     // TODO verify signed tx_w matches tx_prepare_sign_msg. Broadcast transaction?
-    
+
     Ok(tx_w)
 }

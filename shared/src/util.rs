@@ -6,7 +6,7 @@ use super::Result;
 use crate::structs::{BackUpTxPSM, WithdrawTxPSM};
 use crate::error::SharedLibError;
 
-use bitcoin::{TxIn, TxOut, Transaction, Address, OutPoint};
+use bitcoin::{TxIn, TxOut, Transaction, Address};
 use bitcoin::hashes::sha256d::Hash;
 use bitcoin::blockdata::script::Builder;
 use bitcoin::{util::bip143::SighashComponents, blockdata::opcodes::OP_TRUE};
@@ -39,10 +39,7 @@ pub fn reverse_hex_str(hex_str: String) -> Result<String> {
 /// rebuild backup tx and return sig hash from PrepareSignMessage data
 pub fn rebuild_backup_tx(prepare_sign_msg: &BackUpTxPSM) -> Result<(Transaction, Hash)> {
     let txin = TxIn {
-        previous_output: OutPoint {
-            txid: Hash::from_str(&prepare_sign_msg.input_txid).unwrap(),
-            vout: prepare_sign_msg.input_vout
-        },
+        previous_output: prepare_sign_msg.input,
         sequence: 0xFFFFFFFF,
         witness: Vec::new(),
         script_sig: bitcoin::Script::default(),
@@ -67,10 +64,7 @@ pub fn rebuild_backup_tx(prepare_sign_msg: &BackUpTxPSM) -> Result<(Transaction,
 /// rebuild withdraw tx and return sig hash from PrepareSignMessage data
 pub fn rebuild_withdraw_tx(prepare_sign_msg: &WithdrawTxPSM) -> Result<(Transaction, Hash)> {
     let txin = TxIn {
-        previous_output: OutPoint {
-            txid: Hash::from_str(&prepare_sign_msg.input_txid).unwrap(),
-            vout: prepare_sign_msg.input_vout
-        },
+        previous_output: prepare_sign_msg.input,
         sequence: 0xFFFFFFFF,
         witness: Vec::new(),
         script_sig: bitcoin::Script::default(),

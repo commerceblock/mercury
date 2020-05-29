@@ -138,7 +138,7 @@ pub fn transfer_receiver(
 
     // verify proof key inclusion in SE sparse merkle tree
     let root = get_smt_root(wallet)?;
-    let proof = get_smt_proof(wallet, &root, &state_chain_data.funding_txid)?;
+    let proof = get_smt_proof(wallet, &root, &state_chain_data.utxo.txid.to_string())?;
     assert!(verify_statechain_smt(
         &root.value,
         &se_addr.proof_key.to_string(),
@@ -157,7 +157,7 @@ pub fn transfer_receiver(
 pub fn try_o2(wallet: &mut Wallet, state_chain_data: &StateChainDataAPI, transfer_msg3: &TransferMsg3, num_tries: &u32) -> Result<(FE,TransferMsg5)>{
     // generate o2 private key and corresponding 02 public key
     let mut encoded_txid = num_tries.to_string();
-    encoded_txid.push_str(&state_chain_data.funding_txid);
+    encoded_txid.push_str(&state_chain_data.utxo.txid.to_string());
     let key_share_pub = wallet.se_key_shares.get_new_key_encoded_id(
         funding_txid_to_int(&encoded_txid)?
     )?;

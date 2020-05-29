@@ -36,9 +36,8 @@ mod tests {
         spawn_server();
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
         let secret_key: FE = ECScalar::new_random();
-        if let Err(e) = ecdsa::get_master_key(&"Invalid id".to_string(), &client_shim, &secret_key, false) {
-            assert_eq!(e.to_string(),"State Entity Error: Authentication Error: User authorisation failed".to_string());
-        }
+        let err = ecdsa::get_master_key(&"Invalid id".to_string(), &client_shim, &secret_key, false);
+        assert!(err.is_err());
     }
 
     // #[test]
@@ -114,9 +113,8 @@ mod tests {
         spawn_server();
         let mut wallet = gen_wallet();
 
-        if let Err(e) = state_entity::api::get_statechain(&mut wallet, &String::from("id")) {
-            assert!(e.to_string().contains(&String::from("No data for such identifier")))
-        }
+        let err = state_entity::api::get_statechain(&mut wallet, &String::from("id"));
+        assert!(err.is_err());
 
         let deposit = run_deposit(&mut wallet);
 
@@ -192,6 +190,10 @@ mod tests {
         assert!(state_chain.chain.last().unwrap().data.contains(&String::from("bcrt")));
         // check purpose of state chain signature
         assert_eq!(state_chain.chain.get(0).unwrap().next_state.clone().unwrap().purpose, String::from("WITHDRAW"));
+
+        // Try again after funds already withdrawn
+        let err = state_entity::withdraw::withdraw(&mut wallet, &deposit_resp.0);
+        assert!(err.is_err());
     }
 
     #[test]
