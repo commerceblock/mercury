@@ -119,7 +119,8 @@ pub fn get_master_key(id: &String, client_shim: &ClientShim, secret_key: &FE, va
         state_chain_id: None,
         value: value.to_owned(),
         proof_key: None,
-        smt_proof: None
+        smt_proof: None,
+        unspent: true
     })
 }
 

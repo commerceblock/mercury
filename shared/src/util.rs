@@ -16,8 +16,8 @@ use std::str::FromStr;
 /// network - move this to config
 #[allow(dead_code)]
 pub const RBF: u32 = 0xffffffff - 2;
-const DUSTLIMIT: u64 = 100;
-const FEE: u64 = 1000;
+pub const DUSTLIMIT: u64 = 100;
+pub const FEE: u64 = 1000;
 
 
 pub fn reverse_hex_str(hex_str: String) -> Result<String> {
@@ -50,6 +50,7 @@ pub fn rebuild_backup_tx(prepare_sign_msg: &BackUpTxPSM) -> Result<(Transaction,
         &prepare_sign_msg.address,
         &prepare_sign_msg.amount
     )? ;
+
 
     let comp = SighashComponents::new(&tx_b);
     let sig_hash = comp.sighash_all(
@@ -90,6 +91,9 @@ pub fn rebuild_withdraw_tx(prepare_sign_msg: &WithdrawTxPSM) -> Result<(Transact
 
 /// build funding tx spending inputs to p2wpkh address P for amount A
 pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &String, amount: &u64, fee: &u64, fee_addr: &String) -> Result<Transaction> {
+    if FEE+fee >= *amount {
+        return Err(SharedLibError::FormatError(String::from("Not enough value to cover fee.")));
+    }
     let tx_0 = Transaction {
                 version: 2,
                 lock_time: 0,
@@ -113,6 +117,9 @@ pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &String, amount: &u64, fee: &u6
 ///     - amount A-D to p2wpkh address P, and
 ///     - amount D to script OP_TRUE
 pub fn build_tx_k(funding_tx_in: &TxIn, p_address: &Address, amount: &u64) -> Result<Transaction> {
+    if DUSTLIMIT >= *amount {
+        return Err(SharedLibError::FormatError(String::from("Not enough value to cover fee.")));
+    }
     let script = Builder::new().push_opcode(OP_TRUE).into_script();
     let tx_k = Transaction {
                 input: vec![funding_tx_in.clone()],
@@ -134,6 +141,9 @@ pub fn build_tx_k(funding_tx_in: &TxIn, p_address: &Address, amount: &u64) -> Re
 
 /// build backup tx spending P output of txK to given backup address
 pub fn build_tx_b(txk_input: &TxIn, b_address: &String, amount: &u64) -> Result<Transaction> {
+    if FEE >= *amount {
+        return Err(SharedLibError::FormatError(String::from("Not enough value to cover fee.")));
+    }
     let tx_b = Transaction {
                 input: vec![txk_input.clone()],
                 output: vec![
@@ -153,6 +163,9 @@ pub fn build_tx_b(txk_input: &TxIn, b_address: &String, amount: &u64) -> Result<
 ///     - amount-fee to receive address, and
 ///     - amount 'fee' to State Entity fee address 'fee_addr'
 pub fn build_tx_w(funding_tx_in: &TxIn, rec_address: &String, amount: &u64, fee: &u64, fee_addr: &String) -> Result<Transaction> {
+    if *fee+FEE >= *amount{
+        return Err(SharedLibError::FormatError(String::from("Not enough value to cover fees.")));
+    }
     let tx_0 = Transaction {
                 version: 2,
                 lock_time: 0,

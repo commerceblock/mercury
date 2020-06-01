@@ -26,7 +26,8 @@ pub struct SharedKey {
     pub value: u64, //Satoshis
     pub state_chain_id: Option<String>,
     pub proof_key: Option<PublicKey>,
-    pub smt_proof: Option<InclusionProofSMT>
+    pub smt_proof: Option<InclusionProofSMT>,
+    pub unspent: bool
 }
 
 impl SharedKey {

@@ -38,6 +38,15 @@ subcommands:
                   required: true
                   value_name: amount
                   help: Amount in Satoshis
+        - withdraw:
+            about: Withdraw from State Entity
+            version: "1.0"
+            args:
+              - key:
+                  short: k
+                  required: true
+                  value_name: key
+                  help: ID of Shared Key hlding funds on State Entity
         - send:
             about: Send a transaction
             version: "1.0"

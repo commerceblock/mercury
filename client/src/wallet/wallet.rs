@@ -409,12 +409,14 @@ impl Wallet {
     pub fn get_state_chain_balances(&self) -> Vec<GetBalanceResponse> {
         let mut state_chain_balances: Vec<GetBalanceResponse> = vec!();
         for shared_key in &self.shared_keys {
-            state_chain_balances.push(
-                GetBalanceResponse {
-                    address: shared_key.id.to_owned(),
-                    confirmed: shared_key.value,
-                    unconfirmed: 0,
-                })
+            if shared_key.unspent {
+                state_chain_balances.push(
+                    GetBalanceResponse {
+                        address: shared_key.id.to_owned(),
+                        confirmed: shared_key.value,
+                        unconfirmed: 0,
+                    })
+            }
         }
         state_chain_balances
     }

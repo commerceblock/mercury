@@ -5,9 +5,11 @@ use clap::App;
 use client_lib::ClientShim;
 use client_lib::wallet::wallet;
 use client_lib::state_entity;
-
-use std::collections::HashMap;
 use wallet::GetBalanceResponse;
+
+use bitcoin::consensus;
+use std::collections::HashMap;
+
 fn main() {
     let yaml = load_yaml!("../cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
@@ -48,14 +50,14 @@ fn main() {
             let state_chain_balances: Vec<GetBalanceResponse> = wallet.get_state_chain_balances();
 
             if addr_balances.len() > 0 {
-                println!("\nAddress:\t\t\t\t\tConfirmed:\tUnconfirmed:");
+                println!("\n\nWallet balance: \n\nAddress:\t\t\t\t\tConfirmed:\tUnconfirmed:");
                 for addr in addr_balances.into_iter() {
                     println!("{}\t{}\t\t{}", addr.address, addr.confirmed, addr.unconfirmed);
                 }
             }
 
             if state_chain_balances.len() > 0 {
-                println!("\nState Chain ID:\t\t\t\t\tConfirmed:\tUnconfirmed:");
+                println!("\n\nState Entity balance: \n\nShared Key ID:\t\t\t\t\tConfirmed:\tUnconfirmed:");
                 for addr in state_chain_balances.into_iter() {
                     println!("{}\t\t{}\t\t{}", addr.address, addr.confirmed, addr.unconfirmed);
                 }
@@ -71,17 +73,33 @@ fn main() {
             );
         } else if matches.is_present("deposit") {
             if let Some(matches) = matches.subcommand_matches("deposit") {
-            let amount: &str = matches.value_of("amount").unwrap();
-            let (shared_key_id, state_chain_id, _, _, _) = state_entity::deposit::deposit(
-                &mut wallet,
-                &amount.to_string().parse::<u64>().unwrap(),
-            ).unwrap();
-            wallet.save();
-            println!(
-                "\nNetwork: [{}], \n\nDeposited {} satoshi's. \nShared Key ID: {} \nState Chain ID: {}",
-                network, amount, shared_key_id, state_chain_id
-            );
-        }
+                let amount: &str = matches.value_of("amount").unwrap();
+                let (shared_key_id, state_chain_id, tx_0, _, _) = state_entity::deposit::deposit(
+                    &mut wallet,
+                    &amount.to_string().parse::<u64>().unwrap(),
+                ).unwrap();
+                wallet.save();
+                println!(
+                    "\nNetwork: [{}], \n\nDeposited {} satoshi's. \nShared Key ID: {} \nState Chain ID: {}",
+                    network, amount, shared_key_id, state_chain_id
+                );
+                println!("\nFunding Transaction hex: {}",hex::encode(consensus::serialize(&tx_0)));
+            }
+        } else if matches.is_present("withdraw") {
+            if let Some(matches) = matches.subcommand_matches("withdraw") {
+                let shared_key_id: &str = matches.value_of("key").unwrap();
+                let (tx_w, state_chain_id, amount) = state_entity::withdraw::withdraw(
+                    &mut wallet,
+                    &shared_key_id.to_string()
+                ).unwrap();
+                wallet.save();
+                println!(
+                    "\nNetwork: [{}], \nWithdrawn {} satoshi's. \nFrom State Chain ID: {}",
+                    network, amount, state_chain_id
+                );
+
+                println!("\nWithdraw Transaction hex: {}",hex::encode(consensus::serialize(&tx_w)));
+            }
         } else if matches.is_present("backup") {
             println!("Backup not currently implemented.")
             // let escrow = escrow::Escrow::load();

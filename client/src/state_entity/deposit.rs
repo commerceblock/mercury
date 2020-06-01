@@ -10,7 +10,7 @@
 
 use super::super::Result;
 extern crate shared_lib;
-use shared_lib::util::build_tx_0;
+use shared_lib::util::{FEE,build_tx_0};
 use shared_lib::structs::{PrepareSignMessage, BackUpTxPSM, DepositMsg1, Protocol};
 
 use crate::wallet::wallet::{to_bitcoin_public_key,Wallet};
@@ -48,17 +48,19 @@ fn basic_input(txid: &String, vout: &u32) -> TxIn {
     }
 }
 
-/// Deposit coins into state entity. Requires list of inputs and spending addresses of those inputs
-/// for funding transaction.
+/// Deposit coins into state entity. Returns shared_key_id, state_chain_id, signed funding tx, back up transacion data and proof_key
 pub fn deposit(wallet: &mut Wallet, amount: &u64)
     -> Result<(String, String, Transaction, PrepareSignMessage, PublicKey)>
 {
+    // get state entity fee info
+    let se_fee_info = get_statechain_fee_info(wallet)?;
+
     // Greedy coin selection.
     let unspent_utxos = wallet.list_unspent();
     let mut inputs: Vec<TxIn> = vec!();
     let mut addrs: Vec<Address> = vec!(); // corresponding addresses for inputs
     let mut amounts: Vec<u64> = vec!(); // corresponding amounts for inputs
-    while amount > &amounts.iter().sum::<u64>() {
+    while amount + se_fee_info.deposit > amounts.iter().sum::<u64>() {
         let unspent_utxo = unspent_utxos.get(inputs.len())
             .ok_or(CError::WalletError(WalletErrorType::NotEnoughFunds)).unwrap();
         inputs.push(basic_input(&unspent_utxo.tx_hash, &unspent_utxo.tx_pos));
@@ -66,6 +68,10 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
         amounts.push(unspent_utxo.value);
     }
 
+    // Ensure funds cover fees before initiating protocol
+    if FEE+se_fee_info.deposit >= *amount {
+        return Err(CError::WalletError(WalletErrorType::NotEnoughFunds));
+    }
 
     // generate proof key
     let proof_key = wallet.se_proof_keys.get_new_key()?;
@@ -77,21 +83,19 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     let shared_key = wallet.gen_shared_key(&shared_key_id, amount)?;
 
     // make funding tx
-    // co-owned key address to send funds to (P_addr)
-    let pk = shared_key.share.public.q.get_element();
+    let pk = shared_key.share.public.q.get_element();   // co-owned key address to send funds to (P_addr)
     let p_addr = bitcoin::Address::p2wpkh(
         &to_bitcoin_public_key(pk),
         wallet.get_bitcoin_network()
     );
-    // get state entity fee info
-    let se_fee_info = get_statechain_fee_info(wallet)?;
-    let tx_0 = build_tx_0(&inputs, &p_addr.to_string(), amount, &se_fee_info.deposit, &se_fee_info.address).unwrap();
-    // sign
+
+    let tx_0 = build_tx_0(&inputs, &p_addr.to_string(), amount, &se_fee_info.deposit, &se_fee_info.address)?;
     let tx_0_signed = wallet.sign_tx(
         &tx_0,
         &(0..inputs.len()).collect(), // inputs to sign are all inputs is this case
         &addrs,
-        &vec!(amount.clone()));
+        &amounts
+    );
 
     // make backup tx PrepareSignMessage: Data required to build Back up tx
     let backup_receive_addr = wallet.se_backup_keys.get_new_address()?;
@@ -109,7 +113,7 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
 
     let state_chain_id = cosign_tx_input(wallet, &shared_key_id, &PrepareSignMessage::BackUpTx(tx_b_prepare_sign_msg.to_owned()))?;
 
-    // Broadcast funding transcation
+    // TODO: Broadcast funding transcation
 
     // verify proof key inclusion in SE sparse merkle tree
     let root = get_smt_root(wallet)?;
