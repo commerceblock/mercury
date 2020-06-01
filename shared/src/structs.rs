@@ -8,7 +8,7 @@ use curv::{FE, GE, BigInt};
 use kms::ecdsa::two_party::party2;
 use bitcoin::OutPoint;
 
-
+use std::fmt;
 
 /// State Entity protocols
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -28,6 +28,12 @@ pub struct StateEntityFeeInfoAPI {
     pub deposit: u64, // satoshis
     pub withdraw: u64 // satoshis
 }
+impl fmt::Display for StateEntityFeeInfoAPI {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Fee address: {},\nDeposit fee: {}\nWithdrawal fee: {}",
+            self.address, self.deposit, self.withdraw)
+    }
+}
 
 /// /api/statechain return struct
 #[derive(Serialize, Deserialize, Debug)]
@@ -36,6 +42,15 @@ pub struct StateChainDataAPI {
     pub amount: u64,
     pub chain: Vec<State>
 }
+
+impl fmt::Display for StateChainDataAPI {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "utxo:\ntxid: {},\nvout: {}\namount: {}\nchain: {:?}",
+            self.utxo.txid, self.utxo.vout, self.amount, self.chain)
+    }
+}
+
+
 /// /api/statechain post struct
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SmtProofMsgAPI {

@@ -56,7 +56,7 @@ pub fn transfer_sender(
     };
 
     // first sign state chain
-    let state_chain_data: StateChainDataAPI = get_statechain(wallet, &state_chain_id)?;
+    let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id)?;
     let state_chain = state_chain_data.chain;
     // get proof key for signing
     let proof_key_derivation = wallet.se_proof_keys.get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap());
@@ -108,7 +108,7 @@ pub fn transfer_receiver(
     transfer_msg3: &TransferMsg3,
 ) -> Result<String> {
     // get statechain data (will Err if statechain not yet finalized)
-    let state_chain_data: StateChainDataAPI = get_statechain(wallet, &transfer_msg3.state_chain_id)?;
+    let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &transfer_msg3.state_chain_id)?;
 
     // verify state chain represents this address as new owner
     let prev_owner_proof_key = state_chain_data.chain.last().unwrap().data.clone();

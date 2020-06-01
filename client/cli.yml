@@ -69,12 +69,7 @@ subcommands:
                   short: a
                   required: true
                   value_name: Recipient Address
-                  help: State Entity Address of recipient
-              - proof_key:
-                  short: p
-                  required: true
-                  value_name: Recipient Proof key
-                  help: State Entity Proof key of recipient
+                  help: State Entity Address for recipient
         - transfer-receiver:
             about: Transfer State Chain - Receive
             version: "1.0"
@@ -98,3 +93,20 @@ subcommands:
                   required: true
                   value_name: amount
                   help: Amount in BTC
+  - state-entity:
+      about: API calls to State Entity
+      version: "1.0"
+      args:
+        - fee-info:
+            short: f
+            help: State Entity Fees information
+      subcommands:
+        - get-statechain:
+            about: Get a State Chain's information
+            version: "1.0"
+            args:
+              - id:
+                  short: i
+                  required: true
+                  value_name: ID
+                  help: State Chain ID

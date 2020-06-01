@@ -37,10 +37,10 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
     }
 
     // Get state chain info
-    let sc_info = get_statechain(wallet, &state_chain_id)?;
+    let sc_info = get_statechain(&wallet.client_shim, &state_chain_id)?;
 
     // Get state entity withdraw fee info
-    let se_fee_info = get_statechain_fee_info(wallet)?;
+    let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
 
     // Find address which spends funding tx (P_addr)
     let p_addr = bitcoin::Address::p2wpkh(
@@ -62,7 +62,7 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
     cosign_tx_input(wallet, &shared_key_id, &PrepareSignMessage::WithdrawTx(tx_prepare_sign_msg))?;
 
     // first sign state chain
-    let state_chain_data: StateChainDataAPI = get_statechain(wallet, &state_chain_id)?;
+    let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id)?;
     let state_chain = state_chain_data.chain;
     // get proof key for signing
     let proof_key_derivation = wallet.se_proof_keys.get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap());

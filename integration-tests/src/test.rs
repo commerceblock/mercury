@@ -101,12 +101,12 @@ mod tests {
         spawn_server();
         let mut wallet = gen_wallet();
 
-        let err = state_entity::api::get_statechain(&mut wallet, &String::from("id"));
+        let err = state_entity::api::get_statechain(&wallet.client_shim, &String::from("id"));
         assert!(err.is_err());
 
         let deposit = run_deposit(&mut wallet);
 
-        let state_chain = state_entity::api::get_statechain(&mut wallet, &String::from(deposit.1.clone())).unwrap();
+        let state_chain = state_entity::api::get_statechain(&wallet.client_shim, &String::from(deposit.1.clone())).unwrap();
         assert_eq!(state_chain.chain.last().unwrap().data, deposit.4.to_string());
     }
 
@@ -142,7 +142,7 @@ mod tests {
         );
 
         // check state chain is updated
-        let state_chain = state_entity::api::get_statechain(&mut wallet_sender, &deposit_resp.1).unwrap();
+        let state_chain = state_entity::api::get_statechain(&wallet_sender.client_shim, &deposit_resp.1).unwrap();
         assert_eq!(state_chain.chain.len(),2);
         assert_eq!(state_chain.chain.last().unwrap().data.to_string(), receiver_addr.proof_key.to_string());
 
@@ -168,7 +168,7 @@ mod tests {
         assert!(withdraw_tx.unwrap().0.input.last().unwrap().witness.len() > 0);
 
         // check state chain is updated
-        let state_chain = state_entity::api::get_statechain(&mut wallet, &deposit_resp.1).unwrap();
+        let state_chain = state_entity::api::get_statechain(&wallet.client_shim, &deposit_resp.1).unwrap();
         assert_eq!(state_chain.chain.len(),2);
 
         // check chain data is address

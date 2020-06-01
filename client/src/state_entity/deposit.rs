@@ -53,7 +53,7 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     -> Result<(String, String, Transaction, PrepareSignMessage, PublicKey)>
 {
     // get state entity fee info
-    let se_fee_info = get_statechain_fee_info(wallet)?;
+    let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
 
     // Greedy coin selection.
     let unspent_utxos = wallet.list_unspent();

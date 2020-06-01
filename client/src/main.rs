@@ -80,7 +80,7 @@ fn main() {
                 wallet.save();
                 println!(
                     "\nNetwork: [{}], \n\nNew State Entity address: \n{:?}",
-                    network, se_address
+                    network, serde_json::to_string(&se_address).unwrap()
                 );
             }
 
@@ -118,15 +118,11 @@ fn main() {
         } else if matches.is_present("transfer-sender") {
             if let Some(matches) = matches.subcommand_matches("transfer-sender") {
                 let shared_key_id: &str = matches.value_of("key").unwrap();
-                let receiver_addr: &str = matches.value_of("addr").unwrap();
-                let receiver_proof_key: &str = matches.value_of("proof_key").unwrap();
+                let receiver_addr: StateEntityAddress = serde_json::from_str(matches.value_of("addr").unwrap()).unwrap();
                 let transfer_msg = state_entity::transfer::transfer_sender(
                     &mut wallet,
                     &shared_key_id.to_string(),
-                    StateEntityAddress {
-                        backup_tx_addr: receiver_addr.to_owned(),
-                        proof_key: receiver_proof_key.to_owned(),
-                    },
+                    receiver_addr
                 ).unwrap();
                 wallet.save();
                 println!(
@@ -149,6 +145,8 @@ fn main() {
                     network, new_shared_key_id
                 );
             }
+
+        // backup
 
         } else if matches.is_present("backup") {
             println!("Backup not currently implemented.")
@@ -202,6 +200,30 @@ fn main() {
             //         network, amount_btc, to, txid
             //     );
             // }
+        }
+
+    // Api
+    } else if let Some(matches) = matches.subcommand_matches("state-entity") {
+        if matches.is_present("get-statechain") {
+            if let Some(matches) = matches.subcommand_matches("get-statechain") {
+                let id: &str = matches.value_of("id").unwrap();
+                let state_chain_info = state_entity::api::get_statechain(
+                    &client_shim,
+                    &id.to_string()
+                ).unwrap();
+                println!(
+                    "\nState Chain with Id {} info: \n{}",
+                    id, state_chain_info
+                );
+            }
+        } else if matches.is_present("fee-info") {
+                let fee_info = state_entity::api::get_statechain_fee_info(
+                    &client_shim
+                ).unwrap();
+                println!(
+                    "\nState Entity fee info: \n{}",
+                    fee_info
+                );
         }
     }
 }
