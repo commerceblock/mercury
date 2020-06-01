@@ -17,11 +17,11 @@
 //      e. Verify o2*S2 = P
 
 use super::super::Result;
-use shared_lib::structs::{StateChainDataAPI, PrepareSignMessage, BackUpTxPSM, TransferMsg1, TransferMsg2, TransferMsg3, TransferMsg4, TransferMsg5};
+use shared_lib::structs::{StateChainDataAPI, PrepareSignMessage, BackUpTxPSM, StateEntityAddress, TransferMsg1, TransferMsg2, TransferMsg3, TransferMsg4, TransferMsg5};
 use shared_lib::state_chain::StateChainSig;
 
 use crate::error::CError;
-use crate::wallet::wallet::{StateEntityAddress, Wallet};
+use crate::wallet::wallet::Wallet;
 use crate::wallet::key_paths::funding_txid_to_int;
 use crate::state_entity::util::{cosign_tx_input,verify_statechain_smt};
 use crate::state_entity::api::{get_smt_proof, get_smt_root, get_statechain};
@@ -37,24 +37,33 @@ use std::str::FromStr;
 pub fn transfer_sender(
     wallet: &mut Wallet,
     shared_key_id: &String,
-    state_chain_id: &String,
-    receiver_addr: &StateEntityAddress,
-    prepare_sign_msg: &PrepareSignMessage
+    receiver_addr: StateEntityAddress,
 ) -> Result<TransferMsg3> {
+    // Get required shared key data
+    let state_chain_id;
+    let prepare_sign_msg;
+    {
+        let shared_key = wallet.get_shared_key(shared_key_id)?;
+        state_chain_id = shared_key.state_chain_id.clone()
+            .ok_or(CError::Generic(String::from("No state chain for this shared key id")))?;
+        prepare_sign_msg = shared_key.backup_tx_psm.clone()
+            .ok_or(CError::Generic(String::from("No back up transaction data found for this shared key id")))?;
+    }
+
     let mut prev_backup_tx_psm: BackUpTxPSM = match prepare_sign_msg.to_owned() {
         PrepareSignMessage::BackUpTx(prev_backup_tx_psm) => prev_backup_tx_psm,
         _ => return Err(CError::Generic(String::from("Invalid PrepareSignMessage type. Back up tx expected.")))
     };
 
     // first sign state chain
-    let state_chain_data: StateChainDataAPI = get_statechain(wallet, state_chain_id)?;
+    let state_chain_data: StateChainDataAPI = get_statechain(wallet, &state_chain_id)?;
     let state_chain = state_chain_data.chain;
     // get proof key for signing
     let proof_key_derivation = wallet.se_proof_keys.get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap());
     let state_chain_sig = StateChainSig::new(
         &proof_key_derivation.unwrap().private_key.key,
         &String::from("TRANSFER"),
-        &receiver_addr.proof_key.to_string()
+        &receiver_addr.proof_key.clone().to_string()
     )?;
 
     // init transfer: perform auth and send new statechain
@@ -65,7 +74,7 @@ pub fn transfer_sender(
         })?;
 
     // sign new back up tx
-    prev_backup_tx_psm.address = receiver_addr.backup_addr.clone();
+    prev_backup_tx_psm.address = receiver_addr.backup_tx_addr.clone();
     cosign_tx_input(wallet, &shared_key_id, &prepare_sign_msg)?;
 
     // get o1 priv key
@@ -79,17 +88,25 @@ pub fn transfer_sender(
         shared_key_id: shared_key_id.to_string(),
         t1, // should be encrypted
         state_chain_sig,
-        state_chain_id: state_chain_id.to_string()
+        state_chain_id: state_chain_id.to_string(),
+        backup_tx_psm: prepare_sign_msg.to_owned(),
+        rec_addr: receiver_addr
     };
+
+    // Mark funds as spent in wallet
+    {
+        let mut shared_key = wallet.get_shared_key_mut(shared_key_id)?;
+        shared_key.unspent = false;
+    }
+
     Ok(transfer_msg3)
 }
 
-/// Transfer coins from old Owner to this wallet
+/// Receiver side of Transfer protocol.
 pub fn transfer_receiver(
     wallet: &mut Wallet,
     transfer_msg3: &TransferMsg3,
-    se_addr: &StateEntityAddress
-) -> Result<TransferMsg5> {
+) -> Result<String> {
     // get statechain data (will Err if statechain not yet finalized)
     let state_chain_data: StateChainDataAPI = get_statechain(wallet, &transfer_msg3.state_chain_id)?;
 
@@ -135,20 +152,21 @@ pub fn transfer_receiver(
 
     // TODO when node is integrated: Should also check that funding tx output address is address derived from shared key.
 
+    let rec_proof_key = transfer_msg3.rec_addr.proof_key.clone();
 
     // verify proof key inclusion in SE sparse merkle tree
     let root = get_smt_root(wallet)?;
     let proof = get_smt_proof(wallet, &root, &state_chain_data.utxo.txid.to_string())?;
     assert!(verify_statechain_smt(
         &root.value,
-        &se_addr.proof_key.to_string(),
+        &rec_proof_key,
         &proof
     ));
 
     // add state chain id, proof key and SMT inclusion proofs to local SharedKey data
-    wallet.update_shared_key(&shared_id, &transfer_msg3.state_chain_id, &se_addr.proof_key, &root, &proof)?;
+    wallet.update_shared_key(&shared_id, &transfer_msg3.state_chain_id, &transfer_msg3.backup_tx_psm, &rec_proof_key, &root, &proof)?;
 
-    Ok(transfer_msg5)
+    Ok(transfer_msg5.new_shared_key_id)
 }
 
 // Constraint on s2 size means that some (most) o2 values are not valid for the lindell_2017 protocol.

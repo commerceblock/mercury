@@ -29,6 +29,15 @@ subcommands:
               short: u
               help: List unspent transactions (tx hash)
       subcommands:
+        - se-addr:
+            about: Generate a new state entity address
+            version: "1.0"
+            args:
+              - txid:
+                  short: t
+                  required: true
+                  value_name: txid
+                  help: Transaction ID of state chain funding transaction
         - deposit:
             about: Deposit to State Entity
             version: "1.0"
@@ -45,8 +54,36 @@ subcommands:
               - key:
                   short: k
                   required: true
-                  value_name: key
-                  help: ID of Shared Key hlding funds on State Entity
+                  value_name: Shared key ID
+                  help: ID of Shared Key holding funds on State Entity
+        - transfer-sender:
+            about: Transfer State Chain - Send
+            version: "1.0"
+            args:
+              - key:
+                  short: k
+                  required: true
+                  value_name: Shared key ID
+                  help: ID of Shared Key holding funds on State Entity
+              - addr:
+                  short: a
+                  required: true
+                  value_name: Recipient Address
+                  help: State Entity Address of recipient
+              - proof_key:
+                  short: p
+                  required: true
+                  value_name: Recipient Proof key
+                  help: State Entity Proof key of recipient
+        - transfer-receiver:
+            about: Transfer State Chain - Receive
+            version: "1.0"
+            args:
+              - message:
+                  short: m
+                  required: true
+                  value_name: message
+                  help: Transfer message from sender
         - send:
             about: Send a transaction
             version: "1.0"

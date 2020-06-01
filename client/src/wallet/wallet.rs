@@ -3,7 +3,7 @@
 //! Basic Bitcoin wallet functionality. Full key owned by this wallet.
 
 use super::super::Result;
-use shared_lib::Root;
+use shared_lib::{structs::{StateEntityAddress, PrepareSignMessage}, Root};
 
 use super::key_paths::{ funding_txid_to_int, KeyPathWithAddresses, KeyPath};
 use crate::error::{ CError, WalletErrorType};
@@ -48,13 +48,6 @@ pub struct GetWalletBalanceResponse {
     pub unconfirmed: u64,
 }
 
-
-/// Address generated for State Entity transfer protocol
-#[derive(Deserialize, Debug)]
-pub struct StateEntityAddress {
-    pub backup_addr: String,
-    pub proof_key: PublicKey,
-}
 
 /// Standard Bitcoin Wallet
 pub struct Wallet {
@@ -262,8 +255,8 @@ impl Wallet {
             funding_txid_to_int(funding_txid)?
         )?;
         Ok(StateEntityAddress{
-            backup_addr: backup_addr.to_string(),
-            proof_key
+            backup_tx_addr: backup_addr.to_string(),
+            proof_key: proof_key.to_string()
         })
     }
 
@@ -328,9 +321,10 @@ impl Wallet {
     }
 
     // update shared key with proof data
-    pub fn update_shared_key(&mut self, shared_key_id: &String, state_chain_id: &String, proof_key: &PublicKey, root: &Root, proof: &Option<Proof>) -> Result<()> {
+    pub fn update_shared_key(&mut self, shared_key_id: &String, state_chain_id: &String, backup_tx_psm: &PrepareSignMessage, proof_key: &String, root: &Root, proof: &Option<Proof>) -> Result<()> {
         let shared_key = self.get_shared_key_mut(shared_key_id)?;
         shared_key.state_chain_id = Some(state_chain_id.to_string());
+        shared_key.backup_tx_psm = Some(backup_tx_psm.to_owned());
         shared_key.add_proof_data(proof_key, root, proof);
         Ok(())
     }

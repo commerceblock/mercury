@@ -125,7 +125,7 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     ));
 
     // add proof data to Shared key
-    wallet.update_shared_key(&shared_key_id, &state_chain_id, &proof_key, &root, &proof)?;
+    wallet.update_shared_key(&shared_key_id, &state_chain_id, &PrepareSignMessage::BackUpTx(tx_b_prepare_sign_msg.to_owned()), &proof_key.to_string(), &root, &proof)?;
 
     Ok((shared_key_id, state_chain_id, tx_0_signed, PrepareSignMessage::BackUpTx(tx_b_prepare_sign_msg), proof_key))
 }

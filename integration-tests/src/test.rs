@@ -89,7 +89,7 @@ mod tests {
         let shared_key = wallet.get_shared_key(&deposit.0).unwrap();
         assert_eq!(shared_key.smt_proof.clone().unwrap().root, root);
         assert_eq!(shared_key.smt_proof.clone().unwrap().proof, proof);
-        assert_eq!(shared_key.proof_key.unwrap(), proof_key);
+        assert_eq!(shared_key.proof_key.clone().unwrap(), proof_key.to_string());
 
         println!("Shared wallet id: {:?} ",deposit.0);
         println!("Funding transaction: {:?} ",funding_tx);
@@ -126,22 +126,19 @@ mod tests {
             state_entity::transfer::transfer_sender(
                 &mut wallet_sender,
                 &deposit_resp.0,    // shared wallet id
-                &deposit_resp.1,    // state chain id
-                &receiver_addr,
-                &deposit_resp.3     // backup tx prepare sign msg
+                receiver_addr.clone(),
         ).unwrap();
 
-        let transfer_receiver_resp  =
+        let new_shared_key_id  =
             state_entity::transfer::transfer_receiver(
                 &mut wallet_receiver,
                 &tranfer_sender_resp,
-                &receiver_addr
             ).unwrap();
 
         // check shared keys have the same master public key
         assert_eq!(
             wallet_sender.get_shared_key(&deposit_resp.0).unwrap().share.public.q,
-            wallet_receiver.get_shared_key(&transfer_receiver_resp.new_shared_key_id).unwrap().share.public.q
+            wallet_receiver.get_shared_key(&new_shared_key_id).unwrap().share.public.q
         );
 
         // check state chain is updated
@@ -153,10 +150,10 @@ mod tests {
         let root = state_entity::api::get_smt_root(&mut wallet_receiver).unwrap();
         let proof = state_entity::api::get_smt_proof(&mut wallet_receiver, &root, &deposit_resp.2.txid().to_string()).unwrap();
         //ensure wallet's shared key is updated with proof info
-        let shared_key = wallet_receiver.get_shared_key(&transfer_receiver_resp.new_shared_key_id).unwrap();
+        let shared_key = wallet_receiver.get_shared_key(&new_shared_key_id).unwrap();
         assert_eq!(shared_key.smt_proof.clone().unwrap().root, root);
         assert_eq!(shared_key.smt_proof.clone().unwrap().proof, proof);
-        assert_eq!(shared_key.proof_key.unwrap(),receiver_addr.proof_key);
+        assert_eq!(shared_key.proof_key.clone().unwrap(),receiver_addr.proof_key);
     }
 
     #[test]

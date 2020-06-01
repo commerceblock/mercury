@@ -98,7 +98,15 @@ pub struct DepositMsg1 {
 }
 
 
-// trasnfer algorithm structs
+// transfer algorithm structs
+
+
+/// Address generated for State Entity transfer protocol
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct StateEntityAddress {
+    pub backup_tx_addr: String,
+    pub proof_key: String,
+}
 
 /// Sender -> SE
 #[derive(Serialize, Deserialize, Debug)]
@@ -118,7 +126,10 @@ pub struct TransferMsg3 {
     pub t1: FE, // t1 = o1x1
     pub state_chain_sig: StateChainSig,
     pub state_chain_id: String,
+    pub backup_tx_psm: PrepareSignMessage,
+    pub rec_addr: StateEntityAddress     // receivers state entity address (btc address and proof key)
 }
+
 
 /// Receiver -> State Entity
 #[derive(Serialize, Deserialize, Debug)]
@@ -144,7 +155,6 @@ impl Default for TransferMsg5 {
         }
     }
 }
-
 
 // withdraw algorithm structs
 /// Owner -> State Entity

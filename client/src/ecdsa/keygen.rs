@@ -116,11 +116,12 @@ pub fn get_master_key(id: &String, client_shim: &ClientShim, secret_key: &FE, va
     Ok(SharedKey {
         id: id.to_string(),
         share: master_key,
-        state_chain_id: None,
         value: value.to_owned(),
+        state_chain_id: None,
+        backup_tx_psm: None,
         proof_key: None,
         smt_proof: None,
-        unspent: true
+        unspent: true,
     })
 }
 
