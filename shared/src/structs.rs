@@ -2,12 +2,13 @@
 //!
 //! Struct definitions used in State entity protocols
 
-use curv::{FE, GE, BigInt};
-use kms::ecdsa::two_party::party2;
 use crate::Root;
 use crate::state_chain::{State, StateChainSig};
+use curv::{FE, GE, BigInt};
+use kms::ecdsa::two_party::party2;
+use bitcoin::OutPoint;
 
-
+use std::fmt;
 
 /// State Entity protocols
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -27,15 +28,29 @@ pub struct StateEntityFeeInfoAPI {
     pub deposit: u64, // satoshis
     pub withdraw: u64 // satoshis
 }
+impl fmt::Display for StateEntityFeeInfoAPI {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Fee address: {},\nDeposit fee: {}\nWithdrawal fee: {}",
+            self.address, self.deposit, self.withdraw)
+    }
+}
 
 /// /api/statechain return struct
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StateChainDataAPI {
-    pub funding_txid: String,
-    pub funding_tx_vout: u32,
+    pub utxo: OutPoint,
     pub amount: u64,
     pub chain: Vec<State>
 }
+
+impl fmt::Display for StateChainDataAPI {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "utxo:\ntxid: {},\nvout: {}\namount: {}\nchain: {:?}",
+            self.utxo.txid, self.utxo.vout, self.amount, self.chain)
+    }
+}
+
+
 /// /api/statechain post struct
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SmtProofMsgAPI {
@@ -59,8 +74,7 @@ pub enum PrepareSignMessage {
 pub struct BackUpTxPSM {
     pub protocol: Protocol,
     pub spending_addr: String,  // address which funding tx funds are sent to
-    pub input_txid: String,
-    pub input_vout: u32,
+    pub input: OutPoint,
     pub address: String,
     pub amount: u64,
     pub proof_key: Option<String>
@@ -70,8 +84,7 @@ pub struct BackUpTxPSM {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WithdrawTxPSM {
     pub spending_addr: String,  // address which funding tx funds are sent to
-    pub input_txid: String,
-    pub input_vout: u32,
+    pub input: OutPoint,
     pub address: String,
     pub amount: u64,
     pub se_fee: u64,
@@ -100,7 +113,15 @@ pub struct DepositMsg1 {
 }
 
 
-// trasnfer algorithm structs
+// transfer algorithm structs
+
+
+/// Address generated for State Entity transfer protocol
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct StateEntityAddress {
+    pub backup_tx_addr: String,
+    pub proof_key: String,
+}
 
 /// Sender -> SE
 #[derive(Serialize, Deserialize, Debug)]
@@ -120,7 +141,10 @@ pub struct TransferMsg3 {
     pub t1: FE, // t1 = o1x1
     pub state_chain_sig: StateChainSig,
     pub state_chain_id: String,
+    pub backup_tx_psm: PrepareSignMessage,
+    pub rec_addr: StateEntityAddress     // receivers state entity address (btc address and proof key)
 }
+
 
 /// Receiver -> State Entity
 #[derive(Serialize, Deserialize, Debug)]
@@ -146,7 +170,6 @@ impl Default for TransferMsg5 {
         }
     }
 }
-
 
 // withdraw algorithm structs
 /// Owner -> State Entity

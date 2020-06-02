@@ -22,10 +22,9 @@ use curv::elliptic::curves::traits::ECPoint;
 use std::str::FromStr;
 
 
-/// Deposit coins into state entity. Requires list of inputs and spending addresses of those inputs
-/// for funding transaction.
+/// Withdraw coins from state entity. Returns signed withdraw transaction, state_chain_id and withdrawn amount.
 pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
-    -> Result<Transaction>
+    -> Result<(Transaction, String, u64)>
 {
     // Get required shared key data
     let state_chain_id;
@@ -33,17 +32,15 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
     {
         let shared_key = wallet.get_shared_key(shared_key_id)?;
         pk = shared_key.share.public.q.get_element();
-        state_chain_id = shared_key.state_chain_id.clone();
-        if state_chain_id.is_none() {
-            return Err(CError::Generic(String::from("No state chain for this shared key id")));
-        }
+        state_chain_id = shared_key.state_chain_id.clone()
+            .ok_or(CError::Generic(String::from("No state chain for this shared key id")))?;
     }
 
     // Get state chain info
-    let sc_info = get_statechain(wallet, &state_chain_id.clone().unwrap())?;
+    let sc_info = get_statechain(&wallet.client_shim, &state_chain_id)?;
 
     // Get state entity withdraw fee info
-    let se_fee_info = get_statechain_fee_info(wallet)?;
+    let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
 
     // Find address which spends funding tx (P_addr)
     let p_addr = bitcoin::Address::p2wpkh(
@@ -55,8 +52,7 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
     let rec_address = wallet.keys.get_new_address()?; // receiving address of withdrawn funds
     let tx_prepare_sign_msg = WithdrawTxPSM {
         spending_addr: p_addr.to_string(),
-        input_txid: sc_info.funding_txid,
-        input_vout: sc_info.funding_tx_vout,
+        input: sc_info.utxo,
         address: rec_address.to_string(),
         amount: sc_info.amount,
         se_fee: se_fee_info.withdraw,
@@ -66,7 +62,7 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
     cosign_tx_input(wallet, &shared_key_id, &PrepareSignMessage::WithdrawTx(tx_prepare_sign_msg))?;
 
     // first sign state chain
-    let state_chain_data: StateChainDataAPI = get_statechain(wallet, &state_chain_id.unwrap())?;
+    let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id)?;
     let state_chain = state_chain_data.chain;
     // get proof key for signing
     let proof_key_derivation = wallet.se_proof_keys.get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap());
@@ -83,7 +79,13 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
             address: rec_address.to_string(),
         })?;
 
+    // Mark funds as spent in wallet
+    {
+        let mut shared_key = wallet.get_shared_key_mut(shared_key_id)?;
+        shared_key.unspent = false;
+    }
+
     // TODO verify signed tx_w matches tx_prepare_sign_msg. Broadcast transaction?
-    
-    Ok(tx_w)
+
+    Ok((tx_w, state_chain_id, state_chain_data.amount))
 }

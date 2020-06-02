@@ -29,6 +29,56 @@ subcommands:
               short: u
               help: List unspent transactions (tx hash)
       subcommands:
+        - se-addr:
+            about: Generate a new state entity address
+            version: "1.0"
+            args:
+              - txid:
+                  short: t
+                  required: true
+                  value_name: txid
+                  help: Transaction ID of state chain funding transaction
+        - deposit:
+            about: Deposit to State Entity
+            version: "1.0"
+            args:
+              - amount:
+                  short: a
+                  required: true
+                  value_name: amount
+                  help: Amount in Satoshis
+        - withdraw:
+            about: Withdraw from State Entity
+            version: "1.0"
+            args:
+              - key:
+                  short: k
+                  required: true
+                  value_name: Shared key ID
+                  help: ID of Shared Key holding funds on State Entity
+        - transfer-sender:
+            about: Transfer State Chain - Send
+            version: "1.0"
+            args:
+              - key:
+                  short: k
+                  required: true
+                  value_name: Shared key ID
+                  help: ID of Shared Key holding funds on State Entity
+              - addr:
+                  short: a
+                  required: true
+                  value_name: Recipient Address
+                  help: State Entity Address for recipient
+        - transfer-receiver:
+            about: Transfer State Chain - Receive
+            version: "1.0"
+            args:
+              - message:
+                  short: m
+                  required: true
+                  value_name: message
+                  help: Transfer message from sender
         - send:
             about: Send a transaction
             version: "1.0"
@@ -43,3 +93,20 @@ subcommands:
                   required: true
                   value_name: amount
                   help: Amount in BTC
+  - state-entity:
+      about: API calls to State Entity
+      version: "1.0"
+      args:
+        - fee-info:
+            short: f
+            help: State Entity Fees information
+      subcommands:
+        - get-statechain:
+            about: Get a State Chain's information
+            version: "1.0"
+            args:
+              - id:
+                  short: i
+                  required: true
+                  value_name: ID
+                  help: State Chain ID

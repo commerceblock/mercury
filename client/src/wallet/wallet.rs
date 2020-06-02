@@ -3,7 +3,7 @@
 //! Basic Bitcoin wallet functionality. Full key owned by this wallet.
 
 use super::super::Result;
-use shared_lib::Root;
+use shared_lib::{structs::{StateEntityAddress, PrepareSignMessage}, Root};
 
 use super::key_paths::{ funding_txid_to_int, KeyPathWithAddresses, KeyPath};
 use crate::error::{ CError, WalletErrorType};
@@ -37,8 +37,8 @@ pub struct GetBalanceResponse {
 pub struct GetListUnspentResponse {
     pub height: usize,
     pub tx_hash: String,
-    pub tx_pos: usize,
-    pub value: usize,
+    pub tx_pos: u32,
+    pub value: u64,
     pub address: String,
 }
 
@@ -48,13 +48,6 @@ pub struct GetWalletBalanceResponse {
     pub unconfirmed: u64,
 }
 
-
-/// Address generated for State Entity transfer protocol
-#[derive(Deserialize, Debug)]
-pub struct StateEntityAddress {
-    pub backup_addr: String,
-    pub proof_key: PublicKey,
-}
 
 /// Standard Bitcoin Wallet
 pub struct Wallet {
@@ -262,8 +255,8 @@ impl Wallet {
             funding_txid_to_int(funding_txid)?
         )?;
         Ok(StateEntityAddress{
-            backup_addr: backup_addr.to_string(),
-            proof_key
+            backup_tx_addr: backup_addr.to_string(),
+            proof_key: proof_key.to_string()
         })
     }
 
@@ -311,26 +304,27 @@ impl Wallet {
     }
 
     /// create new 2P-ECDSA key with state entity
-    pub fn gen_shared_key(&mut self, id: &String) -> Result<&SharedKey> {
+    pub fn gen_shared_key(&mut self, id: &String, value: &u64) -> Result<&SharedKey> {
         let key_share_pub = self.se_key_shares.get_new_key()?;
         let key_share_priv = self.se_key_shares.get_key_derivation(&key_share_pub).unwrap().private_key.key;
 
-        let shared_key = SharedKey::new(id, &self.client_shim, &key_share_priv, false)?;
+        let shared_key = SharedKey::new(id, &self.client_shim, &key_share_priv, value, false)?;
         self.shared_keys.push(shared_key);
         Ok(self.shared_keys.last().unwrap())
     }
 
     /// create new 2P-ECDSA key with predeinfed private key
-    pub fn gen_shared_key_fixed_secret_key(&mut self, id: &String, secret_key: &SecretKey) -> Result<()> {
+    pub fn gen_shared_key_fixed_secret_key(&mut self, id: &String, secret_key: &SecretKey, value: &u64) -> Result<()> {
         self.shared_keys.push(
-            SharedKey::new(id, &self.client_shim, secret_key, true)?);
+            SharedKey::new(id, &self.client_shim, secret_key, value, true)?);
         Ok(())
     }
 
     // update shared key with proof data
-    pub fn update_shared_key(&mut self, shared_key_id: &String, state_chain_id: &String, proof_key: &PublicKey, root: &Root, proof: &Option<Proof>) -> Result<()> {
+    pub fn update_shared_key(&mut self, shared_key_id: &String, state_chain_id: &String, backup_tx_psm: &PrepareSignMessage, proof_key: &String, root: &Root, proof: &Option<Proof>) -> Result<()> {
         let shared_key = self.get_shared_key_mut(shared_key_id)?;
         shared_key.state_chain_id = Some(state_chain_id.to_string());
+        shared_key.backup_tx_psm = Some(backup_tx_psm.to_owned());
         shared_key.add_proof_data(proof_key, root, proof);
         Ok(())
     }
@@ -365,6 +359,15 @@ impl Wallet {
         }
     }
 
+    fn balance_not_zero(&self, addr: &GetBalanceResponse) -> bool {
+        if addr.confirmed == 0 {
+            if addr.unconfirmed == 0 {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /// return list of all addresses derived from keys in wallet
     fn get_all_wallet_addresses(&self) -> Vec<bitcoin::Address> {
         let mut addresses = self.keys.get_all_addresses();
@@ -372,12 +375,14 @@ impl Wallet {
         addresses
     }
 
-    fn get_all_addresses_balance(&self) -> Vec<GetBalanceResponse> {
-        let response: Vec<GetBalanceResponse> = self
+    pub fn get_all_addresses_balance(&self) -> Vec<GetBalanceResponse> {
+        let mut response: Vec<GetBalanceResponse> = self
             .get_all_wallet_addresses()
             .into_iter()
             .map(|a| self.get_address_balance(&a))
             .collect();
+
+        response.retain(|x| self.balance_not_zero(x)); // remove 0 balances
         response
     }
 
@@ -394,6 +399,22 @@ impl Wallet {
         aggregated_balance
     }
 
+    /// Return balances of shared keys
+    pub fn get_state_chain_balances(&self) -> Vec<GetBalanceResponse> {
+        let mut state_chain_balances: Vec<GetBalanceResponse> = vec!();
+        for shared_key in &self.shared_keys {
+            if shared_key.unspent {
+                state_chain_balances.push(
+                    GetBalanceResponse {
+                        address: shared_key.id.to_owned(),
+                        confirmed: shared_key.value,
+                        unconfirmed: 0,
+                    })
+            }
+        }
+        state_chain_balances
+    }
+
 
     /// List unspent outputs for addresses derived by this wallet.
     pub fn list_unspent(&self) -> Vec<GetListUnspentResponse> {
@@ -406,7 +427,6 @@ impl Wallet {
         response
     }
 
-    /* PRIVATE */
     fn list_unspent_for_addresss(&self, address: String) -> Vec<GetListUnspentResponse> {
         let resp = self.electrumx_client.get_list_unspent(&address).unwrap();
         resp.into_iter()

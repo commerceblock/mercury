@@ -4,11 +4,13 @@ use clap::App;
 
 use client_lib::ClientShim;
 use client_lib::wallet::wallet;
+use client_lib::state_entity;
+use wallet::GetBalanceResponse;
 
-// use std::time::Instant;
-// use floating_duration::TimeFormat;
-
+use bitcoin::consensus;
 use std::collections::HashMap;
+use shared_lib::structs::{TransferMsg3, StateEntityAddress};
+
 fn main() {
     let yaml = load_yaml!("../cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
@@ -36,31 +38,116 @@ fn main() {
         wallet.save();
         println!("Network: [{}], Wallet saved to disk", &network);
 
-        // let _escrow = escrow::Escrow::new();
-        // println!("Network: [{}], Escrow initiated", &network);
     } else if let Some(matches) = matches.subcommand_matches("wallet") {
         let mut wallet: wallet::Wallet = wallet::Wallet::load(client_shim).unwrap();
 
         if matches.is_present("new-address") {
             let address = wallet.keys.get_new_address().unwrap();
-            println!("Network: [{}], Address: [{}]", network, address.to_string());
+            println!("\nNetwork: [{}], \n\nAddress: [{}]", network, address.to_string());
             wallet.save();
+
         } else if matches.is_present("get-balance") {
-            let balance = wallet.get_balance();
-            println!(
-                "Network: [{}], Balance: [balance: {}, pending: {}]",
-                network, balance.confirmed, balance.unconfirmed
-            );
+            println!("\nNetwork: [{}],",network);
+            let addr_balances: Vec<GetBalanceResponse> = wallet.get_all_addresses_balance();
+            let state_chain_balances: Vec<GetBalanceResponse> = wallet.get_state_chain_balances();
+            if addr_balances.len() > 0 {
+                println!("\n\nWallet balance: \n\nAddress:\t\t\t\t\tConfirmed:\tUnconfirmed:");
+                for addr in addr_balances.into_iter() {
+                    println!("{}\t{}\t\t{}", addr.address, addr.confirmed, addr.unconfirmed);
+                }
+            }
+            if state_chain_balances.len() > 0 {
+                println!("\n\nState Entity balance: \n\nShared Key ID:\t\t\t\t\tConfirmed:\tUnconfirmed:");
+                for addr in state_chain_balances.into_iter() {
+                    println!("{}\t\t{}\t\t{}", addr.address, addr.confirmed, addr.unconfirmed);
+                }
+            }
+
         } else if matches.is_present("list-unspent") {
             let unspent = wallet.list_unspent();
-            println!("unspent: {:?}",unspent);
             let hashes: Vec<String> = unspent.into_iter().map(|u| u.tx_hash).collect();
 
             println!(
-                "Network: [{}], Unspent tx hashes: [\n{}\n]",
+                "\nNetwork: [{}], \n\nUnspent tx hashes: \n{}\n",
                 network,
                 hashes.join("\n")
             );
+
+        } else if matches.is_present("se-addr") {
+            if let Some(matches) = matches.subcommand_matches("se-addr") {
+                let funding_txid: &str = matches.value_of("txid").unwrap();
+                let se_address = wallet.get_new_state_entity_address(&funding_txid.to_string()).unwrap();
+                wallet.save();
+                println!(
+                    "\nNetwork: [{}], \n\nNew State Entity address: \n{:?}",
+                    network, serde_json::to_string(&se_address).unwrap()
+                );
+            }
+
+        } else if matches.is_present("deposit") {
+            if let Some(matches) = matches.subcommand_matches("deposit") {
+                let amount: &str = matches.value_of("amount").unwrap();
+                let (shared_key_id, state_chain_id, tx_0, _, _) = state_entity::deposit::deposit(
+                    &mut wallet,
+                    &amount.to_string().parse::<u64>().unwrap(),
+                ).unwrap();
+                wallet.save();
+                println!(
+                    "\nNetwork: [{}], \n\nDeposited {} satoshi's. \nShared Key ID: {} \nState Chain ID: {}",
+                    network, amount, shared_key_id, state_chain_id
+                );
+                println!("\nFunding Transaction hex: {}",hex::encode(consensus::serialize(&tx_0)));
+            }
+
+        } else if matches.is_present("withdraw") {
+            if let Some(matches) = matches.subcommand_matches("withdraw") {
+                let shared_key_id: &str = matches.value_of("key").unwrap();
+                let (tx_w, state_chain_id, amount) = state_entity::withdraw::withdraw(
+                    &mut wallet,
+                    &shared_key_id.to_string()
+                ).unwrap();
+                wallet.save();
+                println!(
+                    "\nNetwork: [{}], \nWithdrawn {} satoshi's. \nFrom State Chain ID: {}",
+                    network, amount, state_chain_id
+                );
+
+                println!("\nWithdraw Transaction hex: {}",hex::encode(consensus::serialize(&tx_w)));
+            }
+
+        } else if matches.is_present("transfer-sender") {
+            if let Some(matches) = matches.subcommand_matches("transfer-sender") {
+                let shared_key_id: &str = matches.value_of("key").unwrap();
+                let receiver_addr: StateEntityAddress = serde_json::from_str(matches.value_of("addr").unwrap()).unwrap();
+                let transfer_msg = state_entity::transfer::transfer_sender(
+                    &mut wallet,
+                    &shared_key_id.to_string(),
+                    receiver_addr
+                ).unwrap();
+                wallet.save();
+                println!(
+                    "\nNetwork: [{}], \n\nTransfer initiated for Shared Key ID: {}.",
+                    network, shared_key_id
+                );
+                println!("\nTransfer message: {:?}",serde_json::to_string(&transfer_msg).unwrap());
+            }
+
+        } else if matches.is_present("transfer-receiver") {
+            if let Some(matches) = matches.subcommand_matches("transfer-receiver") {
+                let transfer_msg: TransferMsg3 = serde_json::from_str(matches.value_of("message").unwrap()).unwrap();
+                let new_shared_key_id = state_entity::transfer::transfer_receiver(
+                    &mut wallet,
+                    &transfer_msg
+                ).unwrap();
+                wallet.save();
+                println!(
+                    "\nNetwork: [{}], \n\nTransfer complete for Shared Key ID: {}.",
+                    network, new_shared_key_id
+                );
+            }
+
+        // backup
+
         } else if matches.is_present("backup") {
             println!("Backup not currently implemented.")
             // let escrow = escrow::Escrow::load();
@@ -71,6 +158,7 @@ fn main() {
             // wallet.backup(escrow);
             //
             // println!("Backup key saved in escrow (Took: {})", TimeFormat(start.elapsed()));
+
         } else if matches.is_present("verify") {
             println!("Backup not currently implemented.")
 
@@ -82,6 +170,7 @@ fn main() {
             // wallet.verify_backup(escrow);
             //
             // println!(" (Took: {})", TimeFormat(start.elapsed()));
+
         } else if matches.is_present("restore") {
             println!("Backup not currently implemented.")
 
@@ -93,6 +182,7 @@ fn main() {
             // wallet::Wallet::recover_and_save_share(escrow, &network, &client_shim);
             //
             // println!(" Backup recovered 💾(Took: {})", TimeFormat(start.elapsed()));
+
         } else if matches.is_present("send") {
             println!("Send not currently implemented.")
 
@@ -110,6 +200,30 @@ fn main() {
             //         network, amount_btc, to, txid
             //     );
             // }
+        }
+
+    // Api
+    } else if let Some(matches) = matches.subcommand_matches("state-entity") {
+        if matches.is_present("get-statechain") {
+            if let Some(matches) = matches.subcommand_matches("get-statechain") {
+                let id: &str = matches.value_of("id").unwrap();
+                let state_chain_info = state_entity::api::get_statechain(
+                    &client_shim,
+                    &id.to_string()
+                ).unwrap();
+                println!(
+                    "\nState Chain with Id {} info: \n{}",
+                    id, state_chain_info
+                );
+            }
+        } else if matches.is_present("fee-info") {
+                let fee_info = state_entity::api::get_statechain_fee_info(
+                    &client_shim
+                ).unwrap();
+                println!(
+                    "\nState Entity fee info: \n{}",
+                    fee_info
+                );
         }
     }
 }

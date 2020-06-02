@@ -6,19 +6,19 @@ use super::super::Result;
 use shared_lib::structs::{StateChainDataAPI, SmtProofMsgAPI, StateEntityFeeInfoAPI};
 use shared_lib::Root;
 
-use crate::wallet::wallet::Wallet;
+use crate::{ClientShim, wallet::wallet::Wallet};
 use super::super::utilities::requests;
 
 use monotree::Proof;
 
 /// Get state chain fee
-pub fn get_statechain_fee_info(wallet: &mut Wallet) -> Result<StateEntityFeeInfoAPI> {
-    requests::post(&wallet.client_shim,&format!("api/fee/"))
+pub fn get_statechain_fee_info(client_shim: &ClientShim) -> Result<StateEntityFeeInfoAPI> {
+    requests::post(client_shim,&format!("api/fee/"))
 }
 
 /// Get state chain by ID
-pub fn get_statechain(wallet: &mut Wallet, state_chain_id: &String) -> Result<StateChainDataAPI> {
-    requests::post(&wallet.client_shim,&format!("api/statechain/{}",state_chain_id))
+pub fn get_statechain(client_shim: &ClientShim, state_chain_id: &String) -> Result<StateChainDataAPI> {
+    requests::post(client_shim,&format!("api/statechain/{}",state_chain_id))
 }
 
 /// Get state entity's sparse merkle tree root
