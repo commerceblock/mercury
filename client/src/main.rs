@@ -54,7 +54,7 @@ fn main() {
 
         if matches.is_present("new-address") {
             let address = wallet.keys.get_new_address().unwrap();
-            println!("\nNetwork: [{}], \n\nAddress: [{}]", network, address.to_string());
+            println!("\nNetwork: [{}], \n\nAddress: [{}]\n", network, address.to_string());
             wallet.save();
 
         } else if matches.is_present("get-balance") {
@@ -76,6 +76,7 @@ fn main() {
                 for (i,bal) in bals.into_iter().enumerate() {
                     println!("{}\t\t{}\t\t{}", ids[i], bal.confirmed, bal.unconfirmed);
                 }
+                println!();
             }
 
         } else if matches.is_present("list-unspent") {
@@ -227,9 +228,17 @@ fn main() {
                     &id.to_string()
                 ).unwrap();
                 println!(
-                    "\nState Chain with Id {} info: \n\n{}",
-                    id, state_chain_info
+                    "\nState Chain with Id {} info: \n",
+                    id
                 );
+
+                println!("utxo:\n\ttxid: {},\n\tvout: {}\namount: {}",
+                    state_chain_info.utxo.txid, state_chain_info.utxo.vout, state_chain_info.amount);
+                println!("State Chain: ");
+                for state in state_chain_info.chain.clone() {
+                    println!("\t{:?}",state);
+                }
+                println!();
             }
         } else if matches.is_present("fee-info") {
                 let fee_info = state_entity::api::get_statechain_fee_info(

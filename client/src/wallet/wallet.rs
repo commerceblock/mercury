@@ -564,7 +564,7 @@ mod tests {
         let amount = Amount::ONE_BTC.as_sat();
         let fee = 100;
         let fee_addr = String::from("bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x");
-        let tx = build_tx_0(&inputs, &addr.to_string(), &amount, &fee, &fee_addr).unwrap();
+        let tx = build_tx_0(&inputs, &addr.to_string(), &amount, &fee, &fee_addr, &addr.to_string(), &1000).unwrap();
         let signed_tx  = wallet.sign_tx(&tx, &vec!(0), &vec!(addr), &vec!(amount));
         let witness = &signed_tx.input.get(0).unwrap().witness;
 

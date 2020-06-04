@@ -36,6 +36,7 @@ SUBCOMMANDS:
     help             Prints this message or the help of the given subcommand(s)
     create-wallet    Create a new wallet
     wallet           Operation on wallet
+    state-entity     State Entity API calls
 ```
 
 ## Wallet creation (required)
@@ -63,8 +64,12 @@ FLAGS:
     -h, --help       Prints help information
 
 SUBCOMMANDS:
-    help    Prints this message or the help of the given subcommand(s)
-    send    Send a transaction
+    help                Prints this message or the help of the given subcommand(s)
+    send                Send a transaction
+    deposit             Depotis funds to State Entity
+    Withdraw            Withdraw funds from State Entity
+    Transfer-sender     Transfer protocol Sender side
+    Transfer-receiver   Transfer protocol Receiver side
 ```
 ### Get a derived/new address (HD)
 ```bash
@@ -106,7 +111,7 @@ Network: [regtest]
 Unspent tx hashes:
 e0a97cb38e7e73617ef75a57eaf2841eb06833407c0eae08029bd04ea7e6115a
 40bf39ffdf4322e4d30ed783feec5bd9eb2804b81f23ebd5e24ea2aa2365a326
-]
+
 ```
 
 ### Deposit to State entity
@@ -116,14 +121,14 @@ e0a97cb38e7e73617ef75a57eaf2841eb06833407c0eae08029bd04ea7e6115a
 
 * Example:
 ```bash
-../target/release/cli wallet deposit -a 100
+../target/release/cli wallet deposit -a 1000
 ```
 
 * Output:
 ```text
 Network: [regtest]
 
-Deposited 100 satoshi's.
+Deposited 1000 satoshi's.
 Shared Key ID: 9f197560-cc8a-4abd-8377-247e6208544e
 State Chain ID: c7c57bc7-db45-474f-86f6-109205eb6b99
 ```
@@ -140,7 +145,8 @@ State Chain ID: c7c57bc7-db45-474f-86f6-109205eb6b99
 
 * Output:
 ```text
-Network: [regtest],
+Network: [regtest]
+
 Withdrawn 9000 satoshi's.
 From State Chain ID: a3f8f121-7ae0-4be0-9793-101476fd141e
 
@@ -167,7 +173,7 @@ New State Entity address:
 
 ### Transfer State Chain (Sender)
 ```bash
-../target/release/cli wallet transfer-sender -a [FUNDING_TXID]
+../target/release/cli wallet transfer-sender -a [RECIPIENT_ADDRESS]
 ```
 
 * Example:
@@ -197,4 +203,57 @@ Transfer message: "{\"shared_key_id\":\"665d2d2c-6c3b-4384-a410-15e8a48b7dc5\",\
 Network: [regtest],
 
 Transfer complete for Shared Key ID: 5e288b67-9867-46e0-bbe4-49b9a4cf06a2.
+```
+
+
+## State Entity operations
+
+```text
+Call State Entity's API
+
+USAGE:
+    cli state-entity [FLAGS] [SUBCOMMAND] 
+
+
+FLAGS:
+    -f                  Returns State Entity's Fee information
+    
+SUBCOMMANDS:
+    get-statechain      Returns a State Chain's information
+```
+
+### fee-info
+```bash
+../target/release/cli state-entity -f
+```
+
+* Output:
+```text
+State Entity fee info:
+
+Fee address: bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x,
+Deposit fee: 100
+Withdrawal fee: 100
+```
+
+
+### get-statechain
+```bash
+../target/release/cli state-entity get-statechain -i [STATE_CHAIN_ID]
+```
+
+* Example:
+```bash
+../target/release/cli state-entity get-statechain -i a8880da3-9c53-4b11-ba3a-a3cf7c999d39
+```
+
+* Output:
+```text
+State Chain with Id a8880da3-9c53-4b11-ba3a-a3cf7c999d39 info: 
+
+utxo:
+    txid: 0158f2978e5c2cf407970d7213f2b4289993b2fe3ef6aca531316cdcf347cc41,
+    vout: 0
+amount: 9000
+chain: [State { data: "026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e", next_state: None }]
 ```

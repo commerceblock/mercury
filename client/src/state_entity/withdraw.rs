@@ -87,5 +87,5 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
 
     // TODO verify signed tx_w matches tx_prepare_sign_msg. Broadcast transaction?
 
-    Ok((tx_w, state_chain_id, state_chain_data.amount))
+    Ok((tx_w, state_chain_id, state_chain_data.amount-se_fee_info.withdraw))
 }
