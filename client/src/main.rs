@@ -45,8 +45,8 @@ fn main() {
 
     if let Some(_matches) = matches.subcommand_matches("create-wallet") {
         println!("Network: [{}], Creating wallet", network);
-        wallet::Wallet::new(&seed, &network, client_shim, electrum);
-
+        let wallet = wallet::Wallet::new(&seed, &network, client_shim, electrum);
+        wallet.save();
         println!("Network: [{}], Wallet saved to disk", &network);
 
     } else if let Some(matches) = matches.subcommand_matches("wallet") {

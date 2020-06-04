@@ -19,11 +19,8 @@ use crate::state_entity::util::{cosign_tx_input,verify_statechain_smt};
 use crate::error::{WalletErrorType, CError};
 use super::api::{get_smt_proof, get_smt_root, get_statechain_fee_info};
 
-use bitcoin::{ Address, Transaction, TxIn, PublicKey, OutPoint};
-use bitcoin::hashes::sha256d;
+use bitcoin::{Transaction, PublicKey, OutPoint};
 use curv::elliptic::curves::traits::ECPoint;
-
-use std::str::FromStr;
 
 /// Message to server initiating state entity protocol.
 /// Shared wallet ID returned
@@ -36,38 +33,6 @@ pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<String> {
     )
 }
 
-fn basic_input(txid: &String, vout: &u32) -> TxIn {
-    TxIn {
-        previous_output: OutPoint{
-            txid: sha256d::Hash::from_str(txid).unwrap(),
-            vout: *vout
-        },
-        sequence: 0xFFFFFFFF,
-        witness: Vec::new(),
-        script_sig: bitcoin::Script::default(),
-    }
-}
-
-/// Select unspent coins greedily. Returd TxIns along with corresponding spending addresses and amounts
-pub fn coin_selection_greedy(wallet: &mut Wallet, amount: &u64) -> Result<(Vec<TxIn>, Vec<Address>, Vec<u64>)> {
-    // Greedy coin selection.
-    let (unspent_addrs, unspent_utxos) = wallet.list_unspent();
-    let mut inputs: Vec<TxIn> = vec!();
-    let mut addrs: Vec<Address> = vec!(); // corresponding addresses for inputs
-    let mut amounts: Vec<u64> = vec!(); // corresponding amounts for inputs
-    for (i, addr) in unspent_addrs.into_iter().enumerate() {
-        for unspent_utxo in unspent_utxos.get(i).unwrap() {
-            inputs.push(basic_input(&unspent_utxo.tx_hash, &(unspent_utxo.tx_pos as u32)));
-            addrs.push(addr.clone());
-            amounts.push(unspent_utxo.value as u64);
-            if *amount < amounts.iter().sum::<u64>() {
-                return Ok((inputs, addrs, amounts));
-            }
-        }
-    }
-    return Err(CError::WalletError(WalletErrorType::NotEnoughFunds))
-}
-
 /// Deposit coins into state entity. Returns shared_key_id, state_chain_id, signed funding tx, back up transacion data and proof_key
 pub fn deposit(wallet: &mut Wallet, amount: &u64)
     -> Result<(String, String, Transaction, PrepareSignMessage, PublicKey)>
@@ -76,7 +41,7 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
 
     // Greedy coin selection.
-    let (inputs, addrs, amounts) = coin_selection_greedy(wallet, &(amount+se_fee_info.deposit+FEE))?;
+    let (inputs, addrs, amounts) = wallet.coin_selection_greedy(&(amount+se_fee_info.deposit+FEE))?;
 
     // Ensure funds cover fees before initiating protocol
     if FEE+se_fee_info.deposit >= *amount {

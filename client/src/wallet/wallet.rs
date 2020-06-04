@@ -10,10 +10,11 @@ use crate::error::{ CError, WalletErrorType};
 use crate::wallet::shared_key::SharedKey;
 use crate::ClientShim;
 
-use bitcoin::{ Network, PublicKey };
+use bitcoin::{ Network, PublicKey, Address, TxIn, OutPoint };
+use bitcoin::hashes::sha256d;
 use bitcoin::util::bip32::{ ExtendedPrivKey, ChildNumber };
 use bitcoin::util::bip143::SighashComponents;
-use bitcoin::secp256k1::{ All, Secp256k1, Message, key::SecretKey };
+use bitcoin::secp256k1::{All, Secp256k1, Message, key::SecretKey};
 use monotree::Proof;
 
 use electrumx_client::response::{GetBalanceResponse, GetListUnspentResponse};
@@ -223,6 +224,26 @@ impl Wallet {
         Ok(Wallet::load_from(WALLET_FILENAME, client_shim, electrumx_client)?)
     }
 
+    /// Select unspent coins greedily. Return TxIns along with corresponding spending addresses and amounts
+    pub fn coin_selection_greedy(&mut self, amount: &u64) -> Result<(Vec<TxIn>, Vec<Address>, Vec<u64>)> {
+        // Greedy coin selection.
+        let (unspent_addrs, unspent_utxos) = self.list_unspent();
+        let mut inputs: Vec<TxIn> = vec!();
+        let mut addrs: Vec<Address> = vec!(); // corresponding addresses for inputs
+        let mut amounts: Vec<u64> = vec!(); // corresponding amounts for inputs
+        for (i, addr) in unspent_addrs.into_iter().enumerate() {
+            for unspent_utxo in unspent_utxos.get(i).unwrap() {
+                inputs.push(basic_input(&unspent_utxo.tx_hash, &(unspent_utxo.tx_pos as u32)));
+                addrs.push(addr.clone());
+                amounts.push(unspent_utxo.value as u64);
+                if *amount <= amounts.iter().sum::<u64>() {
+                    return Ok((inputs, addrs, amounts));
+                }
+            }
+        }
+        return Err(CError::WalletError(WalletErrorType::NotEnoughFunds))
+    }
+
     pub fn get_new_state_entity_address(&mut self, funding_txid: &String) -> Result<StateEntityAddress> {
         let backup_addr = self.se_backup_keys.get_new_address_encoded_id(
             funding_txid_to_int(funding_txid)?
@@ -404,6 +425,7 @@ impl Wallet {
     /// List unspent outputs for addresses derived by this wallet.
     pub fn list_unspent(&mut self) -> (Vec<bitcoin::Address>, Vec<Vec<GetListUnspentResponse>>) {
         let addresses = self.get_all_wallet_addresses();
+        println!("addresses: {:?}\n\n\n",addresses);
         let mut unspent_list: Vec<Vec<GetListUnspentResponse>> = vec!();
         for addr in &addresses {
             let addr_unspent_list = self.list_unspent_for_address(addr.to_string());
@@ -429,6 +451,18 @@ impl Wallet {
     }
 }
 
+fn basic_input(txid: &String, vout: &u32) -> TxIn {
+    TxIn {
+        previous_output: OutPoint{
+            txid: sha256d::Hash::from_str(txid).unwrap(),
+            vout: *vout
+        },
+        sequence: 0xFFFFFFFF,
+        witness: Vec::new(),
+        script_sig: bitcoin::Script::default(),
+    }
+}
+
 // type conversion
 pub fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
     bitcoin::util::key::PublicKey {
@@ -447,22 +481,17 @@ mod tests {
     use bitcoin::hashes::sha256d;
     use crate::mocks::mock_electrum::MockElectrum;
 
-    const TEST_WALLET_FILENAME: &str = "test-assets/wallet.data";
-// pub fn new<E: Electrumx>(seed: &[u8], network: &String, client_shim: ClientShim, electrumx_client: &'a mut E) -> Wallet<'a> {
-// from_json<E: Electrumx>(json: serde_json::Value, client_shim: ClientShim, electrumx_client: &'a mut E) -> Result<Self> {
     fn gen_wallet() -> Wallet {
         // let electrum = ElectrumxClient::new("dummy").unwrap();
-        Wallet::new(
+        let mut wallet = Wallet::new(
             &[0xcd; 32],
             &"regtest".to_string(),
             ClientShim::new("http://localhost:8000".to_string(), None),
             Box::new(MockElectrum::new())
-        )
-    }
-
-    #[test]
-    fn load_wallet_test() {
-        Wallet::load_from(TEST_WALLET_FILENAME,ClientShim::new("http://localhost:8000".to_string(), None),Box::new(MockElectrum::new())).unwrap();
+        );
+        let _ = wallet.keys.get_new_address();
+        let _ = wallet.keys.get_new_address();
+        wallet
     }
 
     #[test]
@@ -515,8 +544,8 @@ mod tests {
     #[test]
     fn test_tx_signing() {
         let expected_witness = vec!(
-            vec!(48, 68, 2, 32, 50, 61, 167, 57, 202, 110, 52, 68, 38, 226, 153, 100, 72, 218, 139, 32, 129, 155, 196, 124, 77, 248, 128, 216, 207, 125, 51, 186, 213, 164, 58, 177, 2, 32, 22, 94, 52, 163, 17, 4, 34, 126, 32, 235, 109, 44, 151, 24, 207, 41, 18, 161, 221, 193, 31, 227, 157, 59, 199, 117, 9, 21, 162, 193, 213, 33, 1),
-             vec!(2, 145, 240, 85, 194, 87, 237, 58, 108, 126, 70, 191, 113, 117, 144, 204, 110, 61, 193, 180, 151, 116, 239, 66, 61, 192, 114, 7, 52, 117, 95, 213, 9)
+            vec!(48, 68, 2, 32, 15, 132, 125, 158, 214, 224, 75, 218, 107, 67, 184, 90, 113, 228, 138, 57, 188, 10, 181, 61, 26, 183, 73, 106, 211, 230, 239, 193, 80, 147, 163, 171, 2, 32, 3, 82, 60, 189, 52, 136, 1, 44, 192, 17, 28, 112, 64, 234, 176, 29, 71, 46, 18, 247, 19, 149, 117, 190, 39, 43, 13, 110, 171, 37, 227, 143, 1),
+             vec!(2, 102, 139, 209, 192, 143, 231, 4, 138, 140, 176, 55, 240, 78, 188, 127, 73, 208, 70, 196, 8, 62, 116, 44, 74, 116, 174, 22, 84, 153, 77, 152, 128)
         );
 
         let mut wallet = gen_wallet();
@@ -544,11 +573,19 @@ mod tests {
     }
 
     #[test]
-    fn test_mocks() {
+    fn test_coin_selection_greedy() {
         let mut wallet = gen_wallet();
         let _ = wallet.keys.get_new_address();
-        let _ = wallet.keys.get_new_address();
-        println!("balances: {:?}",wallet.get_all_addresses_balance());
-        println!("list unspent: {:?}",wallet.list_unspent());
+
+        for amount in [10, 100, 100000000, 100000100].iter() {
+            let selection = wallet.coin_selection_greedy(&amount).unwrap();
+            assert_eq!(selection.0.len(), selection.1.len());
+            assert_eq!(selection.0.len(), selection.2.len());
+            assert!(selection.2.iter().sum::<u64>() >= *amount);
+        }
+
+        // 100000100 is total amount in Mock Electrum
+        let selection = wallet.coin_selection_greedy(&100000101);
+        assert!(selection.is_err());
     }
 }
