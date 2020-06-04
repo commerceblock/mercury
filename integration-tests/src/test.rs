@@ -60,7 +60,7 @@ mod tests {
 
     fn run_deposit(wallet: &mut Wallet) -> (String, String, Transaction, PrepareSignMessage, PublicKey)  {
         // make TxIns for funding transaction
-        let amount = Amount::ONE_BTC.as_sat();
+        let amount = 10000;
 
         let resp = state_entity::deposit::deposit(
             wallet,

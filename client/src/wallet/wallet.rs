@@ -534,7 +534,7 @@ mod tests {
     #[test]
     fn test_tx_signing() {
         let expected_witness = vec!(
-            vec!(48, 68, 2, 32, 50, 61, 167, 57, 202, 110, 52, 68, 38, 226, 153, 100, 72, 218, 139, 32, 129, 155, 196, 124, 77, 248, 128, 216, 207, 125, 51, 186, 213, 164, 58, 177, 2, 32, 22, 94, 52, 163, 17, 4, 34, 126, 32, 235, 109, 44, 151, 24, 207, 41, 18, 161, 221, 193, 31, 227, 157, 59, 199, 117, 9, 21, 162, 193, 213, 33, 1),
+            vec!(48, 69, 2, 33, 0, 185, 2, 144, 113, 98, 254, 99, 144, 180, 18, 36, 115, 205, 35, 140, 129, 31, 129, 102, 155, 39, 137, 212, 248, 12, 112, 192, 89, 177, 2, 253, 108, 2, 32, 47, 2, 251, 23, 89, 116, 27, 76, 84, 47, 39, 244, 103, 206, 173, 129, 220, 85, 150, 35, 59, 23, 53, 145, 71, 177, 204, 200, 174, 44, 227, 66, 1),
              vec!(2, 145, 240, 85, 194, 87, 237, 58, 108, 126, 70, 191, 113, 117, 144, 204, 110, 61, 193, 180, 151, 116, 239, 66, 61, 192, 114, 7, 52, 117, 95, 213, 9)
         );
 
@@ -554,7 +554,7 @@ mod tests {
         let amount = Amount::ONE_BTC.as_sat();
         let fee = 100;
         let fee_addr = String::from("bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x");
-        let tx = build_tx_0(&inputs, &addr.to_string(), &amount, &fee, &fee_addr).unwrap();
+        let tx = build_tx_0(&inputs, &addr.to_string(), &amount, &fee, &fee_addr, &addr.to_string(), &1000).unwrap();
         let signed_tx  = wallet.sign_tx(&tx, &vec!(0), &vec!(addr), &vec!(amount));
         let witness = &signed_tx.input.get(0).unwrap().witness;
 

@@ -55,22 +55,22 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     // get state entity fee info
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
 
+    // Ensure funds cover fees before initiating protocol
+    if FEE+se_fee_info.deposit >= *amount {
+        return Err(CError::WalletError(WalletErrorType::NotEnoughFunds));
+    }
+
     // Greedy coin selection.
     let unspent_utxos = wallet.list_unspent();
     let mut inputs: Vec<TxIn> = vec!();
     let mut addrs: Vec<Address> = vec!(); // corresponding addresses for inputs
     let mut amounts: Vec<u64> = vec!(); // corresponding amounts for inputs
-    while amount + se_fee_info.deposit > amounts.iter().sum::<u64>() {
+    while amount + se_fee_info.deposit + FEE > amounts.iter().sum::<u64>() {
         let unspent_utxo = unspent_utxos.get(inputs.len())
             .ok_or(CError::WalletError(WalletErrorType::NotEnoughFunds)).unwrap();
         inputs.push(basic_input(&unspent_utxo.tx_hash, &unspent_utxo.tx_pos));
         addrs.push(Address::from_str(&unspent_utxo.address)?);
         amounts.push(unspent_utxo.value);
-    }
-
-    // Ensure funds cover fees before initiating protocol
-    if FEE+se_fee_info.deposit >= *amount {
-        return Err(CError::WalletError(WalletErrorType::NotEnoughFunds));
     }
 
     // generate proof key
@@ -88,8 +88,9 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
         &to_bitcoin_public_key(pk),
         wallet.get_bitcoin_network()
     );
+    let change_addr = wallet.keys.get_new_address()?.to_string();
 
-    let tx_0 = build_tx_0(&inputs, &p_addr.to_string(), amount, &se_fee_info.deposit, &se_fee_info.address)?;
+    let tx_0 = build_tx_0(&inputs, &p_addr.to_string(), amount, &se_fee_info.deposit, &se_fee_info.address, &change_addr, &amounts.iter().sum::<u64>())?;
     let tx_0_signed = wallet.sign_tx(
         &tx_0,
         &(0..inputs.len()).collect(), // inputs to sign are all inputs is this case

@@ -43,13 +43,6 @@ pub struct StateChainDataAPI {
     pub chain: Vec<State>
 }
 
-impl fmt::Display for StateChainDataAPI {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "utxo:\ntxid: {},\nvout: {}\namount: {}\nchain: {:?}",
-            self.utxo.txid, self.utxo.vout, self.amount, self.chain)
-    }
-}
-
 
 /// /api/statechain post struct
 #[derive(Serialize, Deserialize, Debug)]

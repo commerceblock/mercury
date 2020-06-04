@@ -398,7 +398,7 @@ pub fn transfer_receiver(
     let state_chain_sig = transfer_data.state_chain_sig;
 
     // ensure state_chain_sigs are the same
-    if state_chain_sig != transfer_msg4.state_chain_sig {
+    if state_chain_sig != transfer_msg4.state_chain_sig.to_owned() {
         debug!("Transfer protocol failed. Receiver state chain siganture and State Entity state chain siganture do not match.");
         return Err(SEError::Generic(format!("State chain siganture provided does not match state chain at id {}",transfer_data.state_chain_id)));
     }
@@ -439,6 +439,22 @@ pub fn transfer_receiver(
         return Err(SEError::Generic(String::from("Transfer protocol error: P1 != P2")));
     }
 
+    // update state chain
+    let mut state_chain: StateChain =
+        db::get(&state.db, &claim.sub, &transfer_data.state_chain_id, &StateEntityStruct::StateChain)?
+            .ok_or(SEError::DBError(NoDataForID, transfer_data.state_chain_id.clone()))?;
+
+    assert!(state_chain.backup_tx.is_some());
+    state_chain.add(state_chain_sig.to_owned())?;
+
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &transfer_data.state_chain_id,
+        &StateEntityStruct::StateChain,
+        &state_chain
+    )?;
+
     // create new UserSession to allow new owner to generate shared wallet
     let new_shared_key_id = Uuid::new_v4().to_string();
     db::insert(
@@ -450,28 +466,12 @@ pub fn transfer_receiver(
             id: new_shared_key_id.clone(),
             auth: String::from("auth"),
             proof_key: state_chain_sig.data.to_owned(),
-            backup_tx: None,
+            backup_tx: state_chain.backup_tx.to_owned(),
             withdraw_tx: None,
             sig_hash: None,
             state_chain_id: Some(transfer_data.state_chain_id.to_owned()),
             s2: Some(s2),
         }
-    )?;
-
-    // update state chain
-    let mut state_chain: StateChain =
-        db::get(&state.db, &claim.sub, &transfer_data.state_chain_id, &StateEntityStruct::StateChain)?
-            .ok_or(SEError::DBError(NoDataForID, transfer_data.state_chain_id.clone()))?;
-
-    assert!(state_chain.backup_tx.is_some());
-    state_chain.add(state_chain_sig)?;
-
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &transfer_data.state_chain_id,
-        &StateEntityStruct::StateChain,
-        &state_chain
     )?;
 
     // update sparse merkle tree with new StateChain entry

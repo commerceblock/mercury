@@ -90,7 +90,7 @@ pub fn rebuild_withdraw_tx(prepare_sign_msg: &WithdrawTxPSM) -> Result<(Transact
 
 
 /// build funding tx spending inputs to p2wpkh address P for amount A
-pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &String, amount: &u64, fee: &u64, fee_addr: &String) -> Result<Transaction> {
+pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &String, amount: &u64, fee: &u64, fee_addr: &String, change_addr: &String, change_amount: &u64) -> Result<Transaction> {
     if FEE+fee >= *amount {
         return Err(SharedLibError::FormatError(String::from("Not enough value to cover fee.")));
     }
@@ -101,11 +101,15 @@ pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &String, amount: &u64, fee: &u6
                 output: vec![
                     TxOut {
                         script_pubkey: Address::from_str(p_address)?.script_pubkey(),
-                        value: amount-FEE,
+                        value: *amount,
                     },
                     TxOut {
                         script_pubkey: Address::from_str(fee_addr)?.script_pubkey(),
                         value: *fee,
+                    },
+                    TxOut {
+                        script_pubkey: Address::from_str(change_addr)?.script_pubkey(),
+                        value: *change_amount,
                     }
                 ],
             };
@@ -230,7 +234,7 @@ mod tests {
         let amount = Amount::ONE_BTC.as_sat();
         let fee = 100;
         let fee_addr = String::from("bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x");
-        let tx_0 = build_tx_0(&inputs, &addr.to_string(), &amount, &fee, &fee_addr).unwrap();
+        let tx_0 = build_tx_0(&inputs, &addr.to_string(), &amount, &fee, &fee_addr, &addr.to_string(), &1000).unwrap();
         println!("{}", serde_json::to_string_pretty(&tx_0).unwrap());
 
         // Compute sighash

@@ -17,7 +17,7 @@
 //      e. Verify o2*S2 = P
 
 use super::super::Result;
-use shared_lib::structs::{StateChainDataAPI, PrepareSignMessage, BackUpTxPSM, StateEntityAddress, TransferMsg1, TransferMsg2, TransferMsg3, TransferMsg4, TransferMsg5};
+use shared_lib::structs::{StateChainDataAPI, PrepareSignMessage, BackUpTxPSM, StateEntityAddress, TransferMsg1, TransferMsg2, TransferMsg3, TransferMsg4, TransferMsg5, Protocol};
 use shared_lib::state_chain::StateChainSig;
 
 use crate::error::CError;
@@ -54,6 +54,7 @@ pub fn transfer_sender(
         PrepareSignMessage::BackUpTx(prev_backup_tx_psm) => prev_backup_tx_psm,
         _ => return Err(CError::Generic(String::from("Invalid PrepareSignMessage type. Back up tx expected.")))
     };
+    prev_backup_tx_psm.protocol = Protocol::Transfer;
 
     // first sign state chain
     let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id)?;
