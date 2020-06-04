@@ -5,11 +5,13 @@ use clap::App;
 use client_lib::ClientShim;
 use client_lib::wallet::wallet;
 use client_lib::state_entity;
-use wallet::GetBalanceResponse;
+use client_lib::mocks::mock_electrum::MockElectrum;
+use shared_lib::structs::{TransferMsg3, StateEntityAddress};
 
 use bitcoin::consensus;
+use electrumx_client::{interface::Electrumx, electrumx_client::ElectrumxClient};
 use std::collections::HashMap;
-use shared_lib::structs::{TransferMsg3, StateEntityAddress};
+use std::str::FromStr;
 
 fn main() {
     let yaml = load_yaml!("../cli.yml");
@@ -25,21 +27,30 @@ fn main() {
         .merge(config::Environment::new())
         .unwrap();
     let hm = settings.try_into::<HashMap<String, String>>().unwrap();
-    let endpoint = hm.get("endpoint").unwrap();
+    let se_endpoint = hm.get("endpoint").unwrap();
+    let electrum_server_addr = hm.get("electrum_server").unwrap().clone();
+    let testing: bool = bool::from_str(hm.get("testing").unwrap()).unwrap();
 
     // TODO: random generating of seed and allow input of mnemonic phrase
     let seed = [0xcd; 32];
-    let client_shim = ClientShim::new(endpoint.to_string(), None);
+    let client_shim = ClientShim::new(se_endpoint.to_string(), None);
+
+    let electrum: Box<dyn Electrumx> = if testing {
+        Box::new(MockElectrum::new())
+    } else {
+        Box::new(ElectrumxClient::new(electrum_server_addr).unwrap())
+    };
+
     let network = "regtest".to_string();
 
     if let Some(_matches) = matches.subcommand_matches("create-wallet") {
         println!("Network: [{}], Creating wallet", network);
-        let wallet = wallet::Wallet::new(&seed, &network, client_shim);
-        wallet.save();
+        wallet::Wallet::new(&seed, &network, client_shim, electrum);
+
         println!("Network: [{}], Wallet saved to disk", &network);
 
     } else if let Some(matches) = matches.subcommand_matches("wallet") {
-        let mut wallet: wallet::Wallet = wallet::Wallet::load(client_shim).unwrap();
+        let mut wallet = wallet::Wallet::load(client_shim, electrum).unwrap();
 
         if matches.is_present("new-address") {
             let address = wallet.keys.get_new_address().unwrap();
@@ -48,24 +59,28 @@ fn main() {
 
         } else if matches.is_present("get-balance") {
             println!("\nNetwork: [{}],",network);
-            let addr_balances: Vec<GetBalanceResponse> = wallet.get_all_addresses_balance();
-            let state_chain_balances: Vec<GetBalanceResponse> = wallet.get_state_chain_balances();
-            if addr_balances.len() > 0 {
+            let (addrs, balances) = wallet.get_all_addresses_balance();
+            if addrs.len() > 0 {
                 println!("\n\nWallet balance: \n\nAddress:\t\t\t\t\tConfirmed:\tUnconfirmed:");
-                for addr in addr_balances.into_iter() {
-                    println!("{}\t{}\t\t{}", addr.address, addr.confirmed, addr.unconfirmed);
+                for (i, _) in addrs.iter().enumerate() {
+                    println!("{}\t{}\t\t{}",
+                    addrs[i],
+                    balances[i].confirmed,
+                    balances[i].unconfirmed);
                 }
+                println!();
             }
-            if state_chain_balances.len() > 0 {
+            let (ids, bals) = wallet.get_state_chain_balances();
+            if ids.len() > 0 {
                 println!("\n\nState Entity balance: \n\nShared Key ID:\t\t\t\t\tConfirmed:\tUnconfirmed:");
-                for addr in state_chain_balances.into_iter() {
-                    println!("{}\t\t{}\t\t{}", addr.address, addr.confirmed, addr.unconfirmed);
+                for (i,bal) in bals.into_iter().enumerate() {
+                    println!("{}\t\t{}\t\t{}", ids[i], bal.confirmed, bal.unconfirmed);
                 }
             }
 
         } else if matches.is_present("list-unspent") {
-            let unspent = wallet.list_unspent();
-            let hashes: Vec<String> = unspent.into_iter().map(|u| u.tx_hash).collect();
+            let (_, unspent) = wallet.list_unspent();
+            let hashes: Vec<String> = unspent.into_iter().map(|u| u.into_iter().map(|u| u.tx_hash).collect()).collect();
 
             println!(
                 "\nNetwork: [{}], \n\nUnspent tx hashes: \n{}\n",
@@ -212,7 +227,7 @@ fn main() {
                     &id.to_string()
                 ).unwrap();
                 println!(
-                    "\nState Chain with Id {} info: \n{}",
+                    "\nState Chain with Id {} info: \n\n{}",
                     id, state_chain_info
                 );
             }
@@ -221,7 +236,7 @@ fn main() {
                     &client_shim
                 ).unwrap();
                 println!(
-                    "\nState Entity fee info: \n{}",
+                    "State Entity fee info: \n\n{}",
                     fee_info
                 );
         }

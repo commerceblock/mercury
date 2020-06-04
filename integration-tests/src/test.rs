@@ -11,11 +11,12 @@ mod tests {
     use server_lib::server;
     use shared_lib::structs::PrepareSignMessage;
 
-    use bitcoin::{ Amount, Transaction, PublicKey };
+    use bitcoin::{Transaction, PublicKey};
     use curv::elliptic::curves::traits::ECScalar;
     use curv::FE;
 
     use std::{thread, time};
+    use mocks::mock_electrum::MockElectrum;
 
     pub const TEST_WALLET_FILENAME: &str = "../client/test-assets/wallet.data";
 
@@ -59,12 +60,9 @@ mod tests {
     // }
 
     fn run_deposit(wallet: &mut Wallet) -> (String, String, Transaction, PrepareSignMessage, PublicKey)  {
-        // make TxIns for funding transaction
-        let amount = Amount::ONE_BTC.as_sat();
-
         let resp = state_entity::deposit::deposit(
             wallet,
-            &amount
+            &10000
         ).unwrap();
 
         return resp
@@ -189,7 +187,7 @@ mod tests {
         run_deposit(&mut wallet);
 
         let wallet_json = wallet.to_json();
-        let wallet_rebuilt = wallet::wallet::Wallet::from_json(wallet_json, ClientShim::new("http://localhost:8000".to_string(), None)).unwrap();
+        let wallet_rebuilt = wallet::wallet::Wallet::from_json(wallet_json, ClientShim::new("http://localhost:8000".to_string(), None), Box::new(MockElectrum::new())).unwrap();
 
         let shared_key = wallet.shared_keys.get(0).unwrap();
         let shared_key_rebuilt = wallet_rebuilt.shared_keys.get(0).unwrap();
@@ -215,7 +213,8 @@ mod tests {
         let mut wallet = Wallet::new(
             &[0xcd; 32],
             &"regtest".to_string(),
-            ClientShim::new("http://localhost:8000".to_string(), None)
+            ClientShim::new("http://localhost:8000".to_string(), None),
+            Box::new(MockElectrum::new())
         );
 
         // generate some addresses
@@ -225,6 +224,6 @@ mod tests {
         wallet
     }
     fn load_wallet() -> Wallet {
-        Wallet::load_from(TEST_WALLET_FILENAME,ClientShim::new("http://localhost:8000".to_string(), None)).unwrap()
+        Wallet::load_from(TEST_WALLET_FILENAME,ClientShim::new("http://localhost:8000".to_string(),None),Box::new(MockElectrum::new())).unwrap()
     }
 }

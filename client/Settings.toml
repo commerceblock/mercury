@@ -1,1 +1,3 @@
 endpoint = "http://localhost:8000"
+electrum_server = "127.0.0.1:60401"
+testing = "true"

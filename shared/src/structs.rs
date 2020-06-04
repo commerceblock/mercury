@@ -45,7 +45,7 @@ pub struct StateChainDataAPI {
 
 impl fmt::Display for StateChainDataAPI {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "utxo:\ntxid: {},\nvout: {}\namount: {}\nchain: {:?}",
+        write!(f, "utxo:\t\ntxid: {},\t\nvout: {}\namount: {}\nchain: {:?}",
             self.utxo.txid, self.utxo.vout, self.amount, self.chain)
     }
 }

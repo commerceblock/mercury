@@ -48,6 +48,26 @@ fn basic_input(txid: &String, vout: &u32) -> TxIn {
     }
 }
 
+/// Select unspent coins greedily. Returd TxIns along with corresponding spending addresses and amounts
+pub fn coin_selection_greedy(wallet: &mut Wallet, amount: &u64) -> Result<(Vec<TxIn>, Vec<Address>, Vec<u64>)> {
+    // Greedy coin selection.
+    let (unspent_addrs, unspent_utxos) = wallet.list_unspent();
+    let mut inputs: Vec<TxIn> = vec!();
+    let mut addrs: Vec<Address> = vec!(); // corresponding addresses for inputs
+    let mut amounts: Vec<u64> = vec!(); // corresponding amounts for inputs
+    for (i, addr) in unspent_addrs.into_iter().enumerate() {
+        for unspent_utxo in unspent_utxos.get(i).unwrap() {
+            inputs.push(basic_input(&unspent_utxo.tx_hash, &(unspent_utxo.tx_pos as u32)));
+            addrs.push(addr.clone());
+            amounts.push(unspent_utxo.value as u64);
+            if *amount < amounts.iter().sum::<u64>() {
+                return Ok((inputs, addrs, amounts));
+            }
+        }
+    }
+    return Err(CError::WalletError(WalletErrorType::NotEnoughFunds))
+}
+
 /// Deposit coins into state entity. Returns shared_key_id, state_chain_id, signed funding tx, back up transacion data and proof_key
 pub fn deposit(wallet: &mut Wallet, amount: &u64)
     -> Result<(String, String, Transaction, PrepareSignMessage, PublicKey)>
@@ -56,17 +76,7 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
 
     // Greedy coin selection.
-    let unspent_utxos = wallet.list_unspent();
-    let mut inputs: Vec<TxIn> = vec!();
-    let mut addrs: Vec<Address> = vec!(); // corresponding addresses for inputs
-    let mut amounts: Vec<u64> = vec!(); // corresponding amounts for inputs
-    while amount + se_fee_info.deposit > amounts.iter().sum::<u64>() {
-        let unspent_utxo = unspent_utxos.get(inputs.len())
-            .ok_or(CError::WalletError(WalletErrorType::NotEnoughFunds)).unwrap();
-        inputs.push(basic_input(&unspent_utxo.tx_hash, &unspent_utxo.tx_pos));
-        addrs.push(Address::from_str(&unspent_utxo.address)?);
-        amounts.push(unspent_utxo.value);
-    }
+    let (inputs, addrs, amounts) = coin_selection_greedy(wallet, &(amount+se_fee_info.deposit+FEE))?;
 
     // Ensure funds cover fees before initiating protocol
     if FEE+se_fee_info.deposit >= *amount {
