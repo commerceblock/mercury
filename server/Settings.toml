@@ -8,5 +8,5 @@ audience = "" # Override with ENV variable!
 
 # fee info
 fee_address = "bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x"
-fee_deposit = "100"
-fee_withdraw = "100"
+fee_deposit = "300"
+fee_withdraw = "300"

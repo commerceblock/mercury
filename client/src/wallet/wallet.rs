@@ -372,19 +372,19 @@ impl Wallet {
     }
 
     pub fn get_all_addresses_balance(&mut self) -> (Vec<bitcoin::Address>, Vec<GetBalanceResponse>) {
-        let mut addrs = self.get_all_wallet_addresses();
-        let all_bals: Vec<GetBalanceResponse> = addrs
+        let all_addrs = self.get_all_wallet_addresses();
+        let all_bals: Vec<GetBalanceResponse> = all_addrs
             .clone()
             .into_iter()
             .map(|a| self.get_address_balance(&a))
             .collect();
 
         // return non-0 balances
+        let mut addrs: Vec<bitcoin::Address> = vec!();
         let mut bals: Vec<GetBalanceResponse> = vec!();
         for (i, balance) in all_bals.into_iter().enumerate() {
-            if self.zero_balance(&balance) {
-                addrs.remove(i);
-            } else {
+            if !self.zero_balance(&balance) {
+                addrs.push(all_addrs.get(i).unwrap().clone());
                 bals.push(balance);
             }
         }
@@ -425,7 +425,6 @@ impl Wallet {
     /// List unspent outputs for addresses derived by this wallet.
     pub fn list_unspent(&mut self) -> (Vec<bitcoin::Address>, Vec<Vec<GetListUnspentResponse>>) {
         let addresses = self.get_all_wallet_addresses();
-        println!("addresses: {:?}\n\n\n",addresses);
         let mut unspent_list: Vec<Vec<GetListUnspentResponse>> = vec!();
         for addr in &addresses {
             let addr_unspent_list = self.list_unspent_for_address(addr.to_string());

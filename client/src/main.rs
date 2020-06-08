@@ -80,9 +80,13 @@ fn main() {
             }
 
         } else if matches.is_present("list-unspent") {
-            let (_, unspent) = wallet.list_unspent();
-            let hashes: Vec<String> = unspent.into_iter().map(|u| u.into_iter().map(|u| u.tx_hash).collect()).collect();
-
+            let (_, unspent_list) = wallet.list_unspent();
+            let mut hashes: Vec<String> = vec!();
+            for unspent_for_addr in unspent_list {
+                for unspent in unspent_for_addr {
+                    hashes.push(unspent.tx_hash);
+                }
+            }
             println!(
                 "\nNetwork: [{}], \n\nUnspent tx hashes: \n{}\n",
                 network,

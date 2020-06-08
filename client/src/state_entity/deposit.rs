@@ -63,9 +63,10 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
         &to_bitcoin_public_key(pk),
         wallet.get_bitcoin_network()
     );
-    let change_addr = wallet.keys.get_new_address()?.to_string();
 
-    let tx_0 = build_tx_0(&inputs, &p_addr.to_string(), amount, &se_fee_info.deposit, &se_fee_info.address, &change_addr, &amounts.iter().sum::<u64>())?;
+    let change_addr = wallet.keys.get_new_address()?.to_string();
+    let change_amount = amounts.iter().sum::<u64>() - amount - se_fee_info.deposit - FEE;
+    let tx_0 = build_tx_0(&inputs, &p_addr.to_string(), amount, &se_fee_info.deposit, &se_fee_info.address, &change_addr, &change_amount)?;
     let tx_0_signed = wallet.sign_tx(
         &tx_0,
         &(0..inputs.len()).collect(), // inputs to sign are all inputs is this case
@@ -87,7 +88,7 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
         proof_key: Some(proof_key.to_string())
     };
 
-    let state_chain_id = cosign_tx_input(wallet, &shared_key_id, &PrepareSignMessage::BackUpTx(tx_b_prepare_sign_msg.to_owned()))?;
+    let (backup_sig, state_chain_id) = cosign_tx_input(wallet, &shared_key_id, &PrepareSignMessage::BackUpTx(tx_b_prepare_sign_msg.to_owned()))?;
 
     // TODO: Broadcast funding transcation
 

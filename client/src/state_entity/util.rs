@@ -22,7 +22,8 @@ use std::convert::TryInto;
 
 
 /// Sign a transaction input with state entity shared wallet
-pub fn cosign_tx_input(wallet: &mut Wallet, shared_key_id: &String, prepare_sign_msg: &PrepareSignMessage) -> Result<String> {
+pub fn cosign_tx_input(wallet: &mut Wallet, shared_key_id: &String, prepare_sign_msg: &PrepareSignMessage)
+    -> Result<(Vec<Vec<u8>>, String)> {
 
     // message 1 - send tx data for validation.
     let state_chain_id: String = requests::postb(&wallet.client_shim, &format!("prepare-sign/{}", shared_key_id), prepare_sign_msg)?;
@@ -44,7 +45,7 @@ pub fn cosign_tx_input(wallet: &mut Wallet, shared_key_id: &String, prepare_sign
     let mk = &shared_key.share;
 
     // co-sign transaction
-    ecdsa::sign(
+    let sig = ecdsa::sign(
         &wallet.client_shim,
         BigInt::from_hex(&hex::encode(&sig_hash[..])),
         &mk,
@@ -52,7 +53,7 @@ pub fn cosign_tx_input(wallet: &mut Wallet, shared_key_id: &String, prepare_sign
         &shared_key.id,
     )?;
 
-    Ok(state_chain_id)
+    Ok((sig, state_chain_id))
 }
 
 pub fn verify_statechain_smt(root: &Option<Hash>, proof_key: &String, proof: &Option<Proof>) -> bool {

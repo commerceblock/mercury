@@ -51,7 +51,6 @@ pub fn rebuild_backup_tx(prepare_sign_msg: &BackUpTxPSM) -> Result<(Transaction,
         &prepare_sign_msg.amount
     )? ;
 
-
     let comp = SighashComponents::new(&tx_b);
     let sig_hash = comp.sighash_all(
         &txin,
@@ -109,7 +108,7 @@ pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &String, amount: &u64, fee: &u6
                     },
                     TxOut {
                         script_pubkey: Address::from_str(change_addr)?.script_pubkey(),
-                        value: *change_amount,
+                        value: *change_amount-FEE,
                     }
                 ],
             };

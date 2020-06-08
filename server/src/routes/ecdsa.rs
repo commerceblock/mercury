@@ -22,7 +22,7 @@ use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
 use curv::arithmetic::traits::Converter;
 use rocket::State;
 use rocket_contrib::json::Json;
-use bitcoin::{Transaction, secp256k1::Signature};
+use bitcoin::{Transaction, secp256k1::Signature, consensus};
 use std::string::ToString;
 use db::{update_root, get_current_root, DB_SC_LOC};
 
@@ -415,7 +415,7 @@ pub fn sign_second(
     claim: Claims,
     id: String,
     request: Json<SignSecondMsgRequest>,
-) -> Result<Json<String>> {
+) -> Result<Json<Vec<Vec<u8>>>> {
     // check authorisation id is in DB (and check password?)
     check_user_auth(&state, &claim, &id)?;
 
@@ -493,8 +493,8 @@ pub fn sign_second(
     .unwrap().serialize_der().to_vec();
     sig_vec.push(01);
     let pk_vec = shared_key.public.q.get_element().serialize().to_vec();
-    tx.input[0].witness = vec![sig_vec, pk_vec];
-
+    let witness = vec![sig_vec, pk_vec];
+    tx.input[0].witness = witness.clone();
 
     match request.protocol {
         Protocol::Withdraw => {
@@ -559,7 +559,7 @@ pub fn sign_second(
         }
     };
 
-    Ok(Json(String::from("")))
+    Ok(Json(witness))
 }
 
 pub fn get_mk(state: &State<Config>, claim: Claims, id: &String) -> Result<MasterKey1> {
