@@ -3,13 +3,13 @@
 //! Utilities methods for state entity and mock classes
 
 use super::Result;
-use crate::structs::{BackUpTxPSM, WithdrawTxPSM};
+use crate::structs::{StateEntityFeeInfoAPI};
 use crate::error::SharedLibError;
 
 use bitcoin::{TxIn, TxOut, Transaction, Address};
 use bitcoin::hashes::sha256d::Hash;
 use bitcoin::blockdata::script::Builder;
-use bitcoin::{util::bip143::SighashComponents, blockdata::opcodes::OP_TRUE};
+use bitcoin::{util::bip143::SighashComponents, blockdata::opcodes::OP_TRUE, OutPoint};
 
 use std::str::FromStr;
 
@@ -36,60 +36,91 @@ pub fn reverse_hex_str(hex_str: String) -> Result<String> {
     Ok(result)
 }
 
-/// rebuild backup tx and return sig hash from PrepareSignMessage data
-pub fn rebuild_backup_tx(prepare_sign_msg: &BackUpTxPSM) -> Result<(Transaction, Hash)> {
-    let txin = TxIn {
-        previous_output: prepare_sign_msg.input,
-        sequence: 0xFFFFFFFF,
-        witness: Vec::new(),
-        script_sig: bitcoin::Script::default(),
-    };
-
-    let tx_b = build_tx_b(
-        &txin,
-        &prepare_sign_msg.address,
-        &prepare_sign_msg.amount
-    )? ;
-
-    let comp = SighashComponents::new(&tx_b);
-    let sig_hash = comp.sighash_all(
-        &txin,
-        &Address::from_str(&prepare_sign_msg.spending_addr).unwrap().script_pubkey(),
-        prepare_sign_msg.amount
-    );
-    Ok((tx_b, sig_hash))
+/// get sig hash for transaction input. Arguments: tx, index of input, spending address of input and amount
+pub fn get_sighash(tx: &Transaction, tx_index: &usize, address: &String, amount: &u64) -> Hash {
+    let comp = SighashComponents::new(&tx);
+    comp.sighash_all(
+        &tx.input.get(*tx_index).unwrap(),
+        &Address::from_str(address).unwrap().script_pubkey(),
+        *amount
+    )
 }
+
+
+/// check backup tx is valid
+pub fn tx_backup_verify(_tx: &Transaction) -> Result<()> {
+    // num spending adresses == num inputs
+    return Ok(())
+}
+
+/// check withdraw tx is valid
+pub fn tx_withdraw_verify(_tx: &Transaction, _fee_info: &StateEntityFeeInfoAPI) -> Result<()> {
+    // num spending adresses == num inputs
+
+    // Check fee info
+    // if prepare_sign_msg.se_fee != state.fee_withdraw {
+    //     return Err(SEError::Generic(String::from("Incorrect State Entity fee.")));
+    // }
+    // if prepare_sign_msg.se_fee_addr != state.fee_address {
+    //     return Err(SEError::Generic(String::from("Incorrect State Entity fee address.")));
+    // }
+    return Ok(())
+}
+
+// /// rebuild backup tx and return sig hash from PrepareSignMessage data
+// pub fn rebuild_backup_tx(prepare_sign_msg: &BackUpTxPSM) -> Result<(Transaction, Hash)> {
+//     let txin = TxIn {
+//         previous_output: prepare_sign_msg.input,
+//         sequence: 0xFFFFFFFF,
+//         witness: Vec::new(),
+//         script_sig: bitcoin::Script::default(),
+//     };
+//
+//     let tx_b = tx_backup_build(
+//         &txin,
+//         &prepare_sign_msg.address,
+//         &prepare_sign_msg.amount
+//     )? ;
+//
+//     let comp = SighashComponents::new(&tx_b);
+//     let sig_hash = comp.sighash_all(
+//         &txin,
+//         &Address::from_str(&prepare_sign_msg.spending_addr).unwrap().script_pubkey(),
+//         prepare_sign_msg.amount
+//     );
+//     Ok((tx_b, sig_hash))
+// }
 
 
 /// rebuild withdraw tx and return sig hash from PrepareSignMessage data
-pub fn rebuild_withdraw_tx(prepare_sign_msg: &WithdrawTxPSM) -> Result<(Transaction, Hash)> {
-    let txin = TxIn {
-        previous_output: prepare_sign_msg.input,
-        sequence: 0xFFFFFFFF,
-        witness: Vec::new(),
-        script_sig: bitcoin::Script::default(),
-    };
-
-    let tx_w = build_tx_w(
-        &txin,
-        &prepare_sign_msg.address,
-        &prepare_sign_msg.amount,
-        &prepare_sign_msg.se_fee,
-        &prepare_sign_msg.se_fee_addr
-    )?;
-
-    let comp = SighashComponents::new(&tx_w);
-    let sig_hash = comp.sighash_all(
-        &txin,
-        &Address::from_str(&prepare_sign_msg.spending_addr).unwrap().script_pubkey(),
-        prepare_sign_msg.amount
-    );
-    Ok((tx_w, sig_hash))
-}
+// pub fn rebuild_withdraw_tx(prepare_sign_msg: &WithdrawTxPSM) -> Result<(Transaction, Hash)> {
+//     let txin = TxIn {
+//         previous_output: prepare_sign_msg.input,
+//         sequence: 0xFFFFFFFF,
+//         witness: Vec::new(),
+//         script_sig: bitcoin::Script::default(),
+//     };
+//
+//     let tx_w = tx_withdraw_build(
+//         &txin,
+//         &prepare_sign_msg.address,
+//         &prepare_sign_msg.amount,
+//         &prepare_sign_msg.se_fee,
+//         &prepare_sign_msg.se_fee_addr
+//     )?;
+//
+//     let comp = SighashComponents::new(&tx_w);
+//     let sig_hash = comp.sighash_all(
+//         &txin,
+//         &Address::from_str(&prepare_sign_msg.spending_addr).unwrap().script_pubkey(),
+//         prepare_sign_msg.amount
+//     );
+//     Ok((tx_w, sig_hash))
+// }
 
 
 /// build funding tx spending inputs to p2wpkh address P for amount A
-pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &String, amount: &u64, fee: &u64, fee_addr: &String, change_addr: &String, change_amount: &u64) -> Result<Transaction> {
+pub fn tx_funding_build(inputs: &Vec<TxIn>, p_address: &String, amount: &u64, fee: &u64, fee_addr: &String, change_addr: &String, change_amount: &u64) -> Result<Transaction> {
     if FEE+fee >= *amount {
         return Err(SharedLibError::FormatError(String::from("Not enough value to cover fee.")));
     }
@@ -119,7 +150,7 @@ pub fn build_tx_0(inputs: &Vec<TxIn>, p_address: &String, amount: &u64, fee: &u6
 /// build kick-off transaction spending funding tx to:
 ///     - amount A-D to p2wpkh address P, and
 ///     - amount D to script OP_TRUE
-pub fn build_tx_k(funding_tx_in: &TxIn, p_address: &Address, amount: &u64) -> Result<Transaction> {
+pub fn tx_kickoff_build(funding_tx_in: &TxIn, p_address: &Address, amount: &u64) -> Result<Transaction> {
     if DUSTLIMIT >= *amount {
         return Err(SharedLibError::FormatError(String::from("Not enough value to cover fee.")));
     }
@@ -143,15 +174,25 @@ pub fn build_tx_k(funding_tx_in: &TxIn, p_address: &Address, amount: &u64) -> Re
 }
 
 /// build backup tx spending P output of txK to given backup address
-pub fn build_tx_b(txk_input: &TxIn, b_address: &String, amount: &u64) -> Result<Transaction> {
+pub fn tx_backup_build(funding_txid: &Hash, b_address: &Address, amount: &u64) -> Result<Transaction> {
     if FEE >= *amount {
         return Err(SharedLibError::FormatError(String::from("Not enough value to cover fee.")));
     }
+    let txin = TxIn {
+        previous_output: OutPoint {
+            txid: *funding_txid,
+            vout: 0
+        },
+        sequence: 0xFFFFFFFF,
+        witness: Vec::new(),
+        script_sig: bitcoin::Script::default(),
+    };
+
     let tx_b = Transaction {
-                input: vec![txk_input.clone()],
+                input: vec![txin.clone()],
                 output: vec![
                     TxOut {
-                        script_pubkey: Address::from_str(b_address)?.script_pubkey(),
+                        script_pubkey: b_address.script_pubkey(),
                         value: amount-FEE,
                     }
                 ],
@@ -165,17 +206,28 @@ pub fn build_tx_b(txk_input: &TxIn, b_address: &String, amount: &u64) -> Result<
 /// build withdraw tx spending funding tx to:
 ///     - amount-fee to receive address, and
 ///     - amount 'fee' to State Entity fee address 'fee_addr'
-pub fn build_tx_w(funding_tx_in: &TxIn, rec_address: &String, amount: &u64, fee: &u64, fee_addr: &String) -> Result<Transaction> {
+pub fn tx_withdraw_build(funding_txid: &Hash, rec_address: &Address, amount: &u64, fee: &u64, fee_addr: &String) -> Result<Transaction> {
     if *fee+FEE >= *amount{
         return Err(SharedLibError::FormatError(String::from("Not enough value to cover fees.")));
     }
+
+    let txin = TxIn {
+        previous_output: OutPoint {
+            txid: *funding_txid,
+            vout: 0
+        },
+        sequence: 0xFFFFFFFF,
+        witness: Vec::new(),
+        script_sig: bitcoin::Script::default(),
+    };
+
     let tx_0 = Transaction {
                 version: 2,
                 lock_time: 0,
-                input: vec![funding_tx_in.clone()],
+                input: vec![txin.clone()],
                 output: vec![
                     TxOut {
-                        script_pubkey: Address::from_str(rec_address)?.script_pubkey(),
+                        script_pubkey: rec_address.script_pubkey(),
                         value: amount-*fee-FEE,
                     },
                     TxOut {
@@ -233,7 +285,7 @@ mod tests {
         let amount = Amount::ONE_BTC.as_sat();
         let fee = 100;
         let fee_addr = String::from("bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x");
-        let tx_0 = build_tx_0(&inputs, &addr.to_string(), &amount, &fee, &fee_addr, &addr.to_string(), &1000).unwrap();
+        let tx_0 = tx_funding_build(&inputs, &addr.to_string(), &amount, &fee, &fee_addr, &addr.to_string(), &1000).unwrap();
         println!("{}", serde_json::to_string_pretty(&tx_0).unwrap());
 
         // Compute sighash
@@ -244,11 +296,11 @@ mod tests {
 
         println!("signature: {:?}", signature);
 
-        let tx_k = build_tx_k(tx_0.input.get(0).unwrap(), &addr, &amount).unwrap();
+        let tx_k = tx_kickoff_build(tx_0.input.get(0).unwrap(), &addr, &amount).unwrap();
         println!("{}", serde_json::to_string_pretty(&tx_k).unwrap());
 
-        let tx_1 = build_tx_b(&tx_k.input.get(0).unwrap(), &addr.to_string(), &amount).unwrap();
-        println!("{}", serde_json::to_string_pretty(&tx_1).unwrap());
+        // let tx_1 = tx_backup_build(&tx_k.input.get(0).unwrap(), &addr.to_string(), &amount).unwrap();
+        // println!("{}", serde_json::to_string_pretty(&tx_1).unwrap());
     }
 
     #[test]

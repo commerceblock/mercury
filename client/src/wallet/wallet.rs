@@ -3,7 +3,7 @@
 //! Basic Bitcoin wallet functionality. Full key owned by this wallet.
 
 use super::super::Result;
-use shared_lib::{structs::{StateEntityAddress, PrepareSignMessage}, Root};
+use shared_lib::structs::StateEntityAddress;
 
 use super::key_paths::{ funding_txid_to_int, KeyPathWithAddresses, KeyPath};
 use crate::error::{ CError, WalletErrorType};
@@ -15,7 +15,6 @@ use bitcoin::hashes::sha256d;
 use bitcoin::util::bip32::{ ExtendedPrivKey, ChildNumber };
 use bitcoin::util::bip143::SighashComponents;
 use bitcoin::secp256k1::{All, Secp256k1, Message, key::SecretKey};
-use monotree::Proof;
 
 use electrumx_client::response::{GetBalanceResponse, GetListUnspentResponse};
 use electrumx_client::interface::Electrumx;
@@ -317,15 +316,6 @@ impl Wallet {
         Ok(())
     }
 
-    // update shared key with proof data
-    pub fn update_shared_key(&mut self, shared_key_id: &String, state_chain_id: &String, backup_tx_psm: &PrepareSignMessage, proof_key: &String, root: &Root, proof: &Option<Proof>) -> Result<()> {
-        let shared_key = self.get_shared_key_mut(shared_key_id)?;
-        shared_key.state_chain_id = Some(state_chain_id.to_string());
-        shared_key.backup_tx_psm = Some(backup_tx_psm.to_owned());
-        shared_key.add_proof_data(proof_key, root, proof);
-        Ok(())
-    }
-
     /// Get shared key by id. Return None if no shared key with given id.
     pub fn get_shared_key(&self, id: &String) -> Result<&SharedKey> {
         for shared in &self.shared_keys {
@@ -475,9 +465,6 @@ pub fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
 mod tests {
     use super::*;
     extern crate shared_lib;
-    use shared_lib::util::{build_tx_0,RBF};
-    use bitcoin::{ Amount, TxIn, OutPoint, Script };
-    use bitcoin::hashes::sha256d;
     use crate::mocks::mock_electrum::MockElectrum;
 
     fn gen_wallet() -> Wallet {
@@ -538,37 +525,6 @@ mod tests {
         assert!(wallet_rebuilt.se_key_shares.key_derivation_map.contains_key(&key_shares2));
         assert_eq!(wallet_rebuilt.se_key_shares.get_key_derivation(&key_shares1).unwrap().pos, 9999999);
         assert_eq!(wallet_rebuilt.se_key_shares.get_key_derivation(&key_shares2).unwrap().pos, 1);
-    }
-
-    #[test]
-    fn test_tx_signing() {
-        let expected_witness = vec!(
-            vec!(48, 68, 2, 32, 15, 132, 125, 158, 214, 224, 75, 218, 107, 67, 184, 90, 113, 228, 138, 57, 188, 10, 181, 61, 26, 183, 73, 106, 211, 230, 239, 193, 80, 147, 163, 171, 2, 32, 3, 82, 60, 189, 52, 136, 1, 44, 192, 17, 28, 112, 64, 234, 176, 29, 71, 46, 18, 247, 19, 149, 117, 190, 39, 43, 13, 110, 171, 37, 227, 143, 1),
-             vec!(2, 102, 139, 209, 192, 143, 231, 4, 138, 140, 176, 55, 240, 78, 188, 127, 73, 208, 70, 196, 8, 62, 116, 44, 74, 116, 174, 22, 84, 153, 77, 152, 128)
-        );
-
-        let mut wallet = gen_wallet();
-        let addr = wallet.keys.get_new_address().unwrap();
-
-        let inputs =  vec![
-            TxIn {
-                previous_output: OutPoint {
-                    txid: sha256d::Hash::from_str(&String::from("e0a97cb38e7e73617ef75a57eaf2841eb06833407c0eae08029bd04ea7e6115a")).unwrap(),
-                    vout: 1 },
-                sequence: RBF,
-                witness: Vec::new(),
-                script_sig: Script::new(),
-            }
-        ];
-        let amount = Amount::ONE_BTC.as_sat();
-        let fee = 100;
-        let fee_addr = String::from("bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x");
-        let tx = build_tx_0(&inputs, &addr.to_string(), &amount, &fee, &fee_addr, &addr.to_string(), &1000).unwrap();
-        let signed_tx  = wallet.sign_tx(&tx, &vec!(0), &vec!(addr), &vec!(amount));
-        let witness = &signed_tx.input.get(0).unwrap().witness;
-
-        assert_eq!(hex::encode(witness.get(0).unwrap()), hex::encode(expected_witness.get(0).unwrap()));
-        assert_eq!(hex::encode(witness.get(1).unwrap()), hex::encode(expected_witness.get(1).unwrap()));
     }
 
     #[test]

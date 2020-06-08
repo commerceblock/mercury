@@ -9,7 +9,7 @@ mod tests {
     use client_lib::wallet::wallet::Wallet;
 
     use server_lib::server;
-    use shared_lib::structs::PrepareSignMessage;
+    use shared_lib::structs::PrepareSignTxMsg;
 
     use bitcoin::{Transaction, PublicKey};
     use curv::elliptic::curves::traits::ECScalar;
@@ -18,12 +18,10 @@ mod tests {
     use std::{thread, time};
     use mocks::mock_electrum::MockElectrum;
 
-    pub const TEST_WALLET_FILENAME: &str = "../client/test-assets/wallet.data";
-
     #[test]
     fn test_gen_shared_key() {
         spawn_server();
-        let mut wallet = load_wallet();
+        let mut wallet = gen_wallet();
         let proof_key = wallet.se_proof_keys.get_new_key().unwrap();
         let init_res = client_lib::state_entity::deposit::session_init(&mut wallet, &proof_key.to_string());
         assert!(init_res.is_ok());
@@ -59,7 +57,7 @@ mod tests {
     //     );
     // }
 
-    fn run_deposit(wallet: &mut Wallet) -> (String, String, Transaction, PrepareSignMessage, PublicKey)  {
+    fn run_deposit(wallet: &mut Wallet) -> (String, String, Transaction, Transaction, PrepareSignTxMsg, PublicKey)  {
         let resp = state_entity::deposit::deposit(
             wallet,
             &10000
@@ -75,13 +73,13 @@ mod tests {
 
         let deposit = run_deposit(&mut wallet);
 
-        let funding_tx = deposit.2;
-        let backup_tx_psm_msg = deposit.3;
-        let proof_key = deposit.4;
+        let tx_funding = deposit.2;
+        let tx_backup_psm = deposit.4;
+        let proof_key = deposit.5;
 
         // Get SMT inclusion proof and verify
         let root = state_entity::api::get_smt_root(&mut wallet).unwrap();
-        let proof = state_entity::api::get_smt_proof(&mut wallet, &root, &funding_tx.txid().to_string()).unwrap();
+        let proof = state_entity::api::get_smt_proof(&mut wallet, &root, &tx_funding.txid().to_string()).unwrap();
 
         //ensure wallet's shared key is updated with proof info
         let shared_key = wallet.get_shared_key(&deposit.0).unwrap();
@@ -90,8 +88,8 @@ mod tests {
         assert_eq!(shared_key.proof_key.clone().unwrap(), proof_key.to_string());
 
         println!("Shared wallet id: {:?} ",deposit.0);
-        println!("Funding transaction: {:?} ",funding_tx);
-        println!("Back up transaction data: {:?} ",backup_tx_psm_msg);
+        println!("Funding transaction: {:?} ",tx_funding);
+        println!("Back up transaction data: {:?} ",tx_backup_psm);
     }
 
     #[test]
@@ -105,7 +103,7 @@ mod tests {
         let deposit = run_deposit(&mut wallet);
 
         let state_chain = state_entity::api::get_statechain(&wallet.client_shim, &String::from(deposit.1.clone())).unwrap();
-        assert_eq!(state_chain.chain.last().unwrap().data, deposit.4.to_string());
+        assert_eq!(state_chain.chain.last().unwrap().data, deposit.5.to_string());
     }
 
     #[test]
@@ -183,7 +181,7 @@ mod tests {
     fn test_wallet_load_with_shared_key() {
         spawn_server();
 
-        let mut wallet = load_wallet();
+        let mut wallet = gen_wallet();
         run_deposit(&mut wallet);
 
         let wallet_json = wallet.to_json();
@@ -222,8 +220,5 @@ mod tests {
         let _ = wallet.keys.get_new_address();
 
         wallet
-    }
-    fn load_wallet() -> Wallet {
-        Wallet::load_from(TEST_WALLET_FILENAME,ClientShim::new("http://localhost:8000".to_string(),None),Box::new(MockElectrum::new())).unwrap()
     }
 }

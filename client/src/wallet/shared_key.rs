@@ -2,7 +2,7 @@
 //!
 //! Key shares of co-owned keys between user and server.
 
-use shared_lib::{structs::PrepareSignMessage, Root};
+use shared_lib::{structs::{PrepareSignTxMsg}, Root};
 use super::super::ecdsa;
 use super::super::ClientShim;
 use super::super::Result;
@@ -10,7 +10,7 @@ use super::super::Result;
 use kms::ecdsa::two_party::MasterKey2;
 use curv::elliptic::curves::traits::ECScalar;
 use curv::FE;
-use bitcoin::secp256k1::key::SecretKey;
+use bitcoin::{secp256k1::key::SecretKey};
 use monotree::Proof;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -24,7 +24,7 @@ pub struct SharedKey {
     pub share: MasterKey2,
     pub value: u64, //Satoshis
     pub state_chain_id: Option<String>,
-    pub backup_tx_psm: Option<PrepareSignMessage>, // back up transaction data
+    pub tx_backup_psm: Option<PrepareSignTxMsg>, // back up transaction data
     pub proof_key: Option<String>,
     pub smt_proof: Option<InclusionProofSMT>,
     pub unspent: bool

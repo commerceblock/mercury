@@ -10,7 +10,9 @@
 
 use super::super::Result;
 extern crate shared_lib;
-use shared_lib::{state_chain::StateChainSig, structs::{PrepareSignMessage, WithdrawTxPSM, StateChainDataAPI, WithdrawMsg1}};
+use shared_lib::state_chain::StateChainSig;
+use shared_lib::structs::{StateChainDataAPI, WithdrawMsg1, PrepareSignTxMsg, Protocol};
+use shared_lib::util::tx_withdraw_build;
 
 use crate::wallet::wallet::{to_bitcoin_public_key, Wallet};
 use crate::state_entity::util::cosign_tx_input;
@@ -48,18 +50,34 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
         wallet.get_bitcoin_network()
     );
 
-    // prepare to sign withdraw transaction
+    // Make unsigned withdraw tx
     let rec_address = wallet.keys.get_new_address()?; // receiving address of withdrawn funds
-    let tx_prepare_sign_msg = WithdrawTxPSM {
-        spending_addr: p_addr.to_string(),
-        input: sc_info.utxo,
-        address: rec_address.to_string(),
-        amount: sc_info.amount,
-        se_fee: se_fee_info.withdraw,
-        se_fee_addr: se_fee_info.address,
-    };
+    let tx_withdraw_unsigned = tx_withdraw_build(
+        &sc_info.utxo.txid,
+        &rec_address,
+        &sc_info.amount,
+        &se_fee_info.withdraw,
+        &se_fee_info.address
+    )?;
 
-    cosign_tx_input(wallet, &shared_key_id, &PrepareSignMessage::WithdrawTx(tx_prepare_sign_msg))?;
+    let tx_b_prepare_sign_msg = PrepareSignTxMsg {
+        protocol: Protocol::Withdraw,
+        tx: tx_withdraw_unsigned,
+        input_addrs: vec!(p_addr.to_string()),
+        input_amounts: vec!(sc_info.amount),
+        proof_key: None,
+    };
+    // // prepare to sign withdraw transaction
+    // let tx_prepare_sign_msg = WithdrawTxPSM {
+    //     spending_addr: p_addr.to_string(),
+    //     input: sc_info.utxo,
+    //     address: rec_address.to_string(),
+    //     amount: sc_info.amount,
+    //     se_fee: se_fee_info.withdraw,
+    //     se_fee_addr: se_fee_info.address,
+    // };
+
+    cosign_tx_input(wallet, &shared_key_id, &tx_b_prepare_sign_msg)?;
 
     // first sign state chain
     let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id)?;

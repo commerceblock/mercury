@@ -111,9 +111,8 @@ mod tests {
 
         let resp: StateEntityFeeInfoAPI = serde_json::from_str(&response.body_string().unwrap()).unwrap();
         assert_eq!(resp.address, "bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x".to_string());
-        assert_eq!(resp.deposit, 100);
-        assert_eq!(resp.withdraw, 100);
-
+        assert_eq!(resp.deposit, 300);
+        assert_eq!(resp.withdraw, 300);
     }
 
 }

@@ -17,7 +17,7 @@
 //      e. Verify o2*S2 = P
 
 use super::super::Result;
-use shared_lib::structs::{StateChainDataAPI, PrepareSignMessage, BackUpTxPSM, StateEntityAddress, TransferMsg1, TransferMsg2, TransferMsg3, TransferMsg4, TransferMsg5, Protocol};
+use shared_lib::structs::{StateChainDataAPI, StateEntityAddress, TransferMsg1, TransferMsg2, TransferMsg3, TransferMsg4, TransferMsg5, Protocol};
 use shared_lib::state_chain::StateChainSig;
 
 use crate::error::CError;
@@ -27,7 +27,7 @@ use crate::state_entity::util::{cosign_tx_input,verify_statechain_smt};
 use crate::state_entity::api::{get_smt_proof, get_smt_root, get_statechain};
 use super::super::utilities::requests;
 
-use bitcoin::PublicKey;
+use bitcoin::{Address,PublicKey};
 use curv::elliptic::curves::traits::{ECPoint, ECScalar};
 use curv::{FE, GE};
 use std::str::FromStr;
@@ -41,20 +41,14 @@ pub fn transfer_sender(
 ) -> Result<TransferMsg3> {
     // Get required shared key data
     let state_chain_id;
-    let prepare_sign_msg;
+    let mut prepare_sign_msg;
     {
         let shared_key = wallet.get_shared_key(shared_key_id)?;
         state_chain_id = shared_key.state_chain_id.clone()
             .ok_or(CError::Generic(String::from("No state chain for this shared key id")))?;
-        prepare_sign_msg = shared_key.backup_tx_psm.clone()
+        prepare_sign_msg = shared_key.tx_backup_psm.clone()
             .ok_or(CError::Generic(String::from("No back up transaction data found for this shared key id")))?;
     }
-
-    let mut prev_backup_tx_psm: BackUpTxPSM = match prepare_sign_msg.to_owned() {
-        PrepareSignMessage::BackUpTx(prev_backup_tx_psm) => prev_backup_tx_psm,
-        _ => return Err(CError::Generic(String::from("Invalid PrepareSignMessage type. Back up tx expected.")))
-    };
-    prev_backup_tx_psm.protocol = Protocol::Transfer;
 
     // first sign state chain
     let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id)?;
@@ -74,9 +68,15 @@ pub fn transfer_sender(
             state_chain_sig: state_chain_sig.clone()
         })?;
 
+    // update prepare_sign_msg with new owners address, proof key
+    prepare_sign_msg.protocol = Protocol::Transfer;
+    prepare_sign_msg.tx.output.get_mut(0).unwrap().script_pubkey = Address::from_str(&receiver_addr.backup_tx_addr)?.script_pubkey();
+    prepare_sign_msg.proof_key = Some(receiver_addr.proof_key.clone().to_string());
+
     // sign new back up tx
-    prev_backup_tx_psm.address = receiver_addr.backup_tx_addr.clone();
-    cosign_tx_input(wallet, &shared_key_id, &prepare_sign_msg)?;
+    let (new_backup_witness, _) = cosign_tx_input(wallet, &shared_key_id, &prepare_sign_msg)?;
+    // update back up tx with new witness
+    prepare_sign_msg.tx.input[0].witness = new_backup_witness;
 
     // get o1 priv key
     let shared_key = wallet.get_shared_key(&shared_key_id)?;
@@ -90,7 +90,7 @@ pub fn transfer_sender(
         t1, // should be encrypted
         state_chain_sig,
         state_chain_id: state_chain_id.to_string(),
-        backup_tx_psm: prepare_sign_msg.to_owned(),
+        tx_backup_psm: prepare_sign_msg.to_owned(),
         rec_addr: receiver_addr
     };
 
@@ -164,8 +164,13 @@ pub fn transfer_receiver(
         &proof
     ));
 
-    // add state chain id, proof key and SMT inclusion proofs to local SharedKey data
-    wallet.update_shared_key(&shared_id, &transfer_msg3.state_chain_id, &transfer_msg3.backup_tx_psm, &rec_proof_key, &root, &proof)?;
+    // Add state chain id, proof key and SMT inclusion proofs to local SharedKey data
+    {
+        let shared_key = wallet.get_shared_key_mut(&shared_id)?;
+        shared_key.state_chain_id = Some(transfer_msg3.state_chain_id.to_string());
+        shared_key.tx_backup_psm = Some(transfer_msg3.tx_backup_psm.clone());
+        shared_key.add_proof_data(&rec_proof_key, &root, &proof);
+    }
 
     Ok(transfer_msg5.new_shared_key_id)
 }

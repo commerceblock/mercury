@@ -5,7 +5,7 @@
 use super::super::Result;
 extern crate shared_lib;
 
-use shared_lib::util::{rebuild_backup_tx,rebuild_withdraw_tx};
+use shared_lib::util::{tx_backup_verify, get_sighash};
 use shared_lib::Root;
 use shared_lib::structs::*;
 use shared_lib::state_chain::*;
@@ -159,96 +159,97 @@ pub fn prepare_sign_tx(
     state: State<Config>,
     claim: Claims,
     id: String,
-    prepare_sign_msg: Json<PrepareSignMessage>,
+    prepare_sign_msg: Json<PrepareSignTxMsg>,
 ) -> Result<Json<String>> {
     // auth user
     check_user_auth(&state, &claim, &id)?;
 
-    let prepare_sign_msg: PrepareSignMessage = prepare_sign_msg.into_inner();
+    let prepare_sign_msg: PrepareSignTxMsg = prepare_sign_msg.into_inner();
 
-    // Are we signing a backup tx or a withdraw tx?
-    match prepare_sign_msg {
-        // back up case
-        PrepareSignMessage::BackUpTx(prepare_sign_msg) => {
-            // rebuild tx_b sig hash to verify co-sign will be signing the correct data
-            let (tx_b, sig_hash) = rebuild_backup_tx(&prepare_sign_msg)?;
+    // Which protocol are we signing for?
+    match prepare_sign_msg.protocol {
+        Protocol::Deposit => {
+            // verify unsigned backup tx to ensure co-sign will be signing the correct data
+            tx_backup_verify(&prepare_sign_msg.tx)?;
 
-            // Is this for deposit() or transfer()?
-            match prepare_sign_msg.protocol {
-                Protocol::Deposit => {
-                    if prepare_sign_msg.proof_key.is_none() {
-                        return Err(SEError::Generic(String::from("No proof key provided")));
-                    }
-                    let proof_key = prepare_sign_msg.proof_key.as_ref().unwrap().clone();
-
-                    // create StateChain and store
-                    let state_chain = StateChain::new(proof_key.clone(), tx_b.output.last().unwrap().value);
-
-                    db::insert(
-                        &state.db,
-                        &claim.sub,
-                        &state_chain.id,
-                        &StateEntityStruct::StateChain,
-                        &state_chain
-                    )?;
-
-                    // update UserSession data with sig hash, back up tx and state chain id
-                    let mut user_session: UserSession =
-                        db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
-                            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-
-                    user_session.sig_hash = Some(sig_hash.clone());
-                    user_session.backup_tx = Some(tx_b.clone());
-                    user_session.state_chain_id = Some(state_chain.id.to_owned());
-
-                    db::insert(
-                        &state.db,
-                        &claim.sub,
-                        &id,
-                        &StateEntityStruct::UserSession,
-                        &user_session
-                    )?;
-
-                    debug!("Deposit: Statechain created and backup tx ready for signing.");
-
-                    return Ok(Json(state_chain.id));
-                }
-
-                Protocol::Transfer => {
-                    // Get and update UserSession for this user
-                    let mut user_session: UserSession =
-                        db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
-                            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-
-                    user_session.sig_hash = Some(sig_hash);
-
-                    db::insert(
-                        &state.db,
-                        &claim.sub,
-                        &id,
-                        &StateEntityStruct::UserSession,
-                        &user_session
-                    )?;
-
-                    debug!("Transfer: Backup tx ready for signing.");
-
-                    return Ok(Json(String::from("")));
-                }
-                Protocol::Withdraw => {
-                    return Err(SEError::Generic(String::from("Cannot sign backup tx template for Withdraw protocol.")));
-                }
+            if prepare_sign_msg.proof_key.is_none() {
+                return Err(SEError::Generic(String::from("No proof key provided")));
             }
+            let proof_key = prepare_sign_msg.proof_key.as_ref().unwrap().clone();
+
+            // create StateChain and store
+            let state_chain = StateChain::new(proof_key.clone(), prepare_sign_msg.tx.output.last().unwrap().value);
+
+            db::insert(
+                &state.db,
+                &claim.sub,
+                &state_chain.id,
+                &StateEntityStruct::StateChain,
+                &state_chain
+            )?;
+
+            // update UserSession data with sig hash, back up tx and state chain id
+            let mut user_session: UserSession =
+                db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
+                    .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+
+            let sig_hash = get_sighash(
+                &prepare_sign_msg.tx,
+                &0,
+                &prepare_sign_msg.input_addrs[0],
+                &prepare_sign_msg.input_amounts[0]
+            );
+            user_session.sig_hash = Some(sig_hash.clone());
+            user_session.backup_tx = Some(prepare_sign_msg.tx.clone());
+            user_session.state_chain_id = Some(state_chain.id.to_owned());
+
+            db::insert(
+                &state.db,
+                &claim.sub,
+                &id,
+                &StateEntityStruct::UserSession,
+                &user_session
+            )?;
+
+            debug!("Deposit: Statechain created and backup tx ready for signing.");
+
+            return Ok(Json(state_chain.id));
         }
 
-        // Withdraw tx case
-        PrepareSignMessage::WithdrawTx(prepare_sign_msg) => {
-            // Check fee info
-            if prepare_sign_msg.se_fee != state.fee_withdraw {
-                return Err(SEError::Generic(String::from("Incorrect State Entity fee.")));
-            }
-            if prepare_sign_msg.se_fee_addr != state.fee_address {
-                return Err(SEError::Generic(String::from("Incorrect State Entity fee address.")));
-            }
+        Protocol::Transfer => {
+            // verify unsigned backup tx to ensure co-sign will be signing the correct data
+            tx_backup_verify(&prepare_sign_msg.tx)?;
+
+            // Get and update UserSession for this user
+            let mut user_session: UserSession =
+                db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
+                    .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+
+            let sig_hash = get_sighash(
+                &prepare_sign_msg.tx,
+                &0,
+                &prepare_sign_msg.input_addrs[0],
+                &prepare_sign_msg.input_amounts[0]
+            );
+            user_session.sig_hash = Some(sig_hash);
+
+            db::insert(
+                &state.db,
+                &claim.sub,
+                &id,
+                &StateEntityStruct::UserSession,
+                &user_session
+            )?;
+
+            debug!("Transfer: Backup tx ready for signing.");
+
+            return Ok(Json(String::from("")));
+        }
+
+
+        Protocol::Withdraw => {
+            // verify unsigned withdraw tx to ensure co-sign will be signing the correct data
+            tx_backup_verify(&prepare_sign_msg.tx)?;
 
             // Get user session for this user
             let mut user_session: UserSession =
@@ -264,17 +265,21 @@ pub fn prepare_sign_tx(
 
             let backup_tx_input = state_chain.backup_tx // check exists
                 .ok_or(SEError::Generic(String::from("No backup tx found for state chain session.")))?
-                .input.get(0).unwrap().previous_output;
-            if prepare_sign_msg.input != backup_tx_input {
+                .input.get(0).unwrap().previous_output.to_owned();
+            if prepare_sign_msg.tx.input.get(0).unwrap().previous_output.to_owned() != backup_tx_input {
                 return Err(SEError::Generic(String::from("Incorrect withdraw transacton input.")));
             }
 
-            // rebuild tx_b and sig hash to verify co-signing is performed on expected message
-            let (tx_w, sig_hash) = rebuild_withdraw_tx(&prepare_sign_msg)?;
-
             // update UserSession with withdraw tx info
+            let sig_hash = get_sighash(
+                &prepare_sign_msg.tx,
+                &0,
+                &prepare_sign_msg.input_addrs[0],
+                &prepare_sign_msg.input_amounts[0]
+            );
+
             user_session.sig_hash = Some(sig_hash);
-            user_session.withdraw_tx = Some(tx_w);
+            user_session.withdraw_tx = Some(prepare_sign_msg.tx);
 
             db::insert(
                 &state.db,

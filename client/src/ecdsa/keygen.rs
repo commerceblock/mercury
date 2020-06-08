@@ -118,7 +118,7 @@ pub fn get_master_key(id: &String, client_shim: &ClientShim, secret_key: &FE, va
         share: master_key,
         value: value.to_owned(),
         state_chain_id: None,
-        backup_tx_psm: None,
+        tx_backup_psm: None,
         proof_key: None,
         smt_proof: None,
         unspent: true,

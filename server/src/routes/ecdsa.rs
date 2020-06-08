@@ -16,13 +16,14 @@ use curv::cryptographic_primitives::twoparty::dh_key_exchange_variant_with_pok_c
 };
 use curv::elliptic::curves::traits::ECPoint;
 use curv::{BigInt, GE};
+use curv::arithmetic::traits::Converter;
 use kms::chain_code::two_party as chain_code;
 use kms::ecdsa::two_party::*;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
-use curv::arithmetic::traits::Converter;
 use rocket::State;
 use rocket_contrib::json::Json;
-use bitcoin::{Transaction, secp256k1::Signature, consensus};
+use bitcoin::{Transaction, secp256k1::Signature};
+
 use std::string::ToString;
 use db::{update_root, get_current_root, DB_SC_LOC};
 
