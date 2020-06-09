@@ -87,7 +87,7 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     let tx_backup_psm = PrepareSignTxMsg {
         protocol: Protocol::Deposit,
         tx: tx_backup_unsigned.to_owned(),
-        input_addrs: vec!(p_addr.to_string()),
+        input_addrs: vec!(pk),
         input_amounts: vec!(*amount),
         proof_key: Some(proof_key.to_string()),
     };

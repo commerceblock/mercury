@@ -46,6 +46,7 @@ type Result<T> = std::result::Result<T, error::SEError>;
 
 pub struct Config {
     pub db: rocksdb::DB,
+    pub network: String,
     pub fee_address: String, // Receive address for fee payments
     pub fee_deposit: u64, // satoshis
     pub fee_withdraw: u64 // satoshis

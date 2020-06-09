@@ -33,7 +33,8 @@ pub fn cosign_tx_input(wallet: &mut Wallet, shared_key_id: &String, prepare_sign
         &prepare_sign_msg.tx,
         &0,
         &prepare_sign_msg.input_addrs[0],
-        &prepare_sign_msg.input_amounts[0]
+        &prepare_sign_msg.input_amounts[0],
+        &wallet.network
     );
 
     let shared_key = wallet.get_shared_key(&shared_key_id)?;

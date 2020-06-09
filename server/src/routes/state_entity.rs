@@ -5,7 +5,7 @@
 use super::super::Result;
 extern crate shared_lib;
 
-use shared_lib::util::{tx_backup_verify, get_sighash};
+use shared_lib::util::{tx_backup_verify, get_sighash, tx_withdraw_verify, FEE};
 use shared_lib::Root;
 use shared_lib::structs::*;
 use shared_lib::state_chain::*;
@@ -170,7 +170,7 @@ pub fn prepare_sign_tx(
     match prepare_sign_msg.protocol {
         Protocol::Deposit => {
             // verify unsigned backup tx to ensure co-sign will be signing the correct data
-            tx_backup_verify(&prepare_sign_msg.tx)?;
+            tx_backup_verify(&prepare_sign_msg)?;
 
             if prepare_sign_msg.proof_key.is_none() {
                 return Err(SEError::Generic(String::from("No proof key provided")));
@@ -178,7 +178,7 @@ pub fn prepare_sign_tx(
             let proof_key = prepare_sign_msg.proof_key.as_ref().unwrap().clone();
 
             // create StateChain and store
-            let state_chain = StateChain::new(proof_key.clone(), prepare_sign_msg.tx.output.last().unwrap().value);
+            let state_chain = StateChain::new(proof_key.clone(), prepare_sign_msg.tx.output.last().unwrap().value+FEE);
 
             db::insert(
                 &state.db,
@@ -197,7 +197,8 @@ pub fn prepare_sign_tx(
                 &prepare_sign_msg.tx,
                 &0,
                 &prepare_sign_msg.input_addrs[0],
-                &prepare_sign_msg.input_amounts[0]
+                &prepare_sign_msg.input_amounts[0],
+                &state.network
             );
             user_session.sig_hash = Some(sig_hash.clone());
             user_session.backup_tx = Some(prepare_sign_msg.tx.clone());
@@ -218,7 +219,7 @@ pub fn prepare_sign_tx(
 
         Protocol::Transfer => {
             // verify unsigned backup tx to ensure co-sign will be signing the correct data
-            tx_backup_verify(&prepare_sign_msg.tx)?;
+            tx_backup_verify(&prepare_sign_msg)?;
 
             // Get and update UserSession for this user
             let mut user_session: UserSession =
@@ -229,7 +230,8 @@ pub fn prepare_sign_tx(
                 &prepare_sign_msg.tx,
                 &0,
                 &prepare_sign_msg.input_addrs[0],
-                &prepare_sign_msg.input_amounts[0]
+                &prepare_sign_msg.input_amounts[0],
+                &state.network
             );
             user_session.sig_hash = Some(sig_hash);
 
@@ -249,7 +251,7 @@ pub fn prepare_sign_tx(
 
         Protocol::Withdraw => {
             // verify unsigned withdraw tx to ensure co-sign will be signing the correct data
-            tx_backup_verify(&prepare_sign_msg.tx)?;
+            tx_withdraw_verify(&prepare_sign_msg, &state.fee_address, &state.fee_withdraw)?;
 
             // Get user session for this user
             let mut user_session: UserSession =
@@ -275,7 +277,8 @@ pub fn prepare_sign_tx(
                 &prepare_sign_msg.tx,
                 &0,
                 &prepare_sign_msg.input_addrs[0],
-                &prepare_sign_msg.input_amounts[0]
+                &prepare_sign_msg.input_amounts[0],
+                &state.network
             );
 
             user_session.sig_hash = Some(sig_hash);

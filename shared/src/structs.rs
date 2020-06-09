@@ -4,7 +4,7 @@
 
 use crate::Root;
 use crate::state_chain::{State, StateChainSig};
-use curv::{FE, GE, BigInt};
+use curv::{FE, GE, BigInt, PK};
 use kms::ecdsa::two_party::party2;
 use bitcoin::{Transaction, OutPoint};
 
@@ -52,6 +52,7 @@ pub struct SmtProofMsgAPI {
 }
 
 
+
 // PrepareSignTx structs
 
 
@@ -61,7 +62,7 @@ pub struct SmtProofMsgAPI {
 pub struct PrepareSignTxMsg {
     pub protocol: Protocol,
     pub tx: Transaction,
-    pub input_addrs: Vec<String>,  // addresses being spent from
+    pub input_addrs: Vec<PK>,  // pub keys being spent from
     pub input_amounts: Vec<u64>,
     pub proof_key: Option<String>
 }

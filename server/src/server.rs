@@ -19,6 +19,7 @@ impl Config {
         };
         Config {
             db,
+            network: settings.get("network").unwrap().to_string(),
             fee_address,
             fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
             fee_withdraw: settings.get("fee_withdraw").unwrap().parse::<u64>().unwrap()

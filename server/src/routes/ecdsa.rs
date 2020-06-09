@@ -497,6 +497,7 @@ pub fn sign_second(
     let witness = vec![sig_vec, pk_vec];
     tx.input[0].witness = witness.clone();
 
+
     match request.protocol {
         Protocol::Withdraw => {
             // store signed withdraw tx in UserSession DB object

@@ -3,7 +3,7 @@
 //! Basic Bitcoin wallet functionality. Full key owned by this wallet.
 
 use super::super::Result;
-use shared_lib::structs::StateEntityAddress;
+use shared_lib::{util::get_sighash, structs::StateEntityAddress};
 
 use super::key_paths::{ funding_txid_to_int, KeyPathWithAddresses, KeyPath};
 use crate::error::{ CError, WalletErrorType};
@@ -13,7 +13,6 @@ use crate::ClientShim;
 use bitcoin::{ Network, PublicKey, Address, TxIn, OutPoint };
 use bitcoin::hashes::sha256d;
 use bitcoin::util::bip32::{ ExtendedPrivKey, ChildNumber };
-use bitcoin::util::bip143::SighashComponents;
 use bitcoin::secp256k1::{All, Secp256k1, Message, key::SecretKey};
 
 use electrumx_client::response::{GetBalanceResponse, GetListUnspentResponse};
@@ -278,13 +277,12 @@ impl Wallet {
             let pk = key_derivation.public_key.unwrap().key;
             let sk = key_derivation.private_key.key;
 
-            let comp = SighashComponents::new(&transaction);
-            let sig_hash = comp.sighash_all(
-                &transaction.input[*input_index],
-                &bitcoin::Address::p2pkh(
-                    &to_bitcoin_public_key(pk),
-                    self.get_bitcoin_network()).script_pubkey(),
-                *amounts.get(iter).unwrap()
+            let sig_hash = get_sighash(
+                &transaction,
+                &input_index,
+                &pk,
+                &amounts[iter],
+                &self.network
             );
 
             let msg = Message::from_slice(&sig_hash).unwrap();
