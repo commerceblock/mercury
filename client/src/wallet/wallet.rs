@@ -250,7 +250,7 @@ impl Wallet {
             funding_txid_to_int(funding_txid)?
         )?;
         Ok(StateEntityAddress{
-            backup_tx_addr: backup_addr.to_string(),
+            tx_backup_addr: backup_addr.to_string(),
             proof_key: proof_key.to_string()
         })
     }

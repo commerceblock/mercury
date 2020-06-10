@@ -70,11 +70,11 @@ pub fn transfer_sender(
 
     // update prepare_sign_msg with new owners address, proof key
     prepare_sign_msg.protocol = Protocol::Transfer;
-    prepare_sign_msg.tx.output.get_mut(0).unwrap().script_pubkey = Address::from_str(&receiver_addr.backup_tx_addr)?.script_pubkey();
+    prepare_sign_msg.tx.output.get_mut(0).unwrap().script_pubkey = Address::from_str(&receiver_addr.tx_backup_addr)?.script_pubkey();
     prepare_sign_msg.proof_key = Some(receiver_addr.proof_key.clone().to_string());
 
     // sign new back up tx
-    let (new_backup_witness, _) = cosign_tx_input(wallet, &shared_key_id, &prepare_sign_msg)?;
+    let new_backup_witness = cosign_tx_input(wallet, &shared_key_id, &prepare_sign_msg)?;
     // update back up tx with new witness
     prepare_sign_msg.tx.input[0].witness = new_backup_witness;
 

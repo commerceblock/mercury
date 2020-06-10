@@ -5,7 +5,6 @@ use super::super::Config;
 
 use shared_lib::util::reverse_hex_str;
 use shared_lib::structs::{Protocol,SignSecondMsgRequest};
-use shared_lib::{Root, state_chain::{update_statechain_smt, StateChain}};
 
 use crate::routes::state_entity::{ check_user_auth, StateEntityStruct, UserSession };
 use crate::error::{SEError,DBErrorType::NoDataForID};
@@ -25,7 +24,6 @@ use rocket_contrib::json::Json;
 use bitcoin::{Transaction, secp256k1::Signature};
 
 use std::string::ToString;
-use db::{update_root, get_current_root, DB_SC_LOC};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 struct HDPos {
@@ -424,13 +422,10 @@ pub fn sign_second(
     let mut user_session: UserSession = db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
         .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
     if user_session.sig_hash.is_none() {
-        return Err(SEError::SigningError(String::from("No sig_hash found for state chain session.")));
+        return Err(SEError::SigningError(String::from("No sig_hash found for this user's session.")));
     }
-    if user_session.backup_tx.is_none() {
-        return Err(SEError::SigningError(String::from("No backup_tx found for state chain session.")));
-    }
-    if user_session.state_chain_id.is_none() {
-        return Err(SEError::SigningError(String::from("No state_chain_id found for state chain session.")));
+    if user_session.tx_backup.is_none() {
+        return Err(SEError::SigningError(String::from("No tx_backup found for this user's session.")));
     }
 
     // check sighash matches message to be signed
@@ -480,10 +475,10 @@ pub fn sign_second(
     // Get transaction which is being signed.
     let mut tx: Transaction = match request.protocol {
         Protocol::Withdraw => {
-            user_session.withdraw_tx.clone().unwrap().to_owned()
+            user_session.tx_withdraw.clone().unwrap().to_owned()
         },
-        _ => { // despoit() and transfer() both sign backup_tx
-            user_session.backup_tx.clone().unwrap().to_owned()
+        _ => { // despoit() and transfer() both sign tx_backup
+            user_session.tx_backup.clone().unwrap().to_owned()
         }
     };
 
@@ -494,72 +489,32 @@ pub fn sign_second(
     .unwrap().serialize_der().to_vec();
     sig_vec.push(01);
     let pk_vec = shared_key.public.q.get_element().serialize().to_vec();
-    let witness = vec![sig_vec, pk_vec];
+    let mut witness = vec![sig_vec, pk_vec];
     tx.input[0].witness = witness.clone();
 
 
     match request.protocol {
         Protocol::Withdraw => {
-            // store signed withdraw tx in UserSession DB object
-            user_session.withdraw_tx = Some(tx);
-
-            db::insert(
-                &state.db,
-                &claim.sub,
-                &id,
-                &StateEntityStruct::UserSession,
-                &user_session
-            )?;
-
+            // Store signed withdraw tx in UserSession DB object
+            user_session.tx_withdraw = Some(tx);
             debug!("Withdraw: Tx signed and stored.");
+            // Do not return withdraw tx witness until /withdraw/confirm is complete
+            witness = vec!();
         },
-        _ => { // despoit() and transfer() both sign backup_tx
-
-            // store signed backup tx in UserSession DB object
-            user_session.backup_tx = Some(tx.to_owned());
-
-            db::insert(
-                &state.db,
-                &claim.sub,
-                &id,
-                &StateEntityStruct::UserSession,
-                &user_session
-            )?;
-
-            // Store backup tx in State Chain DB object
-            let state_chain_id = user_session.state_chain_id.unwrap();
-            let mut state_chain: StateChain =
-            db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
-                .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
-
-            state_chain.backup_tx = Some(tx.clone());
-
-            db::insert(
-                &state.db,
-                &claim.sub,
-                &state_chain_id,
-                &StateEntityStruct::StateChain,
-                &state_chain
-            )?;
-
-            // deposit() update sparse merkle tree
-            if let Protocol::Deposit = request.protocol {
-                // update sparse merkle tree with new StateChain entry
-                let root = get_current_root::<Root>(&state.db)?;
-                let new_root = update_statechain_smt(
-                    DB_SC_LOC,
-                    &root.value,
-                    &tx.input.get(0).unwrap().previous_output.txid.to_string(),
-                    &user_session.proof_key
-                )?;
-                update_root(&state.db, new_root.unwrap())?;
-
-                debug!("Deposit: Added to sparse merkle tree. State Chain: {}", state_chain_id);
-            }
-
-            debug!("Deposit/Transfer: Backup Tx signed and stored. State Chain: {}", state_chain_id);
+        _ => {
+            // Store signed backup tx in UserSession DB object
+            user_session.tx_backup = Some(tx.to_owned());
+            debug!("Deposit/Transfer: Backup Tx signed and stored. User: {}", user_session.id);
         }
     };
+
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &id,
+        &StateEntityStruct::UserSession,
+        &user_session
+    )?;
 
     Ok(Json(witness))
 }

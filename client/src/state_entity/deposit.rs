@@ -11,7 +11,7 @@
 use super::super::Result;
 extern crate shared_lib;
 use shared_lib::util::{FEE,tx_funding_build, tx_backup_build};
-use shared_lib::structs::{DepositMsg1, Protocol, PrepareSignTxMsg};
+use shared_lib::structs::{DepositMsg1, Protocol, PrepareSignTxMsg, DepositMsg2};
 
 use crate::wallet::wallet::{to_bitcoin_public_key,Wallet};
 use crate::utilities::requests;
@@ -93,12 +93,21 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     };
 
     // co-sign tx backup tx
-    let (witness, state_chain_id) = cosign_tx_input(wallet, &shared_key_id, &tx_backup_psm)?;
+    let witness = cosign_tx_input(wallet, &shared_key_id, &tx_backup_psm)?;
     // add witness to back up tx
     let mut tx_backup_signed = tx_backup_unsigned.clone();
     tx_backup_signed.input[0].witness = witness;
 
+    // TODO: check signature is valid?
+
     // TODO: Broadcast funding transcation
+
+    // Wait for server confirmation of funding tx and receive new StateChain's id
+    let state_chain_id: String = requests::postb(&wallet.client_shim,&format!("/deposit/confirm"),
+        &DepositMsg2 {
+            shared_key_id: shared_key_id.to_owned()
+        }
+    )?;
 
     // verify proof key inclusion in SE sparse merkle tree
     let root = get_smt_root(wallet)?;

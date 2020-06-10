@@ -11,7 +11,7 @@ use bitcoin::{Transaction, OutPoint};
 use std::fmt;
 
 /// State Entity protocols
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 pub enum Protocol {
     Deposit,
     Transfer,
@@ -89,6 +89,11 @@ pub struct DepositMsg1 {
     pub proof_key: String
 }
 
+/// Client -> SE
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DepositMsg2 {
+    pub shared_key_id: String,
+}
 
 // transfer algorithm structs
 
@@ -96,7 +101,7 @@ pub struct DepositMsg1 {
 /// Address generated for State Entity transfer protocol
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StateEntityAddress {
-    pub backup_tx_addr: String,
+    pub tx_backup_addr: String,
     pub proof_key: String,
 }
 
@@ -154,5 +159,11 @@ impl Default for TransferMsg5 {
 pub struct WithdrawMsg1 {
     pub shared_key_id: String,
     pub state_chain_sig: StateChainSig,
+}
+
+/// Owner -> State Entity
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WithdrawMsg2 {
+    pub shared_key_id: String,
     pub address: String,
 }

@@ -11,7 +11,7 @@
 use super::super::Result;
 extern crate shared_lib;
 use shared_lib::state_chain::StateChainSig;
-use shared_lib::structs::{StateChainDataAPI, WithdrawMsg1, PrepareSignTxMsg, Protocol};
+use shared_lib::structs::{StateChainDataAPI, WithdrawMsg1, PrepareSignTxMsg, Protocol, WithdrawMsg2};
 use shared_lib::util::tx_withdraw_build;
 
 use crate::wallet::wallet::Wallet;
@@ -28,7 +28,7 @@ use std::str::FromStr;
 pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
     -> Result<(Transaction, String, u64)>
 {
-    // Get required shared key data
+    // first get required shared key data
     let state_chain_id;
     let pk;
     {
@@ -38,34 +38,14 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
             .ok_or(CError::Generic(String::from("No state chain for this shared key id")))?;
     }
 
-    // Get state chain info
-    let sc_info = get_statechain(&wallet.client_shim, &state_chain_id)?;
+     // Generate receiving address of withdrawn funds
+    let rec_address = wallet.keys.get_new_address()?;
 
-    // Get state entity withdraw fee info
-    let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
-
-    // Make unsigned withdraw tx
-    let rec_address = wallet.keys.get_new_address()?; // receiving address of withdrawn funds
-    let tx_withdraw_unsigned = tx_withdraw_build(
-        &sc_info.utxo.txid,
-        &rec_address,
-        &(sc_info.amount+se_fee_info.deposit), //
-        &se_fee_info.withdraw,
-        &se_fee_info.address
-    )?;
-
-    // co-sign withdraw tx
-    let tx_w_prepare_sign_msg = PrepareSignTxMsg {
-        protocol: Protocol::Withdraw,
-        tx: tx_withdraw_unsigned,
-        input_addrs: vec!(pk),
-        input_amounts: vec!(sc_info.amount),
-        proof_key: None,
-    };
-    cosign_tx_input(wallet, &shared_key_id, &tx_w_prepare_sign_msg)?;
-
-    // first sign state chain
+    // Sign state chain
     let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id)?;
+    if state_chain_data.amount == 0 {
+        return Err(CError::Generic(String::from("Withdraw: StateChain is already withdrawn.")));
+    }
     let state_chain = state_chain_data.chain;
     // get proof key for signing
     let proof_key_derivation = wallet.se_proof_keys.get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap());
@@ -75,12 +55,46 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
         &rec_address.to_string()
     )?;
 
-    let tx_w: Transaction = requests::postb(&wallet.client_shim,&format!("/withdraw"),
+    // Alert SE of desire of withdraw and receive authorisation if state chain signature verifies
+    requests::postb(&wallet.client_shim,&format!("/withdraw/init"),
         &WithdrawMsg1 {
             shared_key_id: shared_key_id.clone(),
             state_chain_sig,
+        })?;
+
+    // Get state chain info
+    let sc_info = get_statechain(&wallet.client_shim, &state_chain_id)?;
+    // Get state entity withdraw fee info
+    let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
+
+    // Construct withdraw tx
+    let tx_withdraw_unsigned = tx_withdraw_build(
+        &sc_info.utxo.txid,
+        &rec_address,
+        &(sc_info.amount+se_fee_info.deposit),
+        &se_fee_info.withdraw,
+        &se_fee_info.address
+    )?;
+
+    // co-sign withdraw tx
+    let tx_w_prepare_sign_msg = PrepareSignTxMsg {
+        protocol: Protocol::Withdraw,
+        tx: tx_withdraw_unsigned.clone(),
+        input_addrs: vec!(pk),
+        input_amounts: vec!(sc_info.amount),
+        proof_key: None,
+    };
+    cosign_tx_input(wallet, &shared_key_id, &tx_w_prepare_sign_msg)?;
+
+
+    let witness: Vec<Vec<u8>> = requests::postb(&wallet.client_shim,&format!("/withdraw/confirm"),
+        &WithdrawMsg2 {
+            shared_key_id: shared_key_id.clone(),
             address: rec_address.to_string(),
         })?;
+
+    let mut tx_withdraw_signed = tx_withdraw_unsigned.clone();
+    tx_withdraw_signed.input[0].witness = witness;
 
     // Mark funds as withdrawn in wallet
     {
@@ -90,5 +104,5 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
 
     // TODO verify signed tx_w matches tx_prepare_sign_msg. Broadcast transaction?
 
-    Ok((tx_w, state_chain_id, state_chain_data.amount-se_fee_info.withdraw))
+    Ok((tx_withdraw_signed, state_chain_id, state_chain_data.amount-se_fee_info.withdraw))
 }

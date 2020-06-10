@@ -23,10 +23,10 @@ use std::convert::TryInto;
 
 /// Sign a transaction input with state entity shared wallet. Return signature witness.
 pub fn cosign_tx_input(wallet: &mut Wallet, shared_key_id: &String, prepare_sign_msg: &PrepareSignTxMsg)
-    -> Result<(Vec<Vec<u8>>, String)> {
+    -> Result<Vec<Vec<u8>>> {
 
     // message 1 - send tx data for validation.
-    let state_chain_id: String = requests::postb(&wallet.client_shim, &format!("prepare-sign/{}", shared_key_id), prepare_sign_msg)?;
+    requests::postb(&wallet.client_shim, &format!("prepare-sign/{}", shared_key_id), prepare_sign_msg)?;
 
     // get sighash as message to be signed
     let sig_hash = get_sighash(
@@ -49,7 +49,7 @@ pub fn cosign_tx_input(wallet: &mut Wallet, shared_key_id: &String, prepare_sign
         &shared_key.id,
     )?;
 
-    Ok((witness, state_chain_id))
+    Ok(witness)
 }
 
 pub fn verify_statechain_smt(root: &Option<Hash>, proof_key: &String, proof: &Option<Proof>) -> bool {

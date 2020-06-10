@@ -159,9 +159,9 @@ mod tests {
 
         let deposit_resp = run_deposit(&mut wallet);
 
-        let withdraw_tx = state_entity::withdraw::withdraw(&mut wallet, &deposit_resp.0);
+        let tx_withdraw = state_entity::withdraw::withdraw(&mut wallet, &deposit_resp.0);
         // ensure withdraw tx is signed
-        assert!(withdraw_tx.unwrap().0.input.last().unwrap().witness.len() > 0);
+        assert!(tx_withdraw.unwrap().0.input.last().unwrap().witness.len() > 0);
 
         // check state chain is updated
         let state_chain = state_entity::api::get_statechain(&wallet.client_shim, &deposit_resp.1).unwrap();
