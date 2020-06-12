@@ -37,7 +37,7 @@ pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<String> {
 /// Deposit coins into state entity. Returns shared_key_id, state_chain_id, signed funding tx,
 /// signed backup tx, back up transacion data and proof_key
 pub fn deposit(wallet: &mut Wallet, amount: &u64)
-    -> Result<(String, String, Transaction, Transaction, PrepareSignTxMsg, PublicKey)>
+    -> Result<(String, String, String, Transaction, PrepareSignTxMsg, PublicKey)>
 {
     // Get state entity fee info
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
@@ -126,5 +126,5 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
         shared_key.add_proof_data(&proof_key.to_string(), &root, &proof);
     }
 
-    Ok((shared_key_id, state_chain_id, tx_funding_signed, tx_backup_signed, tx_backup_psm, proof_key))
+    Ok((shared_key_id, state_chain_id, funding_txid, tx_backup_signed, tx_backup_psm, proof_key))
 }

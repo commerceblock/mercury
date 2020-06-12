@@ -128,10 +128,12 @@ where
 mod tests {
 
     use super::*;
+    use rocksdb::Options;
+    const TEST_DB_LOC: &str = "/tmp/db-statechain";
 
     #[test]
     fn test_db_get_insert() {
-        let db = rocksdb::DB::open_default("/tmp/db-statechain").unwrap();
+        let db = rocksdb::DB::open_default(TEST_DB_LOC).unwrap();
 
         let root = String::from("12345");
         let id = String::from("0");
@@ -143,11 +145,13 @@ mod tests {
 
         let get_res2: Option<String> = get_by_identifier(&db, &String::from("1")).unwrap();
         assert!(get_res2.is_none());
+
+        let _ = rocksdb::DB::destroy(&Options::default(), TEST_DB_LOC);
     }
 
     #[test]
     fn test_db_root_update() {
-        let db = rocksdb::DB::open_default("/tmp/db-statechain").unwrap();
+        let db = rocksdb::DB::open_default(TEST_DB_LOC).unwrap();
         let root1: [u8;32] = [1;32];
         let root2: [u8;32] = [2;32];
 
@@ -166,5 +170,6 @@ mod tests {
         let _ = db.delete(&idify_root(&root2_id));
         let _ = db.delete(&idify_root(&root1_id));
 
+        let _ = rocksdb::DB::destroy(&Options::default(), TEST_DB_LOC);
     }
 }

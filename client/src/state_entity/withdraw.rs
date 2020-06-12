@@ -7,26 +7,26 @@
 // 1. co-sign withdraw tx
 // 2. verify withdraws transaction received is corrcet
 
-
 use super::super::Result;
 extern crate shared_lib;
-use shared_lib::state_chain::StateChainSig;
-use shared_lib::structs::{StateChainDataAPI, WithdrawMsg1, PrepareSignTxMsg, Protocol, WithdrawMsg2};
-use shared_lib::util::tx_withdraw_build;
+use shared_lib::{structs::{StateChainDataAPI, WithdrawMsg1, PrepareSignTxMsg, Protocol, WithdrawMsg2},
+    state_chain::StateChainSig,
+    util::tx_withdraw_build};
 
 use crate::wallet::wallet::Wallet;
 use crate::state_entity::util::cosign_tx_input;
 use super::api::{get_statechain, get_statechain_fee_info};
-use crate::{utilities::requests, error::CError};
+use crate::utilities::requests;
+use crate::error::CError;
 
-use bitcoin::{ Transaction, PublicKey };
+use bitcoin::{PublicKey, consensus};
 use curv::elliptic::curves::traits::ECPoint;
-use std::str::FromStr;
 
+use std::str::FromStr;
 
 /// Withdraw coins from state entity. Returns signed withdraw transaction, state_chain_id and withdrawn amount.
 pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
-    -> Result<(Transaction, String, u64)>
+    -> Result<(String, String, u64)>
 {
     // first get required shared key data
     let state_chain_id;
@@ -102,7 +102,9 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
         shared_key.unspent = false;
     }
 
-    // TODO verify signed tx_w matches tx_prepare_sign_msg. Broadcast transaction?
+    // Broadcast transcation
+    let withdraw_txid = wallet.electrumx_client.broadcast_transaction(hex::encode(consensus::serialize(&tx_withdraw_signed)))?;
+    debug!("Deposit: Funding tx broadcast. txid: {}", withdraw_txid);
 
-    Ok((tx_withdraw_signed, state_chain_id, state_chain_data.amount-se_fee_info.withdraw))
+    Ok((withdraw_txid, state_chain_id, state_chain_data.amount-se_fee_info.withdraw))
 }

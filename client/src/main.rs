@@ -112,7 +112,7 @@ fn main() {
         } else if matches.is_present("deposit") {
             if let Some(matches) = matches.subcommand_matches("deposit") {
                 let amount: &str = matches.value_of("amount").unwrap();
-                let (shared_key_id, state_chain_id, tx_0, tx_b, _, _) = state_entity::deposit::deposit(
+                let (shared_key_id, state_chain_id, funding_txid, tx_b, _, _) = state_entity::deposit::deposit(
                     &mut wallet,
                     &amount.to_string().parse::<u64>().unwrap(),
                 ).unwrap();
@@ -121,14 +121,14 @@ fn main() {
                     "\nNetwork: [{}], \n\nDeposited {} satoshi's. \nShared Key ID: {} \nState Chain ID: {}",
                     network, amount, shared_key_id, state_chain_id
                 );
-                println!("\nFunding Transaction hex: {}",hex::encode(consensus::serialize(&tx_0)));
+                println!("\nFunding Txid: {}",funding_txid);
                 println!("\nBackup Transaction hex: {}",hex::encode(consensus::serialize(&tx_b)));
             }
 
         } else if matches.is_present("withdraw") {
             if let Some(matches) = matches.subcommand_matches("withdraw") {
                 let shared_key_id: &str = matches.value_of("key").unwrap();
-                let (tx_w, state_chain_id, amount) = state_entity::withdraw::withdraw(
+                let (txid, state_chain_id, amount) = state_entity::withdraw::withdraw(
                     &mut wallet,
                     &shared_key_id.to_string()
                 ).unwrap();
@@ -138,7 +138,7 @@ fn main() {
                     network, amount, state_chain_id
                 );
 
-                println!("\nWithdraw Transaction hex: {}",hex::encode(consensus::serialize(&tx_w)));
+                println!("\nWithdraw Txid: {}",txid);
             }
 
         } else if matches.is_present("transfer-sender") {
