@@ -3,50 +3,30 @@
 //! Basic Bitcoin wallet functionality. Full key owned by this wallet.
 
 use super::super::Result;
-use shared_lib::{structs::{StateEntityAddress, PrepareSignMessage}, Root};
+use shared_lib::{
+    util::get_sighash,
+    structs::StateEntityAddress};
 
-use super::key_paths::{ funding_txid_to_int, KeyPathWithAddresses, KeyPath};
-use crate::error::{ CError, WalletErrorType};
-use crate::mocks::mock_electrum::MockElectrum;
+use super::key_paths::{funding_txid_to_int, KeyPathWithAddresses, KeyPath};
+use crate::error::{CError, WalletErrorType};
 use crate::wallet::shared_key::SharedKey;
 use crate::ClientShim;
 
-use bitcoin::{ Network, PublicKey };
-use bitcoin::util::bip32::{ ExtendedPrivKey, ChildNumber };
-use bitcoin::util::bip143::SighashComponents;
-use bitcoin::secp256k1::{ All, Secp256k1, Message, key::SecretKey };
-use monotree::Proof;
+use bitcoin::{{Network, PublicKey, Address, TxIn, OutPoint},
+    hashes::sha256d,
+    util::bip32::{ExtendedPrivKey, ChildNumber},
+    secp256k1::{All, Secp256k1, Message, key::SecretKey}};
 
-// use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
+use electrumx_client::{
+    response::{GetBalanceResponse, GetListUnspentResponse},
+    interface::Electrumx};
+
 use uuid::Uuid;
 use std::str::FromStr;
 use serde_json::json;
 use std::fs;
 
-
 const WALLET_FILENAME: &str = "wallet/wallet.data";
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct GetBalanceResponse {
-    pub address: String,
-    pub confirmed: u64,
-    pub unconfirmed: u64,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct GetListUnspentResponse {
-    pub height: usize,
-    pub tx_hash: String,
-    pub tx_pos: u32,
-    pub value: u64,
-    pub address: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct GetWalletBalanceResponse {
-    pub confirmed: u64,
-    pub unconfirmed: u64,
-}
 
 
 /// Standard Bitcoin Wallet
@@ -54,8 +34,7 @@ pub struct Wallet {
     pub id: String,
     pub network: String,
     secp: Secp256k1<All>,
-    // pub electrumx_client: ElectrumxClient,
-    electrumx_client: MockElectrum,
+    pub electrumx_client: Box<dyn Electrumx>,
     pub client_shim: ClientShim,
 
     pub master_priv_key: ExtendedPrivKey,
@@ -67,7 +46,7 @@ pub struct Wallet {
     pub shared_keys: Vec<SharedKey> // vector of keys co-owned with state entities
 }
 impl Wallet {
-    pub fn new(seed: &[u8], network: &String, client_shim: ClientShim) -> Wallet {
+    pub fn new(seed: &[u8], network: &String, client_shim: ClientShim, electrumx_client: Box<dyn Electrumx>) -> Wallet {
         let secp = Secp256k1::new();
         let master_priv_key = ExtendedPrivKey::new_master(network.parse::<Network>().unwrap(), seed).unwrap();
 
@@ -87,7 +66,7 @@ impl Wallet {
             id: Uuid::new_v4().to_string(),
             network: network.to_string(),
             secp,
-            electrumx_client: MockElectrum::new(),
+            electrumx_client,
             client_shim,
             master_priv_key,
             keys,
@@ -135,7 +114,7 @@ impl Wallet {
     }
 
     /// load wallet from jon
-    pub fn from_json(json: serde_json::Value, client_shim: ClientShim) -> Result<Self> {
+    pub fn from_json(json: serde_json::Value, client_shim: ClientShim, electrumx_client: Box<dyn Electrumx>) -> Result<Self> {
         let secp = Secp256k1::new();
         let network = json["network"].as_str().unwrap().to_string();
 
@@ -167,7 +146,7 @@ impl Wallet {
             id: json["id"].as_str().unwrap().to_string(),
             network,
             secp,
-            electrumx_client: MockElectrum::new(),
+            electrumx_client,
             client_shim,
             master_priv_key,
             keys,
@@ -236,15 +215,35 @@ impl Wallet {
     }
 
     /// load wallet from disk
-    pub fn load_from(filepath: &str, client_shim: ClientShim) -> Result<Wallet> {
+    pub fn load_from(filepath: &str, client_shim: ClientShim, electrumx_client: Box<dyn Electrumx>) -> Result<Wallet> {
         let data = fs::read_to_string(filepath).expect("Unable to load wallet!");
         let serde_json_data = serde_json::from_str(&data).unwrap();
-        let wallet: Wallet = Wallet::from_json(serde_json_data, client_shim)?;
+        let wallet: Wallet = Wallet::from_json(serde_json_data, client_shim, electrumx_client)?;
         debug!("(wallet id: {}) Loaded wallet to memory", wallet.id);
         Ok(wallet)
     }
-    pub fn load(client_shim: ClientShim) -> Result<Wallet> {
-        Ok(Wallet::load_from(WALLET_FILENAME, client_shim)?)
+    pub fn load(client_shim: ClientShim, electrumx_client: Box<dyn Electrumx>) -> Result<Wallet> {
+        Ok(Wallet::load_from(WALLET_FILENAME, client_shim, electrumx_client)?)
+    }
+
+    /// Select unspent coins greedily. Return TxIns along with corresponding spending addresses and amounts
+    pub fn coin_selection_greedy(&mut self, amount: &u64) -> Result<(Vec<TxIn>, Vec<Address>, Vec<u64>)> {
+        // Greedy coin selection.
+        let (unspent_addrs, unspent_utxos) = self.list_unspent();
+        let mut inputs: Vec<TxIn> = vec!();
+        let mut addrs: Vec<Address> = vec!(); // corresponding addresses for inputs
+        let mut amounts: Vec<u64> = vec!(); // corresponding amounts for inputs
+        for (i, addr) in unspent_addrs.into_iter().enumerate() {
+            for unspent_utxo in unspent_utxos.get(i).unwrap() {
+                inputs.push(basic_input(&unspent_utxo.tx_hash, &(unspent_utxo.tx_pos as u32)));
+                addrs.push(addr.clone());
+                amounts.push(unspent_utxo.value as u64);
+                if *amount <= amounts.iter().sum::<u64>() {
+                    return Ok((inputs, addrs, amounts));
+                }
+            }
+        }
+        return Err(CError::WalletError(WalletErrorType::NotEnoughFunds))
     }
 
     pub fn get_new_state_entity_address(&mut self, funding_txid: &String) -> Result<StateEntityAddress> {
@@ -255,7 +254,7 @@ impl Wallet {
             funding_txid_to_int(funding_txid)?
         )?;
         Ok(StateEntityAddress{
-            backup_tx_addr: backup_addr.to_string(),
+            tx_backup_addr: backup_addr.to_string(),
             proof_key: proof_key.to_string()
         })
     }
@@ -282,13 +281,12 @@ impl Wallet {
             let pk = key_derivation.public_key.unwrap().key;
             let sk = key_derivation.private_key.key;
 
-            let comp = SighashComponents::new(&transaction);
-            let sig_hash = comp.sighash_all(
-                &transaction.input[*input_index],
-                &bitcoin::Address::p2pkh(
-                    &to_bitcoin_public_key(pk),
-                    self.get_bitcoin_network()).script_pubkey(),
-                *amounts.get(iter).unwrap()
+            let sig_hash = get_sighash(
+                &transaction,
+                &input_index,
+                &pk,
+                &amounts[iter],
+                &self.network
             );
 
             let msg = Message::from_slice(&sig_hash).unwrap();
@@ -320,15 +318,6 @@ impl Wallet {
         Ok(())
     }
 
-    // update shared key with proof data
-    pub fn update_shared_key(&mut self, shared_key_id: &String, state_chain_id: &String, backup_tx_psm: &PrepareSignMessage, proof_key: &String, root: &Root, proof: &Option<Proof>) -> Result<()> {
-        let shared_key = self.get_shared_key_mut(shared_key_id)?;
-        shared_key.state_chain_id = Some(state_chain_id.to_string());
-        shared_key.backup_tx_psm = Some(backup_tx_psm.to_owned());
-        shared_key.add_proof_data(proof_key, root, proof);
-        Ok(())
-    }
-
     /// Get shared key by id. Return None if no shared key with given id.
     pub fn get_shared_key(&self, id: &String) -> Result<&SharedKey> {
         for shared in &self.shared_keys {
@@ -350,22 +339,17 @@ impl Wallet {
     }
 
     /// return balance of address
-    fn get_address_balance(&self, address: &bitcoin::Address) -> GetBalanceResponse {
-        let resp = self.electrumx_client.get_balance(&address.to_string()).unwrap();
-        GetBalanceResponse {
-            confirmed: resp.confirmed,
-            unconfirmed: resp.unconfirmed,
-            address: address.to_string(),
-        }
+    fn get_address_balance(&mut self, address: &bitcoin::Address) -> GetBalanceResponse {
+        self.electrumx_client.get_balance(&address.to_string()).unwrap()
     }
 
-    fn balance_not_zero(&self, addr: &GetBalanceResponse) -> bool {
+    fn zero_balance(&self, addr: &GetBalanceResponse) -> bool {
         if addr.confirmed == 0 {
             if addr.unconfirmed == 0 {
-                return false;
+                return true;
             }
         }
-        return true;
+        return false;
     }
 
     /// return list of all addresses derived from keys in wallet
@@ -375,24 +359,33 @@ impl Wallet {
         addresses
     }
 
-    pub fn get_all_addresses_balance(&self) -> Vec<GetBalanceResponse> {
-        let mut response: Vec<GetBalanceResponse> = self
-            .get_all_wallet_addresses()
+    pub fn get_all_addresses_balance(&mut self) -> (Vec<bitcoin::Address>, Vec<GetBalanceResponse>) {
+        let all_addrs = self.get_all_wallet_addresses();
+        let all_bals: Vec<GetBalanceResponse> = all_addrs
+            .clone()
             .into_iter()
             .map(|a| self.get_address_balance(&a))
             .collect();
 
-        response.retain(|x| self.balance_not_zero(x)); // remove 0 balances
-        response
+        // return non-0 balances
+        let mut addrs: Vec<bitcoin::Address> = vec!();
+        let mut bals: Vec<GetBalanceResponse> = vec!();
+        for (i, balance) in all_bals.into_iter().enumerate() {
+            if !self.zero_balance(&balance) {
+                addrs.push(all_addrs.get(i).unwrap().clone());
+                bals.push(balance);
+            }
+        }
+        (addrs,bals)
     }
 
     /// Return total balance of addresses in wallet.
-    pub fn get_balance(&mut self) -> GetWalletBalanceResponse {
-        let mut aggregated_balance = GetWalletBalanceResponse {
+    pub fn get_balance(&mut self) -> GetBalanceResponse {
+        let mut aggregated_balance = GetBalanceResponse {
             confirmed: 0,
             unconfirmed: 0,
         };
-        for b in self.get_all_addresses_balance() {
+        for b in self.get_all_addresses_balance().1 {
             aggregated_balance.unconfirmed += b.unconfirmed;
             aggregated_balance.confirmed += b.confirmed;
         }
@@ -400,44 +393,37 @@ impl Wallet {
     }
 
     /// Return balances of shared keys
-    pub fn get_state_chain_balances(&self) -> Vec<GetBalanceResponse> {
+    pub fn get_state_chain_balances(&self) -> (Vec<String>, Vec<GetBalanceResponse>) {
         let mut state_chain_balances: Vec<GetBalanceResponse> = vec!();
+        let mut state_chain_key_ids: Vec<String> = vec!();
         for shared_key in &self.shared_keys {
             if shared_key.unspent {
                 state_chain_balances.push(
                     GetBalanceResponse {
-                        address: shared_key.id.to_owned(),
                         confirmed: shared_key.value,
                         unconfirmed: 0,
-                    })
+                    });
+                state_chain_key_ids.push(shared_key.id.to_owned());
             }
         }
-        state_chain_balances
+        (state_chain_key_ids, state_chain_balances)
     }
 
 
     /// List unspent outputs for addresses derived by this wallet.
-    pub fn list_unspent(&self) -> Vec<GetListUnspentResponse> {
-        let response: Vec<GetListUnspentResponse> = self
-            .get_all_wallet_addresses()
-            .into_iter()
-            .map(|a| self.list_unspent_for_addresss(a.to_string()))
-            .flatten()
-            .collect();
-        response
+    pub fn list_unspent(&mut self) -> (Vec<bitcoin::Address>, Vec<Vec<GetListUnspentResponse>>) {
+        let addresses = self.get_all_wallet_addresses();
+        let mut unspent_list: Vec<Vec<GetListUnspentResponse>> = vec!();
+        for addr in &addresses {
+            let addr_unspent_list = self.list_unspent_for_address(addr.to_string());
+            unspent_list.push(addr_unspent_list);
+        }
+        (addresses, unspent_list)
     }
 
-    fn list_unspent_for_addresss(&self, address: String) -> Vec<GetListUnspentResponse> {
+    fn list_unspent_for_address(&mut self, address: String) -> Vec<GetListUnspentResponse> {
         let resp = self.electrumx_client.get_list_unspent(&address).unwrap();
-        resp.into_iter()
-            .map(|u| GetListUnspentResponse {
-                value: u.value,
-                height: u.height,
-                tx_hash: u.tx_hash,
-                tx_pos: u.tx_pos,
-                address: address.clone(),
-            })
-            .collect()
+        resp
     }
 
     pub fn to_p2wpkh_address(&self, pub_key: &PublicKey) -> bitcoin::Address {
@@ -449,6 +435,18 @@ impl Wallet {
 
     pub fn get_bitcoin_network(&self) -> Network {
         self.network.parse::<Network>().unwrap()
+    }
+}
+
+fn basic_input(txid: &String, vout: &u32) -> TxIn {
+    TxIn {
+        previous_output: OutPoint{
+            txid: sha256d::Hash::from_str(txid).unwrap(),
+            vout: *vout
+        },
+        sequence: 0xFFFFFFFF,
+        witness: Vec::new(),
+        script_sig: bitcoin::Script::default(),
     }
 }
 
@@ -465,23 +463,20 @@ pub fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
 mod tests {
     use super::*;
     extern crate shared_lib;
-    use shared_lib::util::{build_tx_0,RBF};
-    use bitcoin::{ Amount, TxIn, OutPoint, Script };
-    use bitcoin::hashes::sha256d;
+    use shared_lib::mocks::mock_electrum::MockElectrum;
 
-    const TEST_WALLET_FILENAME: &str = "test-assets/wallet.data";
 
     fn gen_wallet() -> Wallet {
-        Wallet::new(
+        // let electrum = ElectrumxClient::new("dummy").unwrap();
+        let mut wallet = Wallet::new(
             &[0xcd; 32],
             &"regtest".to_string(),
-            ClientShim::new("http://localhost:8000".to_string(), None)
-        )
-    }
-
-    #[test]
-    fn load_wallet_test() {
-        Wallet::load_from(TEST_WALLET_FILENAME,ClientShim::new("http://localhost:8000".to_string(), None)).unwrap();
+            ClientShim::new("http://localhost:8000".to_string(), None),
+            Box::new(MockElectrum::new())
+        );
+        let _ = wallet.keys.get_new_address();
+        let _ = wallet.keys.get_new_address();
+        wallet
     }
 
     #[test]
@@ -497,9 +492,9 @@ mod tests {
         let key_shares1 = wallet.se_key_shares.get_new_key_encoded_id(9999999).unwrap();
         let key_shares2 = wallet.se_key_shares.get_new_key().unwrap();
 
-
         let wallet_json = wallet.to_json();
-        let wallet_rebuilt = super::Wallet::from_json(wallet_json,ClientShim::new("http://localhost:8000".to_string(), None)).unwrap();
+
+        let wallet_rebuilt = super::Wallet::from_json(wallet_json,ClientShim::new("http://localhost:8000".to_string(), None), Box::new(MockElectrum::new())).unwrap();
 
         assert_eq!(wallet.id,wallet_rebuilt.id);
         assert_eq!(wallet.network,wallet_rebuilt.network);
@@ -532,42 +527,19 @@ mod tests {
     }
 
     #[test]
-    fn test_tx_signing() {
-        let expected_witness = vec!(
-            vec!(48, 69, 2, 33, 0, 185, 2, 144, 113, 98, 254, 99, 144, 180, 18, 36, 115, 205, 35, 140, 129, 31, 129, 102, 155, 39, 137, 212, 248, 12, 112, 192, 89, 177, 2, 253, 108, 2, 32, 47, 2, 251, 23, 89, 116, 27, 76, 84, 47, 39, 244, 103, 206, 173, 129, 220, 85, 150, 35, 59, 23, 53, 145, 71, 177, 204, 200, 174, 44, 227, 66, 1),
-             vec!(2, 145, 240, 85, 194, 87, 237, 58, 108, 126, 70, 191, 113, 117, 144, 204, 110, 61, 193, 180, 151, 116, 239, 66, 61, 192, 114, 7, 52, 117, 95, 213, 9)
-        );
-
-        let mut wallet = gen_wallet();
-        let addr = wallet.keys.get_new_address().unwrap();
-
-        let inputs =  vec![
-            TxIn {
-                previous_output: OutPoint {
-                    txid: sha256d::Hash::from_str(&String::from("e0a97cb38e7e73617ef75a57eaf2841eb06833407c0eae08029bd04ea7e6115a")).unwrap(),
-                    vout: 1 },
-                sequence: RBF,
-                witness: Vec::new(),
-                script_sig: Script::new(),
-            }
-        ];
-        let amount = Amount::ONE_BTC.as_sat();
-        let fee = 100;
-        let fee_addr = String::from("bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x");
-        let tx = build_tx_0(&inputs, &addr.to_string(), &amount, &fee, &fee_addr, &addr.to_string(), &1000).unwrap();
-        let signed_tx  = wallet.sign_tx(&tx, &vec!(0), &vec!(addr), &vec!(amount));
-        let witness = &signed_tx.input.get(0).unwrap().witness;
-
-        assert_eq!(hex::encode(witness.get(0).unwrap()), hex::encode(expected_witness.get(0).unwrap()));
-        assert_eq!(hex::encode(witness.get(1).unwrap()), hex::encode(expected_witness.get(1).unwrap()));
-    }
-
-    #[test]
-    fn test_mocks() {
+    fn test_coin_selection_greedy() {
         let mut wallet = gen_wallet();
         let _ = wallet.keys.get_new_address();
-        let _ = wallet.keys.get_new_address();
-        println!("balances: {:?}",wallet.get_all_addresses_balance());
-        println!("list unspent: {:?}",wallet.list_unspent());
+
+        for amount in [10, 100, 100000000, 100000100].iter() {
+            let selection = wallet.coin_selection_greedy(&amount).unwrap();
+            assert_eq!(selection.0.len(), selection.1.len());
+            assert_eq!(selection.0.len(), selection.2.len());
+            assert!(selection.2.iter().sum::<u64>() >= *amount);
+        }
+
+        // 100000100 is total amount in Mock Electrum
+        let selection = wallet.coin_selection_greedy(&100000101);
+        assert!(selection.is_err());
     }
 }

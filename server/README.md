@@ -16,6 +16,7 @@ cargo run --release
 * By default, the server will use no authentication (PASSTHROUGH).<br>
 
 ### Running tests
+Ensure testing_mode is set to "true" in `Settings.toml`.
 #### Without timing output
 ```bash
 RUST_TEST_THREADS=1 cargo test

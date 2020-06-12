@@ -37,6 +37,7 @@ floating-duration = "0.1.2"
 bitcoin = { version = "0.20", features = [ "use-serde" ] }
 rand = "0.6.5"
 monotree = "0.1.3"
+electrumx_client = { git = "https://github.com/commerceblock/rust-electrumx-client" }
 
 [dependencies.zk-paillier]
 git = "https://github.com/KZen-networks/zk-paillier"

@@ -33,27 +33,31 @@ pub struct StateChain {
     /// chain of transitory key history
     pub chain: Vec<State>,
     /// current back-up transaction
-    pub backup_tx: Option<Transaction>,
+    pub tx_backup: Transaction,
     /// Amount
     pub amount: u64 // 0 means state chain is ended.
 }
 
 impl StateChain {
-    pub fn new(data: String, amount: u64) -> Self {
+    pub fn new(data: String, tx_backup: Transaction, amount: u64) -> Self {
         StateChain {
             id: Uuid::new_v4().to_string(),
             chain: vec!( State {
                 data,
                 next_state: None
             }),
-            backup_tx: None,
+            tx_backup,
             amount
         }
     }
 
+    pub fn get_tip(&self) -> Result<State> {
+        Ok(self.chain.last()
+            .ok_or(SharedLibError::Generic(String::from("StateChain empty")))?.clone())
+    }
+
     pub fn add(&mut self, state_chain_sig: StateChainSig) -> Result<()> {
-        let mut tip = self.chain.last()
-            .ok_or(SharedLibError::Generic(String::from("StateChain empty")))?.clone();
+        let mut tip = self.get_tip()?;
 
         // verify previous state has signature and signs for new proof_key
         let prev_proof_key = tip.data.clone();
@@ -164,8 +168,14 @@ mod tests {
         let proof_key1_priv = SecretKey::from_slice(&[1;32]).unwrap();
         let proof_key1_pub = PublicKey::from_secret_key(&secp, &proof_key1_priv);
 
-        let mut state_chain = StateChain::new(proof_key1_pub.to_string(), 1000);
+        let mut state_chain = StateChain::new(
+            proof_key1_pub.to_string(),
+            Transaction{version: 2,lock_time: 0,input: vec!(),output: vec!()},
+            1000
+        );
+
         assert_eq!(state_chain.chain.len(),1);
+
         // StateChainSig.verify called in function below
         let new_state_sig = StateChainSig::new(
             &proof_key1_priv,

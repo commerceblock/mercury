@@ -5,11 +5,18 @@ use clap::App;
 use client_lib::ClientShim;
 use client_lib::wallet::wallet;
 use client_lib::state_entity;
-use wallet::GetBalanceResponse;
+use shared_lib::{
+    mocks::mock_electrum::MockElectrum,
+    structs::{TransferMsg3, StateEntityAddress}
+};
 
+use electrumx_client::{
+    interface::Electrumx,
+    electrumx_client::ElectrumxClient
+};
 use bitcoin::consensus;
 use std::collections::HashMap;
-use shared_lib::structs::{TransferMsg3, StateEntityAddress};
+use std::str::FromStr;
 
 fn main() {
     let yaml = load_yaml!("../cli.yml");
@@ -25,21 +32,30 @@ fn main() {
         .merge(config::Environment::new())
         .unwrap();
     let hm = settings.try_into::<HashMap<String, String>>().unwrap();
-    let endpoint = hm.get("endpoint").unwrap();
+    let se_endpoint = hm.get("endpoint").unwrap();
+    let electrum_server_addr = hm.get("electrum_server").unwrap().clone();
+    let testing_mode: bool = bool::from_str(hm.get("testing_mode").unwrap()).unwrap();
 
     // TODO: random generating of seed and allow input of mnemonic phrase
     let seed = [0xcd; 32];
-    let client_shim = ClientShim::new(endpoint.to_string(), None);
+    let client_shim = ClientShim::new(se_endpoint.to_string(), None);
+
+    let electrum: Box<dyn Electrumx> = if testing_mode {
+        Box::new(MockElectrum::new())
+    } else {
+        Box::new(ElectrumxClient::new(electrum_server_addr).unwrap())
+    };
+
     let network = "regtest".to_string();
 
     if let Some(_matches) = matches.subcommand_matches("create-wallet") {
         println!("Network: [{}], Creating wallet", network);
-        let wallet = wallet::Wallet::new(&seed, &network, client_shim);
+        let wallet = wallet::Wallet::new(&seed, &network, client_shim, electrum);
         wallet.save();
         println!("Network: [{}], Wallet saved to disk", &network);
 
     } else if let Some(matches) = matches.subcommand_matches("wallet") {
-        let mut wallet: wallet::Wallet = wallet::Wallet::load(client_shim).unwrap();
+        let mut wallet = wallet::Wallet::load(client_shim, electrum).unwrap();
 
         if matches.is_present("new-address") {
             let address = wallet.keys.get_new_address().unwrap();
@@ -48,27 +64,34 @@ fn main() {
 
         } else if matches.is_present("get-balance") {
             println!("\nNetwork: [{}],",network);
-            let addr_balances: Vec<GetBalanceResponse> = wallet.get_all_addresses_balance();
-            let state_chain_balances: Vec<GetBalanceResponse> = wallet.get_state_chain_balances();
-            if addr_balances.len() > 0 {
+            let (addrs, balances) = wallet.get_all_addresses_balance();
+            if addrs.len() > 0 {
                 println!("\n\nWallet balance: \n\nAddress:\t\t\t\t\tConfirmed:\tUnconfirmed:");
-                for addr in addr_balances.into_iter() {
-                    println!("{}\t{}\t\t{}", addr.address, addr.confirmed, addr.unconfirmed);
+                for (i, _) in addrs.iter().enumerate() {
+                    println!("{}\t{}\t\t{}",
+                    addrs[i],
+                    balances[i].confirmed,
+                    balances[i].unconfirmed);
                 }
                 println!();
             }
-            if state_chain_balances.len() > 0 {
-                println!("State Entity balance: \n\nShared Key ID:\t\t\t\t\tConfirmed:\tUnconfirmed:");
-                for addr in state_chain_balances.into_iter() {
-                    println!("{}\t\t{}\t\t{}", addr.address, addr.confirmed, addr.unconfirmed);
+            let (ids, bals) = wallet.get_state_chain_balances();
+            if ids.len() > 0 {
+                println!("\n\nState Entity balance: \n\nShared Key ID:\t\t\t\t\tConfirmed:\tUnconfirmed:");
+                for (i,bal) in bals.into_iter().enumerate() {
+                    println!("{}\t\t{}\t\t{}", ids[i], bal.confirmed, bal.unconfirmed);
                 }
                 println!();
             }
 
         } else if matches.is_present("list-unspent") {
-            let unspent = wallet.list_unspent();
-            let hashes: Vec<String> = unspent.into_iter().map(|u| u.tx_hash).collect();
-
+            let (_, unspent_list) = wallet.list_unspent();
+            let mut hashes: Vec<String> = vec!();
+            for unspent_for_addr in unspent_list {
+                for unspent in unspent_for_addr {
+                    hashes.push(unspent.tx_hash);
+                }
+            }
             println!(
                 "\nNetwork: [{}], \n\nUnspent tx hashes: \n{}\n",
                 network,
@@ -89,7 +112,7 @@ fn main() {
         } else if matches.is_present("deposit") {
             if let Some(matches) = matches.subcommand_matches("deposit") {
                 let amount: &str = matches.value_of("amount").unwrap();
-                let (shared_key_id, state_chain_id, tx_0, _, _) = state_entity::deposit::deposit(
+                let (shared_key_id, state_chain_id, funding_txid, tx_b, _, _) = state_entity::deposit::deposit(
                     &mut wallet,
                     &amount.to_string().parse::<u64>().unwrap(),
                 ).unwrap();
@@ -98,13 +121,14 @@ fn main() {
                     "\nNetwork: [{}], \n\nDeposited {} satoshi's. \nShared Key ID: {} \nState Chain ID: {}",
                     network, amount, shared_key_id, state_chain_id
                 );
-                println!("\nFunding Transaction hex: {}",hex::encode(consensus::serialize(&tx_0)));
+                println!("\nFunding Txid: {}",funding_txid);
+                println!("\nBackup Transaction hex: {}",hex::encode(consensus::serialize(&tx_b)));
             }
 
         } else if matches.is_present("withdraw") {
             if let Some(matches) = matches.subcommand_matches("withdraw") {
                 let shared_key_id: &str = matches.value_of("key").unwrap();
-                let (tx_w, state_chain_id, amount) = state_entity::withdraw::withdraw(
+                let (txid, state_chain_id, amount) = state_entity::withdraw::withdraw(
                     &mut wallet,
                     &shared_key_id.to_string()
                 ).unwrap();
@@ -114,7 +138,7 @@ fn main() {
                     network, amount, state_chain_id
                 );
 
-                println!("\nWithdraw Transaction hex: {}",hex::encode(consensus::serialize(&tx_w)));
+                println!("\nWithdraw Txid: {}",txid);
             }
 
         } else if matches.is_present("transfer-sender") {
@@ -231,7 +255,7 @@ fn main() {
                     &client_shim
                 ).unwrap();
                 println!(
-                    "\nState Entity fee info: \n\n{}\n",
+                    "State Entity fee info: \n\n{}",
                     fee_info
                 );
         }
