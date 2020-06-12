@@ -2,11 +2,12 @@
 //!
 //! Deposit coins into state entity
 
-// deposit() messages:
+// deposit():
 // 0. Initiate session - generate ID and perform authorisation
 // 1. Generate shared wallet
-// 2. user sends backup tx data
-// 3. Co-op sign back-up tx
+// 2. Co-op sign back-up tx
+// 3. Broadcast funding tx and wait for SE verification
+// 4. Verify funding txid and proof key in SMT 
 
 use super::super::Result;
 extern crate shared_lib;
@@ -111,7 +112,7 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
 
     // Verify proof key inclusion in SE sparse merkle tree
     let root = get_smt_root(wallet)?;
-    let proof = get_smt_proof(wallet, &root, &tx_funding_signed.txid().to_string())?;
+    let proof = get_smt_proof(wallet, &root, &funding_txid)?;
     assert!(verify_statechain_smt(
         &root.value,
         &proof_key.to_string(),

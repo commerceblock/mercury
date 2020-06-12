@@ -1,6 +1,6 @@
 //! # Error
 //!
-//! Custom Error types for our crate
+//! Custom Error types for server
 
 use shared_lib::error::SharedLibError;
 
@@ -57,7 +57,7 @@ impl From<SecpError> for SEError {
 }
 
 
-/// Wallet error types
+/// DB error types
 #[derive(Debug, Deserialize)]
 pub enum DBErrorType {
     /// No data found for identifier

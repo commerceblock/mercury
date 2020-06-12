@@ -69,7 +69,7 @@ pub struct PrepareSignTxMsg {
 
 
 
-// co-signing algorithm structs
+// Co-signing algorithm structs
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SignSecondMsgRequest {
@@ -79,7 +79,7 @@ pub struct SignSecondMsgRequest {
 }
 
 
-// deposit algorithm structs
+// Deposit algorithm structs
 
 
 /// Client -> SE
@@ -95,7 +95,7 @@ pub struct DepositMsg2 {
     pub shared_key_id: String,
 }
 
-// transfer algorithm structs
+// Transfer algorithm structs
 
 
 /// Address generated for State Entity transfer protocol
@@ -153,7 +153,7 @@ impl Default for TransferMsg5 {
     }
 }
 
-// withdraw algorithm structs
+// Withdraw algorithm structs
 /// Owner -> State Entity
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WithdrawMsg1 {

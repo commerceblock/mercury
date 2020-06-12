@@ -20,7 +20,7 @@ use super::super::Result;
 use shared_lib::structs::{StateChainDataAPI, StateEntityAddress, TransferMsg1, TransferMsg2, TransferMsg3, TransferMsg4, TransferMsg5, Protocol};
 use shared_lib::state_chain::StateChainSig;
 
-use crate::error::CError;
+use crate::error::{CError, WalletErrorType::KeyMissingData};
 use crate::wallet::wallet::Wallet;
 use crate::wallet::key_paths::funding_txid_to_int;
 use crate::state_entity::util::{cosign_tx_input,verify_statechain_smt};
@@ -45,9 +45,9 @@ pub fn transfer_sender(
     {
         let shared_key = wallet.get_shared_key(shared_key_id)?;
         state_chain_id = shared_key.state_chain_id.clone()
-            .ok_or(CError::Generic(String::from("No state chain for this shared key id")))?;
+            .ok_or(CError::WalletError(KeyMissingData))?;
         prepare_sign_msg = shared_key.tx_backup_psm.clone()
-            .ok_or(CError::Generic(String::from("No back up transaction data found for this shared key id")))?;
+            .ok_or(CError::WalletError(KeyMissingData))?;
     }
 
     // first sign state chain
@@ -113,11 +113,8 @@ pub fn transfer_receiver(
 
     // verify state chain represents this address as new owner
     let prev_owner_proof_key = state_chain_data.chain.last().unwrap().data.clone();
-    match transfer_msg3.state_chain_sig.verify(&prev_owner_proof_key) {
-        Ok(_) => debug!("State chain signature is valid."),
-        Err(_) => return Err(CError::Generic(String::from("State Chain verification failed.")))
-    }
-
+    transfer_msg3.state_chain_sig.verify(&prev_owner_proof_key)?;
+    debug!("State chain signature is valid.");
 
     // check try_o2() comments and docs for justification of below code
     let mut done = false;

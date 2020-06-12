@@ -2,15 +2,13 @@
 //!
 //! Key shares of co-owned keys between user and server.
 
-use shared_lib::{structs::{PrepareSignTxMsg}, Root};
-use super::super::ecdsa;
-use super::super::ClientShim;
-use super::super::Result;
+use shared_lib::{structs::PrepareSignTxMsg, Root};
+use super::super::{ClientShim, ecdsa, Result};
 
 use kms::ecdsa::two_party::MasterKey2;
 use curv::elliptic::curves::traits::ECScalar;
 use curv::FE;
-use bitcoin::{secp256k1::key::SecretKey};
+use bitcoin::secp256k1::key::SecretKey;
 use monotree::Proof;
 
 #[derive(Serialize, Deserialize, Clone)]

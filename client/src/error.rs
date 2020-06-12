@@ -6,8 +6,8 @@ use shared_lib::error::SharedLibError;
 
 use std::error;
 use std::fmt;
-use bitcoin::util::bip32::Error as Bip32Error;
-use bitcoin::util::address::Error as AddressError;
+use bitcoin::util::{bip32::Error as Bip32Error,
+    address::Error as AddressError};
 use reqwest::Error as ReqwestError;
 use std::num::ParseIntError;
 
@@ -24,7 +24,7 @@ pub enum CError {
     /// Schnorr error
     SchnorrError(String),
     /// Inherit errors from SharedLibError
-    SharedLib(String),
+    SharedLibError(String),
 }
 
 impl From<String> for CError {
@@ -37,7 +37,11 @@ impl From<&str> for CError {
         CError::Generic(e.to_string())
     }
 }
-
+impl From<SharedLibError> for CError {
+    fn from(e: SharedLibError) -> CError {
+        CError::SharedLibError(e.to_string())
+    }
+}
 impl From<Box<dyn error::Error>> for CError {
     fn from(e: Box<dyn error::Error>) -> CError {
         CError::Generic(e.to_string())
@@ -65,26 +69,22 @@ impl From<ParseIntError> for CError {
     }
 }
 
-impl From<SharedLibError> for CError {
-    fn from(e: SharedLibError) -> CError {
-        CError::SharedLib(e.to_string())
-    }
-}
 /// Wallet error types
 #[derive(Debug, Deserialize)]
 pub enum WalletErrorType {
-    /// No key found in wallet derivaton
+    NotEnoughFunds,
     KeyNotFound,
     SharedKeyNotFound,
-    NotEnoughFunds
+    KeyMissingData,
 }
 
 impl WalletErrorType {
     fn as_str(&self) -> &'static str {
         match *self {
-            WalletErrorType::SharedKeyNotFound => "No shared key found.",
-            WalletErrorType::NotEnoughFunds => "Not enough funds.",
-            WalletErrorType::KeyNotFound => "No key found in wallet derivation path.",
+            WalletErrorType::NotEnoughFunds => "Not enough funds",
+            WalletErrorType::KeyNotFound => "Key not found in wallet derivation path",
+            WalletErrorType::SharedKeyNotFound => "Shared key not found in wallet derivation path",
+            WalletErrorType::KeyMissingData => "Key is missing data"
         }
     }
 }
@@ -93,10 +93,10 @@ impl fmt::Display for CError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             CError::Generic(ref e) => write!(f, "Error: {}", e),
-            CError::WalletError(ref e) => write!(f, "Wallet Error: {}", e.as_str()),
+            CError::WalletError(ref e) => write!(f, "Wallet Error: {} ", e.as_str()),
             CError::StateEntityError(ref e) => write!(f, "State Entity Error: {}", e),
             CError::SchnorrError(ref e) => write!(f, "Schnorr Error: {}", e),
-            CError::SharedLib(ref e) => write!(f,"Util Error: {}",e),
+            CError::SharedLibError(ref e) => write!(f,"SharedLib Error: {}",e),
         }
     }
 }

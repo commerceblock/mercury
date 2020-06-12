@@ -49,7 +49,7 @@ pub struct Config {
     pub electrum_server: String,
     pub network: String,
     pub testing_mode: bool,  // set for testing mode
-    pub fee_address: String, // Receive address for fee payments
+    pub fee_address: String, // receive address for fee payments
     pub fee_deposit: u64, // satoshis
     pub fee_withdraw: u64, // satoshis
     pub block_time: u64

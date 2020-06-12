@@ -4,8 +4,9 @@
 
 // withdraw() messages:
 // 0. request withdraw and provide withdraw tx data
-// 1. co-sign withdraw tx
-// 2. verify withdraws transaction received is corrcet
+// 1. Sign state chain and request withdrawal
+// 2. Co-sign withdraw tx
+// 3. Broadcast withdraw tx
 
 use super::super::Result;
 extern crate shared_lib;
@@ -17,7 +18,7 @@ use crate::wallet::wallet::Wallet;
 use crate::state_entity::util::cosign_tx_input;
 use super::api::{get_statechain, get_statechain_fee_info};
 use crate::utilities::requests;
-use crate::error::CError;
+use crate::error::{CError, WalletErrorType};
 
 use bitcoin::{PublicKey, consensus};
 use curv::elliptic::curves::traits::ECPoint;
@@ -35,7 +36,7 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
         let shared_key = wallet.get_shared_key(shared_key_id)?;
         pk = shared_key.share.public.q.get_element();
         state_chain_id = shared_key.state_chain_id.clone()
-            .ok_or(CError::Generic(String::from("No state chain for this shared key id")))?;
+            .ok_or(CError::WalletError(WalletErrorType::KeyMissingData))?;
     }
 
      // Generate receiving address of withdrawn funds
@@ -44,11 +45,12 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
     // Sign state chain
     let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id)?;
     if state_chain_data.amount == 0 {
-        return Err(CError::Generic(String::from("Withdraw: StateChain is already withdrawn.")));
+        return Err(CError::StateEntityError(String::from("Withdraw: StateChain is already withdrawn.")));
     }
     let state_chain = state_chain_data.chain;
     // get proof key for signing
-    let proof_key_derivation = wallet.se_proof_keys.get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap());
+    let proof_key_derivation = wallet.se_proof_keys.get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap())
+        .ok_or(CError::WalletError(WalletErrorType::KeyNotFound));
     let state_chain_sig = StateChainSig::new(
         &proof_key_derivation.unwrap().private_key.key,
         &String::from("WITHDRAW"),

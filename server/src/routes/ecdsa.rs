@@ -1,27 +1,30 @@
-use super::super::Result;
 use super::super::auth::jwt::Claims;
 use super::super::storage::db;
 use super::super::Config;
+use super::super::Result;
 
-use shared_lib::util::reverse_hex_str;
-use shared_lib::structs::{Protocol,SignSecondMsgRequest};
-
-use crate::routes::state_entity::{ check_user_auth, StateEntityStruct, UserSession };
-use crate::error::{SEError,DBErrorType::NoDataForID};
-
-use curv::cryptographic_primitives::proofs::sigma_dlog::*;
-use curv::cryptographic_primitives::twoparty::dh_key_exchange_variant_with_pok_comm::{
-    CommWitness, EcKeyPair, Party1FirstMessage, Party1SecondMessage,
+use crate::error::{DBErrorType::NoDataForID, SEError};
+use crate::routes::state_entity::{check_user_auth, StateEntityStruct, UserSession};
+use shared_lib::{
+    structs::{Protocol, SignSecondMsgRequest},
+    util::reverse_hex_str,
 };
-use curv::elliptic::curves::traits::ECPoint;
-use curv::{BigInt, GE};
-use curv::arithmetic::traits::Converter;
+
+use bitcoin::{secp256k1::Signature, Transaction};
+use curv::{{BigInt, GE},
+    cryptographic_primitives::{
+        proofs::sigma_dlog::*,
+        twoparty::dh_key_exchange_variant_with_pok_comm::{
+            CommWitness, EcKeyPair, Party1FirstMessage, Party1SecondMessage,
+        }},
+    elliptic::curves::traits::ECPoint,
+    arithmetic::traits::Converter};
+
 use kms::chain_code::two_party as chain_code;
 use kms::ecdsa::two_party::*;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
 use rocket::State;
 use rocket_contrib::json::Json;
-use bitcoin::{Transaction, secp256k1::Signature};
 
 use std::string::ToString;
 
@@ -32,7 +35,7 @@ struct HDPos {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 struct Alpha {
-    value: BigInt
+    value: BigInt,
 }
 
 #[derive(Debug)]
@@ -90,25 +93,24 @@ impl db::MPCStruct for EcdsaStruct {
     }
 }
 
-#[post("/ecdsa/keygen/<id>/first/<protocol>", format="json")]
+#[post("/ecdsa/keygen/<id>/first/<protocol>", format = "json")]
 pub fn first_message(
     state: State<Config>,
     claim: Claims,
     id: String,
     protocol: String,
 ) -> Result<Json<(String, party_one::KeyGenFirstMsg)>> {
-    // check authorisation id is in DB (and check password?)
+    // Check authorisation id is in DB (and check password?)
     let user_session = check_user_auth(&state, &claim, &id)?;
 
     // Generate shared key
-    let (key_gen_first_msg, comm_witness, ec_key_pair) =
-        if protocol == String::from("deposit") {
-            MasterKey1::key_gen_first_message()
-        } else {
-            MasterKey1::key_gen_first_message_predefined(user_session.s2.unwrap())
-        };
+    let (key_gen_first_msg, comm_witness, ec_key_pair) = if protocol == String::from("deposit") {
+        MasterKey1::key_gen_first_message()
+    } else {
+        MasterKey1::key_gen_first_message_predefined(user_session.s2.unwrap())
+    };
 
-    //save pos 0
+    // Ssave pos 0
     db::insert(
         &state.db,
         &claim.sub,
@@ -131,11 +133,16 @@ pub fn first_message(
         &EcdsaStruct::CommWitness,
         &comm_witness,
     )?;
-    db::insert(&state.db, &claim.sub, &id, &EcdsaStruct::EcKeyPair, &ec_key_pair)?;
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &id,
+        &EcdsaStruct::EcKeyPair,
+        &ec_key_pair,
+    )?;
 
     Ok(Json((id, key_gen_first_msg)))
 }
-
 
 #[post("/ecdsa/keygen/<id>/second", format = "json", data = "<dlog_proof>")]
 pub fn second_message(
@@ -156,8 +163,9 @@ pub fn second_message(
     let comm_witness: party_one::CommWitness =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::CommWitness)?
             .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-    let ec_key_pair: party_one::EcKeyPair = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::EcKeyPair)?
-        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+    let ec_key_pair: party_one::EcKeyPair =
+        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::EcKeyPair)?
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let (kg_party_one_second_message, paillier_key_pair, party_one_private) =
         MasterKey1::key_gen_second_message(comm_witness, &ec_key_pair, &dlog_proof.0);
@@ -206,7 +214,13 @@ pub fn third_message(
         &party_one_pdl_decommit,
     )?;
 
-    db::insert(&state.db, &claim.sub, &id, &EcdsaStruct::Alpha, &Alpha { value: alpha })?;
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &id,
+        &EcdsaStruct::Alpha,
+        &Alpha { value: alpha },
+    )?;
 
     db::insert(
         &state.db,
@@ -303,8 +317,9 @@ pub fn chain_code_second_message(
     id: String,
     cc_party_two_first_message_d_log_proof: Json<DLogProof>,
 ) -> Result<Json<Party1SecondMessage>> {
-    let cc_comm_witness: CommWitness = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::CCCommWitness)?
-        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+    let cc_comm_witness: CommWitness =
+        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::CCCommWitness)?
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let party1_cc = chain_code::party1::ChainCode1::chain_code_second_message(
         cc_comm_witness,
@@ -384,7 +399,7 @@ pub fn sign_first(
     id: String,
     eph_key_gen_first_message_party_two: Json<party_two::EphKeyGenFirstMsg>,
 ) -> Result<Json<party_one::EphKeyGenFirstMsg>> {
-    // check authorisation id is in DB (and check password?)
+    // Check authorisation id is in DB (and check password?)
     check_user_auth(&state, &claim, &id)?;
 
     let (sign_party_one_first_message, eph_ec_key_pair_party1) = MasterKey1::sign_first_message();
@@ -415,17 +430,22 @@ pub fn sign_second(
     id: String,
     request: Json<SignSecondMsgRequest>,
 ) -> Result<Json<Vec<Vec<u8>>>> {
-    // check authorisation id is in DB (and check password?)
+    // Check authorisation id is in DB (and check password?)
     check_user_auth(&state, &claim, &id)?;
 
     // Get UserSession for this user and check sig hash, backup tx and state chain id exists
-    let mut user_session: UserSession = db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
-        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+    let mut user_session: UserSession =
+        db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
     if user_session.sig_hash.is_none() {
-        return Err(SEError::SigningError(String::from("No sig_hash found for this user's session.")));
+        return Err(SEError::SigningError(String::from(
+            "No sig_hash found for this user's session.",
+        )));
     }
     if user_session.tx_backup.is_none() {
-        return Err(SEError::SigningError(String::from("No tx_backup found for this user's session.")));
+        return Err(SEError::SigningError(String::from(
+            "No tx_backup found for this user's session.",
+        )));
     }
 
     // check sighash matches message to be signed
@@ -437,9 +457,11 @@ pub fn sign_second(
             // Try for case in which sighash begins with 0's and so conversion to hex from
             // BigInt is too short
             let num_zeros = 64 - message_hex.len();
-            if num_zeros < 1 { return Err(SEError::from(e)) };
+            if num_zeros < 1 {
+                return Err(SEError::from(e));
+            };
             let temp = message_hex.clone();
-            message_hex = format!("{:0width$}",0 ,width = num_zeros);
+            message_hex = format!("{:0width$}", 0, width = num_zeros);
             message_hex.push_str(&temp);
             // try reverse again
             message_sig_hash = reverse_hex_str(message_hex.clone())?;
@@ -447,11 +469,14 @@ pub fn sign_second(
     }
 
     if user_session.sig_hash.unwrap().to_string() != message_sig_hash {
-        return Err(SEError::SigningError(String::from("Message to be signed does not match verified sig hash.")))
+        return Err(SEError::SigningError(String::from(
+            "Message to be signed does not match verified sig hash.",
+        )));
     }
 
-    let shared_key: MasterKey1 = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1MasterKey)?
-        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+    let shared_key: MasterKey1 =
+        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1MasterKey)?
+            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
     let eph_ec_key_pair_party1: party_one::EphEcKeyPair =
         db::get(&state.db, &claim.sub, &id, &EcdsaStruct::EphEcKeyPair)?
@@ -469,29 +494,33 @@ pub fn sign_second(
         &request.message,
     ) {
         Ok(sig) => signature = sig,
-        Err(_) => return Err(SEError::SigningError(String::from("Signature validation failed.")))
+        Err(_) => {
+            return Err(SEError::SigningError(String::from(
+                "Signature validation failed.",
+            )))
+        }
     };
 
     // Get transaction which is being signed.
     let mut tx: Transaction = match request.protocol {
-        Protocol::Withdraw => {
-            user_session.tx_withdraw.clone().unwrap().to_owned()
-        },
-        _ => { // despoit() and transfer() both sign tx_backup
+        Protocol::Withdraw => user_session.tx_withdraw.clone().unwrap().to_owned(),
+        _ => {
+            // despoit() and transfer() both sign tx_backup
             user_session.tx_backup.clone().unwrap().to_owned()
         }
     };
 
     // Add signature to tx
-    let mut v = BigInt::to_vec(&signature.r);     // make signature witness
+    let mut v = BigInt::to_vec(&signature.r); // make signature witness
     v.extend(BigInt::to_vec(&signature.s));
     let mut sig_vec = Signature::from_compact(&v[..])
-    .unwrap().serialize_der().to_vec();
+        .unwrap()
+        .serialize_der()
+        .to_vec();
     sig_vec.push(01);
     let pk_vec = shared_key.public.q.get_element().serialize().to_vec();
     let mut witness = vec![sig_vec, pk_vec];
     tx.input[0].witness = witness.clone();
-
 
     match request.protocol {
         Protocol::Withdraw => {
@@ -499,12 +528,15 @@ pub fn sign_second(
             user_session.tx_withdraw = Some(tx);
             debug!("Withdraw: Tx signed and stored.");
             // Do not return withdraw tx witness until /withdraw/confirm is complete
-            witness = vec!();
-        },
+            witness = vec![];
+        }
         _ => {
             // Store signed backup tx in UserSession DB object
             user_session.tx_backup = Some(tx.to_owned());
-            debug!("Deposit/Transfer: Backup Tx signed and stored. User: {}", user_session.id);
+            debug!(
+                "Deposit/Transfer: Backup Tx signed and stored. User: {}",
+                user_session.id
+            );
         }
     };
 
@@ -513,7 +545,7 @@ pub fn sign_second(
         &claim.sub,
         &id,
         &StateEntityStruct::UserSession,
-        &user_session
+        &user_session,
     )?;
 
     Ok(Json(witness))
@@ -523,7 +555,6 @@ pub fn get_mk(state: &State<Config>, claim: Claims, id: &String) -> Result<Maste
     db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1MasterKey)?
         .ok_or(SEError::DBError(NoDataForID, id.to_string()))?
 }
-
 
 #[post("/ecdsa/<id>/recover", format = "json")]
 pub fn recover(state: State<Config>, claim: Claims, id: String) -> Result<Json<u32>> {

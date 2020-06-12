@@ -1,22 +1,23 @@
 //! Util
 //!
-//! Utilities methods for state entity and mock classes
+//! Utilities methods for state entity protocol shared library
 
 use super::Result;
 use crate::structs::PrepareSignTxMsg;
 use crate::error::SharedLibError;
 
-use bitcoin::{TxIn, TxOut, Transaction, Address, Network};
-use bitcoin::hashes::sha256d::Hash;
-use bitcoin::blockdata::script::Builder;
-use bitcoin::{util::bip143::SighashComponents, blockdata::opcodes::OP_TRUE, OutPoint};
+use bitcoin::{{TxIn, TxOut, Transaction, Address, Network},
+        hashes::sha256d::Hash,
+        blockdata::script::Builder,
+        {util::bip143::SighashComponents, blockdata::opcodes::OP_TRUE, OutPoint}};
+        
 use curv::PK;
 use std::str::FromStr;
 
-/// network - move this to config
 #[allow(dead_code)]
 pub const RBF: u32 = 0xffffffff - 2;
 pub const DUSTLIMIT: u64 = 100;
+/// Temporary - fees should be calculated dynamically
 pub const FEE: u64 = 1000;
 
 
@@ -37,7 +38,8 @@ pub fn reverse_hex_str(hex_str: String) -> Result<String> {
 }
 
 
-/// get sig hash for transaction input. Arguments: tx, index of input, spending address of input and amount
+/// Get sig hash for some transaction input.
+/// Arguments: tx, index of input, address being spent from and amount
 pub fn get_sighash(tx: &Transaction, tx_index: &usize, address_pk: &PK, amount: &u64, network: &String) -> Hash {
     let comp = SighashComponents::new(&tx);
     comp.sighash_all(
@@ -53,18 +55,22 @@ pub fn get_sighash(tx: &Transaction, tx_index: &usize, address_pk: &PK, amount: 
 }
 
 
-/// check backup tx is valid
+/// Check backup tx is valid
 pub fn tx_backup_verify(tx_psm: &PrepareSignTxMsg) -> Result<()> {
     if tx_psm.input_addrs.len() != tx_psm.input_amounts.len() {
         return Err(SharedLibError::FormatError(String::from("Back up tx number of signing addresses != number of input amounts.")));
     }
 
     // May want to check more here
+    // - locktime
+    // - amounts
+    // - Fee rate?
+
 
     Ok(())
 }
 
-/// check withdraw tx is valid
+/// Check withdraw tx is valid
 pub fn tx_withdraw_verify(tx_psm: &PrepareSignTxMsg, fee_address: &String, fee_withdraw: &u64) -> Result<()> {
     if tx_psm.input_addrs.len() != tx_psm.input_amounts.len() {
         return Err(SharedLibError::FormatError(String::from("Withdraw tx number of signing addresses != number of input amounts.")));
@@ -80,7 +86,7 @@ pub fn tx_withdraw_verify(tx_psm: &PrepareSignTxMsg, fee_address: &String, fee_w
 }
 
 
-/// build funding tx spending inputs to p2wpkh address P for amount A
+/// Build funding tx spending inputs to p2wpkh address P for amount A
 pub fn tx_funding_build(inputs: &Vec<TxIn>, p_address: &String, amount: &u64, fee: &u64, fee_addr: &String, change_addr: &String, change_amount: &u64) -> Result<Transaction> {
     if FEE+fee >= *amount {
         return Err(SharedLibError::FormatError(String::from("Not enough value to cover fee.")));
@@ -134,7 +140,7 @@ pub fn tx_kickoff_build(funding_tx_in: &TxIn, p_address: &Address, amount: &u64)
     Ok(tx_k)
 }
 
-/// build backup tx spending P output of txK to given backup address
+/// Build backup tx spending P output of txK to given backup address
 pub fn tx_backup_build(funding_txid: &Hash, b_address: &Address, amount: &u64) -> Result<Transaction> {
     if FEE >= *amount {
         return Err(SharedLibError::FormatError(String::from("Not enough value to cover fee.")));
@@ -164,7 +170,7 @@ pub fn tx_backup_build(funding_txid: &Hash, b_address: &Address, amount: &u64) -
 }
 
 
-/// build withdraw tx spending funding tx to:
+/// Build withdraw tx spending funding tx to:
 ///     - amount-fee to receive address, and
 ///     - amount 'fee' to State Entity fee address 'fee_addr'
 pub fn tx_withdraw_build(funding_txid: &Hash, rec_address: &Address, amount: &u64, fee: &u64, fee_addr: &String) -> Result<Transaction> {

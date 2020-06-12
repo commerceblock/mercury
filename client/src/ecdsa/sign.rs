@@ -4,12 +4,11 @@ use super::super::Result;
 use super::super::ClientShim;
 
 use kms::ecdsa::two_party::MasterKey2;
-use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one;
-use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_two;
+use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
 use curv::BigInt;
 
 
-/// co-sign message with shared key
+/// Co-sign message with shared key
 pub fn sign(
     client_shim: &ClientShim,
     message: BigInt,

@@ -7,13 +7,12 @@
 use super::super::Result;
 use crate::wallet::wallet::to_bitcoin_public_key;
 use crate::error::CError;
-use bitcoin::{PrivateKey,PublicKey};
+use bitcoin::{{PrivateKey,PublicKey},
+    secp256k1::{All, Secp256k1},
+    util::bip32::{ExtendedPubKey, ExtendedPrivKey, ChildNumber}};
+
 use std::collections::HashMap;
-use bitcoin::secp256k1::{ All, Secp256k1 };
-use bitcoin::util::bip32::{ ExtendedPubKey, ExtendedPrivKey, ChildNumber };
-
 use std::str::FromStr;
-
 
 /// Struct stores key pairs and their derivation path position
 #[derive(Debug, Copy, Clone)]

@@ -13,16 +13,16 @@
 use super::Result;
 use crate::error::SharedLibError;
 
-use bitcoin::secp256k1::{Signature, SecretKey, Message, Secp256k1, PublicKey};
-use bitcoin::hashes::{sha256d,Hash};
-use bitcoin::Transaction;
+use bitcoin::{Transaction,
+    secp256k1::{Signature, SecretKey, Message, Secp256k1, PublicKey},
+    hashes::{sha256d,Hash}};
+
+use monotree::{{Monotree, Proof},
+    tree::verify_proof,
+    database::RocksDB,
+    hasher::{Hasher,Blake2b}};
+
 use uuid::Uuid;
-
-use monotree::tree::verify_proof;
-use monotree::{Monotree, Proof};
-use monotree::database::RocksDB;
-use monotree::hasher::{Hasher,Blake2b};
-
 use std::str::FromStr;
 use std::convert::TryInto;
 
@@ -77,7 +77,7 @@ impl StateChain {
 }
 
 
-/// each State in the Chain of States
+/// Each State in the Chain of States
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct State {
     pub data: String,   // proof key or address
@@ -91,15 +91,15 @@ pub struct StateChainSig {
     sig: String
 }
 impl StateChainSig {
-    /// create message to be signed
+    /// Create message to be signed
     fn to_message(purpose: &String, data: &String) -> Result<Message> {
         let mut str = purpose.clone();
-        str.push_str(&data);    // append data to msg
+        str.push_str(&data);
         let hash = sha256d::Hash::hash(&str.as_bytes());
         Ok(Message::from_slice(&hash)?)
     }
 
-    /// generate signature for change of state chain ownership
+    /// Generate signature for change of state chain ownership
     pub fn new(proof_key_priv: &SecretKey, purpose: &String, data: &String) -> Result<Self> {
         let secp = Secp256k1::new();
         let message = StateChainSig::to_message(purpose, data)?;
@@ -111,7 +111,7 @@ impl StateChainSig {
         })
     }
 
-    /// verify self's signature for transfer or withdraw
+    /// Verify self's signature for transfer or withdraw
     pub fn verify(&self, pk: &String) -> Result<()> {
         let secp = Secp256k1::new();
         let message = StateChainSig::to_message(&self.purpose, &self.data)?;
@@ -124,7 +124,7 @@ impl StateChainSig {
 }
 
 
-/// insert new statechain entry into Sparse Merkle Tree and return proof
+/// Insert new statechain entry into Sparse Merkle Tree and return proof
 pub fn update_statechain_smt(sc_db_loc: &str, root: &Option<monotree::Hash>, funding_txid: &String, entry: &String) -> Result<Option<monotree::Hash>> {
     let key: &monotree::Hash = funding_txid[..32].as_bytes().try_into().unwrap();
     let entry: &monotree::Hash = entry[..32].as_bytes().try_into().unwrap();
@@ -157,7 +157,6 @@ pub fn verify_statechain_smt(root: &Option<monotree::Hash>, proof_key: &String, 
 mod tests {
 
     use super::*;
-
     use bitcoin::secp256k1::{SecretKey, Secp256k1, PublicKey};
 
     pub static DB_LOC: &str = "./db";
