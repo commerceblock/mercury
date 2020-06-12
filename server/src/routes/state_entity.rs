@@ -4,11 +4,12 @@
 
 use super::super::Result;
 extern crate shared_lib;
-
-use shared_lib::util::{tx_backup_verify, get_sighash, tx_withdraw_verify, FEE};
-use shared_lib::Root;
-use shared_lib::structs::*;
-use shared_lib::state_chain::*;
+use shared_lib::{
+    util::{tx_backup_verify, get_sighash, tx_withdraw_verify, FEE},
+    structs::*,
+    state_chain::*,
+    Root,
+    mocks::mock_electrum::MockElectrum};
 
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::routes::ecdsa;
@@ -18,17 +19,25 @@ use super::super::storage::db;
 use super::super::Config;
 
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
-
 use bitcoin::Transaction;
-use bitcoin::hashes::sha256d;
+use bitcoin::{util::misc::hex_bytes, hashes::sha256d};
+use bitcoin::consensus;
+use consensus::encode::deserialize;
 
-use curv::elliptic::curves::traits::{ ECScalar,ECPoint };
-use curv::{BigInt,FE,GE};
+use electrumx_client::{
+    interface::Electrumx,
+    electrumx_client::ElectrumxClient};
+
+use curv::{
+    elliptic::curves::traits::{ECScalar,ECPoint},
+    {BigInt,FE,GE}};
+
 use monotree::Proof;
 use rocket_contrib::json::Json;
 use rocket::State;
 use uuid::Uuid;
 use db::{DB_SC_LOC, update_root};
+use std::{thread, time};
 
 /// UserSession represents a User in a particular state chain session. This can be used for authentication and DoS protections.
 /// The same client in 2 state chain sessions would have 2 unrelated UserSessions.
@@ -301,6 +310,47 @@ pub fn deposit_init(
     Ok(Json(user_id))
 }
 
+/// This function will be part of a seperate 'watchtower' daemon in the future.
+/// SE would request for a txid to be expected. Watchtower would return an Ok when it is confirmed.
+/// For now we spin up an Electrumx client and query for the transaction confirmation status.
+pub fn verify_tx_confirmed(tx_hash: &String, state: &State<Config>) -> Result<()> {
+    let mut electrum: Box<dyn Electrumx> = if state.testing_mode {
+        Box::new(MockElectrum::new())
+    } else {
+        Box::new(ElectrumxClient::new(state.electrum_server.clone()).unwrap())
+    };
+
+    debug!("Waiting for funding transaction confirmation. Txid: {}",
+        deserialize::<Transaction>(&hex_bytes(tx_hash).unwrap()).unwrap().txid().to_string());
+
+    let mut is_broadcast = 0; // num blocks waited for tx to be broadcast
+    let mut is_mined = 0; // num blocks waited for tx to be mined
+    while is_broadcast < 3 {
+        match electrum.get_transaction_conf_status(tx_hash.clone(), false) {
+            Ok(res) => {
+                // Check for tx confs. If none after 10*(block time) then return low fee error.
+                if res.confirmations.is_none() {
+                    is_mined += 1;
+                    if is_mined > 9 {
+                        return Err(SEError::Generic(String::from("Funding transaction failure to be mined - consider increasing the fee. Deposit failed.")));
+                    }
+                    thread::sleep(time::Duration::from_millis(state.block_time)); //
+                } else { // If confs increase then wait 6*(block time) and return Ok()
+                    debug!("Funding transaction mined. Waiting for 6 blocks confirmation.");
+                    thread::sleep(time::Duration::from_millis(6*state.block_time)); //
+                    return Ok(())
+                }
+            },
+            Err(_) => {
+                // Check for tx broadcast. If not after 3*(block time) then return error.
+                is_broadcast += 1;
+                thread::sleep(time::Duration::from_millis(state.block_time));
+            }
+        }
+    }
+    return Err(SEError::Generic(String::from("Funding Transaction not found in blockchain. Deposit failed.")));
+}
+
 /// Final step in deposit protocol
 ///     - Wait for confirmation of funding tx in blockchain
 ///     - Create StateChain DB object
@@ -315,7 +365,7 @@ pub fn deposit_confirm(
     // get UserSession info
     let mut user_session: UserSession =
     db::get(&state.db, &claim.sub, &deposit_msg2.shared_key_id, &StateEntityStruct::UserSession)?
-    .ok_or(SEError::DBError(NoDataForID, deposit_msg2.shared_key_id.clone()))?;
+        .ok_or(SEError::DBError(NoDataForID, deposit_msg2.shared_key_id.clone()))?;
 
     // Ensure backup tx exists and is signed
     let tx_backup = user_session.tx_backup.clone()
@@ -324,8 +374,8 @@ pub fn deposit_confirm(
         return Err(SEError::DBError(NoDataForID, String::from("Signed Back up transaction not found.")));
     }
 
-    // Wait for fundimg tx existence in blockchain and confs
-    // verify_tx()?;
+    // Wait for funding tx existence in blockchain and confs
+    verify_tx_confirmed(&user_session.tx_backup.clone().unwrap().input[0].previous_output.txid.to_string(), &state)?;
 
     // Create state chain DB object
     let state_chain = StateChain::new(

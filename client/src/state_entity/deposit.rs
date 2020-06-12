@@ -19,7 +19,7 @@ use crate::state_entity::util::{cosign_tx_input,verify_statechain_smt};
 use crate::error::{WalletErrorType, CError};
 use super::api::{get_smt_proof, get_smt_root, get_statechain_fee_info};
 
-use bitcoin::{Transaction, PublicKey};
+use bitcoin::{Transaction, PublicKey, consensus};
 use curv::elliptic::curves::traits::ECPoint;
 
 
@@ -39,7 +39,7 @@ pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<String> {
 pub fn deposit(wallet: &mut Wallet, amount: &u64)
     -> Result<(String, String, Transaction, Transaction, PrepareSignTxMsg, PublicKey)>
 {
-    // get state entity fee info
+    // Get state entity fee info
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
 
     // Ensure funds cover fees before initiating protocol
@@ -50,22 +50,21 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     // Greedy coin selection.
     let (inputs, addrs, amounts) = wallet.coin_selection_greedy(&(amount+se_fee_info.deposit+FEE))?;
 
-    // generate proof key
+    // Generate proof key
     let proof_key = wallet.se_proof_keys.get_new_key()?;
 
-    // init. session - Receive shared wallet ID
+    // Init. session - Receive shared wallet ID
     let shared_key_id: String = session_init(wallet, &proof_key.to_string())?;
 
     // 2P-ECDSA with state entity to create a Shared key
     let shared_key = wallet.gen_shared_key(&shared_key_id, amount)?;
 
-    // make funding tx
+    // Create funding tx
     let pk = shared_key.share.public.q.get_element();   // co-owned key address to send funds to (P_addr)
     let p_addr = bitcoin::Address::p2wpkh(
         &to_bitcoin_public_key(pk),
         wallet.get_bitcoin_network()
     );
-
     let change_addr = wallet.keys.get_new_address()?.to_string();
     let change_amount = amounts.iter().sum::<u64>() - amount - se_fee_info.deposit - FEE;
     let tx_0 = tx_funding_build(&inputs, &p_addr.to_string(), amount, &se_fee_info.deposit, &se_fee_info.address, &change_addr, &change_amount)?;
@@ -84,6 +83,7 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
         &amount
     )?;
 
+    // Co-sign tx backup tx
     let tx_backup_psm = PrepareSignTxMsg {
         protocol: Protocol::Deposit,
         tx: tx_backup_unsigned.to_owned(),
@@ -91,16 +91,16 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
         input_amounts: vec!(*amount),
         proof_key: Some(proof_key.to_string()),
     };
-
-    // co-sign tx backup tx
     let witness = cosign_tx_input(wallet, &shared_key_id, &tx_backup_psm)?;
-    // add witness to back up tx
+    // Add witness to back up tx
     let mut tx_backup_signed = tx_backup_unsigned.clone();
     tx_backup_signed.input[0].witness = witness;
 
     // TODO: check signature is valid?
 
-    // TODO: Broadcast funding transcation
+    // Broadcast funding transcation
+    let funding_txid = wallet.electrumx_client.broadcast_transaction(hex::encode(consensus::serialize(&tx_funding_signed)))?;
+    debug!("Deposit: Funding tx broadcast. txid: {}", funding_txid);
 
     // Wait for server confirmation of funding tx and receive new StateChain's id
     let state_chain_id: String = requests::postb(&wallet.client_shim,&format!("/deposit/confirm"),
@@ -109,7 +109,7 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
         }
     )?;
 
-    // verify proof key inclusion in SE sparse merkle tree
+    // Verify proof key inclusion in SE sparse merkle tree
     let root = get_smt_root(wallet)?;
     let proof = get_smt_proof(wallet, &root, &tx_funding_signed.txid().to_string())?;
     assert!(verify_statechain_smt(
@@ -118,7 +118,7 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
         &proof
     ));
 
-    // Add proof and other data to Shared key
+    // Add proof and state chain id to Shared key
     {
         let shared_key = wallet.get_shared_key_mut(&shared_key_id)?;
         shared_key.state_chain_id = Some(state_chain_id.to_string());

@@ -9,7 +9,6 @@ use rocksdb;
 
 use std::{collections::HashMap, str::FromStr};
 
-
 impl Config {
     pub fn load(settings: HashMap<String, String>) -> Config {
         let db = get_db(settings.clone());
@@ -19,10 +18,13 @@ impl Config {
         };
         Config {
             db,
+            electrum_server: settings.get("electrum_server").unwrap().to_string(),
             network: settings.get("network").unwrap().to_string(),
+            testing_mode: bool::from_str(settings.get("testing_mode").unwrap()).unwrap(),
             fee_address,
             fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
-            fee_withdraw: settings.get("fee_withdraw").unwrap().parse::<u64>().unwrap()
+            fee_withdraw: settings.get("fee_withdraw").unwrap().parse::<u64>().unwrap(),
+            block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
         }
     }
 }

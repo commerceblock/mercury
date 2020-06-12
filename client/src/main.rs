@@ -5,11 +5,16 @@ use clap::App;
 use client_lib::ClientShim;
 use client_lib::wallet::wallet;
 use client_lib::state_entity;
-use client_lib::mocks::mock_electrum::MockElectrum;
-use shared_lib::structs::{TransferMsg3, StateEntityAddress};
+use shared_lib::{
+    mocks::mock_electrum::MockElectrum,
+    structs::{TransferMsg3, StateEntityAddress}
+};
 
+use electrumx_client::{
+    interface::Electrumx,
+    electrumx_client::ElectrumxClient
+};
 use bitcoin::consensus;
-use electrumx_client::{interface::Electrumx, electrumx_client::ElectrumxClient};
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -29,13 +34,13 @@ fn main() {
     let hm = settings.try_into::<HashMap<String, String>>().unwrap();
     let se_endpoint = hm.get("endpoint").unwrap();
     let electrum_server_addr = hm.get("electrum_server").unwrap().clone();
-    let testing: bool = bool::from_str(hm.get("testing").unwrap()).unwrap();
+    let testing_mode: bool = bool::from_str(hm.get("testing_mode").unwrap()).unwrap();
 
     // TODO: random generating of seed and allow input of mnemonic phrase
     let seed = [0xcd; 32];
     let client_shim = ClientShim::new(se_endpoint.to_string(), None);
 
-    let electrum: Box<dyn Electrumx> = if testing {
+    let electrum: Box<dyn Electrumx> = if testing_mode {
         Box::new(MockElectrum::new())
     } else {
         Box::new(ElectrumxClient::new(electrum_server_addr).unwrap())

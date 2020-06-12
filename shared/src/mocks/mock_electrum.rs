@@ -1,8 +1,9 @@
 // Electrum server http RESTful API interface
 
-// use crate::wallet::wallet::{ GetBalanceResponse, GetListUnspentResponse, GetBlockHeadersResponse, GetHistoryResponse };
 use electrumx_client::interface::Electrumx;
-use electrumx_client::response::{GetBalanceResponse, GetListUnspentResponse, GetBlockHeadersResponse, GetHistoryResponse};
+use bitcoin::consensus;
+use electrumx_client::response::{GetTransactionConfStatus, GetBalanceResponse, GetListUnspentResponse, GetBlockHeadersResponse, GetHistoryResponse};
+use bitcoin::{util::misc::hex_bytes, Transaction};
 
 pub struct MockElectrum {}
 
@@ -37,11 +38,19 @@ impl Electrumx for MockElectrum {
     fn get_utxos(&mut self, _addr: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         todo!()
     }
-    fn broadcast_transaction(&mut self, _raw_tx: String) -> Result<String, Box<dyn std::error::Error>> {
+    fn broadcast_transaction(&mut self, raw_tx: String) -> Result<String, Box<dyn std::error::Error>> {
+        let tx: Transaction = consensus::deserialize(&hex_bytes(&raw_tx).unwrap()).unwrap();
+        Ok(tx.txid().to_string())
+    }
+    fn get_transaction(&mut self, _tx_hash: String, _merkle: bool) -> Result<String, Box<dyn std::error::Error>> {
         todo!()
     }
-    fn get_transaction(&mut self, _tx_hash: String, _verbose: bool, _merkle: bool) -> Result<String, Box<dyn std::error::Error>> {
-        todo!()
+    fn get_transaction_conf_status(&mut self, _tx_hash: String, _merkle: bool) -> Result<GetTransactionConfStatus, Box<dyn std::error::Error>> {
+        Ok(GetTransactionConfStatus{
+            in_active_chain: Some(true),
+            confirmations: Some(2),
+            blocktime: Some(123456789),
+        })
     }
     fn get_merkle_transaction(&mut self, _tx_hash: String, _height: usize) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         todo!()

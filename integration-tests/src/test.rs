@@ -9,14 +9,15 @@ mod tests {
     use client_lib::wallet::wallet::Wallet;
 
     use server_lib::server;
-    use shared_lib::structs::PrepareSignTxMsg;
+    use shared_lib::{
+        mocks::mock_electrum::MockElectrum,
+        structs::PrepareSignTxMsg};
 
     use bitcoin::{Transaction, PublicKey};
     use curv::elliptic::curves::traits::ECScalar;
     use curv::FE;
 
     use std::{thread, time};
-    use mocks::mock_electrum::MockElectrum;
 
     #[test]
     fn test_gen_shared_key() {

@@ -16,6 +16,7 @@ pub mod util;
 pub mod error;
 pub mod structs;
 pub mod state_chain;
+pub mod mocks;
 
 type Result<T> = std::result::Result<T, error::SharedLibError>;
 

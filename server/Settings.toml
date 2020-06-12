@@ -1,5 +1,6 @@
 # DB options can be added here
 db = "local"
+electrum_server = "127.0.0.1:60401"
 
 region = "" # Override with ENV variable!
 pool_id = "" # Override with ENV variable!
@@ -7,8 +8,10 @@ issuer = "" # Override with ENV variable!
 audience = "" # Override with ENV variable!
 
 network = "regtest"
+block_time = 2
+testing_mode = "false"
 
 # fee info
 fee_address = "bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x"
-fee_deposit = "300"
-fee_withdraw = "300"
+fee_deposit = 300
+fee_withdraw = 300

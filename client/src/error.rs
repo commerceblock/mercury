@@ -38,6 +38,12 @@ impl From<&str> for CError {
     }
 }
 
+impl From<Box<dyn error::Error>> for CError {
+    fn from(e: Box<dyn error::Error>) -> CError {
+        CError::Generic(e.to_string())
+    }
+}
+
 impl From<Bip32Error> for CError {
     fn from(e: Bip32Error) -> CError {
         CError::Generic(e.to_string())

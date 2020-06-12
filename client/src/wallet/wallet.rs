@@ -3,20 +3,24 @@
 //! Basic Bitcoin wallet functionality. Full key owned by this wallet.
 
 use super::super::Result;
-use shared_lib::{util::get_sighash, structs::StateEntityAddress};
+use shared_lib::{
+    util::get_sighash,
+    structs::StateEntityAddress};
 
-use super::key_paths::{ funding_txid_to_int, KeyPathWithAddresses, KeyPath};
-use crate::error::{ CError, WalletErrorType};
+use super::key_paths::{funding_txid_to_int, KeyPathWithAddresses, KeyPath};
+use crate::error::{CError, WalletErrorType};
 use crate::wallet::shared_key::SharedKey;
 use crate::ClientShim;
 
-use bitcoin::{ Network, PublicKey, Address, TxIn, OutPoint };
-use bitcoin::hashes::sha256d;
-use bitcoin::util::bip32::{ ExtendedPrivKey, ChildNumber };
-use bitcoin::secp256k1::{All, Secp256k1, Message, key::SecretKey};
+use bitcoin::{{Network, PublicKey, Address, TxIn, OutPoint},
+    hashes::sha256d,
+    util::bip32::{ExtendedPrivKey, ChildNumber},
+    secp256k1::{All, Secp256k1, Message, key::SecretKey}};
 
-use electrumx_client::response::{GetBalanceResponse, GetListUnspentResponse};
-use electrumx_client::interface::Electrumx;
+use electrumx_client::{
+    response::{GetBalanceResponse, GetListUnspentResponse},
+    interface::Electrumx};
+
 use uuid::Uuid;
 use std::str::FromStr;
 use serde_json::json;
@@ -30,7 +34,7 @@ pub struct Wallet {
     pub id: String,
     pub network: String,
     secp: Secp256k1<All>,
-    electrumx_client: Box<dyn Electrumx>,
+    pub electrumx_client: Box<dyn Electrumx>,
     pub client_shim: ClientShim,
 
     pub master_priv_key: ExtendedPrivKey,
@@ -336,11 +340,7 @@ impl Wallet {
 
     /// return balance of address
     fn get_address_balance(&mut self, address: &bitcoin::Address) -> GetBalanceResponse {
-        let resp = self.electrumx_client.get_balance(&address.to_string()).unwrap();
-        GetBalanceResponse {
-            confirmed: resp.confirmed,
-            unconfirmed: resp.unconfirmed,
-        }
+        self.electrumx_client.get_balance(&address.to_string()).unwrap()
     }
 
     fn zero_balance(&self, addr: &GetBalanceResponse) -> bool {
@@ -463,7 +463,8 @@ pub fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
 mod tests {
     use super::*;
     extern crate shared_lib;
-    use crate::mocks::mock_electrum::MockElectrum;
+    use shared_lib::mocks::mock_electrum::MockElectrum;
+
 
     fn gen_wallet() -> Wallet {
         // let electrum = ElectrumxClient::new("dummy").unwrap();

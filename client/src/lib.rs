@@ -32,7 +32,6 @@ pub mod electrum;
 pub mod bitcoin_core;
 
 mod utilities;
-pub mod mocks;
 
 type Result<T> = std::result::Result<T, error::CError>;
 
@@ -53,5 +52,3 @@ impl ClientShim {
         }
     }
 }
-
-pub use curv::{BigInt, arithmetic::traits::Converter};
