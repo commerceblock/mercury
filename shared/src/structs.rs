@@ -106,12 +106,6 @@ pub struct StateEntityAddress {
     pub proof_key: String,
 }
 
-/// Data present if transfer is part of an atomic batch transfer
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct BatchData {
-    pub batch_id: String,
-    // pub commitment:      // Commitment to transfer input UTXO in case of protocol failure
-}
 
 /// Sender -> SE
 #[derive(Serialize, Deserialize, Debug)]
@@ -153,14 +147,20 @@ pub struct TransferMsg5 {
     pub s2_pub: GE,
 }
 
-impl Default for TransferMsg5 {
-    fn default() -> TransferMsg5 {
-        TransferMsg5 {
-            new_shared_key_id: String::from(""),
-            s2_pub: GE::base_point2(),
-        }
-    }
+/// Coordinator -> StateEntity
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TransferBatchInitMsg {
+    pub batch_id: String,
+    pub signatures: Vec<StateChainSig>,
 }
+
+/// Data present if transfer is part of an atomic batch transfer
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BatchData {
+    pub batch_id: String,
+    // pub commitment:      // Commitment to transfer input UTXO in case of protocol failure
+}
+
 
 // Withdraw algorithm structs
 /// Owner -> State Entity
@@ -175,4 +175,15 @@ pub struct WithdrawMsg1 {
 pub struct WithdrawMsg2 {
     pub shared_key_id: String,
     pub address: String,
+}
+
+
+
+impl Default for TransferMsg5 {
+    fn default() -> TransferMsg5 {
+        TransferMsg5 {
+            new_shared_key_id: String::from(""),
+            s2_pub: GE::base_point2(),
+        }
+    }
 }

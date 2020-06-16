@@ -13,7 +13,7 @@ use monotree::Proof;
 
 /// Get state chain fee
 pub fn get_statechain_fee_info(client_shim: &ClientShim) -> Result<StateEntityFeeInfoAPI> {
-    requests::post(client_shim,&format!("info/fee/"))
+    requests::post(client_shim,&format!("info/fee"))
 }
 
 /// Get state chain by ID

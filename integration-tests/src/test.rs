@@ -19,6 +19,41 @@ mod tests {
 
     use std::{thread, time};
 
+    fn spawn_server() {
+        // Rocket server is blocking, so we spawn a new thread.
+        thread::spawn(move || {
+            server::get_server().launch();
+        });
+
+        let five_seconds = time::Duration::from_millis(5000);
+        thread::sleep(five_seconds);
+    }
+    fn gen_wallet() -> Wallet {
+        let mut wallet = Wallet::new(
+            &[0xcd; 32],
+            &"regtest".to_string(),
+            ClientShim::new("http://localhost:8000".to_string(), None),
+            Box::new(MockElectrum::new())
+        );
+
+        // generate some addresses
+        let _ = wallet.keys.get_new_address();
+        let _ = wallet.keys.get_new_address();
+
+        wallet
+    }
+
+    // Returns shared_key_id, state_chain_id, funding txid,
+    /// signed backup tx, back up transacion data and proof_key
+    fn run_deposit(wallet: &mut Wallet) -> (String, String, String, Transaction, PrepareSignTxMsg, PublicKey)  {
+        let resp = state_entity::deposit::deposit(
+            wallet,
+            &10000
+        ).unwrap();
+
+        return resp
+    }
+
     #[test]
     fn test_gen_shared_key() {
         spawn_server();
@@ -57,15 +92,6 @@ mod tests {
     //         signature.s
     //     );
     // }
-
-    fn run_deposit(wallet: &mut Wallet) -> (String, String, String, Transaction, PrepareSignTxMsg, PublicKey)  {
-        let resp = state_entity::deposit::deposit(
-            wallet,
-            &10000
-        ).unwrap();
-
-        return resp
-    }
 
     #[test]
     fn test_deposit() {
@@ -155,6 +181,54 @@ mod tests {
     }
 
     #[test]
+    fn test_transfer_batch() {
+        spawn_server();
+
+        let mut wallet1 = gen_wallet();
+        let deposit1 = run_deposit(&mut wallet1);
+
+        let mut wallet2 = gen_wallet();
+        let _ = wallet2.se_proof_keys.get_new_key();
+        let deposit2 = run_deposit(&mut wallet2);
+
+        let mut wallet3 = gen_wallet();
+        let _ = wallet3.se_proof_keys.get_new_key();
+        let deposit3 = run_deposit(&mut wallet3);
+
+        let batch_id = String::from("123456789");
+
+        let transfer_batch_sig1 = state_entity::transfer::transfer_batch_sign(
+            &mut wallet1,
+            &deposit1.1,
+            &batch_id
+        );
+        let transfer_batch_sig2 = state_entity::transfer::transfer_batch_sign(
+            &mut wallet2,
+            &deposit2.1,
+            &batch_id
+        );
+        let transfer_batch_sig3 = state_entity::transfer::transfer_batch_sign(
+            &mut wallet3,
+            &deposit3.1,
+            &batch_id
+        );
+
+        println!("transfer_batch_sig1: {:?}",transfer_batch_sig1);
+        println!("transfer_batch_sig2: {:?}",transfer_batch_sig2);
+        println!("transfer_batch_sig3: {:?}",transfer_batch_sig3);
+
+        let sigs = vec!(transfer_batch_sig1.unwrap(),transfer_batch_sig2.unwrap(),transfer_batch_sig3.unwrap());
+
+        let transfer_batch_init = state_entity::transfer::transfer_batch_init(
+            &wallet1.client_shim,
+            &sigs,
+            &batch_id
+        );
+
+        assert!(transfer_batch_init.is_ok());
+    }
+
+    #[test]
     fn test_withdraw() {
         spawn_server();
         let mut wallet = gen_wallet();
@@ -200,27 +274,5 @@ mod tests {
     }
 
 
-    fn spawn_server() {
-        // Rocket server is blocking, so we spawn a new thread.
-        thread::spawn(move || {
-            server::get_server().launch();
-        });
 
-        let five_seconds = time::Duration::from_millis(5000);
-        thread::sleep(five_seconds);
-    }
-    fn gen_wallet() -> Wallet {
-        let mut wallet = Wallet::new(
-            &[0xcd; 32],
-            &"regtest".to_string(),
-            ClientShim::new("http://localhost:8000".to_string(), None),
-            Box::new(MockElectrum::new())
-        );
-
-        // generate some addresses
-        let _ = wallet.keys.get_new_address();
-        let _ = wallet.keys.get_new_address();
-
-        wallet
-    }
 }

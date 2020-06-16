@@ -92,6 +92,7 @@ pub fn get_server() -> Rocket {
                 state_entity::prepare_sign_tx,
                 state_entity::transfer_sender,
                 state_entity::transfer_receiver,
+                state_entity::transfer_batch_init,
                 state_entity::withdraw_init,
                 state_entity::withdraw_confirm
             ],

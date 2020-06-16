@@ -36,7 +36,7 @@ use rocket_contrib::json::Json;
 use rocket::State;
 use uuid::Uuid;
 use db::{DB_SC_LOC, update_root};
-use std::{thread, time};
+use std::{thread, time, collections::HashMap};
 
 
 /// Structs for DB storage.
@@ -44,7 +44,8 @@ use std::{thread, time};
 pub enum StateEntityStruct {
     UserSession,
     StateChain,
-    TransferData
+    TransferData,
+    TransferBatchData
 }
 impl db::MPCStruct for StateEntityStruct {
     fn to_string(&self) -> String {
@@ -89,10 +90,12 @@ pub struct TransferData {
     pub x1: FE
 }
 
-/// TransferBatch stores list of Users involved in a batch transfer and their status in the potocol.
+/// TransferBatch stores list of StateChains involved in a batch transfer and their status in the potocol.
 /// When all transfers in the batch are complete these transfers are finalized atomically.
-pub struct TransferBatch {
-
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TransferBatchData {
+    pub id: String,
+    pub state_chains: HashMap<String, bool>
 }
 
 /// API: Return StateEntity fee information.
@@ -619,8 +622,41 @@ pub fn transfer_finalize(
 /// Request setup of a batch transfer.
 ///     - Verify all signatures
 ///     - Create TransferBatchData DB object
-pub fn transfer_batch_init() {
+#[post("/transfer/batch/init", format = "json", data = "<transfer_batch_init_msg>")]
+pub fn transfer_batch_init(
+    state: State<Config>,
+    claim: Claims,
+    transfer_batch_init_msg: Json<TransferBatchInitMsg>
+) -> Result<Json<()>> {
+    let mut state_chains = HashMap::new();
+    for sig in transfer_batch_init_msg.signatures.clone() {
+        // Verify sig
+        let state_chain: StateChain =
+            db::get(&state.db, &claim.sub, &sig.data, &StateEntityStruct::StateChain)?
+                .ok_or(SEError::DBError(NoDataForID, sig.data.clone()))?;
+        let proof_key = state_chain.get_tip()?.data;
+        sig.verify(&proof_key)?;
 
+        // Add to TransferBatchData object
+        state_chains.insert(
+            sig.data,
+            false
+        );
+    }
+
+    // Create new TransferBatchData and add to DB
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &transfer_batch_init_msg.batch_id,
+        &StateEntityStruct::TransferBatchData,
+        &TransferBatchData {
+            id: transfer_batch_init_msg.batch_id.clone(),
+            state_chains,
+        }
+    )?;
+
+    Ok(Json(()))
 }
 
 /// User request withdraw:

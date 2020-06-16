@@ -18,13 +18,13 @@
 
 use super::super::Result;
 
-use shared_lib::{state_chain::StateChainSig, structs::{TransferMsg3, StateEntityAddress, TransferMsg2, Protocol, TransferMsg1, StateChainDataAPI, TransferMsg5, TransferMsg4}};
+use shared_lib::{state_chain::StateChainSig, structs::{TransferMsg3, StateEntityAddress, TransferMsg2, Protocol, TransferMsg1, StateChainDataAPI, TransferMsg5, TransferMsg4, TransferBatchInitMsg}};
 use crate::error::{CError, WalletErrorType::KeyMissingData};
 use crate::wallet::wallet::Wallet;
 use crate::wallet::key_paths::funding_txid_to_int;
 use crate::state_entity::util::{cosign_tx_input,verify_statechain_smt};
 use crate::state_entity::api::{get_smt_proof, get_smt_root, get_statechain};
-use crate::utilities::requests;
+use crate::{ClientShim, utilities::requests};
 
 use bitcoin::{PublicKey, Address};
 use curv::elliptic::curves::traits::{ECPoint, ECScalar};
@@ -60,12 +60,6 @@ pub fn transfer_sender(
         &String::from("TRANSFER"),
         &receiver_addr.proof_key.clone().to_string()
     )?;
-
-        // StateChainSig::new(
-        //     &proof_key_derivation.unwrap().private_key.key,
-        //     &format!("TRANSFER_BATCH:{:?}",batch_id),
-        //     &receiver_addr.proof_key.clone().to_string()
-        // )?
 
     // Init transfer: Send statechain signature or batch data
     let transfer_msg2: TransferMsg2 = requests::postb(&wallet.client_shim,&format!("/transfer/sender"),
@@ -235,6 +229,30 @@ pub fn transfer_receiver_finalize(
     }
 
     Ok(())
+}
+
+/// Sign data signalling intention to carry out transfer_batch protocol with given state chain
+pub fn transfer_batch_sign(wallet: &mut Wallet, state_chain_id: &String, batch_id: &String) -> Result<StateChainSig> {
+    // First sign state chain
+    let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id)?;
+    let state_chain = state_chain_data.chain;
+    // Get proof key for signing
+    let proof_key_derivation = wallet.se_proof_keys.get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap());
+    Ok(StateChainSig::new(
+        &proof_key_derivation.unwrap().private_key.key,
+        &format!("TRANSFER_BATCH:{:?}",batch_id),
+        &state_chain_id
+    )?)
+}
+
+/// Request StateEntity start transfer_batch protocol
+pub fn transfer_batch_init(client_shim: &ClientShim, signatures: &Vec<StateChainSig>, batch_id: &String) -> Result<()> {
+    requests::postb(&client_shim,&format!("transfer/batch/init  "),
+        &TransferBatchInitMsg {
+            batch_id: batch_id.clone(),
+            signatures: signatures.clone()
+        }
+    )
 }
 
 #[cfg(test)]

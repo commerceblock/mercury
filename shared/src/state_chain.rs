@@ -86,8 +86,8 @@ pub struct State {
 /// Data necessary to create ownership transfer signatures
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct StateChainSig {
-    pub purpose: String, // "TRANSFER", "TRANSFER-BATCH" or "WITHDRAW"
-    pub data: String, // proof key or address
+    pub purpose: String,    // "TRANSFER", "TRANSFER-BATCH" or "WITHDRAW"
+    pub data: String,       // proof key, state chain id or address
     sig: String
 }
 impl StateChainSig {

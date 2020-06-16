@@ -35,7 +35,7 @@ pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<String> {
     )
 }
 
-/// Deposit coins into state entity. Returns shared_key_id, state_chain_id, signed funding tx,
+/// Deposit coins into state entity. Returns shared_key_id, state_chain_id, funding txid,
 /// signed backup tx, back up transacion data and proof_key
 pub fn deposit(wallet: &mut Wallet, amount: &u64)
     -> Result<(String, String, String, Transaction, PrepareSignTxMsg, PublicKey)>
