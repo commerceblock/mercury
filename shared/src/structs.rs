@@ -21,7 +21,7 @@ pub enum Protocol {
 
 // API structs
 
-/// /api/info return struct
+/// /info/info return struct
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StateEntityFeeInfoAPI {
     pub address: String,  // Receive address for fee payments
@@ -35,7 +35,7 @@ impl fmt::Display for StateEntityFeeInfoAPI {
     }
 }
 
-/// /api/statechain return struct
+/// /info/statechain return struct
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StateChainDataAPI {
     pub utxo: OutPoint,
@@ -44,7 +44,7 @@ pub struct StateChainDataAPI {
 }
 
 
-/// /api/statechain post struct
+/// /info/statechain post struct
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SmtProofMsgAPI {
     pub root: Root,
@@ -60,6 +60,7 @@ pub struct SmtProofMsgAPI {
 /// by Server before co-signing is performed for validation of tx.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PrepareSignTxMsg {
+    pub shared_key_id: String,
     pub protocol: Protocol,
     pub tx: Transaction,
     pub input_addrs: Vec<PK>,  // pub keys being spent from
@@ -105,11 +106,19 @@ pub struct StateEntityAddress {
     pub proof_key: String,
 }
 
+/// Data present if transfer is part of an atomic batch transfer
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BatchData {
+    pub batch_id: String,
+    // pub commitment:      // Commitment to transfer input UTXO in case of protocol failure
+}
+
 /// Sender -> SE
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMsg1 {
     pub shared_key_id: String,
     pub state_chain_sig: StateChainSig,
+    pub batch_id: Option<String>
 }
 /// SE -> Sender
 #[derive(Serialize, Deserialize, Debug)]

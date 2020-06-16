@@ -81,7 +81,7 @@ pub struct UserSession {
     pub withdraw_sc_sig: Option<StateChainSig>
 }
 
-/// TransferData provides new Owner's data for their new UserSession struct.
+/// TransferData provides new Owner's data for their new UserSession struct created in transfer_receiver.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct TransferData {
     pub state_chain_id: String,
@@ -89,9 +89,14 @@ pub struct TransferData {
     pub x1: FE
 }
 
+/// TransferBatch stores list of Users involved in a batch transfer and their status in the potocol.
+/// When all transfers in the batch are complete these transfers are finalized atomically.
+pub struct TransferBatch {
+
+}
 
 /// API: Return StateEntity fee information.
-#[post("/api/fee", format = "json")]
+#[post("/info/fee", format = "json")]
 pub fn get_state_entity_fees(
     state: State<Config>,
 ) -> Result<Json<StateEntityFeeInfoAPI>> {
@@ -103,7 +108,7 @@ pub fn get_state_entity_fees(
 }
 
 /// API: Return StateChain info: funding txid and state chain list of proof keys and signatures.
-#[post("/api/statechain/<state_chain_id>", format = "json")]
+#[post("/info/statechain/<state_chain_id>", format = "json")]
 pub fn get_statechain(
     state: State<Config>,
     claim: Claims,
@@ -122,7 +127,7 @@ pub fn get_statechain(
 }
 
 /// API: Generates sparse merkle tree inclusion proof for some key in a tree with some root.
-#[post("/api/proof", format = "json", data = "<smt_proof_msg>")]
+#[post("/info/proof", format = "json", data = "<smt_proof_msg>")]
 pub fn get_smt_proof(
     state: State<Config>,
     smt_proof_msg: Json<SmtProofMsgAPI>,
@@ -136,7 +141,7 @@ pub fn get_smt_proof(
 }
 
 /// API: Get root of sparse merkle tree. Will be via Mainstay in the future.
-#[post("/api/root", format = "json")]
+#[post("/info/root", format = "json")]
 pub fn get_smt_root(
     state: State<Config>,
 ) -> Result<Json<Root>> {
@@ -165,25 +170,26 @@ pub fn check_user_auth(
 /// honest and error free:
 ///     - Check tx data
 ///     - calculate and store tx sighash for validation before performing ecdsa::sign
-#[post("/prepare-sign/<id>", format = "json", data = "<prepare_sign_msg>")]
+#[post("/prepare-sign", format = "json", data = "<prepare_sign_msg>")]
 pub fn prepare_sign_tx(
     state: State<Config>,
     claim: Claims,
-    id: String,
     prepare_sign_msg: Json<PrepareSignTxMsg>,
 ) -> Result<Json<()>> {
     // Auth user
-    check_user_auth(&state, &claim, &id)?;
+    check_user_auth(&state, &claim, &prepare_sign_msg.shared_key_id)?;
 
     let prepare_sign_msg: PrepareSignTxMsg = prepare_sign_msg.into_inner();
+
+    // Get user session for this user
+    let mut user_session: UserSession =
+    db::get(&state.db, &claim.sub, &prepare_sign_msg.shared_key_id, &StateEntityStruct::UserSession)?
+    .ok_or(SEError::DBError(NoDataForID, prepare_sign_msg.shared_key_id.clone()))?;
+
 
     // Which protocol are we signing for?
     match prepare_sign_msg.protocol {
         Protocol::Withdraw => {
-            // Get user session for this user
-            let mut user_session: UserSession =
-                db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
-                    .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
             // Verify withdrawl has been authorised via presense of withdraw_sc_sig
             if user_session.withdraw_sc_sig.is_none() {
@@ -219,7 +225,7 @@ pub fn prepare_sign_tx(
             db::insert(
                 &state.db,
                 &claim.sub,
-                &id,
+                &prepare_sign_msg.shared_key_id,
                 &StateEntityStruct::UserSession,
                 &user_session
             )?;
@@ -229,11 +235,6 @@ pub fn prepare_sign_tx(
         _ => {
             // Verify unsigned backup tx to ensure co-sign will be signing the correct data
             tx_backup_verify(&prepare_sign_msg)?;
-
-            // Update UserSession data with sig hash, back up tx and state chain id
-            let mut user_session: UserSession =
-                db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
-                    .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
 
             let sig_hash = get_sighash(
                 &prepare_sign_msg.tx,
@@ -249,17 +250,19 @@ pub fn prepare_sign_tx(
                 user_session.tx_backup = Some(prepare_sign_msg.tx.clone());
             }
 
-            db::insert(
-                &state.db,
-                &claim.sub,
-                &id,
-                &StateEntityStruct::UserSession,
-                &user_session
-            )?;
 
             debug!("Deposit: Statechain created and backup tx ready for signing.");
         }
     }
+
+    // Update DB UserSession object
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &prepare_sign_msg.shared_key_id,
+        &StateEntityStruct::UserSession,
+        &user_session
+    )?;
 
     Ok(Json(()))
 }
@@ -439,6 +442,11 @@ pub fn transfer_sender(
         return Err(SEError::Generic(String::from("Transfer Error: User does not own a state chain.")));
     }
 
+    // If batch transfer mark Statechain as "sent" in TransferBatchData.
+    if transfer_msg1.batch_id.is_some() {
+
+    }
+
     // Generate x1
     let x1: FE = ECScalar::new_random();
 
@@ -481,7 +489,6 @@ pub fn transfer_receiver(
 
     // Ensure state_chain_sigs are the same
     if state_chain_sig != transfer_msg4.state_chain_sig.to_owned() {
-        debug!("Transfer protocol failed. Receiver state chain siganture and State Entity state chain siganture do not match.");
         return Err(SEError::Generic(format!("State chain siganture provided does not match state chain at id {}",transfer_data.state_chain_id)));
     }
 
@@ -522,23 +529,61 @@ pub fn transfer_receiver(
         return Err(SEError::Generic(String::from("Transfer protocol error: P1 != P2")));
     }
 
+    // Create user ID for new UserSession (receiver of transfer)
+    let new_shared_key_id = Uuid::new_v4().to_string();
+
+    if state_chain_sig.purpose == String::from("TRANSFER-BATCH") {
+        // Set transfer as complete in TransferBatchData
+
+    } else {
+        // Update DB and SMT with new transfer data
+        transfer_finalize(
+            &state,
+            &claim,
+            &new_shared_key_id,
+            &transfer_data.state_chain_id,
+            &state_chain_sig,
+            s2
+        )?;
+    }
+
+    debug!("Transfer: Receiver side complete and DB updated. State Chain ID: {}",transfer_data.state_chain_id);
+
+    Ok(Json(
+        TransferMsg5 {
+            new_shared_key_id,
+            s2_pub,
+        }
+    ))
+}
+
+/// Update DB and SMT after successful transfer.
+/// This function is called immediately in the regular transfer case or after confirmation of atomic
+/// transfers completion in the batch transfer case.
+pub fn transfer_finalize(
+    state: &State<Config>,
+    claim: &Claims,
+    new_shared_key_id: &String,
+    state_chain_id: &String,
+    state_chain_sig: &StateChainSig,
+    s2: FE
+) -> Result<()> {
     // Update state chain
     let mut state_chain: StateChain =
-        db::get(&state.db, &claim.sub, &transfer_data.state_chain_id, &StateEntityStruct::StateChain)?
-            .ok_or(SEError::DBError(NoDataForID, transfer_data.state_chain_id.clone()))?;
+        db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
+            .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
 
     state_chain.add(state_chain_sig.to_owned())?;
 
     db::insert(
         &state.db,
         &claim.sub,
-        &transfer_data.state_chain_id,
+        &state_chain_id,
         &StateEntityStruct::StateChain,
         &state_chain
     )?;
 
     // Create new UserSession to allow new owner to generate shared wallet
-    let new_shared_key_id = Uuid::new_v4().to_string();
     db::insert(
         &state.db,
         &claim.sub,
@@ -551,7 +596,7 @@ pub fn transfer_receiver(
             tx_backup: Some(state_chain.tx_backup.clone()),
             tx_withdraw: None,
             sig_hash: None,
-            state_chain_id: Some(transfer_data.state_chain_id.to_owned()),
+            state_chain_id: Some(state_chain_id.to_owned()),
             s2: Some(s2),
             withdraw_sc_sig: None
         }
@@ -567,14 +612,15 @@ pub fn transfer_receiver(
     let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &funding_txid, &proof_key)?;
     update_root(&state.db, new_root.unwrap())?;
 
-    debug!("Transfer: Receiver side complete. For State Chain: {}",transfer_data.state_chain_id);
+    Ok(())
+}
 
-    Ok(Json(
-        TransferMsg5 {
-            new_shared_key_id,
-            s2_pub,
-        }
-    ))
+
+/// Request setup of a batch transfer.
+///     - Verify all signatures
+///     - Create TransferBatchData DB object
+pub fn transfer_batch_init() {
+
 }
 
 /// User request withdraw:

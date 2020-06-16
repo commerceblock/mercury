@@ -124,6 +124,7 @@ mod tests {
                 &mut wallet_sender,
                 &deposit_resp.0,    // shared wallet id
                 receiver_addr.clone(),
+                None
         ).unwrap();
 
         let new_shared_key_id  =

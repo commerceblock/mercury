@@ -7,7 +7,7 @@
 // 1. Generate shared wallet
 // 2. Co-op sign back-up tx
 // 3. Broadcast funding tx and wait for SE verification
-// 4. Verify funding txid and proof key in SMT 
+// 4. Verify funding txid and proof key in SMT
 
 use super::super::Result;
 extern crate shared_lib;
@@ -86,13 +86,14 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
 
     // Co-sign tx backup tx
     let tx_backup_psm = PrepareSignTxMsg {
+        shared_key_id: shared_key_id.to_owned(),
         protocol: Protocol::Deposit,
         tx: tx_backup_unsigned.to_owned(),
         input_addrs: vec!(pk),
         input_amounts: vec!(*amount),
         proof_key: Some(proof_key.to_string()),
     };
-    let witness = cosign_tx_input(wallet, &shared_key_id, &tx_backup_psm)?;
+    let witness = cosign_tx_input(wallet, &tx_backup_psm)?;
     // Add witness to back up tx
     let mut tx_backup_signed = tx_backup_unsigned.clone();
     tx_backup_signed.input[0].witness = witness;

@@ -148,7 +148,8 @@ fn main() {
                 let transfer_msg = state_entity::transfer::transfer_sender(
                     &mut wallet,
                     &shared_key_id.to_string(),
-                    receiver_addr
+                    receiver_addr,
+                    None
                 ).unwrap();
                 wallet.save();
                 println!(

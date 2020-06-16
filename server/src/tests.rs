@@ -53,7 +53,7 @@ mod tests {
 
         // get_statechin
         let mut response = client
-            .post(format!("/api/statechain/{}","invalidID".to_string()))
+            .post(format!("/info/statechain/{}","invalidID".to_string()))
             .header(ContentType::JSON)
             .dispatch();
 
@@ -68,7 +68,7 @@ mod tests {
         };
         let body = serde_json::to_string(&smt_proof_msg).unwrap();
         let mut response = client
-            .post(format!("/api/proof"))
+            .post(format!("/info/proof"))
             .body(body)
             .header(ContentType::JSON)
             .dispatch();
@@ -79,7 +79,7 @@ mod tests {
         // invalid root for tree
         // first grab current root id
         let mut response = client
-        .post(format!("/api/root"))
+        .post(format!("/info/root"))
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();
@@ -91,7 +91,7 @@ mod tests {
         };
         let body = serde_json::to_string(&smt_proof_msg).unwrap();
         let mut response = client
-            .post(format!("/api/proof"))
+            .post(format!("/info/proof"))
             .body(body)
             .header(ContentType::JSON)
             .dispatch();
@@ -105,7 +105,7 @@ mod tests {
         let client = Client::new(server::get_server()).expect("valid rocket instance");
 
         let mut response = client
-            .post("/api/fee")
+            .post("/info/fee")
             .header(ContentType::JSON)
             .dispatch();
 
