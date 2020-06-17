@@ -18,6 +18,7 @@ mod tests {
     use curv::FE;
 
     use std::{thread, time};
+    use std::str::FromStr;
 
     fn spawn_server() {
         // Rocket server is blocking, so we spawn a new thread.
@@ -45,10 +46,10 @@ mod tests {
 
     // Returns shared_key_id, state_chain_id, funding txid,
     /// signed backup tx, back up transacion data and proof_key
-    fn run_deposit(wallet: &mut Wallet) -> (String, String, String, Transaction, PrepareSignTxMsg, PublicKey)  {
+    fn run_deposit(wallet: &mut Wallet, amount: &u64) -> (String, String, String, Transaction, PrepareSignTxMsg, PublicKey)  {
         let resp = state_entity::deposit::deposit(
             wallet,
-            &10000
+            amount
         ).unwrap();
 
         return resp
@@ -98,15 +99,15 @@ mod tests {
         spawn_server();
         let mut wallet = gen_wallet();
 
-        let deposit = run_deposit(&mut wallet);
+        let deposit = run_deposit(&mut wallet, &10000);
 
         let funding_txid = deposit.2;
         let tx_backup_psm = deposit.4;
         let proof_key = deposit.5;
 
         // Get SMT inclusion proof and verify
-        let root = state_entity::api::get_smt_root(&mut wallet).unwrap();
-        let proof = state_entity::api::get_smt_proof(&mut wallet, &root, &funding_txid).unwrap();
+        let root = state_entity::api::get_smt_root(&wallet.client_shim).unwrap();
+        let proof = state_entity::api::get_smt_proof(&wallet.client_shim, &root, &funding_txid).unwrap();
 
         //ensure wallet's shared key is updated with proof info
         let shared_key = wallet.get_shared_key(&deposit.0).unwrap();
@@ -127,7 +128,7 @@ mod tests {
         let err = state_entity::api::get_statechain(&wallet.client_shim, &String::from("id"));
         assert!(err.is_err());
 
-        let deposit = run_deposit(&mut wallet);
+        let deposit = run_deposit(&mut wallet, &10000);
 
         let state_chain = state_entity::api::get_statechain(&wallet.client_shim, &String::from(deposit.1.clone())).unwrap();
         assert_eq!(state_chain.chain.last().unwrap().data, deposit.5.to_string());
@@ -138,7 +139,7 @@ mod tests {
         spawn_server();
         let mut wallet_sender = gen_wallet();
 
-        let deposit_resp = run_deposit(&mut wallet_sender);
+        let deposit_resp = run_deposit(&mut wallet_sender, &10000);
 
         // transfer
         let mut wallet_receiver = gen_wallet();
@@ -150,14 +151,14 @@ mod tests {
                 &mut wallet_sender,
                 &deposit_resp.0,    // shared wallet id
                 receiver_addr.clone(),
-                None
         ).unwrap();
 
         let new_shared_key_id  =
             state_entity::transfer::transfer_receiver(
                 &mut wallet_receiver,
                 &tranfer_sender_resp,
-            ).unwrap();
+                &None
+            ).unwrap().new_shared_key_id;
 
         // check shared keys have the same master public key
         assert_eq!(
@@ -171,8 +172,8 @@ mod tests {
         assert_eq!(state_chain.chain.last().unwrap().data.to_string(), receiver_addr.proof_key.to_string());
 
         // Get SMT inclusion proof and verify
-        let root = state_entity::api::get_smt_root(&mut wallet_receiver).unwrap();
-        let proof = state_entity::api::get_smt_proof(&mut wallet_receiver, &root, &funding_txid).unwrap();
+        let root = state_entity::api::get_smt_root(&wallet_receiver.client_shim).unwrap();
+        let proof = state_entity::api::get_smt_proof(&wallet_receiver.client_shim, &root, &funding_txid).unwrap();
         //ensure wallet's shared key is updated with proof info
         let shared_key = wallet_receiver.get_shared_key(&new_shared_key_id).unwrap();
         assert_eq!(shared_key.smt_proof.clone().unwrap().root, root);
@@ -181,51 +182,108 @@ mod tests {
     }
 
     #[test]
-    fn test_transfer_batch() {
+    fn test_batch_transfer() {
         spawn_server();
 
-        let mut wallet1 = gen_wallet();
-        let deposit1 = run_deposit(&mut wallet1);
+        let num_participants = 3;
+        let mut amounts = vec!();
+        for i in 0..num_participants {
+            amounts.push(u64::from_str(&format!("{}0000",i+1)).unwrap());
+        }
 
-        let mut wallet2 = gen_wallet();
-        let _ = wallet2.se_proof_keys.get_new_key();
-        let deposit2 = run_deposit(&mut wallet2);
+        // Gen some wallets and deposit coins into SCE from each with amount 10000, 20000, 30000...
+        let mut wallets = vec!();
+        let mut deposits = vec!();
+        for i in 0..num_participants {
+            wallets.push(gen_wallet());
+            for _ in 0..i { // Gen keys so different wallets have different proof keys (since wallets have the same seed)
+                let _ = wallets[i].se_proof_keys.get_new_key();
+            }
+            deposits.push(run_deposit(&mut wallets[i],&amounts[i]));
+        }
 
-        let mut wallet3 = gen_wallet();
-        let _ = wallet3.se_proof_keys.get_new_key();
-        let deposit3 = run_deposit(&mut wallet3);
+        // Check transfers exist
+        for i in 0..num_participants {
+            let (_, bals) = wallets[i].get_state_chain_balances();
+            assert_eq!(bals.len(),1);
+            assert_eq!(bals.last().unwrap().confirmed,amounts[i]);
+        }
 
+
+        // Create new batch transfer ID
         let batch_id = String::from("123456789");
 
-        let transfer_batch_sig1 = state_entity::transfer::transfer_batch_sign(
-            &mut wallet1,
-            &deposit1.1,
-            &batch_id
-        );
-        let transfer_batch_sig2 = state_entity::transfer::transfer_batch_sign(
-            &mut wallet2,
-            &deposit2.1,
-            &batch_id
-        );
-        let transfer_batch_sig3 = state_entity::transfer::transfer_batch_sign(
-            &mut wallet3,
-            &deposit3.1,
-            &batch_id
-        );
+        // Gen transfer-batch signatures for each state chain (each wallet's SCE coins)
+        let mut transfer_sigs = vec!();
+        for i in 0..num_participants {
+            transfer_sigs.push(
+                state_entity::transfer::transfer_batch_sign(
+                    &mut wallets[i],
+                    &deposits[i].1, // state chain id
+                    &batch_id
+                ).unwrap()
+            );
+        }
 
-        println!("transfer_batch_sig1: {:?}",transfer_batch_sig1);
-        println!("transfer_batch_sig2: {:?}",transfer_batch_sig2);
-        println!("transfer_batch_sig3: {:?}",transfer_batch_sig3);
-
-        let sigs = vec!(transfer_batch_sig1.unwrap(),transfer_batch_sig2.unwrap(),transfer_batch_sig3.unwrap());
-
+        // Initiate batch-transfer protocol on SCE
         let transfer_batch_init = state_entity::transfer::transfer_batch_init(
-            &wallet1.client_shim,
-            &sigs,
+            &wallets[0].client_shim,
+            &transfer_sigs,
             &batch_id
         );
-
         assert!(transfer_batch_init.is_ok());
+
+        // Check all marked false (= incomplete)
+        let status_api = state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id);
+        assert!(status_api.is_ok());
+        let mut state_chains_copy = status_api.unwrap().state_chains;
+        state_chains_copy.retain(|_, &mut v| v == false);
+        assert_eq!(state_chains_copy.len(), num_participants);
+
+        // Perform transfers
+        let mut transfer_finalized_datas = vec!();
+        for i in 0..num_participants {
+            let receiver_addr = wallets[i+1%num_participants-1].get_new_state_entity_address(&deposits[i].2).unwrap();
+            let tranfer_sender_resp =
+                state_entity::transfer::transfer_sender(
+                    &mut wallets[i],
+                    &deposits[i].0,    // shared wallet id
+                    receiver_addr.clone(),
+            ).unwrap();
+
+            transfer_finalized_datas.push(
+                state_entity::transfer::transfer_receiver(
+                    &mut wallets[i+1%num_participants-1],
+                    &tranfer_sender_resp,
+                    &Some(batch_id.clone())
+                ).unwrap());
+        }
+
+        // Check all marked true (= complete)
+        let status_api = state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id);
+        let mut state_chains_copy = status_api.unwrap().state_chains;
+        state_chains_copy.retain(|_, &mut v| v == false);
+        assert_eq!(state_chains_copy.len(), 0);
+
+        // Finalize transfers in wallets now that StateEntity has finalized the transfers
+        transfer_finalized_datas.rotate_left(1); // rotate back to match with wallets vec
+                                                 //(items pushed to this vec in i+1 order)
+        for i in 0..num_participants {
+            let _ = state_entity::transfer::transfer_receiver_finalize(
+                &mut wallets[i],
+                transfer_finalized_datas[i].clone()
+            ).unwrap();
+        }
+
+        // Check amounts have correctly rotated
+        amounts.rotate_left(1);
+        for i in 0..num_participants {
+            let (_, bals) = wallets[i].get_state_chain_balances();
+            assert_eq!(bals.len(),1);
+            assert_eq!(
+                bals.last().unwrap().confirmed,
+                amounts[i]);
+        }
     }
 
     #[test]
@@ -233,7 +291,7 @@ mod tests {
         spawn_server();
         let mut wallet = gen_wallet();
 
-        let deposit_resp = run_deposit(&mut wallet);
+        let deposit_resp = run_deposit(&mut wallet, &10000);
 
         // check withdraw method completes without Err
         state_entity::withdraw::withdraw(&mut wallet, &deposit_resp.0)
@@ -258,7 +316,7 @@ mod tests {
         spawn_server();
 
         let mut wallet = gen_wallet();
-        run_deposit(&mut wallet);
+        run_deposit(&mut wallet, &10000);
 
         let wallet_json = wallet.to_json();
         let wallet_rebuilt = wallet::wallet::Wallet::from_json(wallet_json, ClientShim::new("http://localhost:8000".to_string(), None), Box::new(MockElectrum::new())).unwrap();

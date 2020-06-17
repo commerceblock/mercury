@@ -8,7 +8,7 @@ use curv::{FE, GE, BigInt, PK};
 use kms::ecdsa::two_party::party2;
 use bitcoin::{Transaction, OutPoint};
 
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 /// State Entity protocols
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -36,11 +36,17 @@ impl fmt::Display for StateEntityFeeInfoAPI {
 }
 
 /// /info/statechain return struct
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StateChainDataAPI {
     pub utxo: OutPoint,
     pub amount: u64,
     pub chain: Vec<State>
+}
+
+/// /info/transfer-batch return struct
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TransferBatchDataAPI {
+    pub state_chains: HashMap<String, bool>
 }
 
 
@@ -111,8 +117,7 @@ pub struct StateEntityAddress {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMsg1 {
     pub shared_key_id: String,
-    pub state_chain_sig: StateChainSig,
-    pub batch_id: Option<String>
+    pub state_chain_sig: StateChainSig
 }
 /// SE -> Sender
 #[derive(Serialize, Deserialize, Debug)]
@@ -120,7 +125,7 @@ pub struct TransferMsg2 {
     pub x1: FE,
 }
 /// Sender -> Receiver
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferMsg3 {
     pub shared_key_id: String,
     pub t1: FE, // t1 = o1x1
@@ -137,7 +142,8 @@ pub struct TransferMsg4 {
     pub shared_key_id: String,
     pub t2: FE, // t2 = t1*o2_inv = o1*x1*o2_inv
     pub state_chain_sig: StateChainSig,
-    pub o2_pub: GE
+    pub o2_pub: GE,
+    pub batch_id: Option<String>
 }
 
 /// State Entity -> Receiver

@@ -3,10 +3,10 @@
 //! API calls availble for Client to State Entity
 
 use super::super::Result;
-use shared_lib::structs::{StateChainDataAPI, SmtProofMsgAPI, StateEntityFeeInfoAPI};
+use shared_lib::structs::{StateChainDataAPI, SmtProofMsgAPI, StateEntityFeeInfoAPI, TransferBatchDataAPI};
 use shared_lib::Root;
 
-use crate::{ClientShim, wallet::wallet::Wallet};
+use crate::ClientShim;
 use super::super::utilities::requests;
 
 use monotree::Proof;
@@ -22,15 +22,20 @@ pub fn get_statechain(client_shim: &ClientShim, state_chain_id: &String) -> Resu
 }
 
 /// Get state entity's sparse merkle tree root
-pub fn get_smt_root(wallet: &mut Wallet) -> Result<Root> {
-    requests::post(&wallet.client_shim,&format!("/info/root"))
+pub fn get_smt_root(client_shim: &ClientShim) -> Result<Root> {
+    requests::post(&client_shim,&format!("/info/root"))
 }
 
 /// Get state chain inclusion proof
-pub fn get_smt_proof(wallet: &mut Wallet, root: &Root, funding_txid: &String) -> Result<Option<Proof>> {
+pub fn get_smt_proof(client_shim: &ClientShim, root: &Root, funding_txid: &String) -> Result<Option<Proof>> {
     let smt_proof_msg = SmtProofMsgAPI {
         root: root.clone(),
         funding_txid: funding_txid.clone()
     };
-    requests::postb(&wallet.client_shim,&format!("info/proof"),smt_proof_msg)
+    requests::postb(&client_shim,&format!("info/proof"),smt_proof_msg)
+}
+
+/// Get transaction batch session status
+pub fn get_transfer_batch_status(client_shim: &ClientShim, batch_id: &String) -> Result<TransferBatchDataAPI> {
+    requests::post(client_shim,&format!("info/transfer-batch/{}",batch_id))
 }

@@ -87,6 +87,7 @@ pub fn get_server() -> Rocket {
                 state_entity::get_smt_root,
                 state_entity::get_smt_proof,
                 state_entity::get_state_entity_fees,
+                state_entity::get_transfer_batch_status,
                 state_entity::deposit_init,
                 state_entity::deposit_confirm,
                 state_entity::prepare_sign_tx,

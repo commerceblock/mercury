@@ -95,8 +95,18 @@ pub struct TransferData {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferBatchData {
     pub id: String,
-    pub state_chains: HashMap<String, bool>
+    pub state_chains: HashMap<String, bool>,
+    pub finalized_data: Vec<TransferFinalizeData>
 }
+/// Struct holds data when transfer is complete but not yet finalized
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TransferFinalizeData {
+    pub new_shared_key_id: String,
+    pub state_chain_id: String,
+    pub state_chain_sig: StateChainSig,
+    pub s2: FE
+}
+
 
 /// API: Return StateEntity fee information.
 #[post("/info/fee", format = "json")]
@@ -149,6 +159,35 @@ pub fn get_smt_root(
     state: State<Config>,
 ) -> Result<Json<Root>> {
     Ok(Json(get_current_root::<Root>(&state.db)?))
+}
+
+/// API: Return TransferBatchData status. Triggers check for all transfers complete - if so then finalize all.
+#[post("/info/transfer-batch/<batch_id>", format = "json")]
+pub fn get_transfer_batch_status(
+    state: State<Config>,
+    claim: Claims,
+    batch_id: String,
+) -> Result<Json<TransferBatchDataAPI>> {
+    let transfer_batch_data: TransferBatchData =
+        db::get(&state.db, &claim.sub, &batch_id, &StateEntityStruct::TransferBatchData)?
+            .ok_or(SEError::DBError(NoDataForID, batch_id.clone()))?;
+
+    // Check if all transfers are complete. If so then all transfers in batch can be finalized.
+    let mut state_chains_copy = transfer_batch_data.state_chains.clone();
+    state_chains_copy.retain(|_, &mut v| v == false);
+    if state_chains_copy.len() == 0 {
+        debug!("All trtansfers complete in batch {}. Finalizing...", batch_id);
+        finalize_batch(
+            &state,
+            &claim,
+            &batch_id
+        )?;
+    }
+
+    // return status of transfers
+    Ok(Json(TransferBatchDataAPI{
+        state_chains: transfer_batch_data.state_chains,
+    }))
 }
 
 
@@ -445,11 +484,6 @@ pub fn transfer_sender(
         return Err(SEError::Generic(String::from("Transfer Error: User does not own a state chain.")));
     }
 
-    // If batch transfer mark Statechain as "sent" in TransferBatchData.
-    if transfer_msg1.batch_id.is_some() {
-
-    }
-
     // Generate x1
     let x1: FE = ECScalar::new_random();
 
@@ -535,18 +569,38 @@ pub fn transfer_receiver(
     // Create user ID for new UserSession (receiver of transfer)
     let new_shared_key_id = Uuid::new_v4().to_string();
 
-    if state_chain_sig.purpose == String::from("TRANSFER-BATCH") {
-        // Set transfer as complete in TransferBatchData
+    let state_chain_id = transfer_data.state_chain_id.clone();
+    let finalized_data = TransferFinalizeData {
+        new_shared_key_id: new_shared_key_id.clone(),
+        state_chain_id: state_chain_id.clone(),
+        state_chain_sig,
+        s2
+    };
 
+    // If batch transfer then mark StateChain as complete and store finalized data in TransferBatchData.
+    // This is so the transfers can be finalized when all transfers in the batch are complete.
+    if transfer_msg4.batch_id.is_some() {
+        let batch_id = transfer_msg4.batch_id.clone().unwrap();
+        let mut transfer_batch_data: TransferBatchData =
+            db::get(&state.db, &claim.sub, &batch_id, &StateEntityStruct::TransferBatchData)?
+                .ok_or(SEError::DBError(NoDataForID, batch_id.clone()))?;
+
+        transfer_batch_data.state_chains.insert(state_chain_id, true);
+        transfer_batch_data.finalized_data.push(finalized_data);
+        db::insert(
+            &state.db,
+            &claim.sub,
+            &batch_id,
+            &StateEntityStruct::TransferBatchData,
+            &transfer_batch_data
+        )?;
+    // If not batch then finalize transfer now
     } else {
         // Update DB and SMT with new transfer data
         transfer_finalize(
             &state,
             &claim,
-            &new_shared_key_id,
-            &transfer_data.state_chain_id,
-            &state_chain_sig,
-            s2
+            &finalized_data
         )?;
     }
 
@@ -560,28 +614,51 @@ pub fn transfer_receiver(
     ))
 }
 
+/// Finalize all transfers in a batch.
+pub fn finalize_batch(
+    state: &State<Config>,
+    claim: &Claims,
+    batch_id: &String
+) -> Result<()> {
+    let transfer_batch_data: TransferBatchData =
+        db::get(&state.db, &claim.sub, &batch_id, &StateEntityStruct::TransferBatchData)?
+            .ok_or(SEError::DBError(NoDataForID, batch_id.clone()))?;
+
+    if transfer_batch_data.state_chains.len() != transfer_batch_data.finalized_data.len() {
+        // Because a user has transferred twice? Prevent this somehow
+        return Err(SEError::Generic(String::from("TransferBatchData has unequal finalized data to state chains.")))
+    }
+
+    for finalized_data in transfer_batch_data.finalized_data {
+        transfer_finalize(
+            &state,
+            &claim,
+            &finalized_data
+        )?;
+    }
+
+    Ok(())
+}
+
 /// Update DB and SMT after successful transfer.
 /// This function is called immediately in the regular transfer case or after confirmation of atomic
 /// transfers completion in the batch transfer case.
 pub fn transfer_finalize(
     state: &State<Config>,
     claim: &Claims,
-    new_shared_key_id: &String,
-    state_chain_id: &String,
-    state_chain_sig: &StateChainSig,
-    s2: FE
+    finalized_data: &TransferFinalizeData
 ) -> Result<()> {
     // Update state chain
     let mut state_chain: StateChain =
-        db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
-            .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
+        db::get(&state.db, &claim.sub, &finalized_data.state_chain_id, &StateEntityStruct::StateChain)?
+            .ok_or(SEError::DBError(NoDataForID, finalized_data.state_chain_id.clone()))?;
 
-    state_chain.add(state_chain_sig.to_owned())?;
+    state_chain.add(finalized_data.state_chain_sig.to_owned())?;
 
     db::insert(
         &state.db,
         &claim.sub,
-        &state_chain_id,
+        &finalized_data.state_chain_id,
         &StateEntityStruct::StateChain,
         &state_chain
     )?;
@@ -590,17 +667,17 @@ pub fn transfer_finalize(
     db::insert(
         &state.db,
         &claim.sub,
-        &new_shared_key_id,
+        &finalized_data.new_shared_key_id,
         &StateEntityStruct::UserSession,
         &UserSession {
-            id: new_shared_key_id.clone(),
+            id: finalized_data.new_shared_key_id.clone(),
             auth: String::from("auth"),
-            proof_key: state_chain_sig.data.to_owned(),
+            proof_key: finalized_data.state_chain_sig.data.to_owned(),
             tx_backup: Some(state_chain.tx_backup.clone()),
             tx_withdraw: None,
             sig_hash: None,
-            state_chain_id: Some(state_chain_id.to_owned()),
-            s2: Some(s2),
+            state_chain_id: Some(finalized_data.state_chain_id.to_owned()),
+            s2: Some(finalized_data.s2),
             withdraw_sc_sig: None
         }
     )?;
@@ -653,6 +730,7 @@ pub fn transfer_batch_init(
         &TransferBatchData {
             id: transfer_batch_init_msg.batch_id.clone(),
             state_chains,
+            finalized_data: vec!()
         }
     )?;
 
