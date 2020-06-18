@@ -29,7 +29,7 @@ use rocket::State;
 use uuid::Uuid;
 use db::{DB_SC_LOC, update_root};
 use std::{thread,
-    time::{SystemTime,Duration}};
+    time::Duration};
 
 /// Initiliase deposit protocol:
 ///     - Generate and return shared wallet ID

@@ -12,11 +12,12 @@ extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 
-pub mod util;
-pub mod error;
-pub mod structs;
-pub mod state_chain;
 pub mod mocks;
+pub mod error;
+pub mod state_chain;
+pub mod structs;
+pub mod commitment;
+pub mod util;
 
 type Result<T> = std::result::Result<T, error::SharedLibError>;
 

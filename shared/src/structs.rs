@@ -143,7 +143,7 @@ pub struct TransferMsg4 {
     pub t2: FE, // t2 = t1*o2_inv = o1*x1*o2_inv
     pub state_chain_sig: StateChainSig,
     pub o2_pub: GE,
-    pub batch_id: Option<String>
+    pub batch_data: Option<BatchData>
 }
 
 /// State Entity -> Receiver
@@ -156,15 +156,15 @@ pub struct TransferMsg5 {
 /// Coordinator -> StateEntity
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferBatchInitMsg {
-    pub batch_id: String,
+    pub id: String,
     pub signatures: Vec<StateChainSig>,
 }
 
 /// Data present if transfer is part of an atomic batch transfer
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BatchData {
-    pub batch_id: String,
-    // pub commitment:      // Commitment to transfer input UTXO in case of protocol failure
+    pub id: String,
+    pub commitment: String   // Commitment to transfer input UTXO in case of protocol failure
 }
 
 

@@ -12,7 +12,7 @@ use shared_lib::{
     state_chain::*,
     Root};
 
-use crate::routes::transfer::{batch_punish_failures, finalize_batch};
+use crate::routes::transfer::finalize_batch;
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::storage::db::{get_root, get_current_root};
 
@@ -94,7 +94,8 @@ pub struct TransferFinalizeData {
     pub new_shared_key_id: String,
     pub state_chain_id: String,
     pub state_chain_sig: StateChainSig,
-    pub s2: FE
+    pub s2: FE,
+    pub batch_data: Option<BatchData>,
 }
 
 /// Check if user has passed authentication.
@@ -110,6 +111,21 @@ pub fn check_user_auth(
         &id,
         &StateEntityStruct::UserSession).unwrap()
     .ok_or(SEError::AuthError)
+}
+
+// Set state chain time-out
+pub fn punish_state_chain(
+    state: State<Config>,
+    claim: Claims,
+    state_chain_id: String
+) -> Result<()> {
+    let _state_chain: TransferBatchData =
+        db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
+            .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
+    // if already punished - error: this shouldnt be possible
+
+    // set punishent
+    Ok(())
 }
 
 /// API: Return StateEntity fee information.

@@ -18,12 +18,16 @@
 
 use super::super::Result;
 
-use shared_lib::{state_chain::StateChainSig, structs::{TransferMsg3, StateEntityAddress, TransferMsg2, Protocol, TransferMsg1, StateChainDataAPI, TransferMsg5, TransferMsg4, TransferBatchInitMsg, PrepareSignTxMsg}};
+use shared_lib::{
+    state_chain::StateChainSig,
+    structs::*};
 use crate::error::{CError, WalletErrorType::KeyMissingData};
-use crate::wallet::wallet::Wallet;
-use crate::wallet::key_paths::funding_txid_to_int;
-use crate::state_entity::util::{cosign_tx_input,verify_statechain_smt};
-use crate::state_entity::api::{get_smt_proof, get_smt_root, get_statechain};
+use crate::wallet::{
+    wallet::Wallet,
+    key_paths::funding_txid_to_int};
+use crate::state_entity::{
+    util::{cosign_tx_input,verify_statechain_smt},
+    api::{get_smt_proof, get_smt_root, get_statechain}};
 use crate::{ClientShim, utilities::requests};
 
 use bitcoin::{PublicKey, Address};
@@ -107,7 +111,7 @@ pub fn transfer_sender(
 pub fn transfer_receiver(
     wallet: &mut Wallet,
     transfer_msg3: &TransferMsg3,
-    batch_id: &Option<String>
+    batch_data: &Option<BatchData>
 ) -> Result<TransferFinalizeData> {
     // Get statechain data (will Err if statechain not yet finalized)
     let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &transfer_msg3.state_chain_id)?;
@@ -123,7 +127,7 @@ pub fn transfer_receiver(
     let mut o2 = FE::zero();
     let mut num_tries = 0;
     while !done {
-        match try_o2(wallet, &state_chain_data, transfer_msg3, &num_tries, batch_id) {
+        match try_o2(wallet, &state_chain_data, transfer_msg3, &num_tries, batch_data) {
             Ok(success_resp) => {
                 o2 = success_resp.0.clone();
                 transfer_msg5 = success_resp.1.clone();
@@ -151,7 +155,7 @@ pub fn transfer_receiver(
     };
 
     // In batch case this step is performed once all other transfers in the batch are complete.
-    if batch_id.is_none() {
+    if batch_data.is_none() {
         // Finalize protocol run by generating new shared key and updating wallet.
         transfer_receiver_finalize(
             wallet,
@@ -165,7 +169,7 @@ pub fn transfer_receiver(
 // Constraint on s2 size means that some (most) o2 values are not valid for the lindell_2017 protocol.
 // We must generate random o2, test if the resulting s2 is valid and try again if not.
 /// Carry out transfer_receiver() protocol with a randomly generated o2 value.
-pub fn try_o2(wallet: &mut Wallet, state_chain_data: &StateChainDataAPI, transfer_msg3: &TransferMsg3, num_tries: &u32, batch_id: &Option<String>) -> Result<(FE,TransferMsg5)>{
+pub fn try_o2(wallet: &mut Wallet, state_chain_data: &StateChainDataAPI, transfer_msg3: &TransferMsg3, num_tries: &u32, batch_data: &Option<BatchData>) -> Result<(FE,TransferMsg5)>{
     // generate o2 private key and corresponding 02 public key
     let mut encoded_txid = num_tries.to_string();
     encoded_txid.push_str(&state_chain_data.utxo.txid.to_string());
@@ -192,7 +196,7 @@ pub fn try_o2(wallet: &mut Wallet, state_chain_data: &StateChainDataAPI, transfe
             t2, // should be encrypted
             state_chain_sig: transfer_msg3.state_chain_sig.clone(),
             o2_pub,
-            batch_id: batch_id.to_owned()
+            batch_data: batch_data.to_owned()
         })?;
     Ok((o2,transfer_msg5))
 }
@@ -257,7 +261,7 @@ pub fn transfer_batch_sign(wallet: &mut Wallet, state_chain_id: &String, batch_i
     let proof_key_derivation = wallet.se_proof_keys.get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap());
     Ok(StateChainSig::new(
         &proof_key_derivation.unwrap().private_key.key,
-        &format!("TRANSFER_BATCH:{:?}",batch_id),
+        &format!("TRANSFER_BATCH:{}",batch_id.to_owned()),
         &state_chain_id
     )?)
 }
@@ -266,7 +270,7 @@ pub fn transfer_batch_sign(wallet: &mut Wallet, state_chain_id: &String, batch_i
 pub fn transfer_batch_init(client_shim: &ClientShim, signatures: &Vec<StateChainSig>, batch_id: &String) -> Result<()> {
     requests::postb(&client_shim,&format!("transfer/batch/init  "),
         &TransferBatchInitMsg {
-            batch_id: batch_id.clone(),
+            id: batch_id.clone(),
             signatures: signatures.clone()
         }
     )
