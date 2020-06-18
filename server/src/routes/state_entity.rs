@@ -476,6 +476,11 @@ pub fn transfer_sender(
     // Verification/PoW/authoriation failed
     // Err(SEError::AuthError)
 
+    // Ensure transfer has not already been completed (but not finalized)
+    if db::get::<TransferData>(&state.db, &claim.sub, &transfer_msg1.shared_key_id, &StateEntityStruct::TransferData)?.is_some() {
+        return Err(SEError::Generic(String::from("Transfer already completed.")));
+    }
+
     // Get state_chain id
     let user_session: UserSession =
         db::get(&state.db, &claim.sub, &transfer_msg1.shared_key_id, &StateEntityStruct::UserSession)?
@@ -705,8 +710,21 @@ pub fn transfer_batch_init(
     claim: Claims,
     transfer_batch_init_msg: Json<TransferBatchInitMsg>
 ) -> Result<Json<()>> {
+    // Ensure sigs purpose is for batch transfer
+    for sig in &transfer_batch_init_msg.signatures {
+        if !sig.purpose.contains("TRANSFER_BATCH") {
+            return Err(SEError::Generic(String::from("Signture's purpose is not valid for batch transfer.")));
+        }
+    }
+
     let mut state_chains = HashMap::new();
+    let batch_id = &transfer_batch_init_msg.signatures[0].purpose[15..];
     for sig in transfer_batch_init_msg.signatures.clone() {
+        // Ensure sig is for same batch as others
+        if !sig.purpose.contains(batch_id) {
+            return Err(SEError::Generic(String::from("Batch id is not identical for all signtures.")));
+        }
+
         // Verify sig
         let state_chain: StateChain =
             db::get(&state.db, &claim.sub, &sig.data, &StateEntityStruct::StateChain)?
