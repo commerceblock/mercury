@@ -1,10 +1,9 @@
-use super::super::auth::jwt::Claims;
-use super::super::storage::db;
-use super::super::Config;
-use super::super::Result;
+use super::super::{{Result,Config},
+    auth::jwt::Claims,
+    storage::db};
 
 use crate::error::{DBErrorType::NoDataForID, SEError};
-use crate::routes::state_entity::{check_user_auth, StateEntityStruct, UserSession};
+use crate::routes::util::{check_user_auth, StateEntityStruct, UserSession};
 use shared_lib::{
     structs::{Protocol, SignSecondMsgRequest},
     util::reverse_hex_str,
