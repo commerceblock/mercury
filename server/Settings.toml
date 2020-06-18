@@ -15,3 +15,5 @@ testing_mode = "true"
 fee_address = "bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x"
 fee_deposit = 300
 fee_withdraw = 300
+
+batch_lifetime = "3600" # 1 hour

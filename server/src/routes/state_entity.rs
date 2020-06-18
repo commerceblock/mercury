@@ -36,7 +36,9 @@ use rocket_contrib::json::Json;
 use rocket::State;
 use uuid::Uuid;
 use db::{DB_SC_LOC, update_root};
-use std::{thread, time, collections::HashMap};
+use std::{thread,
+    time::{SystemTime,Duration},
+    collections::HashMap};
 
 
 /// Structs for DB storage.
@@ -95,6 +97,7 @@ pub struct TransferData {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferBatchData {
     pub id: String,
+    pub start_time: SystemTime, // time batch transfer began
     pub state_chains: HashMap<String, bool>,
     pub finalized_data: Vec<TransferFinalizeData>
 }
@@ -161,7 +164,9 @@ pub fn get_smt_root(
     Ok(Json(get_current_root::<Root>(&state.db)?))
 }
 
-/// API: Return TransferBatchData status. Triggers check for all transfers complete - if so then finalize all.
+/// API: Return a TransferBatchData status.
+/// Triggers check for all transfers complete - if so then finalize all.
+/// Also triggers check for batch transfer lifetime. If passed then cancel all transfers and punish state chains.
 #[post("/info/transfer-batch/<batch_id>", format = "json")]
 pub fn get_transfer_batch_status(
     state: State<Config>,
@@ -172,11 +177,16 @@ pub fn get_transfer_batch_status(
         db::get(&state.db, &claim.sub, &batch_id, &StateEntityStruct::TransferBatchData)?
             .ok_or(SEError::DBError(NoDataForID, batch_id.clone()))?;
 
+    // Check batch is still within lifetime
+    if SystemTime::now().duration_since(transfer_batch_data.start_time)?.as_secs() > state.batch_lifetime {
+        return Err(SEError::Generic(String::from("Transfer Batch cancelled due to time-out.")))
+    }
+
     // Check if all transfers are complete. If so then all transfers in batch can be finalized.
     let mut state_chains_copy = transfer_batch_data.state_chains.clone();
     state_chains_copy.retain(|_, &mut v| v == false);
     if state_chains_copy.len() == 0 {
-        debug!("All trtansfers complete in batch {}. Finalizing...", batch_id);
+        debug!("All transfers complete in batch {}. Finalizing...", batch_id);
         finalize_batch(
             &state,
             &claim,
@@ -374,16 +384,16 @@ pub fn verify_tx_confirmed(tx_hash: &String, state: &State<Config>) -> Result<()
                     if is_mined > 9 {
                         return Err(SEError::Generic(String::from("Funding transaction failure to be mined - consider increasing the fee. Deposit failed.")));
                     }
-                    thread::sleep(time::Duration::from_millis(state.block_time)); //
+                    thread::sleep(Duration::from_millis(state.block_time)); //
                 } else { // If confs increase then wait 6*(block time) and return Ok()
                     debug!("Funding transaction mined. Waiting for 6 blocks confirmation.");
-                    thread::sleep(time::Duration::from_millis(6*state.block_time)); //
+                    thread::sleep(Duration::from_millis(6*state.block_time)); //
                     return Ok(())
                 }
             },
             Err(_) => {
                 is_broadcast += 1;
-                thread::sleep(time::Duration::from_millis(state.block_time));
+                thread::sleep(Duration::from_millis(state.block_time));
             }
         }
     }
@@ -747,6 +757,7 @@ pub fn transfer_batch_init(
         &StateEntityStruct::TransferBatchData,
         &TransferBatchData {
             id: transfer_batch_init_msg.batch_id.clone(),
+            start_time: SystemTime::now(),
             state_chains,
             finalized_data: vec!()
         }

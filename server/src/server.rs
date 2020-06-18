@@ -25,6 +25,7 @@ impl Config {
             fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
             fee_withdraw: settings.get("fee_withdraw").unwrap().parse::<u64>().unwrap(),
             block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
+            batch_lifetime: settings.get("batch_lifetime").unwrap().parse::<u64>().unwrap(),
         }
     }
 }

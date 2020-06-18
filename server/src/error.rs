@@ -11,6 +11,7 @@ use rocket::response::Responder;
 use std::error;
 use std::fmt;
 use std::io::Cursor;
+use std::time::SystemTimeError;
 use monotree::Errors as MonotreeErrors;
 use bitcoin::secp256k1::Error as SecpError;
 
@@ -53,6 +54,12 @@ impl From<MonotreeErrors> for SEError {
 impl From<SecpError> for SEError {
     fn from(e: SecpError) -> SEError {
         SEError::SigningError(e.to_string())
+    }
+}
+
+impl From<SystemTimeError> for SEError {
+    fn from(e: SystemTimeError) -> SEError {
+        SEError::Generic(e.to_string())
     }
 }
 
