@@ -24,7 +24,7 @@ use monotree::Proof;
 use rocket_contrib::json::Json;
 use rocket::State;
 use db::DB_SC_LOC;
-use std::{collections::HashMap, time::SystemTime};
+use std::{collections::HashMap, time::{Duration, SystemTime}};
 
 
 /// Structs for DB storage.
@@ -86,8 +86,18 @@ pub struct TransferBatchData {
     pub start_time: SystemTime, // time batch transfer began
     pub state_chains: HashMap<String, bool>,
     pub finalized_data: Vec<TransferFinalizeData>,
-    pub punished_state_chains: Option<Vec<String>> // If transfer batch fails these state chain Id's were punished.
+    pub punished_state_chains: Vec<String> // If transfer batch fails these state chain Id's were punished.
 }
+
+impl TransferBatchData {
+    pub fn is_ended(&self, batch_lifetime: &u64) -> bool {
+        if SystemTime::now().duration_since(self.start_time).unwrap().as_secs() > *batch_lifetime {
+            true;
+        }
+        false
+    }
+}
+
 /// Struct holds data when transfer is complete but not yet finalized
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferFinalizeData {
@@ -115,16 +125,29 @@ pub fn check_user_auth(
 
 // Set state chain time-out
 pub fn punish_state_chain(
-    state: State<Config>,
-    claim: Claims,
+    state: &State<Config>,
+    claim: &Claims,
     state_chain_id: String
 ) -> Result<()> {
-    let _state_chain: TransferBatchData =
+    let mut state_chain: StateChain =
         db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
             .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
-    // if already punished - error: this shouldnt be possible
 
-    // set punishent
+    if state_chain.is_locked().is_err() {
+        return Err(SEError::Generic(String::from("State chain is already locked. This should not be possible.")));
+    }
+
+    // set punishment
+    state_chain.locked_until = SystemTime::now() + Duration::from_secs(state.punishment_duration);
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &state_chain_id,
+        &StateEntityStruct::StateChain,
+        &state_chain
+    )?;
+
+
     Ok(())
 }
 
@@ -191,16 +214,21 @@ pub fn get_transfer_batch_status(
     claim: Claims,
     batch_id: String,
 ) -> Result<Json<TransferBatchDataAPI>> {
-    let transfer_batch_data: TransferBatchData =
+    let mut transfer_batch_data: TransferBatchData =
         db::get(&state.db, &claim.sub, &batch_id, &StateEntityStruct::TransferBatchData)?
             .ok_or(SEError::DBError(NoDataForID, batch_id.clone()))?;
 
     // Check batch is still within lifetime
-    if SystemTime::now().duration_since(transfer_batch_data.start_time)?.as_secs() > state.batch_lifetime {
-        if transfer_batch_data.punished_state_chains.is_none() {
-            // batch_punish_failures(transfer_batch_data);
+    if transfer_batch_data.is_ended(&state.batch_lifetime) {
+        if transfer_batch_data.punished_state_chains.len() == 0 { // Punishments not yet set
+            // Set punishments for all statechains involved in batch
+            for (state_chain_id, _) in transfer_batch_data.state_chains {
+                punish_state_chain(&state, &claim, state_chain_id.clone())?;
+                transfer_batch_data.punished_state_chains.push(state_chain_id);
+            }
+            debug!("Punished all state chains in failed batch. ID:{}",transfer_batch_data.id);
         }
-        return Err(SEError::Generic(String::from("Transfer Batch cancelled due to time-out.")))
+        return Err(SEError::Generic(String::from("Transfer Batch ended.")))
     }
 
     // Check if all transfers are complete. If so then all transfers in batch can be finalized.
@@ -220,7 +248,6 @@ pub fn get_transfer_batch_status(
         state_chains: transfer_batch_data.state_chains,
     }))
 }
-
 
 
 /// Prepare to co-sign a transaction input. This is where SE checks that the tx to be signed is

@@ -10,7 +10,7 @@ extern crate shared_lib;
 use shared_lib::{
     structs::*,
     state_chain::*,
-    Root};
+    Root, commitment::verify_commitment};
 use crate::routes::util::*;
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::routes::ecdsa;
@@ -160,6 +160,11 @@ pub fn transfer_receiver(
             db::get(&state.db, &claim.sub, &batch_id, &StateEntityStruct::TransferBatchData)?
                 .ok_or(SEError::DBError(NoDataForID, batch_id.clone()))?;
 
+        // Ensure batch transfer is still active
+        if transfer_batch_data.is_ended(&state.batch_lifetime) {
+            return Err(SEError::Generic(String::from("Transfer batch ended. Too late to complete transfer.")));
+        }
+
         transfer_batch_data.state_chains.insert(state_chain_id, true);
         transfer_batch_data.finalized_data.push(finalized_data);
         db::insert(
@@ -295,7 +300,7 @@ pub fn transfer_batch_init(
             start_time: SystemTime::now(),
             state_chains,
             finalized_data: vec!(),
-            punished_state_chains: None
+            punished_state_chains: vec!()
         }
     )?;
 
@@ -328,17 +333,59 @@ pub fn finalize_batch(
 }
 
 
-pub fn batch_punish_failures(
-    _state: State<Config>,
-    _claim: Claims,
-    transfer_batch_data: TransferBatchData
-) {
-    for (_state_chain, complete) in transfer_batch_data.state_chains {
-        if !complete {
-            // punish_state_chain(state, claim, state_chain);
-        }
+/// API: Reveal a nonce for a corresponding commitment
+#[post("/info/transfer/batch/reveal", format = "json", data = "<transfer_reveal_nonce>")]
+pub fn transfer_reveal_nonce(
+    state: State<Config>,
+    claim: Claims,
+    transfer_reveal_nonce: Json<TransferRevealNonce>,
+) -> Result<Json<()>> {
+    let mut transfer_batch_data: TransferBatchData =
+        db::get(&state.db, &claim.sub, &transfer_reveal_nonce.batch_id, &StateEntityStruct::TransferBatchData)?
+            .ok_or(SEError::DBError(NoDataForID, transfer_reveal_nonce.batch_id.clone()))?;
+
+    if !transfer_batch_data.is_ended(&state.batch_lifetime) {
+        return Err(SEError::Generic(String::from("Transfer Batch still live.")));
+    }
+    if transfer_batch_data.state_chains.get(&transfer_reveal_nonce.state_chain_id).is_none() {
+        return Err(SEError::Generic(String::from("State chain ID not in this batch.")));
     }
 
-    // debug!("Punished the following state chains for failing to complete transfers in batch {}.\n{}"
-    //     ,transfer_batch_data.id, )
+    verify_commitment(
+        &transfer_reveal_nonce.hash,
+        &transfer_reveal_nonce.state_chain_id,
+        &transfer_reveal_nonce.nonce,
+    )?;
+
+    // If state chain completed + commitment revealed then punishment can be removed from state chain
+    if *transfer_batch_data.state_chains.get(&transfer_reveal_nonce.state_chain_id).unwrap() {
+        let mut state_chain: StateChain =
+            db::get(&state.db, &claim.sub, &transfer_reveal_nonce.state_chain_id, &StateEntityStruct::StateChain)?
+                .ok_or(SEError::DBError(NoDataForID, transfer_reveal_nonce.state_chain_id.clone()))?;
+
+        state_chain.locked_until = SystemTime::now();
+        db::insert(
+            &state.db,
+            &claim.sub,
+            &transfer_reveal_nonce.state_chain_id,
+            &StateEntityStruct::StateChain,
+            &state_chain
+        )?;
+
+        // remove from transfer batch punished list
+        transfer_batch_data.punished_state_chains.retain(|x| x != &transfer_reveal_nonce.state_chain_id);
+
+        debug!("Commitment revealed for state chain ID {} in batch ID: {}",
+            transfer_reveal_nonce.state_chain_id, transfer_reveal_nonce.batch_id);
+    }
+
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &transfer_reveal_nonce.batch_id,
+        &StateEntityStruct::TransferBatchData,
+        &transfer_batch_data
+    )?;
+
+    Ok(Json(()))
 }

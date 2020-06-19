@@ -160,6 +160,15 @@ pub struct TransferBatchInitMsg {
     pub signatures: Vec<StateChainSig>,
 }
 
+/// User -> State Entity
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TransferRevealNonce {
+    pub batch_id: String,
+    pub hash: String,
+    pub state_chain_id: String,
+    pub nonce: [u8;32],
+}
+
 /// Data present if transfer is part of an atomic batch transfer
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BatchData {
