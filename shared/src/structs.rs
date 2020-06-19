@@ -140,6 +140,7 @@ pub struct TransferMsg3 {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMsg4 {
     pub shared_key_id: String,
+    pub state_chain_id: String,
     pub t2: FE, // t2 = t1*o2_inv = o1*x1*o2_inv
     pub state_chain_sig: StateChainSig,
     pub o2_pub: GE,

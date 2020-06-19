@@ -45,18 +45,28 @@ pub fn transfer_sender(
     // Verification/PoW/authoriation failed
     // Err(SEError::AuthError)
 
-    // Ensure transfer has not already been completed (but not finalized)
-    if db::get::<TransferData>(&state.db, &claim.sub, &transfer_msg1.shared_key_id, &StateEntityStruct::TransferData)?.is_some() {
-        return Err(SEError::Generic(String::from("Transfer already completed.")));
-    }
-
     // Get state_chain id
     let user_session: UserSession =
         db::get(&state.db, &claim.sub, &transfer_msg1.shared_key_id, &StateEntityStruct::UserSession)?
             .ok_or(SEError::DBError(NoDataForID, transfer_msg1.shared_key_id.clone()))?;
-    if user_session.state_chain_id.is_none() {
-        return Err(SEError::Generic(String::from("Transfer Error: User does not own a state chain.")));
+    let state_chain_id =  user_session.state_chain_id
+        .ok_or(SEError::Generic(String::from("Transfer Error: User does not own a state chain.")))?;
+
+    // Ensure transfer has not already been completed (but not finalized)
+    match db::get::<TransferData>(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::TransferData)? {
+        None => {},
+        Some(transfer_data) => {
+            if !transfer_data.archive {
+                return Err(SEError::Generic(String::from("Transfer already completed.")));
+            }
+        }
     }
+
+    // Check if state chain is locked
+    let state_chain: StateChain =
+        db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
+            .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
+    state_chain.is_locked()?;
 
     // Generate x1
     let x1: FE = ECScalar::new_random();
@@ -65,16 +75,17 @@ pub fn transfer_sender(
     db::insert(
         &state.db,
         &claim.sub,
-        &transfer_msg1.shared_key_id,
+        &state_chain_id,
         &StateEntityStruct::TransferData,
         &TransferData {
-            state_chain_id: user_session.state_chain_id.clone().unwrap(),
+            state_chain_id: state_chain_id.clone(),
             state_chain_sig: transfer_msg1.state_chain_sig.to_owned(),
-            x1
+            x1,
+            archive: false
         }
     )?;
 
-    debug!("Transfer: Sender side complete. For State Chain: {}",user_session.state_chain_id.unwrap());
+    debug!("Transfer: Sender side complete. For State Chain: {}",state_chain_id);
 
     // TODO encrypt x1 with Senders proof key
 
@@ -94,8 +105,8 @@ pub fn transfer_receiver(
     let id = transfer_msg4.shared_key_id.clone();
     // Get TransferData for shared_key_id
     let transfer_data: TransferData =
-        db::get(&state.db, &claim.sub, &id, &StateEntityStruct::TransferData)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+        db::get(&state.db, &claim.sub, &transfer_msg4.state_chain_id, &StateEntityStruct::TransferData)?
+            .ok_or(SEError::DBError(NoDataForID, transfer_msg4.state_chain_id.clone()))?;
     let state_chain_sig = transfer_data.state_chain_sig;
 
     // Ensure state_chain_sigs are the same
@@ -161,7 +172,7 @@ pub fn transfer_receiver(
                 .ok_or(SEError::DBError(NoDataForID, batch_id.clone()))?;
 
         // Ensure batch transfer is still active
-        if transfer_batch_data.is_ended(&state.batch_lifetime) {
+        if transfer_batch_data.is_ended(state.batch_lifetime) {
             return Err(SEError::Generic(String::from("Transfer batch ended. Too late to complete transfer.")));
         }
 
@@ -237,6 +248,7 @@ pub fn transfer_finalize(
         }
     )?;
 
+
     // Update sparse merkle tree with new StateChain entry
     let funding_txid = state_chain.tx_backup.input.get(0).unwrap().previous_output.txid.to_string();
     let proof_key = state_chain.chain.last()
@@ -260,6 +272,9 @@ pub fn transfer_batch_init(
     claim: Claims,
     transfer_batch_init_msg: Json<TransferBatchInitMsg>
 ) -> Result<Json<()>> {
+    db::get::<TransferData>(&state.db, &claim.sub, &transfer_batch_init_msg.id, &StateEntityStruct::TransferData)?
+        .ok_or(SEError::Generic(format!("Batch transfer with {} ID already exists.",transfer_batch_init_msg.id)))?;
+
     // Ensure sigs purpose is for batch transfer
     for sig in &transfer_batch_init_msg.signatures {
         if !sig.purpose.contains("TRANSFER_BATCH") {
@@ -282,6 +297,12 @@ pub fn transfer_batch_init(
         let proof_key = state_chain.get_tip()?.data;
         sig.verify(&proof_key)?;
 
+        // Ensure state chains are all available
+        match state_chain.is_locked() {
+            Err(_) => return Err(SEError::Generic(format!("State Chain ID {} is locked.",sig.data))),
+            Ok(_) => {}
+        }
+
         // Add to TransferBatchData object
         state_chains.insert(
             sig.data,
@@ -300,7 +321,8 @@ pub fn transfer_batch_init(
             start_time: SystemTime::now(),
             state_chains,
             finalized_data: vec!(),
-            punished_state_chains: vec!()
+            punished_state_chains: vec!(),
+            finalized: false
         }
     )?;
 
@@ -313,7 +335,7 @@ pub fn finalize_batch(
     claim: &Claims,
     batch_id: &String
 ) -> Result<()> {
-    let transfer_batch_data: TransferBatchData =
+    let mut transfer_batch_data: TransferBatchData =
         db::get(&state.db, &claim.sub, &batch_id, &StateEntityStruct::TransferBatchData)?
             .ok_or(SEError::DBError(NoDataForID, batch_id.clone()))?;
 
@@ -321,7 +343,7 @@ pub fn finalize_batch(
         return Err(SEError::Generic(String::from("TransferBatchData has unequal finalized data to state chains.")))
     }
 
-    for finalized_data in transfer_batch_data.finalized_data {
+    for finalized_data in transfer_batch_data.finalized_data.clone() {
         transfer_finalize(
             &state,
             &claim,
@@ -329,12 +351,21 @@ pub fn finalize_batch(
         )?;
     }
 
+    transfer_batch_data.finalized = true;
+    db::insert(
+        &state.db,
+        &claim.sub,
+        &batch_id,
+        &StateEntityStruct::TransferBatchData,
+        &transfer_batch_data
+    )?;
+
     Ok(())
 }
 
 
 /// API: Reveal a nonce for a corresponding commitment
-#[post("/info/transfer/batch/reveal", format = "json", data = "<transfer_reveal_nonce>")]
+#[post("/transfer/batch/reveal", format = "json", data = "<transfer_reveal_nonce>")]
 pub fn transfer_reveal_nonce(
     state: State<Config>,
     claim: Claims,
@@ -344,7 +375,10 @@ pub fn transfer_reveal_nonce(
         db::get(&state.db, &claim.sub, &transfer_reveal_nonce.batch_id, &StateEntityStruct::TransferBatchData)?
             .ok_or(SEError::DBError(NoDataForID, transfer_reveal_nonce.batch_id.clone()))?;
 
-    if !transfer_batch_data.is_ended(&state.batch_lifetime) {
+    if transfer_batch_data.finalized {
+        return Err(SEError::Generic(String::from("Transfer Batch completed successfully.")));
+    }
+    if !transfer_batch_data.is_ended(state.batch_lifetime) {
         return Err(SEError::Generic(String::from("Transfer Batch still live.")));
     }
     if transfer_batch_data.state_chains.get(&transfer_reveal_nonce.state_chain_id).is_none() {

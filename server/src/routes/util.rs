@@ -71,11 +71,13 @@ pub struct UserSession {
 }
 
 /// TransferData provides new Owner's data for their new UserSession struct created in transfer_receiver.
+/// Key: state_chain_id
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct TransferData {
     pub state_chain_id: String,
     pub state_chain_sig: StateChainSig,
-    pub x1: FE
+    pub x1: FE,
+    pub archive: bool // data no longer in use
 }
 
 /// TransferBatch stores list of StateChains involved in a batch transfer and their status in the potocol.
@@ -86,20 +88,21 @@ pub struct TransferBatchData {
     pub start_time: SystemTime, // time batch transfer began
     pub state_chains: HashMap<String, bool>,
     pub finalized_data: Vec<TransferFinalizeData>,
-    pub punished_state_chains: Vec<String> // If transfer batch fails these state chain Id's were punished.
+    pub punished_state_chains: Vec<String>, // If transfer batch fails these state chain Id's were punished.
+    pub finalized: bool
 }
 
 impl TransferBatchData {
-    pub fn is_ended(&self, batch_lifetime: &u64) -> bool {
-        if SystemTime::now().duration_since(self.start_time).unwrap().as_secs() > *batch_lifetime {
-            true;
+    pub fn is_ended(&self, batch_lifetime: u64) -> bool {
+        if SystemTime::now().duration_since(self.start_time).unwrap().as_secs() > batch_lifetime {
+            return true
         }
         false
     }
 }
 
 /// Struct holds data when transfer is complete but not yet finalized
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferFinalizeData {
     pub new_shared_key_id: String,
     pub state_chain_id: String,
@@ -219,7 +222,7 @@ pub fn get_transfer_batch_status(
             .ok_or(SEError::DBError(NoDataForID, batch_id.clone()))?;
 
     // Check batch is still within lifetime
-    if transfer_batch_data.is_ended(&state.batch_lifetime) {
+    if transfer_batch_data.is_ended(state.batch_lifetime) {
         if transfer_batch_data.punished_state_chains.len() == 0 { // Punishments not yet set
             // Set punishments for all statechains involved in batch
             for (state_chain_id, _) in transfer_batch_data.state_chains {

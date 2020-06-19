@@ -468,8 +468,9 @@ pub fn sign_second(
     }
 
     if user_session.sig_hash.unwrap().to_string() != message_sig_hash {
-        return Err(SEError::SigningError(String::from(
-            "Message to be signed does not match verified sig hash.",
+        return Err(SEError::SigningError(format!(
+            "Message to be signed does not match verified sig hash. \n{}, {}",
+            user_session.sig_hash.unwrap().to_string(), message_sig_hash
         )));
     }
 

@@ -96,6 +96,7 @@ pub fn get_server() -> Rocket {
                 transfer::transfer_sender,
                 transfer::transfer_receiver,
                 transfer::transfer_batch_init,
+                transfer::transfer_reveal_nonce,
                 withdraw::withdraw_init,
                 withdraw::withdraw_confirm
             ],

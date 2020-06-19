@@ -193,6 +193,7 @@ pub fn try_o2(wallet: &mut Wallet, state_chain_data: &StateChainDataAPI, transfe
     let transfer_msg5: TransferMsg5 = requests::postb(&wallet.client_shim,&format!("/transfer/receiver"),
         &TransferMsg4 {
             shared_key_id: transfer_msg3.shared_key_id.clone(),
+            state_chain_id: transfer_msg3.state_chain_id.clone(),
             t2, // should be encrypted
             state_chain_sig: transfer_msg3.state_chain_sig.clone(),
             o2_pub,
@@ -274,6 +275,20 @@ pub fn transfer_batch_init(client_shim: &ClientShim, signatures: &Vec<StateChain
             signatures: signatures.clone()
         }
     )
+}
+
+/// Reveal nonce to State Entity. Used when transfer batch has failed and punishment is removed
+/// from honest participants.
+pub fn transfer_reveal_nonce(client_shim: &ClientShim, state_chain_id: &String, batch_id: &String, hash: &String, nonce: &[u8;32]) -> Result<()> {
+    requests::postb(&client_shim,&format!("transfer/batch/reveal"),
+        &TransferRevealNonce {
+            batch_id: batch_id.to_owned(),
+            hash: hash.to_owned(),
+            state_chain_id: state_chain_id.to_owned(),
+            nonce: nonce.to_owned(),
+        }
+    )
+
 }
 
 #[cfg(test)]

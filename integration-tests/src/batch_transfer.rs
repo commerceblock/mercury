@@ -14,8 +14,8 @@ mod tests {
 
     use bitcoin::PublicKey;
     use client_lib::state_entity;
-
-    use std::str::FromStr;
+    use std::time::Duration;
+    use std::{thread, str::FromStr};
 
     /// Test batch transfer signatures
     #[test]
@@ -234,5 +234,182 @@ mod tests {
                 bals.last().unwrap().confirmed,
                 amounts[i]);
         }
+
+        // attempt to reveal nonce when batch transfer is over
+        let resp = state_entity::transfer::transfer_reveal_nonce(
+            &wallets[0].client_shim,
+            &transfer_sigs[0].data,
+            &batch_id,
+            &commitments[0],
+            &nonces[0]
+        );
+        println!("resp: {:?}", resp);
+
+        assert!(state_entity::transfer::transfer_reveal_nonce(
+            &wallets[0].client_shim,
+            &transfer_sigs[0].data,
+            &batch_id,
+            &commitments[0],
+            &nonces[0]
+        ).is_err());
+    }
+
+    // Test punishments and reveals after batch transfer failure.
+    // Set up batch transfer and perform 2 full transfers (wallet[0] -> wallet[1] and wallet[1] -> wallet[2]).
+    // This should result in a single state chain (wallet[0]->wallet[1]) being unpunished after revealing.
+    // (since both sender and receiver get punished in transfer failure)
+    // Allow batch_lifetime time to pass and test punishments are set and test removal of punishment to completed transfer.
+    // *** THIS TEST REQUIRES batch_lifetime SERVER SETTING TO BE SET TO < 3 ***
+    #[test]
+    fn test_failure_batch_transfer() {
+        spawn_server();
+
+        let num_state_chains = 3; // must be > 2
+        let mut amounts = vec!();
+        for i in 0..num_state_chains {
+            amounts.push(u64::from_str(&format!("{}0000",i+1)).unwrap());
+        }
+
+        // Gen some wallets and deposit coins into SCE from each with amount 10000, 20000, 30000...
+        let mut wallets = vec!();
+        let mut deposits = vec!();
+        for i in 0..num_state_chains {
+            wallets.push(gen_wallet());
+            for _ in 0..i { // Gen keys so different wallets have different proof keys (since wallets have the same seed)
+                let _ = wallets[i].se_proof_keys.get_new_key();
+            }
+            deposits.push(run_deposit(&mut wallets[i],&amounts[i]));
+        }
+        // Check deposits exist
+        for i in 0..num_state_chains {
+            let (_, bals) = wallets[i].get_state_chain_balances();
+            assert_eq!(bals.len(),1);
+            assert_eq!(bals.last().unwrap().confirmed,amounts[i]);
+        }
+
+        // Create new batch transfer ID
+        let batch_id = String::from("123456789");
+
+        // Gen transfer-batch signatures for each state chain (each wallet's SCE coins)
+        let mut transfer_sigs = vec!();
+        for i in 0..num_state_chains {
+            transfer_sigs.push(
+                state_entity::transfer::transfer_batch_sign(
+                    &mut wallets[i],
+                    &deposits[i].1, // state chain id
+                    &batch_id
+                ).unwrap()
+            );
+        }
+
+        // Initiate batch-transfer protocol on SCE
+        let transfer_batch_init = state_entity::transfer::transfer_batch_init(
+            &wallets[0].client_shim,
+            &transfer_sigs,
+            &batch_id
+        );
+        assert!(transfer_batch_init.is_ok());
+
+        // Check all marked false (= incomplete)
+        let status_api = state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id);
+        assert!(status_api.is_ok());
+        let mut state_chains_copy = status_api.unwrap().state_chains;
+        state_chains_copy.retain(|_, &mut v| v == false);
+        assert_eq!(state_chains_copy.len(), num_state_chains);
+
+        // We will complete 2 transfer_sender's and a 2 transfer_receiver's - yielding a single
+        // fully completed state chain owned by wallet[1]
+        // Perform transfers
+        let receiver_addr = wallets[1].get_new_state_entity_address(&deposits[0].2).unwrap();
+        let tranfer_sender_resp1 =
+            state_entity::transfer::transfer_sender(
+                &mut wallets[0],
+                &deposits[0].0,    // shared wallet id
+                receiver_addr.clone(),
+        ).unwrap();
+        let receiver_addr = wallets[2].get_new_state_entity_address(&deposits[1].2).unwrap();
+        let tranfer_sender_resp2 =
+            state_entity::transfer::transfer_sender(
+                &mut wallets[1],
+                &deposits[1].0,    // shared wallet id
+                receiver_addr.clone(),
+        ).unwrap();
+
+        // make commitments - only need wallet[1]'s commitment
+        let (commitment1, nonce1) = make_commitment(&deposits[1].1);
+        let (commitment2, nonce2) = make_commitment(&deposits[2].1);
+
+        // attempt to reveal nonce early
+        assert!(state_entity::transfer::transfer_reveal_nonce(
+            &wallets[0].client_shim,
+            &transfer_sigs[0].data,
+            &batch_id,
+            &commitment1,
+            &nonce1
+        ).is_err());
+
+        // complete wallet[1] and wallet[2]
+        let transfer_finalized_data2 =
+            state_entity::transfer::transfer_receiver(
+                &mut wallets[1],
+                &tranfer_sender_resp1,
+                &Some(
+                    BatchData {
+                        id: batch_id.clone(),
+                        commitment: commitment1
+                    })
+            ).unwrap();
+            let transfer_finalized_data3 =
+                state_entity::transfer::transfer_receiver(
+                    &mut wallets[2],
+                    &tranfer_sender_resp2,
+                    &Some(
+                        BatchData {
+                            id: batch_id.clone(),
+                            commitment: commitment2
+                        })
+                ).unwrap();
+
+        // Check 2 transfers are complete
+        let status_api = state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id);
+        assert!(status_api.is_ok());
+        let mut state_chains_copy = status_api.unwrap().state_chains;
+        state_chains_copy.retain(|_, &mut v| v == true);
+        assert_eq!(state_chains_copy.len(), 2);
+
+
+        // Allow batch transfer to end
+        thread::sleep(Duration::from_secs(6));
+
+        // Check ended
+        match  state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id) {
+            Err(e) => assert!(e.to_string().contains("Transfer Batch ended.")),
+            _ => assert!(false)
+        }
+
+        // Check state chains are all locked by attempting to transfer + withdraw
+        for i in 0..num_state_chains {
+            let receiver_addr = wallets[i+1%num_state_chains-1].get_new_state_entity_address(&deposits[i].2).unwrap();
+            let resp = state_entity::transfer::transfer_sender(
+                &mut wallets[i],
+                &deposits[i].0,    // shared wallet id
+                receiver_addr.clone(),
+            );
+            println!("resp: {:?}",resp);
+            match resp {
+                Err(e) => assert!(e.to_string().contains("State Chain locked for")),
+                _ => assert!(false)
+            };
+            match state_entity::withdraw::withdraw(
+                &mut wallets[i],
+                &deposits[i].0,    // shared wallet id
+            ) {
+                Err(e) => assert!(e.to_string().contains("State Chain locked for")),
+                _ => assert!(false)
+            };
+        }
+
+        // Reveal commitment for first wallet
+
     }
 }
