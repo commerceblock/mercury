@@ -46,7 +46,8 @@ pub struct StateChainDataAPI {
 /// /info/transfer-batch return struct
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferBatchDataAPI {
-    pub state_chains: HashMap<String, bool>
+    pub state_chains: HashMap<String, bool>,
+    pub finalized: bool
 }
 
 
@@ -76,7 +77,7 @@ pub struct PrepareSignTxMsg {
 
 
 
-// Co-signing algorithm structs
+// 2P-ECDSA Co-signing algorithm structs
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SignSecondMsgRequest {

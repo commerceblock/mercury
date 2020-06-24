@@ -52,21 +52,21 @@ pub fn transfer_sender(
     let state_chain_id =  user_session.state_chain_id
         .ok_or(SEError::Generic(String::from("Transfer Error: User does not own a state chain.")))?;
 
+    // Check if state chain is locked
+    let state_chain: StateChain =
+    db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
+    .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
+    state_chain.is_locked()?;
+
     // Ensure transfer has not already been completed (but not finalized)
     match db::get::<TransferData>(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::TransferData)? {
         None => {},
         Some(transfer_data) => {
             if !transfer_data.archive {
-                return Err(SEError::Generic(String::from("Transfer already completed.")));
+                return Err(SEError::Generic(String::from("Transfer already completed. Waiting for finalize.")));
             }
         }
     }
-
-    // Check if state chain is locked
-    let state_chain: StateChain =
-        db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
-            .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
-    state_chain.is_locked()?;
 
     // Generate x1
     let x1: FE = ECScalar::new_random();
@@ -272,8 +272,9 @@ pub fn transfer_batch_init(
     claim: Claims,
     transfer_batch_init_msg: Json<TransferBatchInitMsg>
 ) -> Result<Json<()>> {
-    db::get::<TransferData>(&state.db, &claim.sub, &transfer_batch_init_msg.id, &StateEntityStruct::TransferData)?
-        .ok_or(SEError::Generic(format!("Batch transfer with {} ID already exists.",transfer_batch_init_msg.id)))?;
+    if db::get::<TransferBatchData>(&state.db, &claim.sub, &transfer_batch_init_msg.id, &StateEntityStruct::TransferBatchData)?.is_some() {
+        return Err(SEError::Generic(format!("Batch transfer with ID {} already exists.",transfer_batch_init_msg.id)))
+    }
 
     // Ensure sigs purpose is for batch transfer
     for sig in &transfer_batch_init_msg.signatures {

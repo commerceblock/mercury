@@ -77,7 +77,7 @@ pub struct TransferData {
     pub state_chain_id: String,
     pub state_chain_sig: StateChainSig,
     pub x1: FE,
-    pub archive: bool // data no longer in use
+    pub archive: bool // Data no longer in use
 }
 
 /// TransferBatch stores list of StateChains involved in a batch transfer and their status in the potocol.
@@ -227,7 +227,25 @@ pub fn get_transfer_batch_status(
             // Set punishments for all statechains involved in batch
             for (state_chain_id, _) in transfer_batch_data.state_chains {
                 punish_state_chain(&state, &claim, state_chain_id.clone())?;
-                transfer_batch_data.punished_state_chains.push(state_chain_id);
+                transfer_batch_data.punished_state_chains.push(state_chain_id.clone());
+
+                // Set TransferDatas involved as archived
+                match db::get::<TransferData>(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::TransferData)? {
+                    None => {},
+                    Some(mut transfer_data) => {
+                        transfer_data.archive = true;
+                        db::insert(
+                            &state.db,
+                            &claim.sub,
+                            &state_chain_id,
+                            &StateEntityStruct::TransferData,
+                            &transfer_data
+                        )?;
+                    }
+                }
+
+
+
             }
             debug!("Punished all state chains in failed batch. ID:{}",transfer_batch_data.id);
         }
@@ -235,20 +253,23 @@ pub fn get_transfer_batch_status(
     }
 
     // Check if all transfers are complete. If so then all transfers in batch can be finalized.
-    let mut state_chains_copy = transfer_batch_data.state_chains.clone();
-    state_chains_copy.retain(|_, &mut v| v == false);
-    if state_chains_copy.len() == 0 {
-        debug!("All transfers complete in batch {}. Finalizing...", batch_id);
-        finalize_batch(
-            &state,
-            &claim,
-            &batch_id
-        )?;
+    if !transfer_batch_data.finalized {
+        let mut state_chains_copy = transfer_batch_data.state_chains.clone();
+        state_chains_copy.retain(|_, &mut v| v == false);
+        if state_chains_copy.len() == 0 {
+            finalize_batch(
+                &state,
+                &claim,
+                &batch_id
+            )?;
+            debug!("All transfers complete in batch {}. Batch finalized.", batch_id);
+        }
     }
 
     // return status of transfers
     Ok(Json(TransferBatchDataAPI{
         state_chains: transfer_batch_data.state_chains,
+        finalized: transfer_batch_data.finalized
     }))
 }
 
