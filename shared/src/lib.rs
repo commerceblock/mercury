@@ -12,11 +12,19 @@ extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 
+extern crate itertools;
+
+extern crate reqwest;
+#[macro_use]
+extern crate hyperx;
+#[macro_use]
+extern crate hyper;
 pub mod util;
 pub mod error;
 pub mod structs;
 pub mod state_chain;
 pub mod mocks;
+pub mod mainstay;
 
 type Result<T> = std::result::Result<T, error::SharedLibError>;
 
