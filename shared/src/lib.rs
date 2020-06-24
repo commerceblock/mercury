@@ -15,10 +15,7 @@ extern crate serde_json;
 extern crate itertools;
 
 extern crate reqwest;
-#[macro_use]
-extern crate hyperx;
-#[macro_use]
-extern crate hyper;
+extern crate base64;
 pub mod util;
 pub mod error;
 pub mod structs;

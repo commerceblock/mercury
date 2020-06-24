@@ -1,16 +1,14 @@
+use crate::error::SharedLibError;
 use std::collections::HashMap;
 use bitcoin::secp256k1::Secp256k1;
 use bitcoin::util::key::PrivateKey;
 use reqwest;
 use itertools::Itertools;
+use base64::encode;
 
 use super::Result;
 
 type Hash = monotree::Hash;
-
-//Custom headers for Mainstay posts
-header! { (XMainstayPayload, "X-MAINSTAY-PAYLOAD") => [String] }
-header! { (XMainstaySignature, "X-MAINSTAY-PAYLOAD") => [String] }
 
 //Mainstay API requires empty string if no password
 fn bytes_to_hex_string(bytes: &Option<[u8; 32]>) -> String {
@@ -22,7 +20,7 @@ fn bytes_to_hex_string(bytes: &Option<[u8; 32]>) -> String {
 
 trait Attestable:  {
     //Attest to the slot using the specified config
-    fn attest(&self, config: &Config) -> Result<reqwest::Response>{
+    fn attest(&self, config: &Config) -> Result<()>{
         let commitment = self.commitment()?;
         let signature = match config.key {
             Some(k) => {
@@ -33,19 +31,45 @@ trait Attestable:  {
         };
 
         let mut payload = HashMap::new();
-        payload.insert("commmitment", bytes_to_hex_string(&Some(*commitment)));
+        payload.insert("commitment", bytes_to_hex_string(&Some(*commitment)));
         payload.insert("position", config.position.to_string());
         payload.insert("token", config.token.clone()); 
-        let payload_ser = serde_json::to_string(&payload)?;
-
-        let client = reqwest::Client::new();
-        let url = reqwest::Url::parse(&format!("{}{}",config.url,"commitment/send"))?;
-        let res = client.post(url)
-        .header("XMainstayPayload",payload_ser)
-        .header("XMainstaySignature",bytes_to_hex_string(&signature))
-        .send()?;
+        let payload_str = String::from(serde_json::to_string(&payload)?);
+        let payload_enc = encode(payload_str);
+        let mut data = HashMap::new();
+        data.insert("X-MAINSTAY-PAYLOAD", &payload_enc);
+        let sig_str = bytes_to_hex_string(&signature);
+        data.insert("X-MAINSTAY-SIGNATURE", &sig_str);
         
-        Ok(res)
+        let client = reqwest::Client::new();
+        let url = reqwest::Url::parse(&format!("{}/{}",config.url,"commitment/send"))?;
+        let req = client.post(url)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .json(&data);
+        
+        let mut res = req.send()?;
+        
+        if res.status().is_success(){
+
+            match res.text(){
+                Ok(t) => {
+                    if t.contains("Commitment added"){
+                        return Ok(());
+                    } else {
+                        return Err(SharedLibError::Generic(String::from("Mainstay commitment failed")));
+                    }
+                }
+                Err(e) => assert!(false, e)
+            }
+            println!("success!");
+            return Ok(());
+        } else if res.status().is_server_error() {
+            println!("server error!");
+            return Err(SharedLibError::Generic(String::from("Mainstay server error")));
+        } else {
+            println!("Something else happened. Status: {:?}", res.status());
+            return Err(SharedLibError::Generic(String::from(format!("Mainstay status: {}", res.status())))); 
+        }            
     }
 
     //The data to be commited
@@ -105,13 +129,15 @@ mod tests {
                 Default::default()
             }
         };
+
+        //let token = String::from("gghh");
                 
 
         let test_config = Config { position: slot, token: token, ..Default::default() };
         let random_hash : Hash = monotree::utils::random_hash();
 
         match random_hash.attest(&test_config) {
-            Ok(_) => assert!(true),
+            Ok(()) => assert!(true),
             Err(e) => assert!(false, e)
         }
     }

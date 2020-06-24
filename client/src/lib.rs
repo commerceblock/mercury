@@ -22,6 +22,7 @@ extern crate electrumx_client;
 extern crate hex;
 extern crate itertools;
 extern crate uuid;
+extern crate base64;
 
 pub mod ecdsa;
 pub mod wallet;
