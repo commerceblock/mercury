@@ -24,7 +24,6 @@ trait Attestable:  {
         let commitment = self.commitment()?;
         let signature = match config.key {
             Some(k) => {
-                //format!("{:02x}",self.sign(&k)?.iter().format(""))
                 Some(self.sign(&k)?)
             },
             None => None
@@ -61,13 +60,10 @@ trait Attestable:  {
                 }
                 Err(e) => assert!(false, e)
             }
-            println!("success!");
             return Ok(());
         } else if res.status().is_server_error() {
-            println!("server error!");
             return Err(SharedLibError::Generic(String::from("Mainstay server error")));
         } else {
-            println!("Something else happened. Status: {:?}", res.status());
             return Err(SharedLibError::Generic(String::from(format!("Mainstay status: {}", res.status())))); 
         }            
     }
@@ -130,9 +126,6 @@ mod tests {
             }
         };
 
-        //let token = String::from("gghh");
-                
-
         let test_config = Config { position: slot, token: token, ..Default::default() };
         let random_hash : Hash = monotree::utils::random_hash();
 
@@ -140,5 +133,17 @@ mod tests {
             Ok(()) => assert!(true),
             Err(e) => assert!(false, e)
         }
-    }
+
+        //Incorrect token should fail.
+        let token = String::from("wrong_token");
+        let test_config = Config { position: slot, token: token, ..Default::default() };
+        
+        match random_hash.attest(&test_config) {
+            Ok(()) => assert!(false, "should have failed with incorrect token"),
+            Err(e) => {
+                println!("{}",e);
+            }
+        }
+    } 
+
 }
