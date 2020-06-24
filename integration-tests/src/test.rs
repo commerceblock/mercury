@@ -1,23 +1,69 @@
+extern crate server_lib;
+extern crate client_lib;
+extern crate shared_lib;
+extern crate bitcoin;
+
+use client_lib::*;
+use client_lib::wallet::wallet::Wallet;
+
+use server_lib::server;
+use shared_lib::{
+    mocks::mock_electrum::MockElectrum,
+    structs::PrepareSignTxMsg};
+
+use bitcoin::{Transaction, PublicKey};
+
+use std::{thread, time};
+
+pub fn spawn_server() {
+    // Rocket server is blocking, so we spawn a new thread.
+    thread::spawn(move || {
+        server::get_server().launch();
+    });
+
+    let five_seconds = time::Duration::from_millis(5000);
+    thread::sleep(five_seconds);
+}
+
+pub fn gen_wallet() -> Wallet {
+    let mut wallet = Wallet::new(
+        &[0xcd; 32],
+        &"regtest".to_string(),
+        ClientShim::new("http://localhost:8000".to_string(), None),
+        Box::new(MockElectrum::new())
+    );
+
+    // generate some addresses
+    let _ = wallet.keys.get_new_address();
+    let _ = wallet.keys.get_new_address();
+
+    wallet
+}
+
+// Returns shared_key_id, state_chain_id, funding txid,
+/// signed backup tx, back up transacion data and proof_key
+pub fn run_deposit(wallet: &mut Wallet, amount: &u64) -> (String, String, String, Transaction, PrepareSignTxMsg, PublicKey)  {
+    let resp = state_entity::deposit::deposit(
+        wallet,
+        amount
+    ).unwrap();
+
+    return resp
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
     extern crate server_lib;
     extern crate client_lib;
     extern crate shared_lib;
     extern crate bitcoin;
 
-    use client_lib::*;
-    use client_lib::wallet::wallet::Wallet;
+    use shared_lib::mocks::mock_electrum::MockElectrum;
 
-    use server_lib::server;
-    use shared_lib::{
-        mocks::mock_electrum::MockElectrum,
-        structs::PrepareSignTxMsg};
-
-    use bitcoin::{Transaction, PublicKey};
     use curv::elliptic::curves::traits::ECScalar;
     use curv::FE;
 
-    use std::{thread, time};
 
     #[test]
     fn test_gen_shared_key() {
@@ -58,29 +104,20 @@ mod tests {
     //     );
     // }
 
-    fn run_deposit(wallet: &mut Wallet) -> (String, String, String, Transaction, PrepareSignTxMsg, PublicKey)  {
-        let resp = state_entity::deposit::deposit(
-            wallet,
-            &10000
-        ).unwrap();
-
-        return resp
-    }
-
     #[test]
     fn test_deposit() {
         spawn_server();
         let mut wallet = gen_wallet();
 
-        let deposit = run_deposit(&mut wallet);
+        let deposit = run_deposit(&mut wallet, &10000);
 
         let funding_txid = deposit.2;
         let tx_backup_psm = deposit.4;
         let proof_key = deposit.5;
 
         // Get SMT inclusion proof and verify
-        let root = state_entity::api::get_smt_root(&mut wallet).unwrap();
-        let proof = state_entity::api::get_smt_proof(&mut wallet, &root, &funding_txid).unwrap();
+        let root = state_entity::api::get_smt_root(&wallet.client_shim).unwrap();
+        let proof = state_entity::api::get_smt_proof(&wallet.client_shim, &root, &funding_txid).unwrap();
 
         //ensure wallet's shared key is updated with proof info
         let shared_key = wallet.get_shared_key(&deposit.0).unwrap();
@@ -101,7 +138,7 @@ mod tests {
         let err = state_entity::api::get_statechain(&wallet.client_shim, &String::from("id"));
         assert!(err.is_err());
 
-        let deposit = run_deposit(&mut wallet);
+        let deposit = run_deposit(&mut wallet, &10000);
 
         let state_chain = state_entity::api::get_statechain(&wallet.client_shim, &String::from(deposit.1.clone())).unwrap();
         assert_eq!(state_chain.chain.last().unwrap().data, deposit.5.to_string());
@@ -112,7 +149,7 @@ mod tests {
         spawn_server();
         let mut wallet_sender = gen_wallet();
 
-        let deposit_resp = run_deposit(&mut wallet_sender);
+        let deposit_resp = run_deposit(&mut wallet_sender, &10000);
 
         // transfer
         let mut wallet_receiver = gen_wallet();
@@ -130,7 +167,8 @@ mod tests {
             state_entity::transfer::transfer_receiver(
                 &mut wallet_receiver,
                 &tranfer_sender_resp,
-            ).unwrap();
+                &None
+            ).unwrap().new_shared_key_id;
 
         // check shared keys have the same master public key
         assert_eq!(
@@ -144,8 +182,8 @@ mod tests {
         assert_eq!(state_chain.chain.last().unwrap().data.to_string(), receiver_addr.proof_key.to_string());
 
         // Get SMT inclusion proof and verify
-        let root = state_entity::api::get_smt_root(&mut wallet_receiver).unwrap();
-        let proof = state_entity::api::get_smt_proof(&mut wallet_receiver, &root, &funding_txid).unwrap();
+        let root = state_entity::api::get_smt_root(&wallet_receiver.client_shim).unwrap();
+        let proof = state_entity::api::get_smt_proof(&wallet_receiver.client_shim, &root, &funding_txid).unwrap();
         //ensure wallet's shared key is updated with proof info
         let shared_key = wallet_receiver.get_shared_key(&new_shared_key_id).unwrap();
         assert_eq!(shared_key.smt_proof.clone().unwrap().root, root);
@@ -153,12 +191,14 @@ mod tests {
         assert_eq!(shared_key.proof_key.clone().unwrap(),receiver_addr.proof_key);
     }
 
+
+
     #[test]
     fn test_withdraw() {
         spawn_server();
         let mut wallet = gen_wallet();
 
-        let deposit_resp = run_deposit(&mut wallet);
+        let deposit_resp = run_deposit(&mut wallet, &10000);
 
         // check withdraw method completes without Err
         state_entity::withdraw::withdraw(&mut wallet, &deposit_resp.0)
@@ -183,7 +223,7 @@ mod tests {
         spawn_server();
 
         let mut wallet = gen_wallet();
-        run_deposit(&mut wallet);
+        run_deposit(&mut wallet, &10000);
 
         let wallet_json = wallet.to_json();
         let wallet_rebuilt = wallet::wallet::Wallet::from_json(wallet_json, ClientShim::new("http://localhost:8000".to_string(), None), Box::new(MockElectrum::new())).unwrap();
@@ -199,27 +239,5 @@ mod tests {
     }
 
 
-    fn spawn_server() {
-        // Rocket server is blocking, so we spawn a new thread.
-        thread::spawn(move || {
-            server::get_server().launch();
-        });
 
-        let five_seconds = time::Duration::from_millis(5000);
-        thread::sleep(five_seconds);
-    }
-    fn gen_wallet() -> Wallet {
-        let mut wallet = Wallet::new(
-            &[0xcd; 32],
-            &"regtest".to_string(),
-            ClientShim::new("http://localhost:8000".to_string(), None),
-            Box::new(MockElectrum::new())
-        );
-
-        // generate some addresses
-        let _ = wallet.keys.get_new_address();
-        let _ = wallet.keys.get_new_address();
-
-        wallet
-    }
 }

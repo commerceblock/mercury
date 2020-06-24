@@ -28,8 +28,6 @@ pub mod wallet;
 pub mod schnorr;
 pub mod state_entity;
 pub mod error;
-pub mod electrum;
-pub mod bitcoin_core;
 
 mod utilities;
 

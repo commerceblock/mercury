@@ -531,15 +531,15 @@ mod tests {
         let mut wallet = gen_wallet();
         let _ = wallet.keys.get_new_address();
 
-        for amount in [10, 100, 100000000, 100000100].iter() {
+        for amount in [10, 100, 10000000, 10000100].iter() {
             let selection = wallet.coin_selection_greedy(&amount).unwrap();
             assert_eq!(selection.0.len(), selection.1.len());
             assert_eq!(selection.0.len(), selection.2.len());
             assert!(selection.2.iter().sum::<u64>() >= *amount);
         }
 
-        // 100000100 is total amount in Mock Electrum
-        let selection = wallet.coin_selection_greedy(&100000101);
+        // 10000100 is total amount in Mock Electrum
+        let selection = wallet.coin_selection_greedy(&10000101);
         assert!(selection.is_err());
     }
 }

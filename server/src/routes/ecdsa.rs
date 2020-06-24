@@ -1,10 +1,9 @@
-use super::super::auth::jwt::Claims;
-use super::super::storage::db;
-use super::super::Config;
-use super::super::Result;
+use super::super::{{Result,Config},
+    auth::jwt::Claims,
+    storage::db};
 
 use crate::error::{DBErrorType::NoDataForID, SEError};
-use crate::routes::state_entity::{check_user_auth, StateEntityStruct, UserSession};
+use crate::routes::util::{check_user_auth, StateEntityStruct, UserSession};
 use shared_lib::{
     structs::{Protocol, SignSecondMsgRequest},
     util::reverse_hex_str,
@@ -469,8 +468,9 @@ pub fn sign_second(
     }
 
     if user_session.sig_hash.unwrap().to_string() != message_sig_hash {
-        return Err(SEError::SigningError(String::from(
-            "Message to be signed does not match verified sig hash.",
+        return Err(SEError::SigningError(format!(
+            "Message to be signed does not match verified sig hash. \n{}, {}",
+            user_session.sig_hash.unwrap().to_string(), message_sig_hash
         )));
     }
 
@@ -513,8 +513,7 @@ pub fn sign_second(
     // Add signature to tx
     let mut v = BigInt::to_vec(&signature.r); // make signature witness
     v.extend(BigInt::to_vec(&signature.s));
-    let mut sig_vec = Signature::from_compact(&v[..])
-        .unwrap()
+    let mut sig_vec = Signature::from_compact(&v[..])?
         .serialize_der()
         .to_vec();
     sig_vec.push(01);

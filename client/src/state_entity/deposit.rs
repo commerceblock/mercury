@@ -7,7 +7,7 @@
 // 1. Generate shared wallet
 // 2. Co-op sign back-up tx
 // 3. Broadcast funding tx and wait for SE verification
-// 4. Verify funding txid and proof key in SMT 
+// 4. Verify funding txid and proof key in SMT
 
 use super::super::Result;
 extern crate shared_lib;
@@ -35,7 +35,7 @@ pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<String> {
     )
 }
 
-/// Deposit coins into state entity. Returns shared_key_id, state_chain_id, signed funding tx,
+/// Deposit coins into state entity. Returns shared_key_id, state_chain_id, funding txid,
 /// signed backup tx, back up transacion data and proof_key
 pub fn deposit(wallet: &mut Wallet, amount: &u64)
     -> Result<(String, String, String, Transaction, PrepareSignTxMsg, PublicKey)>
@@ -86,13 +86,14 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
 
     // Co-sign tx backup tx
     let tx_backup_psm = PrepareSignTxMsg {
+        shared_key_id: shared_key_id.to_owned(),
         protocol: Protocol::Deposit,
         tx: tx_backup_unsigned.to_owned(),
         input_addrs: vec!(pk),
         input_amounts: vec!(*amount),
         proof_key: Some(proof_key.to_string()),
     };
-    let witness = cosign_tx_input(wallet, &shared_key_id, &tx_backup_psm)?;
+    let witness = cosign_tx_input(wallet, &tx_backup_psm)?;
     // Add witness to back up tx
     let mut tx_backup_signed = tx_backup_unsigned.clone();
     tx_backup_signed.input[0].witness = witness;
@@ -111,8 +112,8 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     )?;
 
     // Verify proof key inclusion in SE sparse merkle tree
-    let root = get_smt_root(wallet)?;
-    let proof = get_smt_proof(wallet, &root, &funding_txid)?;
+    let root = get_smt_root(&wallet.client_shim)?;
+    let proof = get_smt_proof(&wallet.client_shim, &root, &funding_txid)?;
     assert!(verify_statechain_smt(
         &root.value,
         &proof_key.to_string(),

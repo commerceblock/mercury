@@ -80,13 +80,14 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
 
     // co-sign withdraw tx
     let tx_w_prepare_sign_msg = PrepareSignTxMsg {
+        shared_key_id: shared_key_id.to_owned(),
         protocol: Protocol::Withdraw,
         tx: tx_withdraw_unsigned.clone(),
         input_addrs: vec!(pk),
         input_amounts: vec!(sc_info.amount),
         proof_key: None,
     };
-    cosign_tx_input(wallet, &shared_key_id, &tx_w_prepare_sign_msg)?;
+    cosign_tx_input(wallet, &tx_w_prepare_sign_msg)?;
 
 
     let witness: Vec<Vec<u8>> = requests::postb(&wallet.client_shim,&format!("/withdraw/confirm"),

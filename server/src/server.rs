@@ -25,6 +25,8 @@ impl Config {
             fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
             fee_withdraw: settings.get("fee_withdraw").unwrap().parse::<u64>().unwrap(),
             block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
+            batch_lifetime: settings.get("batch_lifetime").unwrap().parse::<u64>().unwrap(),
+            punishment_duration: settings.get("punishment_duration").unwrap().parse::<u64>().unwrap(),
         }
     }
 }
@@ -83,17 +85,20 @@ pub fn get_server() -> Rocket {
                 schnorr::keygen_second,
                 schnorr::keygen_third,
                 schnorr::sign,
-                state_entity::get_statechain,
-                state_entity::get_smt_root,
-                state_entity::get_smt_proof,
-                state_entity::get_state_entity_fees,
-                state_entity::deposit_init,
-                state_entity::deposit_confirm,
-                state_entity::prepare_sign_tx,
-                state_entity::transfer_sender,
-                state_entity::transfer_receiver,
-                state_entity::withdraw_init,
-                state_entity::withdraw_confirm
+                util::get_statechain,
+                util::get_smt_root,
+                util::get_smt_proof,
+                util::get_state_entity_fees,
+                util::prepare_sign_tx,
+                util::get_transfer_batch_status,
+                deposit::deposit_init,
+                deposit::deposit_confirm,
+                transfer::transfer_sender,
+                transfer::transfer_receiver,
+                transfer::transfer_batch_init,
+                transfer::transfer_reveal_nonce,
+                withdraw::withdraw_init,
+                withdraw::withdraw_confirm
             ],
         )
         .manage(config)

@@ -24,7 +24,9 @@ use monotree::{{Monotree, Proof},
 
 use uuid::Uuid;
 use std::str::FromStr;
-use std::convert::TryInto;
+use std::{
+    time::SystemTime,
+    convert::TryInto};
 
 /// A list of States in which each State signs for the next State.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -35,7 +37,9 @@ pub struct StateChain {
     /// current back-up transaction
     pub tx_backup: Transaction,
     /// Amount
-    pub amount: u64 // 0 means state chain is ended.
+    pub amount: u64, // 0 means state chain is ended.
+    /// Gets set to a time in the future before which this state chain cannot be acted upon.
+    pub locked_until: SystemTime,
 }
 
 impl StateChain {
@@ -47,7 +51,8 @@ impl StateChain {
                 next_state: None
             }),
             tx_backup,
-            amount
+            amount,
+            locked_until: SystemTime::now(),
         }
     }
 
@@ -74,6 +79,15 @@ impl StateChain {
             next_state: None
         }))
     }
+
+    /// Check if state chain is available for transfer/withdrawal
+    pub fn is_locked(&self) -> Result<()> {
+        match self.locked_until.duration_since(SystemTime::now()) {
+            Ok(secs_left) => return Err(SharedLibError::Generic(
+                format!("State Chain locked for {} minutes.", (secs_left.as_secs()/60)+1))),
+            Err(_) => return Ok(())
+        }
+    }
 }
 
 
@@ -86,8 +100,8 @@ pub struct State {
 /// Data necessary to create ownership transfer signatures
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct StateChainSig {
-    pub purpose: String, // "TRANSFER" or "WITHDRAW"
-    pub data: String, // proof key or address
+    pub purpose: String,    // "TRANSFER", "TRANSFER-BATCH" or "WITHDRAW"
+    pub data: String,       // proof key, state chain id or address
     sig: String
 }
 impl StateChainSig {
@@ -158,6 +172,7 @@ mod tests {
 
     use super::*;
     use bitcoin::secp256k1::{SecretKey, Secp256k1, PublicKey};
+    use std::time::Duration;
 
     pub static DB_LOC: &str = "./db";
 
@@ -189,6 +204,25 @@ mod tests {
         // try add again (signature no longer valid for proof key "03b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3")
         let fail = state_chain.add(new_state_sig);
         assert!(fail.is_err());
+    }
+
+    #[test]
+    fn test_state_chain_locked() {
+        let secp = Secp256k1::new();
+        let proof_key1_priv = SecretKey::from_slice(&[1;32]).unwrap();
+        let proof_key1_pub = PublicKey::from_secret_key(&secp, &proof_key1_priv);
+
+        let mut state_chain = StateChain::new(
+            proof_key1_pub.to_string(),
+            Transaction{version: 2,lock_time: 0,input: vec!(),output: vec!()},
+            1000
+        );
+
+        state_chain.locked_until = SystemTime::now() - Duration::from_secs(5);
+        assert!(state_chain.is_locked().is_ok());
+
+        state_chain.locked_until = SystemTime::now() + Duration::from_secs(5);
+        assert!(state_chain.is_locked().is_err());
     }
 
     #[test]

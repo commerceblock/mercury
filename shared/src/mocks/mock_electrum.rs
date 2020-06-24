@@ -67,7 +67,7 @@ impl Electrumx for MockElectrum {
             }
 
             if addr == "bcrt1qsuqsurhgfduhqw6ejquw54482sqpkfc22gytyh" {
-                return Ok(GetBalanceResponse{unconfirmed: 0, confirmed: 100000000});
+                return Ok(GetBalanceResponse{unconfirmed: 0, confirmed: 10000000});
             }
             Ok(GetBalanceResponse{unconfirmed: 0, confirmed: 0})
     }
@@ -87,7 +87,7 @@ impl Electrumx for MockElectrum {
                     height: 1234,
                     tx_hash: "40bf39ffdf4322e4d30ed783feec5bd9eb2804b81f23ebd5e24ea2aa2365a326".to_string(),
                     tx_pos: 1,
-                    value: 100000000,
+                    value: 10000000,
                 }))
         }
         Ok(vec!())

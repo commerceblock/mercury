@@ -4,29 +4,28 @@
 
 extern crate shared_lib;
 
-use super::super::utilities::requests;
 use super::super::Result;
+use super::super::utilities::requests;
 use crate::wallet::wallet::Wallet;
 use crate::ecdsa;
+
 use shared_lib::util::get_sighash;
 use shared_lib::structs::PrepareSignTxMsg;
 
 use curv::BigInt;
 use curv::arithmetic::traits::Converter;
-
-use monotree::tree::verify_proof;
-use monotree::hasher::{Hasher,Blake2b};
-use monotree::{Proof,Hash};
+use monotree::{{Proof,Hash},
+    tree::verify_proof,
+    hasher::{Hasher,Blake2b}};
 
 use std::convert::TryInto;
 
-
 /// Sign a transaction input with state entity shared wallet. Return signature witness.
-pub fn cosign_tx_input(wallet: &mut Wallet, shared_key_id: &String, prepare_sign_msg: &PrepareSignTxMsg)
+pub fn cosign_tx_input(wallet: &mut Wallet, prepare_sign_msg: &PrepareSignTxMsg)
     -> Result<Vec<Vec<u8>>> {
 
     // message 1 - send tx data for validation.
-    requests::postb(&wallet.client_shim, &format!("prepare-sign/{}", shared_key_id), prepare_sign_msg)?;
+    requests::postb(&wallet.client_shim, &format!("prepare-sign/"), prepare_sign_msg)?;
 
     // get sighash as message to be signed
     let sig_hash = get_sighash(
@@ -37,7 +36,7 @@ pub fn cosign_tx_input(wallet: &mut Wallet, shared_key_id: &String, prepare_sign
         &wallet.network
     );
 
-    let shared_key = wallet.get_shared_key(&shared_key_id)?;
+    let shared_key = wallet.get_shared_key(&prepare_sign_msg.shared_key_id)?;
     let mk = &shared_key.share;
 
     // co-sign transaction
