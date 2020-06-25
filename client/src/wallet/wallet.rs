@@ -393,9 +393,10 @@ impl Wallet {
     }
 
     /// Return balances of shared keys
-    pub fn get_state_chain_balances(&self) -> (Vec<String>, Vec<GetBalanceResponse>) {
-        let mut state_chain_balances: Vec<GetBalanceResponse> = vec!();
+    pub fn get_state_chains_info(&self) -> (Vec<String>, Vec<String>, Vec<GetBalanceResponse>) {
         let mut state_chain_key_ids: Vec<String> = vec!();
+        let mut state_chain_ids: Vec<String> = vec!();
+        let mut state_chain_balances: Vec<GetBalanceResponse> = vec!();
         for shared_key in &self.shared_keys {
             if shared_key.unspent {
                 state_chain_balances.push(
@@ -404,9 +405,12 @@ impl Wallet {
                         unconfirmed: 0,
                     });
                 state_chain_key_ids.push(shared_key.id.to_owned());
+                if shared_key.state_chain_id.is_some() {
+                    state_chain_ids.push(shared_key.state_chain_id.clone().unwrap());
+                }
             }
         }
-        (state_chain_key_ids, state_chain_balances)
+        (state_chain_key_ids, state_chain_ids, state_chain_balances)
     }
 
 
