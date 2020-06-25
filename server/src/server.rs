@@ -17,6 +17,13 @@ impl Config {
         if let Err(e) = bitcoin::Address::from_str(&fee_address) {
             panic!("Invalid fee address: {}",e)
         };
+        //mainstay_config is optional
+        let mainstay_config = match settings.get("mainstay_config"){
+            Some(o) => {
+                Some(o.parse::<mainstay::Config>().unwrap())
+            },
+            None => None
+        };
         Config {
             db,
             electrum_server: settings.get("electrum_server").unwrap().to_string(),
@@ -26,7 +33,7 @@ impl Config {
             fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
             fee_withdraw: settings.get("fee_withdraw").unwrap().parse::<u64>().unwrap(),
             block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
-            mainstay_config: settings.get("mainstay_config").unwrap().parse::<mainstay::Config>().unwrap(),
+            mainstay_config: mainstay_config,
         }
     }
 }

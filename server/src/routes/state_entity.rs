@@ -45,9 +45,14 @@ type Hash = mainstay::Hash;
 // Update the mainstay slot commitment and the database
 fn update_root(state: &State<Config>, root: Hash) -> Result<()>{
     db::update_root(&state.db, root)?;
-    match root.attest(&state.mainstay_config) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(SEError::SharedLibError(e.to_string()))
+    match &state.mainstay_config {
+        Some(c) => {
+            match root.attest(&c) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(SEError::SharedLibError(e.to_string()))
+            }
+        },
+        None => Ok(())
     }
 }
 
