@@ -12,7 +12,9 @@ use shared_lib::{
     structs::*,
     state_chain::*,
     Root,
-    mocks::mock_electrum::MockElectrum};
+    mocks::mock_electrum::MockElectrum,
+    mainstay,
+    mainstay::Attestable};
 
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::routes::ecdsa;
@@ -35,9 +37,19 @@ use monotree::Proof;
 use rocket_contrib::json::Json;
 use rocket::State;
 use uuid::Uuid;
-use db::{DB_SC_LOC, update_root};
+use db::{DB_SC_LOC};
 use std::{thread, time};
 
+type Hash = mainstay::Hash;
+
+// Update the mainstay slot commitment and the database
+fn update_root(state: &State<Config>, root: Hash) -> Result<()>{
+    db::update_root(&state.db, root)?;
+    match root.attest(&state.mainstay_config) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(SEError::SharedLibError(e.to_string()))
+    }
+}
 
 /// Structs for DB storage.
 #[derive(Debug)]
@@ -396,7 +408,7 @@ pub fn deposit_confirm(
         &tx_backup.input.get(0).unwrap().previous_output.txid.to_string(),
         &user_session.proof_key
     )?;
-    update_root(&state.db, new_root.unwrap())?;
+    update_root(&state, new_root.unwrap())?;
 
     debug!("Deposit: Added to sparse merkle tree. State Chain: {}", state_chain.id);
 
@@ -565,7 +577,7 @@ pub fn transfer_receiver(
 
     let root = get_current_root::<Root>(&state.db)?;
     let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &funding_txid, &proof_key)?;
-    update_root(&state.db, new_root.unwrap())?;
+    update_root(&state, new_root.unwrap())?;
 
     debug!("Transfer: Receiver side complete. For State Chain: {}",transfer_data.state_chain_id);
 
@@ -675,7 +687,7 @@ pub fn withdraw_confirm(
 
     let root = get_current_root::<Root>(&state.db)?;
     let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &funding_txid, &withdraw_msg2.address)?;
-    update_root(&state.db, new_root.unwrap())?;
+    update_root(&state, new_root.unwrap())?;
 
     debug!("Withdraw: Complete. State Chain: {}",state_chain_id);
 

@@ -6,6 +6,7 @@ use config;
 use rocket;
 use rocket::{Request, Rocket};
 use rocksdb;
+use shared_lib::mainstay;
 
 use std::{collections::HashMap, str::FromStr};
 
@@ -25,6 +26,7 @@ impl Config {
             fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
             fee_withdraw: settings.get("fee_withdraw").unwrap().parse::<u64>().unwrap(),
             block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
+            mainstay_config: settings.get("mainstay_config").unwrap().parse::<mainstay::Config>().unwrap(),
         }
     }
 }

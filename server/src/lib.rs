@@ -34,6 +34,8 @@ extern crate rusoto_dynamodb;
 extern crate serde_dynamodb;
 
 extern crate hex;
+extern crate shared_lib;
+use shared_lib::mainstay;
 
 pub mod auth;
 pub mod routes;
@@ -52,7 +54,8 @@ pub struct Config {
     pub fee_address: String, // receive address for fee payments
     pub fee_deposit: u64, // satoshis
     pub fee_withdraw: u64, // satoshis
-    pub block_time: u64
+    pub block_time: u64,
+    pub mainstay_config: mainstay::Config
 }
 
 #[derive(Deserialize)]

@@ -8,17 +8,17 @@ use base64::encode;
 
 use super::Result;
 
-type Hash = monotree::Hash;
+pub type Hash = monotree::Hash;
 
 //Mainstay API requires empty string if no password
-fn bytes_to_hex_string(bytes: &Option<[u8; 32]>) -> String {
+fn bytes_to_hex_string(bytes: &Option<Hash>) -> String {
     match bytes{
         Some(b) => format!("{:02x}",b.iter().format("")),
         None => String::from("")
     }
 }
 
-trait Attestable:  {
+pub trait Attestable:  {
     //Attest to the slot using the specified config
     fn attest(&self, config: &Config) -> Result<()>{
         let commitment = self.commitment()?;
@@ -91,11 +91,24 @@ impl Attestable for Hash {
 }
 
 //Mainstay configuration
-struct Config {
+#[derive(Serialize, Deserialize)]
+pub struct Config {
     url: String,
     position: u32,
     token: String,
     key: Option<PrivateKey>
+}
+
+use std::str::FromStr;
+
+impl FromStr for Config {
+    type Err = SharedLibError;
+    fn from_str(s: &str) -> Result<Self> {
+        match serde_json::from_str(s){
+            Ok(p) => Ok(p),
+            Err(e) =>  Err(SharedLibError::Generic(e.to_string()))
+        }
+    }
 }
 
 impl Default for Config {
