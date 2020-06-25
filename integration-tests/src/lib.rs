@@ -1,5 +1,6 @@
 pub mod test;
-pub mod batch_transfer;
+pub mod batch_transfer_test;
+pub mod simulation;
 
 use client_lib::*;
 use client_lib::wallet::wallet::Wallet;
@@ -70,7 +71,8 @@ pub fn run_deposit(wallet: &mut Wallet, amount: &u64) -> (String, String, String
 
 /// Run a transfer between two wallets. Input vector of wallets with sender and receiver indexes in vector.
 /// Return new shared key id.
-pub fn run_transfer(wallets: &mut Vec<Wallet>, sender_index: usize, receiver_index: usize, funding_txid: &String, shared_key_id: &String) -> String {
+pub fn run_transfer(wallets: &mut Vec<Wallet>, sender_index: usize, receiver_index: usize, shared_key_id: &String) -> String {
+    let (_, funding_txid, _, _, _) = wallets[sender_index].get_shared_key_info(shared_key_id).unwrap();
     let receiver_addr = wallets[receiver_index].get_new_state_entity_address(&funding_txid).unwrap();
 
     let tranfer_sender_resp =

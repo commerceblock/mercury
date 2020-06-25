@@ -311,7 +311,7 @@ impl Wallet {
         Ok(self.shared_keys.last().unwrap())
     }
 
-    /// create new 2P-ECDSA key with predeinfed private key
+    /// create new 2P-ECDSA key with pre-definfed private key
     pub fn gen_shared_key_fixed_secret_key(&mut self, id: &String, secret_key: &SecretKey, value: &u64) -> Result<()> {
         self.shared_keys.push(
             SharedKey::new(id, &self.client_shim, secret_key, value, true)?);
@@ -326,6 +326,18 @@ impl Wallet {
             }
         }
         Err(CError::WalletError(WalletErrorType::SharedKeyNotFound))
+    }
+
+    /// Return Shared key info: StateChain ID, Funding Txid, proof key, value, unspent
+    pub fn get_shared_key_info(&self, id: &String) -> Result<(String, String, String, u64, bool)> {
+        let shared_key = self.get_shared_key(id)?;
+        Ok((
+            shared_key.state_chain_id.clone().unwrap(),
+            shared_key.tx_backup_psm.clone().unwrap().tx.input.get(0).unwrap().previous_output.txid.to_string(),
+            shared_key.proof_key.clone().unwrap(),
+            shared_key.value.clone(),
+            shared_key.unspent,
+        ))
     }
 
     /// Get mutable reference to shared key by id. Return None if no shared key with given id.
@@ -392,7 +404,7 @@ impl Wallet {
         aggregated_balance
     }
 
-    /// Return balances of shared keys
+    /// Return balances of unspent shared keys
     pub fn get_state_chains_info(&self) -> (Vec<String>, Vec<String>, Vec<GetBalanceResponse>) {
         let mut state_chain_key_ids: Vec<String> = vec!();
         let mut state_chain_ids: Vec<String> = vec!();
