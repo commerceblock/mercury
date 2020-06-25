@@ -120,6 +120,7 @@ impl Default for Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::keygen::generate_keypair;
 
     #[test]
     fn test_commit() {
@@ -158,5 +159,26 @@ mod tests {
             }
         }
     } 
+
+    #[test]
+    fn test_config() {
+        let (priv_key, _pub_key) = generate_keypair();
+        let privkey_str = priv_key.to_wif().to_string();
+
+        let (priv_key_2, _pub_key_2) = generate_keypair();
+        
+        let str_1="{\"url\":\"https://mainstay.xyz/api/v1\", \"position\":234, \"token\":\"mytoken\"}";
+        let str_2=format!("{{\"url\":\"https://mainstay.xyz/api/v1\", \"position\":234, \"token\":\"mytoken\", \"key\":\"{}\"}}", privkey_str);
+        let config_1 = Config::from_str(str_1).unwrap();
+        assert!(config_1.url == "https://mainstay.xyz/api/v1", "url parse fail");
+        assert!(config_1.position == 234, "position parse fail");
+        assert!(config_1.token == "mytoken", "token parse fail");
+        assert!(config_1.key == None, "key parse fail");
+        let config_2 = Config::from_str(&str_2).unwrap();
+        assert!(config_2.key.unwrap().key == priv_key.key, "str_2 key parse fail");
+        assert!(config_2.key.unwrap().key != priv_key_2.key, "str_2 key parse check fail");
+
+
+    }
 
 }
