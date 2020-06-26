@@ -16,6 +16,9 @@ extern crate itertools;
 
 extern crate reqwest;
 extern crate base64;
+extern crate merkletree;
+extern crate arrayvec;
+
 pub mod util;
 pub mod error;
 pub mod structs;

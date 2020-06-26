@@ -29,6 +29,9 @@ electrumx_client = { git = "https://github.com/commerceblock/rust-electrumx-clie
 reqwest = "0.9.5"
 itertools = "0.9.0"
 base64 = "0.12.2"
+merkletree = "0.20.0"
+arrayvec = "0.5.1"
+
 
 [dependencies.curv]
 git = "https://github.com/KZen-networks/curv"

@@ -24,7 +24,7 @@ pub enum CError {
     /// Schnorr error
     SchnorrError(String),
     /// Inherit errors from SharedLibError
-    SharedLibError(String),
+    SharedLibError(String)
 }
 
 impl From<String> for CError {
