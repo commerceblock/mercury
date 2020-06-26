@@ -455,6 +455,7 @@ pub fn sign_second(
         Err(e) => {
             // Try for case in which sighash begins with 0's and so conversion to hex from
             // BigInt is too short
+            info!("SIGN_SECOND: Trying to add missing 0's. {}",message_hex.clone());
             let num_zeros = 64 - message_hex.len();
             if num_zeros < 1 {
                 return Err(SEError::from(e));
@@ -462,12 +463,13 @@ pub fn sign_second(
             let temp = message_hex.clone();
             message_hex = format!("{:0width$}", 0, width = num_zeros);
             message_hex.push_str(&temp);
+            info!("SIGN_SECOND: Trying to add missing 0's res. {}",message_hex.clone());
             // try reverse again
             message_sig_hash = reverse_hex_str(message_hex.clone())?;
         }
     }
 
-    if !user_session.sig_hash.unwrap().to_string().contains(&message_sig_hash) {
+    if user_session.sig_hash.unwrap().to_string() != message_sig_hash {
         return Err(SEError::SigningError(format!(
             "Message to be signed does not match verified sig hash. \n{}, {}",
             user_session.sig_hash.unwrap().to_string(), message_sig_hash
@@ -525,17 +527,14 @@ pub fn sign_second(
         Protocol::Withdraw => {
             // Store signed withdraw tx in UserSession DB object
             user_session.tx_withdraw = Some(tx);
-            debug!("Withdraw: Tx signed and stored.");
+            info!("WITHDRAW: Tx signed and stored. User ID: {}", user_session.id);
             // Do not return withdraw tx witness until /withdraw/confirm is complete
             witness = vec![];
         }
         _ => {
             // Store signed backup tx in UserSession DB object
             user_session.tx_backup = Some(tx.to_owned());
-            debug!(
-                "Deposit/Transfer: Backup Tx signed and stored. User: {}",
-                user_session.id
-            );
+            info!("DEPOSIT/TRANSFER: Backup Tx signed and stored. User: {}", user_session.id);
         }
     };
 

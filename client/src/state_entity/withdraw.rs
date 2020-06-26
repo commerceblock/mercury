@@ -58,7 +58,7 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
     )?;
 
     // Alert SE of desire of withdraw and receive authorisation if state chain signature verifies
-    requests::postb(&wallet.client_shim,&format!("/withdraw/init"),
+    requests::postb(&wallet.client_shim,&format!("withdraw/init"),
         &WithdrawMsg1 {
             shared_key_id: shared_key_id.clone(),
             state_chain_sig,

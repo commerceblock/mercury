@@ -13,6 +13,7 @@ log = "0.4"
 time = "*"
 bitcoin = "0.20.0"
 rand = "0.6.5"
+env_logger = "0.7.1"
 
 [dependencies.curv]
 git = "https://github.com/KZen-networks/curv"

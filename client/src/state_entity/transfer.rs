@@ -65,7 +65,7 @@ pub fn transfer_sender(
     )?;
 
     // Init transfer: Send statechain signature or batch data
-    let transfer_msg2: TransferMsg2 = requests::postb(&wallet.client_shim,&format!("/transfer/sender"),
+    let transfer_msg2: TransferMsg2 = requests::postb(&wallet.client_shim,&format!("transfer/sender"),
         &TransferMsg1 {
             shared_key_id: shared_key_id.to_string(),
             state_chain_sig: state_chain_sig.clone(),
@@ -190,7 +190,7 @@ pub fn try_o2(wallet: &mut Wallet, state_chain_data: &StateChainDataAPI, transfe
 
     // encrypt t2 with SE key and sign with Receiver proof key (se_addr.proof_key)
 
-    let transfer_msg5: TransferMsg5 = requests::postb(&wallet.client_shim,&format!("/transfer/receiver"),
+    let transfer_msg5: TransferMsg5 = requests::postb(&wallet.client_shim,&format!("transfer/receiver"),
         &TransferMsg4 {
             shared_key_id: transfer_msg3.shared_key_id.clone(),
             state_chain_id: transfer_msg3.state_chain_id.clone(),

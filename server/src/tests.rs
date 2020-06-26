@@ -48,7 +48,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_statechain_err() {
+    fn test_err_get_statechain() {
         let client = Client::new(server::get_server()).expect("valid rocket instance");
 
         // get_statechain invalid id
@@ -69,7 +69,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_smt_proof_err() {
+    fn test_err_get_smt_proof() {
         let client = Client::new(server::get_server()).expect("valid rocket instance");
 
         // None root
@@ -119,7 +119,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_transfer_batch_status_err() {
+    fn test_err_get_transfer_batch_status() {
         let client = Client::new(server::get_server()).expect("valid rocket instance");
 
         // get_transfer_batch_status invalid id

@@ -6,6 +6,7 @@ use config;
 use rocket;
 use rocket::{Request, Rocket};
 use rocksdb;
+use env_logger;
 
 use std::{collections::HashMap, str::FromStr};
 
@@ -65,6 +66,8 @@ pub fn get_server() -> Rocket {
 
     let config = Config::load(settings.clone());
     let auth_config = AuthConfig::load(settings.clone());
+
+    let _ = env_logger::try_init();
 
     rocket::ignite()
         .register(catchers![internal_error, not_found, bad_request])
