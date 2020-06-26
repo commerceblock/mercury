@@ -11,3 +11,4 @@ Cargo.lock
 .idea
 db/
 db-statechain/
+log/

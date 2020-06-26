@@ -94,7 +94,7 @@ mod tests {
         wallets.push(gen_wallet_with_deposit(10000)); // sender
         wallets.push(gen_wallet()); // receiver
 
-        // Get deposit info from wallet
+        // Get state chain owned by wallet
         let state_chains_info = wallets[0].get_state_chains_info();
         let shared_key_id = state_chains_info.0.last().unwrap();
         let (state_chain_id, funding_txid, _, _, _) = wallets[0].get_shared_key_info(shared_key_id).unwrap();
@@ -109,7 +109,7 @@ mod tests {
             wallets[1].get_shared_key(&new_shared_key_id).unwrap().share.public.q
         );
 
-        // check shared key is marked spent in sender and unspent in sender
+        // check shared key is marked spent in sender and unspent in receiver
         assert!(!wallets[0].get_shared_key(shared_key_id).unwrap().unspent);
         assert!(wallets[1].get_shared_key(&new_shared_key_id).unwrap().unspent);
 
@@ -126,6 +126,72 @@ mod tests {
         assert_eq!(shared_key.smt_proof.clone().unwrap().root, root);
         assert_eq!(shared_key.smt_proof.clone().unwrap().proof, proof);
         assert_eq!(shared_key.proof_key.clone().unwrap(),receiver_addr.proof_key);
+    }
+
+    #[test]
+    fn test_double_transfer() {
+        spawn_server();
+        let mut wallets = vec!();
+        wallets.push(gen_wallet_with_deposit(10000)); // sender
+        wallets.push(gen_wallet()); // receiver1
+        wallets.push(gen_wallet()); // receiver2
+
+        // Get state chain owned by wallets[0]
+        let state_chains_info = wallets[0].get_state_chains_info();
+        assert_eq!(state_chains_info.0.len(),1);
+        let shared_key_id0 = state_chains_info.0.last().unwrap();
+        let (state_chain_id1, funding_txid, _, _, _) = wallets[0].get_shared_key_info(shared_key_id0).unwrap();
+
+        // Transfer 1
+        let receiver1_addr = wallets[1].get_new_state_entity_address(&funding_txid).unwrap();
+        let new_shared_key_id1 = run_transfer(&mut wallets, 0, 1, shared_key_id0);
+
+        // Get state chain owned by wallets[1]
+        let state_chains_info = wallets[0].get_state_chains_info();
+        assert_eq!(state_chains_info.0.len(),0);
+
+        let state_chains_info = wallets[1].get_state_chains_info();
+        assert_eq!(state_chains_info.0.len(),1);
+
+        let shared_key_id1 = state_chains_info.0.last().unwrap();
+        assert_eq!(new_shared_key_id1, shared_key_id1.to_owned());
+        let (state_chain_id2, funding_txid, _, _, _) = wallets[1].get_shared_key_info(shared_key_id1).unwrap();
+        assert_eq!(state_chain_id1,state_chain_id2);
+
+        // Transfer 2
+        let receiver2_addr = wallets[2].get_new_state_entity_address(&funding_txid).unwrap();
+
+        let new_shared_key_id2 = run_transfer(&mut wallets, 1, 2, shared_key_id1);
+
+        // check shared keys have the same master public key
+        assert_eq!(
+            wallets[0].get_shared_key(shared_key_id0).unwrap().share.public.q,
+            wallets[1].get_shared_key(shared_key_id1).unwrap().share.public.q
+        );
+        assert_eq!(
+            wallets[1].get_shared_key(shared_key_id1).unwrap().share.public.q,
+            wallets[2].get_shared_key(&new_shared_key_id2).unwrap().share.public.q
+        );
+
+        // check shared key is marked spent in wallets 0, 1 and unspent in 2
+        assert!(!wallets[0].get_shared_key(shared_key_id0).unwrap().unspent);
+        assert!(!wallets[1].get_shared_key(shared_key_id1).unwrap().unspent);
+        assert!(wallets[2].get_shared_key(&new_shared_key_id2).unwrap().unspent);
+
+        // check state chain is updated
+        let state_chain = state_entity::api::get_statechain(&wallets[0].client_shim, &state_chain_id1).unwrap();
+        assert_eq!(state_chain.chain.len(),3);
+        assert_eq!(state_chain.chain.get(1).unwrap().data.to_string(), receiver1_addr.proof_key.to_string());
+        assert_eq!(state_chain.chain.last().unwrap().data.to_string(), receiver2_addr.proof_key.to_string());
+
+        // Get SMT inclusion proof and verify
+        let root = state_entity::api::get_smt_root(&wallets[1].client_shim).unwrap();
+        let proof = state_entity::api::get_smt_proof(&wallets[1].client_shim, &root, &funding_txid).unwrap();
+        // Ensure wallet's shared key is updated with proof info
+        let shared_key = wallets[2].get_shared_key(&new_shared_key_id2).unwrap();
+        assert_eq!(shared_key.smt_proof.clone().unwrap().root, root);
+        assert_eq!(shared_key.smt_proof.clone().unwrap().proof, proof);
+        assert_eq!(shared_key.proof_key.clone().unwrap(),receiver2_addr.proof_key);
     }
 
 

@@ -64,10 +64,8 @@ pub fn transfer_sender(
     // Ensure transfer has not already been completed (but not finalized)
     match db::get::<TransferData>(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::TransferData)? {
         None => {},
-        Some(transfer_data) => {
-            if !transfer_data.archive {
-                return Err(SEError::Generic(String::from("Transfer already completed. Waiting for finalize.")));
-            }
+        Some(_) => {
+            return Err(SEError::Generic(String::from("Transfer already completed. Waiting for finalize.")));
         }
     }
 
@@ -109,7 +107,7 @@ pub fn transfer_receiver(
     let id = transfer_msg4.shared_key_id.clone();
     info!("TRANSFER: Receiver side. Shared Key ID: {}", id);
 
-    // Get TransferData for shared_key_id
+    // Get TransferData for state_chain_id
     let transfer_data: TransferData =
         db::get(&state.db, &claim.sub, &transfer_msg4.state_chain_id, &StateEntityStruct::TransferData)?
             .ok_or(SEError::DBError(NoDataForID, transfer_msg4.state_chain_id.clone()))?;
@@ -274,6 +272,9 @@ pub fn transfer_finalize(
     info!("TRANSFER: Included in sparse merkle tree. State Chain ID: {}", state_chain_id);
     debug!("TRANSFER: State Chain ID: {}. New root: {:?}. Previous root: {:?}.", state_chain_id, new_root.unwrap(), root);
 
+    // Remove TransferData for this transfer
+    db::remove(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::TransferData)?;
+    
     Ok(())
 }
 

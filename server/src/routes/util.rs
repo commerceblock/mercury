@@ -80,6 +80,7 @@ pub struct TransferData {
     pub archive: bool // Data no longer in use
 }
 
+
 /// TransferBatch stores list of StateChains involved in a batch transfer and their status in the potocol.
 /// When all transfers in the batch are complete these transfers are finalized atomically.
 #[derive(Serialize, Deserialize, Debug)]
@@ -230,20 +231,8 @@ pub fn get_transfer_batch_status(
                 punish_state_chain(&state, &claim, state_chain_id.clone())?;
                 transfer_batch_data.punished_state_chains.push(state_chain_id.clone());
 
-                // Set TransferDatas involved as archived
-                match db::get::<TransferData>(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::TransferData)? {
-                    None => {},
-                    Some(mut transfer_data) => {
-                        transfer_data.archive = true;
-                        db::insert(
-                            &state.db,
-                            &claim.sub,
-                            &state_chain_id,
-                            &StateEntityStruct::TransferData,
-                            &transfer_data
-                        )?;
-                    }
-                }
+                // Remove TransferData involved
+                db::remove(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::TransferData)?;
                 info!("TRANSFER_BATCH: Transfer data marked as archived. State Chain ID: {}.", state_chain_id);
             }
             info!("TRANSFER_BATCH: Punished all state chains in failed batch. ID: {}.",batch_id);

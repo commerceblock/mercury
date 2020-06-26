@@ -16,10 +16,6 @@ use crate::routes::util::{UserSession, StateEntityStruct};
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::storage::db::get_current_root;
 
-use bitcoin::{{Transaction, consensus},
-    util::misc::hex_bytes};
-use consensus::encode::deserialize;
-
 use electrumx_client::{
     interface::Electrumx,
     electrumx_client::ElectrumxClient};
