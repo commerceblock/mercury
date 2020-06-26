@@ -13,7 +13,8 @@ use shared_lib::{
 use rand::random;
 use bitcoin::{Transaction, PublicKey};
 use std::{thread, time};
-
+use std::time::Instant;
+use floating_duration::TimeFormat;
 
 /// Spawn a fresh StateChain entity server
 pub fn spawn_server() {
@@ -22,7 +23,7 @@ pub fn spawn_server() {
         server::get_server().launch();
     });
 
-    let five_seconds = time::Duration::from_millis(5000);
+    let five_seconds = time::Duration::from_millis(2000);
     thread::sleep(five_seconds);
 }
 
@@ -61,20 +62,33 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
 /// Run deposit on a wallet for some amount
 /// Returns shared_key_id, state_chain_id, funding txid, signed backup tx, back up transacion data and proof_key
 pub fn run_deposit(wallet: &mut Wallet, amount: &u64) -> (String, String, String, Transaction, PrepareSignTxMsg, PublicKey)  {
+    let start = Instant::now();
     let resp = state_entity::deposit::deposit(
         wallet,
         amount
     ).unwrap();
+    println!("(Deposit Took: {})", TimeFormat(start.elapsed()));
 
-    return resp
+    resp
+}
+
+/// Run withdraw of shared key ID given
+pub fn run_withdraw(wallet: &mut Wallet, shared_key_id: &String) -> (String, String, u64) {
+    let start = Instant::now();
+    let resp = state_entity::withdraw::withdraw(wallet, &shared_key_id).unwrap();
+    println!("(Withdraw Took: {})", TimeFormat(start.elapsed()));
+
+    resp
 }
 
 /// Run a transfer between two wallets. Input vector of wallets with sender and receiver indexes in vector.
 /// Return new shared key id.
 pub fn run_transfer(wallets: &mut Vec<Wallet>, sender_index: usize, receiver_index: usize, shared_key_id: &String) -> String {
+
     let (_, funding_txid, _, _, _) = wallets[sender_index].get_shared_key_info(shared_key_id).unwrap();
     let receiver_addr = wallets[receiver_index].get_new_state_entity_address(&funding_txid).unwrap();
 
+    let start = Instant::now();
     let tranfer_sender_resp =
         state_entity::transfer::transfer_sender(
             &mut wallets[sender_index],
@@ -88,6 +102,8 @@ pub fn run_transfer(wallets: &mut Vec<Wallet>, sender_index: usize, receiver_ind
             &tranfer_sender_resp,
             &None
         ).unwrap().new_shared_key_id;
+
+    println!("(Transfer Took: {})", TimeFormat(start.elapsed()));
 
     return new_shared_key_id;
 }
@@ -103,6 +119,8 @@ pub fn run_transfer_with_commitment(
     state_chain_id: &String,
     batch_id: &String
 ) -> (TransferFinalizeData, String, [u8;32]) {
+    let start = Instant::now();
+
     let receiver_addr = wallets[receiver_index].get_new_state_entity_address(&funding_txid).unwrap();
 
     let tranfer_sender_resp =
@@ -125,6 +143,7 @@ pub fn run_transfer_with_commitment(
                 })
             ).unwrap();
 
+    println!("(Transfer Took: {})", TimeFormat(start.elapsed()));
 
     return (transfer_finalized_data, commitment, nonce)
 }

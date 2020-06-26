@@ -8,9 +8,6 @@
 //
 
 use curv::FE;
-use std::time::Instant;
-use floating_duration::TimeFormat;
-
 use curv::cryptographic_primitives::twoparty::dh_key_exchange_variant_with_pok_comm::*;
 use kms::chain_code::two_party as chain_code;
 use kms::ecdsa::two_party::*;
@@ -25,8 +22,6 @@ use super::super::Result;
 const KG_PATH_PRE: &str = "ecdsa/keygen";
 
 pub fn get_master_key(id: &String, client_shim: &ClientShim, secret_key: &FE, value: &u64, is_transfer: bool) -> Result<SharedKey> {
-    let start = Instant::now();
-
     let (id, kg_party_one_first_message): (String, party_one::KeyGenFirstMsg)
         = if is_transfer {
             requests::post(client_shim, &format!("{}/{}/first/transfer", KG_PATH_PRE, id))?
@@ -110,8 +105,6 @@ pub fn get_master_key(id: &String, client_shim: &ClientShim, secret_key: &FE, va
             .public_share,
         &party_two_paillier,
     );
-
-    println!("(id: {}) Took: {}", id, TimeFormat(start.elapsed()));
 
     Ok(SharedKey {
         id: id.to_string(),
