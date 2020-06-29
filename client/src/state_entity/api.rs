@@ -23,7 +23,7 @@ pub fn get_statechain(client_shim: &ClientShim, state_chain_id: &String) -> Resu
 
 /// Get state entity's sparse merkle tree root
 pub fn get_smt_root(client_shim: &ClientShim) -> Result<Root> {
-    requests::post(&client_shim,&format!("/info/root"))
+    requests::post(&client_shim,&format!("info/root"))
 }
 
 /// Get state chain inclusion proof

@@ -75,7 +75,7 @@ fn main() {
                 }
                 println!();
             }
-            let (ids, bals) = wallet.get_state_chain_balances();
+            let (ids, _, bals) = wallet.get_state_chains_info();
             if ids.len() > 0 {
                 println!("\n\nState Entity balance: \n\nShared Key ID:\t\t\t\t\tConfirmed:\tUnconfirmed:");
                 for (i,bal) in bals.into_iter().enumerate() {

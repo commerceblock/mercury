@@ -26,13 +26,16 @@ pub fn withdraw_init(
     claim: Claims,
     withdraw_msg1: Json<WithdrawMsg1>,
 ) -> Result<Json<()>> {
+    let shared_key_id = withdraw_msg1.shared_key_id.clone();
+    info!("WITHDRAW: Init. Shared Key ID: {}", shared_key_id);
+
     // Auth user
-    check_user_auth(&state, &claim, &withdraw_msg1.shared_key_id)?;
+    check_user_auth(&state, &claim, &shared_key_id)?;
 
     // Get UserSession data
     let mut user_session: UserSession =
-        db::get(&state.db, &claim.sub, &withdraw_msg1.shared_key_id, &StateEntityStruct::UserSession)?
-            .ok_or(SEError::DBError(NoDataForID, withdraw_msg1.shared_key_id.clone()))?;
+        db::get(&state.db, &claim.sub, &shared_key_id, &StateEntityStruct::UserSession)?
+            .ok_or(SEError::DBError(NoDataForID, shared_key_id.clone()))?;
 
     // Get statechain
     let state_chain_id = user_session.state_chain_id.clone()
@@ -40,8 +43,10 @@ pub fn withdraw_init(
     let state_chain: StateChain =
         db::get(&state.db, &claim.sub, &state_chain_id.to_owned(), &StateEntityStruct::StateChain)?
             .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_owned()))?;
-    // Check if state chain is locked
+    // Check if state chain is still owned by user and not locked
     state_chain.is_locked()?;
+    state_chain.is_owned_by(&shared_key_id)?;
+
 
     // Verify new StateChainSig
     let prev_proof_key = state_chain.get_tip()?.data;
@@ -52,12 +57,12 @@ pub fn withdraw_init(
     db::insert(
         &state.db,
         &claim.sub,
-        &withdraw_msg1.shared_key_id,
+        &shared_key_id,
         &StateEntityStruct::UserSession,
         &user_session
     )?;
 
-    debug!("Withdraw: Authorised. State Chain: {}",state_chain_id);
+    info!("WITHDRAW: Authorised. Shared Key ID: {}. State Chain: {}",shared_key_id, state_chain_id);
 
     Ok(Json(()))
 }
@@ -72,10 +77,13 @@ pub fn withdraw_confirm(
     claim: Claims,
     withdraw_msg2: Json<WithdrawMsg2>,
 ) -> Result<Json<Vec<Vec<u8>>>> {
+    let shared_key_id = withdraw_msg2.shared_key_id.clone();
+    info!("WITHDRAW: Confirm. Shared Key ID: {}", shared_key_id);
+
     // Get UserSession data
     let mut user_session: UserSession =
-        db::get(&state.db, &claim.sub, &withdraw_msg2.shared_key_id, &StateEntityStruct::UserSession)?
-            .ok_or(SEError::DBError(NoDataForID, withdraw_msg2.shared_key_id.clone()))?;
+        db::get(&state.db, &claim.sub, &shared_key_id, &StateEntityStruct::UserSession)?
+            .ok_or(SEError::DBError(NoDataForID, shared_key_id.clone()))?;
     // Check withdraw tx and statechain signature exists
     if user_session.tx_withdraw.is_none() {
         return Err(SEError::Generic(String::from("Withdraw Error: No withdraw tx has been signed.")));
@@ -106,7 +114,7 @@ pub fn withdraw_confirm(
     db::insert(
         &state.db,
         &claim.sub,
-        &withdraw_msg2.shared_key_id,
+        &shared_key_id,
         &StateEntityStruct::UserSession,
         &user_session
     )?;
@@ -119,7 +127,7 @@ pub fn withdraw_confirm(
     let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &funding_txid, &withdraw_msg2.address)?;
     update_root(&state.db, new_root.unwrap())?;
 
-    debug!("Withdraw: Complete. State Chain: {}",state_chain_id);
+    info!("WITHDRAW: Complete. Shared Key ID: {}. State Chain: {}",shared_key_id, state_chain_id);
 
     Ok(Json(tx_withdraw.input[0].clone().witness))
 }

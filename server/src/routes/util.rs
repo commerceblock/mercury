@@ -77,8 +77,8 @@ pub struct TransferData {
     pub state_chain_id: String,
     pub state_chain_sig: StateChainSig,
     pub x1: FE,
-    pub archive: bool // Data no longer in use
 }
+
 
 /// TransferBatch stores list of StateChains involved in a batch transfer and their status in the potocol.
 /// When all transfers in the batch are complete these transfers are finalized atomically.
@@ -150,7 +150,7 @@ pub fn punish_state_chain(
         &state_chain
     )?;
 
-
+    info!("PUNISHMENT: State Chain ID: {} locked for {}s.", state_chain_id, state.punishment_duration);
     Ok(())
 }
 
@@ -224,30 +224,17 @@ pub fn get_transfer_batch_status(
     // Check batch is still within lifetime
     if transfer_batch_data.is_ended(state.batch_lifetime) {
         if transfer_batch_data.punished_state_chains.len() == 0 { // Punishments not yet set
+            info!("TRANSFER_BATCH: Lifetime reached. ID: {}.", batch_id);
             // Set punishments for all statechains involved in batch
             for (state_chain_id, _) in transfer_batch_data.state_chains {
                 punish_state_chain(&state, &claim, state_chain_id.clone())?;
                 transfer_batch_data.punished_state_chains.push(state_chain_id.clone());
 
-                // Set TransferDatas involved as archived
-                match db::get::<TransferData>(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::TransferData)? {
-                    None => {},
-                    Some(mut transfer_data) => {
-                        transfer_data.archive = true;
-                        db::insert(
-                            &state.db,
-                            &claim.sub,
-                            &state_chain_id,
-                            &StateEntityStruct::TransferData,
-                            &transfer_data
-                        )?;
-                    }
-                }
-
-
-
+                // Remove TransferData involved
+                db::remove(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::TransferData)?;
+                info!("TRANSFER_BATCH: Transfer data marked as archived. State Chain ID: {}.", state_chain_id);
             }
-            debug!("Punished all state chains in failed batch. ID:{}",transfer_batch_data.id);
+            info!("TRANSFER_BATCH: Punished all state chains in failed batch. ID: {}.",batch_id);
         }
         return Err(SEError::Generic(String::from("Transfer Batch ended.")))
     }
@@ -262,7 +249,7 @@ pub fn get_transfer_batch_status(
                 &claim,
                 &batch_id
             )?;
-            debug!("All transfers complete in batch {}. Batch finalized.", batch_id);
+            info!("TRANSFER_BATCH: All transfers complete in batch. Finalized. ID: {}.", batch_id);
         }
     }
 
@@ -277,23 +264,24 @@ pub fn get_transfer_batch_status(
 /// Prepare to co-sign a transaction input. This is where SE checks that the tx to be signed is
 /// honest and error free:
 ///     - Check tx data
-///     - calculate and store tx sighash for validation before performing ecdsa::sign
+///     - Calculate and store tx sighash for validation before performing ecdsa::sign
 #[post("/prepare-sign", format = "json", data = "<prepare_sign_msg>")]
 pub fn prepare_sign_tx(
     state: State<Config>,
     claim: Claims,
     prepare_sign_msg: Json<PrepareSignTxMsg>,
 ) -> Result<Json<()>> {
+    let shared_key_id = prepare_sign_msg.shared_key_id.clone();
+
     // Auth user
-    check_user_auth(&state, &claim, &prepare_sign_msg.shared_key_id)?;
+    check_user_auth(&state, &claim, &shared_key_id)?;
 
     let prepare_sign_msg: PrepareSignTxMsg = prepare_sign_msg.into_inner();
 
     // Get user session for this user
     let mut user_session: UserSession =
-    db::get(&state.db, &claim.sub, &prepare_sign_msg.shared_key_id, &StateEntityStruct::UserSession)?
-    .ok_or(SEError::DBError(NoDataForID, prepare_sign_msg.shared_key_id.clone()))?;
-
+        db::get(&state.db, &claim.sub, &shared_key_id, &StateEntityStruct::UserSession)?
+            .ok_or(SEError::DBError(NoDataForID, shared_key_id.clone()))?;
 
     // Which protocol are we signing for?
     match prepare_sign_msg.protocol {
@@ -333,12 +321,12 @@ pub fn prepare_sign_tx(
             db::insert(
                 &state.db,
                 &claim.sub,
-                &prepare_sign_msg.shared_key_id,
+                &shared_key_id,
                 &StateEntityStruct::UserSession,
                 &user_session
             )?;
 
-            debug!("Withdraw: Withdraw tx ready for signing.");
+            info!("WITHDRAW: Withdraw tx ready for signing. Shared Key ID: {}. State Chain ID: {}.",shared_key_id, state_chain_id);
         }
         _ => {
             // Verify unsigned backup tx to ensure co-sign will be signing the correct data
@@ -358,8 +346,7 @@ pub fn prepare_sign_tx(
                 user_session.tx_backup = Some(prepare_sign_msg.tx.clone());
             }
 
-
-            debug!("Deposit: Statechain created and backup tx ready for signing.");
+            info!("DEPOSIT: Backup tx ready for signing. Shared Key ID: {}.", shared_key_id);
         }
     }
 
@@ -367,7 +354,7 @@ pub fn prepare_sign_tx(
     db::insert(
         &state.db,
         &claim.sub,
-        &prepare_sign_msg.shared_key_id,
+        &shared_key_id,
         &StateEntityStruct::UserSession,
         &user_session
     )?;

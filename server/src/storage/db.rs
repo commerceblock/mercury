@@ -45,6 +45,16 @@ where
     get_by_identifier(db, &identifier)
 }
 
+pub fn remove(db: &DB, user_id: &str, id: &str, name: &dyn MPCStruct) -> Result<()> {
+    let identifier = idify(user_id, id, name);
+    debug!("Getting from db ({})", identifier);
+
+    match db.delete(identifier) {
+        Err(e) => return Err(SEError::Generic(e.to_string())),
+        Ok(_) => Ok(())
+    }
+}
+
 
 fn idify_root(id: &u32) -> String {
     format!("{}_{}", id, String::from("root"))
@@ -76,7 +86,6 @@ where
         }
     }
 }
-
 
 /// Update state chain root value
 pub fn update_root(db: &DB, new_root: [u8;32]) -> Result<()> {

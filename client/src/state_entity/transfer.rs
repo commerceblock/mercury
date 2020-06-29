@@ -65,7 +65,7 @@ pub fn transfer_sender(
     )?;
 
     // Init transfer: Send statechain signature or batch data
-    let transfer_msg2: TransferMsg2 = requests::postb(&wallet.client_shim,&format!("/transfer/sender"),
+    let transfer_msg2: TransferMsg2 = requests::postb(&wallet.client_shim,&format!("transfer/sender"),
         &TransferMsg1 {
             shared_key_id: shared_key_id.to_string(),
             state_chain_sig: state_chain_sig.clone(),
@@ -143,6 +143,10 @@ pub fn transfer_receiver(
         }
     }
 
+    // Update tx_backup_psm shared_key_id with new one
+    let mut tx_backup_psm = transfer_msg3.tx_backup_psm.clone();
+    tx_backup_psm.shared_key_id = transfer_msg5.new_shared_key_id.clone();
+
     // Data to update wallet with transfer. Should only be applied after StateEntity has finalized.
     let finalize_data = TransferFinalizeData {
         new_shared_key_id: transfer_msg5.new_shared_key_id,
@@ -151,7 +155,7 @@ pub fn transfer_receiver(
         state_chain_data,
         proof_key: transfer_msg3.rec_addr.proof_key.clone(),
         state_chain_id: transfer_msg3.state_chain_id.clone(),
-        tx_backup_psm: transfer_msg3.tx_backup_psm.clone()
+        tx_backup_psm
     };
 
     // In batch case this step is performed once all other transfers in the batch are complete.
@@ -190,7 +194,7 @@ pub fn try_o2(wallet: &mut Wallet, state_chain_data: &StateChainDataAPI, transfe
 
     // encrypt t2 with SE key and sign with Receiver proof key (se_addr.proof_key)
 
-    let transfer_msg5: TransferMsg5 = requests::postb(&wallet.client_shim,&format!("/transfer/receiver"),
+    let transfer_msg5: TransferMsg5 = requests::postb(&wallet.client_shim,&format!("transfer/receiver"),
         &TransferMsg4 {
             shared_key_id: transfer_msg3.shared_key_id.clone(),
             state_chain_id: transfer_msg3.state_chain_id.clone(),

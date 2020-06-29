@@ -6,6 +6,12 @@ use config;
 use rocket;
 use rocket::{Request, Rocket};
 use rocksdb;
+use env_logger;
+
+use log::LevelFilter;
+use log4rs::append::file::FileAppender;
+use log4rs::encode::pattern::PatternEncoder;
+use log4rs::config::{Appender, Config as LogConfig, Root};
 
 use std::{collections::HashMap, str::FromStr};
 
@@ -65,6 +71,8 @@ pub fn get_server() -> Rocket {
 
     let config = Config::load(settings.clone());
     let auth_config = AuthConfig::load(settings.clone());
+
+    set_logging_config(settings.get("log_file"));
 
     rocket::ignite()
         .register(catchers![internal_error, not_found, bad_request])
@@ -127,4 +135,22 @@ fn get_db(_settings: HashMap<String, String>) -> rocksdb::DB {
     //     .to_string();
 
     rocksdb::DB::open_default(db::DB_LOC).unwrap()
+}
+
+fn set_logging_config(log_file: Option<&String>) {
+    if log_file.is_none() {
+        let _ = env_logger::try_init();
+    } else {
+        // Write log to file
+        let logfile = FileAppender::builder()
+            .encoder(Box::new(PatternEncoder::new("{l} - {m}\n")))
+            .build(log_file.unwrap()).unwrap();
+        let log_config = LogConfig::builder()
+            .appender(Appender::builder().build("logfile", Box::new(logfile)))
+            .build(Root::builder()
+                       .appender("logfile")
+                       .build(LevelFilter::Info)).unwrap();
+
+        let _ = log4rs::init_config(log_config);
+    }
 }

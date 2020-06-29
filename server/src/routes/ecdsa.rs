@@ -447,26 +447,18 @@ pub fn sign_second(
         )));
     }
 
-    // check sighash matches message to be signed
+    // Check sig hash is of corrcet length. Leading 0s are lost during BigInt conversion so add them
+    // back here if necessary.
     let mut message_hex = request.message.to_hex();
-    let message_sig_hash;
-    match reverse_hex_str(message_hex.clone()) {
-        Ok(res) => message_sig_hash = res,
-        Err(e) => {
-            // Try for case in which sighash begins with 0's and so conversion to hex from
-            // BigInt is too short
-            let num_zeros = 64 - message_hex.len();
-            if num_zeros < 1 {
-                return Err(SEError::from(e));
-            };
-            let temp = message_hex.clone();
-            message_hex = format!("{:0width$}", 0, width = num_zeros);
-            message_hex.push_str(&temp);
-            // try reverse again
-            message_sig_hash = reverse_hex_str(message_hex.clone())?;
-        }
+    if message_hex.len() < 64 {
+        let num_zeros = 64 - message_hex.len();
+        let temp = message_hex.clone();
+        message_hex = format!("{:0width$}", 0, width = num_zeros);
+        message_hex.push_str(&temp);
     }
 
+    // Check sighash matches message to be signed
+    let message_sig_hash = reverse_hex_str(message_hex.clone())?;
     if user_session.sig_hash.unwrap().to_string() != message_sig_hash {
         return Err(SEError::SigningError(format!(
             "Message to be signed does not match verified sig hash. \n{}, {}",
@@ -510,32 +502,43 @@ pub fn sign_second(
         }
     };
 
-    // Add signature to tx
-    let mut v = BigInt::to_vec(&signature.r); // make signature witness
-    v.extend(BigInt::to_vec(&signature.s));
+    // Make signature witness
+    let mut r_vec = BigInt::to_vec(&signature.r);
+    if r_vec.len() != 32 { // Check corrcet length of conversion to Signature
+        let mut temp = vec![0;32-r_vec.len()];
+        temp.extend(r_vec);
+        r_vec = temp;
+    }
+    let mut s_vec = BigInt::to_vec(&signature.s);
+    if s_vec.len() != 32 { // Check corrcet length of conversion to Signature
+        let mut temp = vec![0;32-s_vec.len()];
+        temp.extend(s_vec);
+        s_vec = temp;
+    }
+    let mut v = r_vec;
+    v.extend(s_vec);
     let mut sig_vec = Signature::from_compact(&v[..])?
         .serialize_der()
         .to_vec();
     sig_vec.push(01);
     let pk_vec = shared_key.public.q.get_element().serialize().to_vec();
     let mut witness = vec![sig_vec, pk_vec];
+
+    // Add signature to tx
     tx.input[0].witness = witness.clone();
 
     match request.protocol {
         Protocol::Withdraw => {
             // Store signed withdraw tx in UserSession DB object
             user_session.tx_withdraw = Some(tx);
-            debug!("Withdraw: Tx signed and stored.");
+            info!("WITHDRAW: Tx signed and stored. User ID: {}", user_session.id);
             // Do not return withdraw tx witness until /withdraw/confirm is complete
             witness = vec![];
         }
         _ => {
             // Store signed backup tx in UserSession DB object
             user_session.tx_backup = Some(tx.to_owned());
-            debug!(
-                "Deposit/Transfer: Backup Tx signed and stored. User: {}",
-                user_session.id
-            );
+            info!("DEPOSIT/TRANSFER: Backup Tx signed and stored. User: {}", user_session.id);
         }
     };
 

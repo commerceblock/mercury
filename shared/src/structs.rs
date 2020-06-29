@@ -123,7 +123,7 @@ pub struct TransferMsg1 {
 /// SE -> Sender
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMsg2 {
-    pub x1: FE,
+    pub x1: FE
 }
 /// Sender -> Receiver
 #[derive(Serialize, Deserialize, Debug, Clone)]
