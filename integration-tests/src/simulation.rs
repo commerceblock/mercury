@@ -111,7 +111,7 @@ mod tests {
     use super::run_simulation;
 
     #[allow(dead_code)]
-    #[test]
+    // #[test]
     fn test_run_simulation() {
         run_simulation();
     }
