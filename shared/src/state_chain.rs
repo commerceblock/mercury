@@ -40,10 +40,12 @@ pub struct StateChain {
     pub amount: u64, // 0 means state chain is ended.
     /// Gets set to a time in the future before which this state chain cannot be acted upon.
     pub locked_until: SystemTime,
+    /// Owner's UserSession id
+    pub owner_id: String
 }
 
 impl StateChain {
-    pub fn new(data: String, tx_backup: Transaction, amount: u64) -> Self {
+    pub fn new(data: String, tx_backup: Transaction, amount: u64, owner_id: String) -> Self {
         StateChain {
             id: Uuid::new_v4().to_string(),
             chain: vec!( State {
@@ -53,6 +55,7 @@ impl StateChain {
             tx_backup,
             amount,
             locked_until: SystemTime::now(),
+            owner_id
         }
     }
 
@@ -86,6 +89,16 @@ impl StateChain {
             Ok(secs_left) => return Err(SharedLibError::Generic(
                 format!("State Chain locked for {} minutes.", (secs_left.as_secs()/60)+1))),
             Err(_) => return Ok(())
+        }
+    }
+
+    /// Check if state chain is still owned by this user
+    pub fn is_owned_by(&self, shared_key_id: &String) -> Result<()> {
+        if &self.owner_id == shared_key_id {
+            Ok(())
+        } else {
+            return Err(SharedLibError::Generic(
+                format!("State Chain not owned by this wallet.")));
         }
     }
 }
@@ -185,7 +198,8 @@ mod tests {
         let mut state_chain = StateChain::new(
             proof_key1_pub.to_string(),
             Transaction{version: 2,lock_time: 0,input: vec!(),output: vec!()},
-            1000
+            1000,
+            String::from("owner_ID")
         );
 
         assert_eq!(state_chain.chain.len(),1);
@@ -215,7 +229,8 @@ mod tests {
         let mut state_chain = StateChain::new(
             proof_key1_pub.to_string(),
             Transaction{version: 2,lock_time: 0,input: vec!(),output: vec!()},
-            1000
+            1000,
+            String::from("owner_ID")
         );
 
         state_chain.locked_until = SystemTime::now() - Duration::from_secs(5);

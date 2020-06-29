@@ -77,7 +77,6 @@ pub struct TransferData {
     pub state_chain_id: String,
     pub state_chain_sig: StateChainSig,
     pub x1: FE,
-    pub archive: bool // Data no longer in use
 }
 
 
@@ -265,7 +264,7 @@ pub fn get_transfer_batch_status(
 /// Prepare to co-sign a transaction input. This is where SE checks that the tx to be signed is
 /// honest and error free:
 ///     - Check tx data
-///     - calculate and store tx sighash for validation before performing ecdsa::sign
+///     - Calculate and store tx sighash for validation before performing ecdsa::sign
 #[post("/prepare-sign", format = "json", data = "<prepare_sign_msg>")]
 pub fn prepare_sign_tx(
     state: State<Config>,

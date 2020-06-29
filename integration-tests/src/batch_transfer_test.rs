@@ -164,7 +164,7 @@ mod tests {
             &mut wallets[0],
             &shared_key_ids[0],    // shared wallet id
             receiver_addr.clone()) {
-                Err(e) => assert!(e.to_string().contains("Transfer already completed. Waiting for finalize.")),
+                Err(e) => assert!(e.to_string().contains("State Chain not owned by this wallet.")),
                 _ => assert!(false)
         }
 

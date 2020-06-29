@@ -39,8 +39,8 @@ pub fn transfer_sender(
     claim: Claims,
     transfer_msg1: Json<TransferMsg1>,
 ) -> Result<Json<TransferMsg2>> {
-    let id = transfer_msg1.shared_key_id.clone();
-    info!("TRANSFER: Sender Side. Shared Key ID: {}", id);
+    let shared_key_id = transfer_msg1.shared_key_id.clone();
+    info!("TRANSFER: Sender Side. Shared Key ID: {}", shared_key_id);
 
     // Auth user
     check_user_auth(&state, &claim, &transfer_msg1.shared_key_id)?;
@@ -50,18 +50,19 @@ pub fn transfer_sender(
 
     // Get state_chain id
     let user_session: UserSession =
-        db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+        db::get(&state.db, &claim.sub, &shared_key_id, &StateEntityStruct::UserSession)?
+            .ok_or(SEError::DBError(NoDataForID, shared_key_id.clone()))?;
     let state_chain_id =  user_session.state_chain_id
         .ok_or(SEError::Generic(String::from("Transfer Error: User does not own a state chain.")))?;
 
-    // Check if state chain is locked
+    // Check if state chain is still owned by user and not locked
     let state_chain: StateChain =
         db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
             .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
     state_chain.is_locked()?;
+    state_chain.is_owned_by(&shared_key_id)?;
 
-    // Ensure transfer has not already been completed (but not finalized)
+    // Ensure if transfer has already been completed (but not finalized)
     match db::get::<TransferData>(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::TransferData)? {
         None => {},
         Some(_) => {
@@ -82,11 +83,10 @@ pub fn transfer_sender(
             state_chain_id: state_chain_id.clone(),
             state_chain_sig: transfer_msg1.state_chain_sig.to_owned(),
             x1: x1.clone(),
-            archive: false
         }
     )?;
 
-    info!("TRANSFER: Sender side complete. Previous shared key ID: {}. State Chain ID: {}",id,state_chain_id);
+    info!("TRANSFER: Sender side complete. Previous shared key ID: {}. State Chain ID: {}",shared_key_id,state_chain_id);
     debug!("TRANSFER: Sender side complete. State Chain ID: {}. State Chain Signature: {:?}. x1: {:?}.", state_chain_id, transfer_msg1.state_chain_sig, x1);
 
     // TODO encrypt x1 with Senders proof key
@@ -229,6 +229,7 @@ pub fn transfer_finalize(
             .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
 
     state_chain.add(finalized_data.state_chain_sig.to_owned())?;
+    state_chain.owner_id = finalized_data.new_shared_key_id.to_owned();
 
     db::insert(
         &state.db,
@@ -274,7 +275,7 @@ pub fn transfer_finalize(
 
     // Remove TransferData for this transfer
     db::remove(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::TransferData)?;
-    
+
     Ok(())
 }
 

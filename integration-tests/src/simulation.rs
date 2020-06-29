@@ -37,9 +37,9 @@ pub fn run_simulation() {
     }
 }
 
-/// Generate random 1000 <= amount <= 20000
+/// Generate random 2000 <= amount <= 20000
 pub fn random_amount() -> u64 {
-    u64::from_str(&format!("{}000",rand::thread_rng().gen_range(1, 21))).unwrap()
+    u64::from_str(&format!("{}000",rand::thread_rng().gen_range(2, 21))).unwrap()
 }
 
 pub fn new_wallet(wallets: &mut Vec<Wallet>) {
@@ -115,5 +115,4 @@ mod tests {
     fn test_run_simulation() {
         run_simulation();
     }
-
 }

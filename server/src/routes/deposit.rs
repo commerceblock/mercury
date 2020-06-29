@@ -119,11 +119,11 @@ pub fn deposit_confirm(
     claim: Claims,
     deposit_msg2: Json<DepositMsg2>,
 ) -> Result<Json<String>> {
-
+    let shared_key_id = deposit_msg2.shared_key_id.clone();
     // Get UserSession info
     let mut user_session: UserSession =
-    db::get(&state.db, &claim.sub, &deposit_msg2.shared_key_id, &StateEntityStruct::UserSession)?
-        .ok_or(SEError::DBError(NoDataForID, deposit_msg2.shared_key_id.clone()))?;
+    db::get(&state.db, &claim.sub, &shared_key_id, &StateEntityStruct::UserSession)?
+        .ok_or(SEError::DBError(NoDataForID, shared_key_id.clone()))?;
 
     // Ensure backup tx exists and is signed
     let tx_backup = user_session.tx_backup.clone()
@@ -139,7 +139,8 @@ pub fn deposit_confirm(
     let state_chain = StateChain::new(
         user_session.proof_key.clone(),
         tx_backup.clone(),
-        tx_backup.output.last().unwrap().value+FEE
+        tx_backup.output.last().unwrap().value+FEE,
+        shared_key_id.to_owned()
     );
 
     db::insert(
@@ -170,7 +171,7 @@ pub fn deposit_confirm(
     db::insert(
         &state.db,
         &claim.sub,
-        &deposit_msg2.shared_key_id,
+        &shared_key_id.clone(),
         &StateEntityStruct::UserSession,
         &user_session
     )?;

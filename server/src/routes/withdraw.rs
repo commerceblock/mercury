@@ -43,8 +43,10 @@ pub fn withdraw_init(
     let state_chain: StateChain =
         db::get(&state.db, &claim.sub, &state_chain_id.to_owned(), &StateEntityStruct::StateChain)?
             .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_owned()))?;
-    // Check if state chain is locked
+    // Check if state chain is still owned by user and not locked
     state_chain.is_locked()?;
+    state_chain.is_owned_by(&shared_key_id)?;
+
 
     // Verify new StateChainSig
     let prev_proof_key = state_chain.get_tip()?.data;
