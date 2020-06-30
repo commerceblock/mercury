@@ -14,7 +14,9 @@ use super::Result;
 
 pub type Hash = monotree::Hash;
 
-#[derive(Serialize, Deserialize, PartialEq, Copy)]
+type Payload<'a> = HashMap::<&'a str,&'a str>;
+
+#[derive(Serialize, Deserialize, PartialEq, Copy, Default)]
 pub struct Commitment(Option<Hash>);
 
 impl std::clone::Clone for Commitment {
@@ -51,6 +53,42 @@ impl ToString for Commitment {
 //    }
 //}
 
+pub struct Request(reqwest::RequestBuilder);
+
+impl Request {
+    //Construct a request from the give payload and config
+    pub fn from(payload: Option<&Payload>, command: &String, config: &Config, signature: Option<String>) -> Result<Self> {
+        //Build request
+        let client = reqwest::Client::new();
+        let url = reqwest::Url::parse(&format!("{}/{}",config.url,command))?;
+        let mut req = client.post(url)
+        .header(reqwest::header::CONTENT_TYPE, "application/json");
+        
+        //Insert payload if required
+        req = match payload{
+            Some(p) => {
+                let payload_str = String::from(serde_json::to_string(&p)?);
+                let payload_enc = encode(payload_str);
+                let mut data = HashMap::new();
+                data.insert("X-MAINSTAY-PAYLOAD", &payload_enc);
+                let sig_str = match signature {
+                    Some(s)=>s,
+                    None => String::from("")
+                };
+                data.insert("X-MAINSTAY-SIGNATURE", &sig_str);
+                req.json(&data)
+            },
+            None => req
+        };
+
+        Ok(Self(req))
+    }
+
+    pub fn send(self) -> std::result::Result<reqwest::Response, reqwest::Error> {
+        self.0.send()
+    }
+}
+
 pub trait Attestable:  {
     //Attest to the mainstay slot using the specified config
     fn attest(&self, config: &Config) -> Result<()>{
@@ -62,24 +100,20 @@ pub trait Attestable:  {
             None => Commitment(None)
         };
 
-        let mut payload = HashMap::new();
-        payload.insert("commitment", commitment.to_string());
-        payload.insert("position", config.position.to_string());
-        payload.insert("token", config.token.clone()); 
-        let payload_str = String::from(serde_json::to_string(&payload)?);
-        let payload_enc = encode(payload_str);
-        let mut data = HashMap::new();
-        data.insert("X-MAINSTAY-PAYLOAD", &payload_enc);
-        let sig_str = signature.to_string();
-        data.insert("X-MAINSTAY-SIGNATURE", &sig_str);
-        
-        let client = reqwest::Client::new();
-        let url = reqwest::Url::parse(&format!("{}/{}",config.url,"commitment/send"))?;
-        let req = client.post(url)
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .json(&data);
-        
+        let mut payload = Payload::new();
+        let com = &commitment.to_string();
+        let pos = &config.position.to_string();
+        let tok = &config.token.to_string();
+        payload.insert("commitment", &com);
+        payload.insert("position", &pos);
+        payload.insert("token", &tok); 
+       
+        println!("payload: {:?}", payload);
+
+        let req = Request::from(Some(&payload), &String::from("commitment/send"), config, Some(signature.to_string()))?.0;        
         let mut res = req.send()?;
+
+        println!("res: {:?}", res);
         
         if res.status().is_success(){
 
@@ -166,21 +200,6 @@ struct MSJSON {
     response: Option<serde_json::Value>
 }
 
-//#[derive(Serialize, Deserialize)]
-//struct 
-
-//#[derive(Serialize, Deserialize)]
-//struct Response {
-    //merkleproof: merkle::Proof
-//}
-
-//#[derive(Serialize, Deserialize)]
-//struct Merkle {
-    //merkle_root: String,
-    //txid: String,
-//}
-
-
 pub mod merkle {
     use super::*;
     //Double sha256
@@ -223,6 +242,33 @@ pub mod merkle {
     impl Proof {
         pub fn from(merkle_root: &Commitment, commitment: &Commitment, ops: Vec<Commitment>) -> Self{
             Self{merkle_root:*merkle_root, commitment:*commitment, ops: ops}
+        }
+
+        pub fn from_latest_commitment(config: &Config) -> Result<Self> {
+            let command = format!("latestproof?position={}",config.position);
+            let req = Request::from(None, &command, config, None)?;
+
+            let mut res = req.send()?;
+        
+            if res.status().is_success(){
+
+            match res.text(){
+                Ok(t) => {
+                    if t.contains("Commitment added"){
+                        let proof = Self::from_str(&t)?;
+                        return Ok(proof);
+                    } else {
+                        return Err(SharedLibError::Generic(String::from("Mainstay commitment failed")));
+                    }
+                }
+                Err(e) => Err(SharedLibError::Generic(format!("Mainstay proof parse error: {}", e)))
+            }
+        } else if res.status().is_server_error() {
+            Err(SharedLibError::Generic(String::from("Mainstay server error")))
+        } else {
+            Err(SharedLibError::Generic(String::from(format!("Mainstay status: {}", res.status()))))
+        }            
+
         }
     }
 
