@@ -114,24 +114,38 @@ pub trait Attestable:  {
         let mut res = req.send()?;
 
         println!("res: {:?}", res);
+
+        let err_base = "Mainstay commitment failed";
         
         if res.status().is_success(){
 
-            match res.text(){
-                Ok(t) => {
-                    if t.contains("Commitment added"){
-                        return Ok(());
-                    } else {
-                        return Err(SharedLibError::Generic(String::from("Mainstay commitment failed")));
+            match res.json() {
+                Ok(r)=> {
+                    let j : &serde_json::Value = &r;
+                    match j.get("response"){
+                        Some(r) => {
+                            match r.as_str(){
+                                Some(r)=>{
+                                    match r == "Commitment added" {
+                                        true => return Ok(()),
+                                        false => return Err(SharedLibError::Generic(format!("{} - expected \"Commitment added\" in response: {:?}", err_base, res)))
+                                    }
+                                },
+                                None => {
+                                    return Err(SharedLibError::Generic(format!("{} - response: {:?}", err_base, res)))
+                                }
+                            }
+                        },
+                        None => return Err(SharedLibError::Generic(format!("{} - no \"response\" field: {:?}", err_base, res)))
                     }
-                }
-                Err(e) => assert!(false, e)
+
+                },
+                Err(e) => return Err(SharedLibError::Generic(format!("{} - response: {:?}, error: {}", err_base, res, e)))
             }
-            return Ok(());
         } else if res.status().is_server_error() {
-            return Err(SharedLibError::Generic(String::from("Mainstay server error")));
+            return Err(SharedLibError::Generic(format!("{} - server error", err_base)));
         } else {
-            return Err(SharedLibError::Generic(String::from(format!("Mainstay status: {}", res.status())))); 
+            return Err(SharedLibError::Generic(format!("{} - status: {}", err_base, res.status()))); 
         }            
     }
 
