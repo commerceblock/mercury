@@ -61,11 +61,9 @@ impl Request {
         //Build request
         let client = reqwest::Client::new();
         let url = reqwest::Url::parse(&format!("{}/{}",config.url,command))?;
-        let mut req = client.post(url)
-        .header(reqwest::header::CONTENT_TYPE, "application/json");
-        
-        //Insert payload if required
-        req = match payload{
+                
+        //If there is a payload this is a 'POST' request, otherwise a 'GET' request
+        let req = match payload{
             Some(p) => {
                 let payload_str = String::from(serde_json::to_string(&p)?);
                 let payload_enc = encode(payload_str);
@@ -76,9 +74,12 @@ impl Request {
                     None => String::from("")
                 };
                 data.insert("X-MAINSTAY-SIGNATURE", &sig_str);
-                req.json(&data)
+                client.post(url)
+                    .header(reqwest::header::CONTENT_TYPE, "application/json")
+                    .json(&data)
             },
-            None => req
+            None => client.get(url)
+                    .header(reqwest::header::CONTENT_TYPE, "application/json")
         };
 
         Ok(Self(req))
@@ -258,12 +259,16 @@ pub mod merkle {
             Self{merkle_root:*merkle_root, commitment:*commitment, ops: ops}
         }
 
-        pub fn from_latest_commitment(config: &Config) -> Result<Self> {
-            let command = format!("latestproof?position={}",config.position);
+        pub fn from_latest_proof(config: &Config) -> Result<Self> {
+            let command = format!("commitment/latestproof?position={}",config.position);
             let req = Request::from(None, &command, config, None)?;
 
             let mut res = req.send()?;
         
+            println!("from_latest_proof res: {:?}", res);
+
+            let err_base = "Mainstay from_latest_commitment";
+
             if res.status().is_success(){
 
             match res.text(){
@@ -318,42 +323,54 @@ pub mod merkle {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::util::keygen::generate_keypair;
     
-    #[test]
-    fn test_commit() {
-        let slot = match std::env::var("MERC_MS_TEST_SLOT_1="){
+    pub fn slot() -> u32 {
+        match std::env::var("MERC_MS_TEST_SLOT_1="){
             Ok(s) => s.parse::<u32>().unwrap(),   
             Err(_)=> {
                 assert!(false);
                 Default::default()
             }
-        };
-                
-        let token = match std::env::var("MERC_MS_TEST_TOKEN_1"){
+        }
+    }
+
+    pub fn token() -> String {
+        match std::env::var("MERC_MS_TEST_TOKEN_1"){
             Ok(t) => t,   
             Err(_)=> {
                 assert!(false);
                 Default::default()
             }
-        };
+        }
+    }
 
-        let test_config = Config { position: slot, token: token, ..Default::default() };
+    pub fn config() -> Config {
+        Config { position: slot(), token: token(), ..Default::default() }
+    }
+
+    
+    #[test]
+    fn test_commit() {
+                
         let random_hash = Commitment::from_hash(&monotree::utils::random_hash());
 
-        match random_hash.attest(&test_config) {
+        let config = config();
+
+        match random_hash.attest(&config) {
             Ok(()) => assert!(true),
             Err(e) => assert!(false, e)
         }
 
         //Incorrect token should fail.
         let token = String::from("wrong_token");
-        let test_config = Config { position: slot, token: token, ..Default::default() };
-        
-        match random_hash.attest(&test_config) {
+        let config = Config { position: slot(), token: token, ..Default::default() };        
+
+        match random_hash.attest(&config) {
             Ok(()) => assert!(false, "should have failed with incorrect token"),
             Err(e) => {
                 println!("{}",e);
@@ -442,5 +459,17 @@ mod tests {
         assert!(merkleproof_1 ==merkleproof_compare);
 
     }
+
+    /*
+    #[test]
+    fn test_get_proof_from_server() {
+        println!("********** test get proof from server");
+
+        match merkle::Proof::from_latest_proof(&config()){
+            Ok(_) => assert!(true),
+            Err(e) => assert!(false, e)
+        };
+    }
+    */
 
 }
