@@ -17,6 +17,15 @@ pub fn db_ecdsa_new(conn: &Connection, id: &Uuid) -> Result<u64> {
     Ok(statement.execute(&[id])?)
 }
 
+pub fn db_ecdsa_get_complete(conn: &Connection, id: Uuid) -> Result<bool> {
+    let statement = conn.prepare("SELECT (complete) FROM ecdsa WHERE id = $1")?;
+
+    let rows = statement.query(&[&id])?;
+    if rows.is_empty() { return Err(SEError::EcdsaDBError(NoDataForID, id.to_string().clone(), "complete".to_string())) };
+
+    return Ok(rows.get(0).get(0))
+}
+
 pub fn db_ecdsa_update<T>(conn: &Connection, id: Uuid, data: T, name: &dyn MPCStruct) -> Result<()>
 where
     T: serde::ser::Serialize
@@ -37,9 +46,10 @@ where
     let statement = conn.prepare(&format!("SELECT {} FROM ecdsa WHERE id = $1",name.to_string()))?;
 
     let rows = statement.query(&[&id])?;
-    if rows.len() == 0 { return Err(SEError::EcdsaDBError(NoDataForID, id.to_string().clone(), name.to_string())) };
-    let row = rows.get(0);
-    let data: String = row.get(0);
+    if rows.is_empty() { return Err(SEError::EcdsaDBError(NoDataForID, id.to_string().clone(), name.to_string())) };
+
+    let data: String = rows.get(0).get(0);
+    if data == "0" { return Err(SEError::EcdsaDBError(NoDataForID, id.to_string().clone(), name.to_string())) }
 
     return Ok(serde_json::from_str(&data).unwrap())
 }

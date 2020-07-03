@@ -3,7 +3,7 @@ use super::super::{{Result,Config},
     storage::db};
 
 use crate::error::{DBErrorType::NoDataForID, SEError};
-use crate::{storage::db_postgres::{db_ecdsa_update, db_ecdsa_new, db_ecdsa_get}, routes::util::{check_user_auth, StateEntityStruct, UserSession}, DataBase};
+use crate::{storage::db_postgres::{db_ecdsa_update, db_ecdsa_new, db_ecdsa_get, db_ecdsa_get_complete}, routes::util::{check_user_auth, StateEntityStruct, UserSession}, DataBase};
 use shared_lib::{
     structs::{Protocol, SignSecondMsgRequest},
     util::reverse_hex_str,
@@ -85,12 +85,19 @@ pub fn first_message(
     protocol: String,
 ) -> Result<Json<(String, party_one::KeyGenFirstMsg)>> {
     let user_id = Uuid::from_str(&id).unwrap();
-
     // Check authorisation id is in DB (and check password?)
     let user_session = check_user_auth(&state, &claim, &id)?;
 
-    // If shared key already exists for user then return error
-
+    // Create new entry in ecdsa table if key not already in table.
+    match db_ecdsa_get_complete(&conn, user_id) {
+        Ok(is_complete) => match is_complete {
+            true =>  { return Err(SEError::Generic(format!("Key Generation already completed for ID {}",user_id)))},
+            false => {} // Key exists but key gen not complete. Carry on without writing user_id.
+        },
+        Err(_) => {
+            db_ecdsa_new(&conn, &user_id)?;
+        }
+    }
 
     // Generate shared key
     let (key_gen_first_msg, comm_witness, ec_key_pair) = if protocol == String::from("deposit") {
@@ -98,9 +105,6 @@ pub fn first_message(
     } else {
         MasterKey1::key_gen_first_message_predefined(user_session.s2.unwrap())
     };
-
-    // Create new entry in ecdsa table
-    db_ecdsa_new(&conn, &user_id)?;
 
     db_ecdsa_update(&conn, user_id, &HDPos{pos:0u32}, &EcdsaStruct::POS)?;
     db_ecdsa_update(&conn, user_id, &key_gen_first_msg, &EcdsaStruct::KeyGenFirstMsg)?;
