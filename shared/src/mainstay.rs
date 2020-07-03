@@ -8,8 +8,11 @@ use std::str::FromStr;
 use std::string::ToString;
 use std::convert::TryInto;
 use std::fmt::Display;
+use chrono::NaiveDateTime;
 
-use super::Result;
+type SharedLibResult<T> = super::Result<T>;
+type Result<T> = std::result::Result<T, Box<dyn ::std::error::Error> >;
+
 
 pub type Hash = monotree::Hash;
 
@@ -36,12 +39,12 @@ impl Display for Commitment {
 }
 
 impl FromStr for Commitment {
-    type Err = SharedLibError;
+    type Err = Box<dyn ::std::error::Error>;
     fn from_str(s: &str) -> Result<Self> {
         match hex::decode(s).unwrap()[..].try_into()
         {
             Ok(h) => Ok(Self(Some(h))),
-            Err(e) =>  Err(SharedLibError::Generic(e.to_string()))
+            Err(e) =>  Err(SharedLibError::Generic(e.to_string()).into())
         }
     }
 }
@@ -85,15 +88,7 @@ impl Request {
 
 fn get(command: &str, config: &Config) -> Result<serde_json::Value> {
     let url = reqwest::Url::parse(&format!("{}/{}",config.url,command))?;
-    match reqwest::get(url){
-        Ok(mut r) => {
-            match r.json() {
-                Ok(j) => Ok(j),
-                Err(e) => Err(SharedLibError::Generic(format!("Mainstay get error: {}", e)))
-            }
-        },
-        Err(e) => Err(SharedLibError::Generic(format!("Mainstay get error: {}", e)))
-    }
+    Ok(reqwest::get(url)?.json()?)
 }
 
 pub trait Attestable:  {
@@ -119,36 +114,27 @@ pub trait Attestable:  {
         let mut res = req.send()?;
         let err_base = "Mainstay commitment failed";
         
-        if res.status().is_success(){
-
-            match res.json() {
-                Ok(r)=> {
-                    let j : &serde_json::Value = &r;
-                    match j.get("response"){
-                        Some(r) => {
-                            match r.as_str(){
-                                Some(r)=>{
-                                    match r == "Commitment added" {
-                                        true => return Ok(()),
-                                        false => return Err(SharedLibError::Generic(format!("{} - expected \"Commitment added\" in response: {:?}", err_base, res)))
-                                    }
-                                },
-                                None => {
-                                    return Err(SharedLibError::Generic(format!("{} - response: {:?}", err_base, res)))
-                                }
+        if res.status().is_success() {    
+            match res.json::<serde_json::Value>(){
+                Ok(j)=>{
+                    let response = Response::from_json(&j)?;
+                    match response.response.as_str(){
+                        Some(r)=>{
+                            match r == "Commitment added" {
+                                true => return Ok(()),
+                                false => return Err(SharedLibError::Generic(format!("{} - expected \"Commitment added\" in response: {:?}", err_base, res)).into())
                             }
-                        },
-                        None => return Err(SharedLibError::Generic(format!("{} - no \"response\" field: {:?}", err_base, res)))
+                        }
+                        None => {
+                            return Err(SharedLibError::Generic(format!("{} - response: {:?}", err_base, res)).into())
+                        }
                     }
-
-                },
-                Err(e) => return Err(SharedLibError::Generic(format!("{} - response: {:?}, error: {}", err_base, res, e)))
+                }, 
+                Err(e) => Err(e.into())
             }
-        } else if res.status().is_server_error() {
-            return Err(SharedLibError::Generic(format!("{} - server error", err_base)));
         } else {
-            return Err(SharedLibError::Generic(format!("{} - status: {}", err_base, res.status()))); 
-        }            
+            return Err(SharedLibError::Generic(format!("{}", err_base)).into())
+        }
     }
 
     //The data to be commited
@@ -196,11 +182,11 @@ pub struct Config {
 }
 
 impl FromStr for Config {
-    type Err = SharedLibError;
+    type Err = Box<dyn ::std::error::Error>;
     fn from_str(s: &str) -> Result<Self> {
         match serde_json::from_str(s){
             Ok(p) => Ok(p),
-            Err(e) =>  Err(SharedLibError::Generic(e.to_string()))
+            Err(e) =>  Err(SharedLibError::Generic(e.to_string()).into())
         }
     }
 }
@@ -215,6 +201,80 @@ impl Default for Config {
 struct MSJSON {
     response: Option<serde_json::Value>
 }
+
+#[derive(Serialize, Deserialize, PartialEq)]
+pub struct Response {
+    response: serde_json::Value
+}
+
+impl Response {
+    pub fn from_json(json_data: &serde_json::Value) -> Result<Self>{       
+        match json_data.get("response"){
+            Some(r) => Ok(Self{response:r.clone()}),
+            None => Err(SharedLibError::Generic(String::from("Error parsing response")).into())
+        }
+    }
+}
+
+ #[derive(Serialize, Deserialize, PartialEq)]
+//Information about a commitment: it's attestation, if any, and its proof
+pub struct CommitmentInfo {
+    attestation: Option<Attestation>,
+    merkle_proof: merkle::Proof
+}
+
+
+
+#[derive(Serialize, Deserialize, PartialEq)]
+pub struct Attestation {
+    merkle_root: Commitment,
+    txid: Commitment,
+    confirmed: bool,
+    inserted_at: NaiveDateTime
+}
+
+#[derive(Debug, Clone)]
+struct ParseError();
+
+impl Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "error parsing mainstay API")
+    }
+}
+
+impl std::error::Error for ParseError {}
+    
+
+impl Attestation {
+      pub fn from(merkle_root: Commitment, txid: Commitment, confirmed: bool, inserted_at: NaiveDateTime) -> Self{
+        Self{merkle_root:merkle_root, txid:txid, confirmed: confirmed, inserted_at: inserted_at}
+    }
+
+    pub fn from_json(json_data: &serde_json::Value) -> Result<Self>{    
+        let resp = &Response::from_json(json_data)?;
+        Self::from_response(resp)
+    }
+
+    fn from_response(response: &Response) -> Result<Self>{       
+        let err_str = "Mainstay Attestation: error parsing API response";
+
+        match response.response.get("attestation"){
+            Some(val) => {
+                let mrs = val.get("merkle_root").ok_or(err_str)?.as_str();
+                let mrs = mrs.ok_or(err_str)?;
+                let merkle_root = Commitment::from_str(&mrs)?; 
+                let txid = Commitment::from_str(val.get("txid").ok_or(err_str)?.as_str().ok_or(err_str)?)?;
+                let confirmed = val.get("confirmed").ok_or(err_str)?.as_bool().ok_or(err_str)?;
+                let inserted_at = val.get("inserted_at").ok_or(err_str)?.as_str().ok_or(err_str)?;
+                let inserted_at = NaiveDateTime::parse_from_str(&inserted_at, "%H:%M:%S %d/%m/%y")?;
+
+                Ok(Self::from(merkle_root, txid, confirmed, inserted_at))
+            },
+            None => Err(SharedLibError::Generic(String::from("Error parsing attestation")).into())
+        }
+    }
+}
+
 
 pub mod merkle {
     use super::*;
@@ -248,6 +308,16 @@ pub mod merkle {
     //use std::str::FromStr;
 */
 
+/*
+"attestation":
+{
+    "merkle_root": "f46a58a0cc796fade0c7854f169eb86a06797ac493ea35f28dbe35efee62399b",
+    "txid": "38fa2c6e103673925aaec50e5aadcbb6fd0bf1677c5c88e27a9e4b0229197b13",
+    "confirmed": true,
+    "inserted_at": "16:06:41 23/01/19"
+}
+*/
+
     #[derive(Serialize, Deserialize, PartialEq)]
     pub struct Proof {
         merkle_root: Commitment,
@@ -256,15 +326,15 @@ pub mod merkle {
     }
 
     impl Proof {
-        pub fn from(merkle_root: &Commitment, commitment: &Commitment, ops: Vec<Commitment>) -> Self{
-            Self{merkle_root:*merkle_root, commitment:*commitment, ops: ops}
+        pub fn from(merkle_root: Commitment, commitment: Commitment, ops: Vec<Commitment>) -> Self{
+            Self{merkle_root: merkle_root, commitment: commitment, ops: ops}
         }
 
         fn from_command(command: &str, config: &Config) -> Result<Self> {
             let response = get(command, config);
             match response {
                 Ok(r) => Self::from_json(&r),
-                Err(e) => Err(SharedLibError::Generic(e.to_string()))
+                Err(e) => Err(SharedLibError::Generic(e.to_string()).into())
             }   
         }
 
@@ -307,14 +377,14 @@ pub mod merkle {
                 ops.push(Commitment::from_str(commit_str).unwrap())
             }
             
-            Ok(Proof::from(&merkle_root, &commitment, ops))
+            Ok(Proof::from(merkle_root, commitment, ops))
         }
     }
 
     impl FromStr for Proof {
-        type Err = SharedLibError;
+        type Err = Box<dyn ::std::error::Error>;
         fn from_str(s: &str) -> Result<Self> {
-            let json_data : serde_json::Value = serde_json::from_str(s).unwrap();
+            let json_data : serde_json::Value = serde_json::from_str(s)?;
             Self::from_json(&json_data)
         }
     }
@@ -360,7 +430,7 @@ mod tests {
 
         match random_hash.attest(&config) {
             Ok(()) => assert!(true),
-            Err(e) => assert!(false, e)
+            Err(e) => assert!(false)
         }
 
         //Incorrect token should fail.
@@ -441,7 +511,7 @@ mod tests {
         let merkle_root = Commitment::from_str("47fc767ebc5095133d6de9a060c248c115b3fdf5f30921de2ee111225690de01").unwrap();
         let commitment = Commitment::from_str("71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d").unwrap();
 
-        let merkleproof_compare = merkle::Proof::from(&merkle_root, &commitment, ops);
+        let merkleproof_compare = merkle::Proof::from(merkle_root, commitment, ops);
 
         assert!(merkleproof_1 ==merkleproof_2);
         assert!(merkleproof_1 ==merkleproof_3);
@@ -455,7 +525,7 @@ mod tests {
     fn test_get_latest_proof() {
         match merkle::Proof::from_latest_proof(&config()){
             Ok(_) => assert!(true),
-            Err(e) => assert!(false, e)
+            Err(e) => assert!(false)
         };
     }
 

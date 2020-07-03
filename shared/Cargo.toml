@@ -31,6 +31,7 @@ itertools = "0.9.0"
 base64 = "0.12.2"
 merkletree = "0.20.0"
 arrayvec = "0.5.1"
+chrono="0.4.0"
 
 
 [dependencies.curv]

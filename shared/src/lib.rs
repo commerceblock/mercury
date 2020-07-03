@@ -18,6 +18,7 @@ extern crate reqwest;
 extern crate base64;
 extern crate merkletree;
 extern crate arrayvec;
+extern crate chrono;
 
 pub mod util;
 pub mod error;
