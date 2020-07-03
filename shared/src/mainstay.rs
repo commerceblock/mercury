@@ -7,6 +7,7 @@ use base64::encode;
 use std::str::FromStr;
 use std::string::ToString;
 use std::convert::TryInto;
+use std::fmt::Display;
 
 use super::Result;
 
@@ -23,6 +24,17 @@ impl std::clone::Clone for Commitment {
     }
 }
 
+impl Display for Commitment {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self.0 {
+            Some(v) => {
+                write!(f, "{}", hex::encode(v))
+            },
+            None => write!(f, "")
+        }
+    }
+}
+
 impl FromStr for Commitment {
     type Err = SharedLibError;
     fn from_str(s: &str) -> Result<Self> {
@@ -33,23 +45,6 @@ impl FromStr for Commitment {
         }
     }
 }
-
-impl ToString for Commitment {
-    fn to_string(&self) -> String {
-        match self.0 {
-            Some(v) => hex::encode(v),
-            None => String::from("")
-        }
-    }
-}
-
-//Mainstay API requires empty string if no password
-//fn bytes_to_hex_string(bytes: &Option<Hash>) -> String {
-//    match bytes{
-//        Some(b) => format!("{:02x}",b.iter().format("")),
-//        None => String::from("")
-//    }
-//}
 
 pub struct Request(reqwest::RequestBuilder);
 
@@ -88,7 +83,7 @@ impl Request {
     }
 }
 
-fn get(command: &String, config: &Config) -> Result<serde_json::Value> {
+fn get(command: &str, config: &Config) -> Result<serde_json::Value> {
     let url = reqwest::Url::parse(&format!("{}/{}",config.url,command))?;
     match reqwest::get(url){
         Ok(mut r) => {
@@ -104,7 +99,7 @@ fn get(command: &String, config: &Config) -> Result<serde_json::Value> {
 pub trait Attestable:  {
     //Attest to the mainstay slot using the specified config
     fn attest(&self, config: &Config) -> Result<()>{
-        let commitment = &self.commitment()?;
+        let commitment: &Commitment = &self.commitment()?;
         let signature = match config.key {
             Some(k) => {
                 self.sign(&k)?
@@ -265,13 +260,27 @@ pub mod merkle {
             Self{merkle_root:*merkle_root, commitment:*commitment, ops: ops}
         }
 
-        pub fn from_latest_proof(config: &Config) -> Result<Self> {
-            let command = format!("commitment/latestproof?position={}",config.position);
-            let response = get(&command, config);
+        fn from_command(command: &str, config: &Config) -> Result<Self> {
+            let response = get(command, config);
             match response {
                 Ok(r) => Self::from_json(&r),
                 Err(e) => Err(SharedLibError::Generic(e.to_string()))
-            }
+            }   
+        }
+
+        pub fn from_latest_proof(config: &Config) -> Result<Self> {
+            let command = format!("commitment/latestproof?position={}",config.position);
+            Self::from_command(&command, config)
+        }
+
+        pub fn from_commitment(config: &Config, commitment: &Commitment) ->Result<Self> {
+            let command = &format!("commitment/commitment?commitment={}",commitment);
+            Self::from_command(command,config)
+        }
+
+        pub fn from_attestable<T: Attestable>(config: &Config, attestable: &T) ->Result<Self> {
+            let commitment=&attestable.commitment()?;
+            Self::from_commitment(config, commitment)
         }
 
         pub fn from_json(json_data: &serde_json::Value) -> Result<Self>{
@@ -421,13 +430,6 @@ mod tests {
                 \"commitment\":\"94adb04ab09036fbc6cc164ec6df4d9d8fba45bcd7901a03d2e91b123071a5ec\"}]}";
 
 
-        let msjson : MSJSON = serde_json::from_str(response_str).unwrap();
-
-        //println!("{}", response_str);
-        //let resp = msjson.response.unwrap();
-        //println!("{}", resp.to_string());
-        //println!("{}", resp["merkleproof'"].to_string());
-
         let merkleproof_1 = merkle::Proof::from_str(data_str).unwrap();
         let merkleproof_2 = merkle::Proof::from_str(response_str).unwrap();
         let merkleproof_3 = merkle::Proof::from_str(merkleproof_str).unwrap();
@@ -450,14 +452,22 @@ mod tests {
 
     
     #[test]
-    fn test_get_proof_from_server() {
-        println!("********** test get proof from server");
-
+    fn test_get_latest_proof() {
         match merkle::Proof::from_latest_proof(&config()){
             Ok(_) => assert!(true),
             Err(e) => assert!(false, e)
         };
     }
-    
 
+    #[test]
+    fn test_get_proof_from_commitment() {
+        //Retrieve the proof for a commitment
+        let commitment = &Commitment::from_str("31e66288b9074bcfeb3bc5734f2d0b189ad601b61f86b8241ee427648b59fdbc").unwrap();
+        
+        let proof1 = merkle::Proof::from_commitment(&config(), commitment).unwrap();
+        
+        let proof2 = merkle::Proof::from_attestable::<Commitment>(&config(), commitment).unwrap();
+
+        assert!(proof1 == proof2);
+    }
 }
