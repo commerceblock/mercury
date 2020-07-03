@@ -3,11 +3,9 @@ use std::collections::HashMap;
 use bitcoin::secp256k1::Secp256k1;
 use bitcoin::util::key::PrivateKey;
 use reqwest;
-use itertools::Itertools;
 use base64::encode;
 use std::str::FromStr;
 use std::string::ToString;
-use arrayvec::ArrayVec;
 use std::convert::TryInto;
 
 use super::Result;
@@ -90,6 +88,19 @@ impl Request {
     }
 }
 
+fn get(command: &String, config: &Config) -> Result<serde_json::Value> {
+    let url = reqwest::Url::parse(&format!("{}/{}",config.url,command))?;
+    match reqwest::get(url){
+        Ok(mut r) => {
+            match r.json() {
+                Ok(j) => Ok(j),
+                Err(e) => Err(SharedLibError::Generic(format!("Mainstay get error: {}", e)))
+            }
+        },
+        Err(e) => Err(SharedLibError::Generic(format!("Mainstay get error: {}", e)))
+    }
+}
+
 pub trait Attestable:  {
     //Attest to the mainstay slot using the specified config
     fn attest(&self, config: &Config) -> Result<()>{
@@ -109,13 +120,8 @@ pub trait Attestable:  {
         payload.insert("position", &pos);
         payload.insert("token", &tok); 
        
-        println!("payload: {:?}", payload);
-
         let req = Request::from(Some(&payload), &String::from("commitment/send"), config, Some(signature.to_string()))?.0;        
         let mut res = req.send()?;
-
-        println!("res: {:?}", res);
-
         let err_base = "Mainstay commitment failed";
         
         if res.status().is_success(){
@@ -261,43 +267,17 @@ pub mod merkle {
 
         pub fn from_latest_proof(config: &Config) -> Result<Self> {
             let command = format!("commitment/latestproof?position={}",config.position);
-            let req = Request::from(None, &command, config, None)?;
-
-            let mut res = req.send()?;
-        
-            println!("from_latest_proof res: {:?}", res);
-
-            let err_base = "Mainstay from_latest_commitment";
-
-            if res.status().is_success(){
-
-            match res.text(){
-                Ok(t) => {
-                    if t.contains("Commitment added"){
-                        let proof = Self::from_str(&t)?;
-                        return Ok(proof);
-                    } else {
-                        return Err(SharedLibError::Generic(String::from("Mainstay commitment failed")));
-                    }
-                }
-                Err(e) => Err(SharedLibError::Generic(format!("Mainstay proof parse error: {}", e)))
+            let response = get(&command, config);
+            match response {
+                Ok(r) => Self::from_json(&r),
+                Err(e) => Err(SharedLibError::Generic(e.to_string()))
             }
-        } else if res.status().is_server_error() {
-            Err(SharedLibError::Generic(String::from("Mainstay server error")))
-        } else {
-            Err(SharedLibError::Generic(String::from(format!("Mainstay status: {}", res.status()))))
-        }            
-
         }
-    }
 
-    impl FromStr for Proof {
-        type Err = SharedLibError;
-        fn from_str(s: &str) -> Result<Self> {
-            let json_data : serde_json::Value = serde_json::from_str(s).unwrap();
+        pub fn from_json(json_data: &serde_json::Value) -> Result<Self>{
+            //Parse Mainstay API responses and Proof object strings            
             let mut val: &serde_json::Value;
 
-            //Parse Mainstay API responses and Proof object strings
             match json_data.get("response"){
                 Some(resp) => val = resp,
                 None => val = &json_data
@@ -319,6 +299,14 @@ pub mod merkle {
             }
             
             Ok(Proof::from(&merkle_root, &commitment, ops))
+        }
+    }
+
+    impl FromStr for Proof {
+        type Err = SharedLibError;
+        fn from_str(s: &str) -> Result<Self> {
+            let json_data : serde_json::Value = serde_json::from_str(s).unwrap();
+            Self::from_json(&json_data)
         }
     }
 }
@@ -373,7 +361,7 @@ mod tests {
         match random_hash.attest(&config) {
             Ok(()) => assert!(false, "should have failed with incorrect token"),
             Err(e) => {
-                println!("{}",e);
+                println!("Correctly failed with incorrect token");
             }
         }
     } 
@@ -435,7 +423,7 @@ mod tests {
 
         let msjson : MSJSON = serde_json::from_str(response_str).unwrap();
 
-        println!("{}", response_str);
+        //println!("{}", response_str);
         //let resp = msjson.response.unwrap();
         //println!("{}", resp.to_string());
         //println!("{}", resp["merkleproof'"].to_string());
@@ -460,7 +448,7 @@ mod tests {
 
     }
 
-    /*
+    
     #[test]
     fn test_get_proof_from_server() {
         println!("********** test get proof from server");
@@ -470,6 +458,6 @@ mod tests {
             Err(e) => assert!(false, e)
         };
     }
-    */
+    
 
 }
