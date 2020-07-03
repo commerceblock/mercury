@@ -3,7 +3,7 @@ use super::super::{{Result,Config},
     storage::db};
 
 use crate::error::{DBErrorType::NoDataForID, SEError};
-use crate::routes::util::{check_user_auth, StateEntityStruct, UserSession};
+use crate::{storage::db_postgres::{db_ecdsa_update, db_ecdsa_new, db_ecdsa_get}, routes::util::{check_user_auth, StateEntityStruct, UserSession}, DataBase};
 use shared_lib::{
     structs::{Protocol, SignSecondMsgRequest},
     util::reverse_hex_str,
@@ -11,21 +11,18 @@ use shared_lib::{
 
 use bitcoin::{secp256k1::Signature, Transaction};
 use curv::{{BigInt, GE},
-    cryptographic_primitives::{
-        proofs::sigma_dlog::*,
-        twoparty::dh_key_exchange_variant_with_pok_comm::{
-            CommWitness, EcKeyPair, Party1FirstMessage, Party1SecondMessage,
-        }},
+    cryptographic_primitives::proofs::sigma_dlog::*,
     elliptic::curves::traits::ECPoint,
     arithmetic::traits::Converter};
 
-use kms::chain_code::two_party as chain_code;
 use kms::ecdsa::two_party::*;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
 use rocket::State;
 use rocket_contrib::json::Json;
 
 use std::string::ToString;
+use std::str::FromStr;
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 struct HDPos {
@@ -70,25 +67,12 @@ pub enum EcdsaStruct {
     RotateParty2First,
     RotateParty1Second,
 
-    POS,
+    POS
 }
 
 impl db::MPCStruct for EcdsaStruct {
     fn to_string(&self) -> String {
         format!("{:?}", self)
-    }
-
-    // backward compatibility
-    fn to_table_name(&self, env: &str) -> String {
-        if self.to_string() == "Party1MasterKey" {
-            format!("{}_{}", env, self.to_string())
-        } else {
-            format!("{}-gotham-{}", env, self.to_string())
-        }
-    }
-
-    fn require_customer_id(&self) -> bool {
-        self.to_string() == "Party1MasterKey"
     }
 }
 
@@ -96,9 +80,12 @@ impl db::MPCStruct for EcdsaStruct {
 pub fn first_message(
     state: State<Config>,
     claim: Claims,
+    conn: DataBase,
     id: String,
     protocol: String,
 ) -> Result<Json<(String, party_one::KeyGenFirstMsg)>> {
+    let user_id = Uuid::from_str(&id).unwrap();
+
     // Check authorisation id is in DB (and check password?)
     let user_session = check_user_auth(&state, &claim, &id)?;
 
@@ -112,80 +99,39 @@ pub fn first_message(
         MasterKey1::key_gen_first_message_predefined(user_session.s2.unwrap())
     };
 
-    // Save pos 0
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::POS,
-        &HDPos { pos: 0u32 },
-    )?;
+    // Create new entry in ecdsa table
+    db_ecdsa_new(&conn, &user_id)?;
 
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::KeyGenFirstMsg,
-        &key_gen_first_msg,
-    )?;
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::CommWitness,
-        &comm_witness,
-    )?;
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::EcKeyPair,
-        &ec_key_pair,
-    )?;
+    db_ecdsa_update(&conn, user_id, &HDPos{pos:0u32}, &EcdsaStruct::POS)?;
+    db_ecdsa_update(&conn, user_id, &key_gen_first_msg, &EcdsaStruct::KeyGenFirstMsg)?;
+    db_ecdsa_update(&conn, user_id, &comm_witness, &EcdsaStruct::CommWitness)?;
+    db_ecdsa_update(&conn, user_id, &ec_key_pair, &EcdsaStruct::EcKeyPair)?;
 
     Ok(Json((id, key_gen_first_msg)))
 }
 
 #[post("/ecdsa/keygen/<id>/second", format = "json", data = "<dlog_proof>")]
 pub fn second_message(
-    state: State<Config>,
-    claim: Claims,
+    conn: DataBase,
     id: String,
     dlog_proof: Json<DLogProof>,
 ) -> Result<Json<party1::KeyGenParty1Message2>> {
+    let user_id = Uuid::from_str(&id).unwrap();
+
     let party2_public: GE = dlog_proof.0.pk.clone();
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::Party2Public,
-        &party2_public,
-    )?;
+    db_ecdsa_update(&conn, user_id, &party2_public, &EcdsaStruct::Party2Public)?;
 
     let comm_witness: party_one::CommWitness =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::CommWitness)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+        db_ecdsa_get(&conn, user_id, &EcdsaStruct::CommWitness)?;
+
     let ec_key_pair: party_one::EcKeyPair =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::EcKeyPair)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+        db_ecdsa_get(&conn, user_id, &EcdsaStruct::EcKeyPair)?;
 
     let (kg_party_one_second_message, paillier_key_pair, party_one_private) =
         MasterKey1::key_gen_second_message(comm_witness, &ec_key_pair, &dlog_proof.0);
 
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::PaillierKeyPair,
-        &paillier_key_pair,
-    )?;
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::Party1Private,
-        &party_one_private,
-    )?;
+    db_ecdsa_update(&conn, user_id, &paillier_key_pair, &EcdsaStruct::PaillierKeyPair)?;
+    db_ecdsa_update(&conn, user_id, &party_one_private, &EcdsaStruct::Party1Private)?;
 
     Ok(Json(kg_party_one_second_message))
 }
@@ -196,41 +142,21 @@ pub fn second_message(
     data = "<party_2_pdl_first_message>"
 )]
 pub fn third_message(
-    state: State<Config>,
-    claim: Claims,
+    conn: DataBase,
     id: String,
     party_2_pdl_first_message: Json<party_two::PDLFirstMessage>,
 ) -> Result<Json<party_one::PDLFirstMessage>> {
+    let user_id = Uuid::from_str(&id).unwrap();
+
     let party_one_private: party_one::Party1Private =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1Private)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+        db_ecdsa_get(&conn, user_id, &EcdsaStruct::Party1Private)?;
 
     let (party_one_third_message, party_one_pdl_decommit, alpha) =
         MasterKey1::key_gen_third_message(&party_2_pdl_first_message.0, &party_one_private);
 
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::PDLDecommit,
-        &party_one_pdl_decommit,
-    )?;
-
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::Alpha,
-        &Alpha { value: alpha },
-    )?;
-
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::Party2PDLFirstMsg,
-        &party_2_pdl_first_message.0,
-    )?;
+    db_ecdsa_update(&conn, user_id, &party_one_pdl_decommit, &EcdsaStruct::PDLDecommit)?;
+    db_ecdsa_update(&conn, user_id, &Alpha{value:alpha}, &EcdsaStruct::Alpha)?;
+    db_ecdsa_update(&conn, user_id, &party_2_pdl_first_message.0, &EcdsaStruct::Party2PDLFirstMsg)?;
 
     Ok(Json(party_one_third_message))
 }
@@ -241,25 +167,23 @@ pub fn third_message(
     data = "<party_two_pdl_second_message>"
 )]
 pub fn fourth_message(
-    state: State<Config>,
-    claim: Claims,
+    conn: DataBase,
     id: String,
     party_two_pdl_second_message: Json<party_two::PDLSecondMessage>,
 ) -> Result<Json<party_one::PDLSecondMessage>> {
+    let user_id = Uuid::from_str(&id).unwrap();
+
     let party_one_private: party_one::Party1Private =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1Private)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+        db_ecdsa_get(&conn, user_id, &EcdsaStruct::Party1Private)?;
 
     let party_one_pdl_decommit: party_one::PDLdecommit =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::PDLDecommit)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+        db_ecdsa_get(&conn, user_id, &EcdsaStruct::PDLDecommit)?;
 
     let party_2_pdl_first_message: party_two::PDLFirstMessage =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party2PDLFirstMsg)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+        db_ecdsa_get(&conn, user_id, &EcdsaStruct::Party2PDLFirstMsg)?;
 
-    let alpha: Alpha = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Alpha)?
-        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+    let alpha: Alpha =
+        db_ecdsa_get(&conn, user_id, &EcdsaStruct::Alpha)?;
 
     let res = MasterKey1::key_gen_fourth_message(
         &party_2_pdl_first_message,
@@ -271,123 +195,35 @@ pub fn fourth_message(
 
     assert!(res.is_ok());
 
+    master_key(conn, id)?;
+
     Ok(Json(res.unwrap()))
 }
 
-#[post("/ecdsa/keygen/<id>/chaincode/first", format = "json")]
-pub fn chain_code_first_message(
-    state: State<Config>,
-    claim: Claims,
-    id: String,
-) -> Result<Json<Party1FirstMessage>> {
-    let (cc_party_one_first_message, cc_comm_witness, cc_ec_key_pair1) =
-        chain_code::party1::ChainCode1::chain_code_first_message();
+pub fn master_key(conn: DataBase, id: String) -> Result<()> {
+    let user_id = Uuid::from_str(&id).unwrap();
 
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::CCKeyGenFirstMsg,
-        &cc_party_one_first_message,
-    )?;
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::CCCommWitness,
-        &cc_comm_witness,
-    )?;
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::CCEcKeyPair,
-        &cc_ec_key_pair1,
-    )?;
-
-    Ok(Json(cc_party_one_first_message))
-}
-
-#[post(
-    "/ecdsa/keygen/<id>/chaincode/second",
-    format = "json",
-    data = "<cc_party_two_first_message_d_log_proof>"
-)]
-pub fn chain_code_second_message(
-    state: State<Config>,
-    claim: Claims,
-    id: String,
-    cc_party_two_first_message_d_log_proof: Json<DLogProof>,
-) -> Result<Json<Party1SecondMessage>> {
-    let cc_comm_witness: CommWitness =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::CCCommWitness)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-
-    let party1_cc = chain_code::party1::ChainCode1::chain_code_second_message(
-        cc_comm_witness,
-        &cc_party_two_first_message_d_log_proof.0,
-    );
-
-    let party2_pub = &cc_party_two_first_message_d_log_proof.pk;
-    chain_code_compute_message(state, claim, id, party2_pub)?;
-
-    Ok(Json(party1_cc))
-}
-
-pub fn chain_code_compute_message(
-    state: State<Config>,
-    claim: Claims,
-    id: String,
-    cc_party2_public: &GE,
-) -> Result<Json<()>> {
-    let cc_ec_key_pair_party1: EcKeyPair =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::CCEcKeyPair)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-    let party1_cc = chain_code::party1::ChainCode1::compute_chain_code(
-        &cc_ec_key_pair_party1,
-        &cc_party2_public,
-    );
-
-    db::insert(&state.db, &claim.sub, &id, &EcdsaStruct::CC, &party1_cc)?;
-    master_key(state, claim, id)?;
-    Ok(Json(()))
-}
-
-pub fn master_key(state: State<Config>, claim: Claims, id: String) -> Result<()> {
-    let party2_public: GE = db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party2Public)?
-        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+    let party2_public: GE =
+        db_ecdsa_get(&conn, user_id, &EcdsaStruct::Party2Public)?;
 
     let paillier_key_pair: party_one::PaillierKeyPair =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::PaillierKeyPair)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-
-    let party1_cc: chain_code::party1::ChainCode1 =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::CC)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+        db_ecdsa_get(&conn, user_id, &EcdsaStruct::PaillierKeyPair)?;
 
     let party_one_private: party_one::Party1Private =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1Private)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+        db_ecdsa_get(&conn, user_id, &EcdsaStruct::Party1Private)?;
 
     let comm_witness: party_one::CommWitness =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::CommWitness)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+        db_ecdsa_get(&conn, user_id, &EcdsaStruct::CommWitness)?;
 
     let master_key = MasterKey1::set_master_key(
-        &party1_cc.chain_code,
+        &BigInt::from(0),
         party_one_private,
         &comm_witness.public_share,
         &party2_public,
         paillier_key_pair,
     );
 
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::Party1MasterKey,
-        &master_key,
-    )
+    db_ecdsa_update(&conn, user_id, &master_key, &EcdsaStruct::Party1MasterKey)
 }
 
 #[post(
@@ -398,29 +234,18 @@ pub fn master_key(state: State<Config>, claim: Claims, id: String) -> Result<()>
 pub fn sign_first(
     state: State<Config>,
     claim: Claims,
+    conn: DataBase,
     id: String,
     eph_key_gen_first_message_party_two: Json<party_two::EphKeyGenFirstMsg>,
 ) -> Result<Json<party_one::EphKeyGenFirstMsg>> {
+    let user_id = Uuid::from_str(&id).unwrap();
     // Check authorisation id is in DB (and check password?)
     check_user_auth(&state, &claim, &id)?;
 
     let (sign_party_one_first_message, eph_ec_key_pair_party1) = MasterKey1::sign_first_message();
 
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::EphKeyGenFirstMsg,
-        &eph_key_gen_first_message_party_two.0,
-    )?;
-
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &EcdsaStruct::EphEcKeyPair,
-        &eph_ec_key_pair_party1,
-    )?;
+    db_ecdsa_update(&conn, user_id, &eph_key_gen_first_message_party_two.0, &EcdsaStruct::EphKeyGenFirstMsg)?;
+    db_ecdsa_update(&conn, user_id, &eph_ec_key_pair_party1, &EcdsaStruct::EphEcKeyPair)?;
 
     Ok(Json(sign_party_one_first_message))
 }
@@ -429,9 +254,11 @@ pub fn sign_first(
 pub fn sign_second(
     state: State<Config>,
     claim: Claims,
+    conn: DataBase,
     id: String,
     request: Json<SignSecondMsgRequest>,
 ) -> Result<Json<Vec<Vec<u8>>>> {
+    let user_id = Uuid::from_str(&id).unwrap();
     // Check authorisation id is in DB (and check password?)
     check_user_auth(&state, &claim, &id)?;
 
@@ -470,16 +297,13 @@ pub fn sign_second(
     }
 
     let shared_key: MasterKey1 =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1MasterKey)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+        db_ecdsa_get(&conn, user_id, &EcdsaStruct::Party1MasterKey)?;
 
     let eph_ec_key_pair_party1: party_one::EphEcKeyPair =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::EphEcKeyPair)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+        db_ecdsa_get(&conn, user_id, &EcdsaStruct::EphEcKeyPair)?;
 
     let eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg =
-        db::get(&state.db, &claim.sub, &id, &EcdsaStruct::EphKeyGenFirstMsg)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+        db_ecdsa_get(&conn, user_id, &EcdsaStruct::EphKeyGenFirstMsg)?;
 
     let signature;
     match shared_key.sign_second_message(
@@ -556,10 +380,6 @@ pub fn sign_second(
     Ok(Json(witness))
 }
 
-pub fn get_mk(state: &State<Config>, claim: Claims, id: &String) -> Result<MasterKey1> {
-    db::get(&state.db, &claim.sub, &id, &EcdsaStruct::Party1MasterKey)?
-        .ok_or(SEError::DBError(NoDataForID, id.to_string()))?
-}
 
 #[post("/ecdsa/<id>/recover", format = "json")]
 pub fn recover(state: State<Config>, claim: Claims, id: String) -> Result<Json<u32>> {

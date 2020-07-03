@@ -13,4 +13,4 @@ fee_deposit = 300
 fee_withdraw = 300
 
 punishment_duration = "3600" # 1 hour
-batch_lifetime = "3" # 
+batch_lifetime = "3600" # 

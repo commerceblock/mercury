@@ -16,7 +16,6 @@ use monotree::Errors as MonotreeErrors;
 use bitcoin::secp256k1::Error as SecpError;
 use postgres::Error as PostgresError;
 
-
 /// State Entity library specific errors
 #[derive(Debug, Deserialize)]
 pub enum SEError {
@@ -28,6 +27,8 @@ pub enum SEError {
     SigningError(String),
     /// Storage error
     DBError(DBErrorType, String),
+    /// Storage error
+    EcdsaDBError(DBErrorType, String, String),
     /// Inherit errors from Util
     SharedLibError(String),
     /// Inherit errors from Monotree
@@ -70,13 +71,16 @@ impl From<PostgresError> for SEError {
 #[derive(Debug, Deserialize)]
 pub enum DBErrorType {
     /// No data found for identifier
-    NoDataForID
+    NoDataForID,
+    /// No update made
+    UpdateFailed
 }
 
 impl DBErrorType {
     fn as_str(&self) -> &'static str {
         match *self {
-            DBErrorType::NoDataForID => "No data for such identifier.",
+            DBErrorType::NoDataForID => "No data for identifier.",
+            DBErrorType::UpdateFailed => "No update made.",
         }
     }
 }
@@ -86,7 +90,8 @@ impl fmt::Display for SEError {
         match *self {
             SEError::Generic(ref e) => write!(f, "Error: {}", e),
             SEError::AuthError => write!(f,"Authentication Error: User authorisation failed"),
-            SEError::DBError(ref e, ref value) => write!(f, "DB Error: {} (value: {})", e.as_str(), value),
+            SEError::DBError(ref e, ref id) => write!(f, "DB Error: {} (id: {})", e.as_str(), id),
+            SEError::EcdsaDBError(ref e, ref id, ref col) => write!(f, "DB Error: {} (id: {}, column: {})", e.as_str(), id, col),
             SEError::SigningError(ref e) => write!(f,"Signing Error: {}",e),
             SEError::SharedLibError(ref e) => write!(f,"SharedLibError Error: {}",e),
             SEError::SMTError(ref e) => write!(f,"SMT Error: {}",e),

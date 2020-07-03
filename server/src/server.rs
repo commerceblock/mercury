@@ -14,7 +14,6 @@ use log4rs::encode::pattern::PatternEncoder;
 use log4rs::config::{Appender, Config as LogConfig, Root};
 
 use std::{collections::HashMap, str::FromStr};
-use crate::storage::db_postgres;
 
 impl Config {
     pub fn load(settings: HashMap<String, String>) -> Config {
@@ -85,8 +84,6 @@ pub fn get_server() -> Rocket {
                 ecdsa::second_message,
                 ecdsa::third_message,
                 ecdsa::fourth_message,
-                ecdsa::chain_code_first_message,
-                ecdsa::chain_code_second_message,
                 ecdsa::sign_first,
                 ecdsa::sign_second,
                 ecdsa::recover,

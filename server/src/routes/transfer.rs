@@ -2,7 +2,7 @@
 //!
 //! StateEntity Transfer and batch-transfer protocols.
 
-use super::super::{{Result,Config},
+use super::super::{{Result,Config,DataBase},
     auth::jwt::Claims,
     storage::db};
 
@@ -14,7 +14,7 @@ use shared_lib::{
 use crate::routes::util::*;
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::routes::ecdsa;
-use crate::storage::db::get_current_root;
+use crate::storage::{db_postgres::db_ecdsa_get, db::get_current_root};
 
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 
@@ -26,7 +26,8 @@ use rocket::State;
 use uuid::Uuid;
 use db::{DB_SC_LOC, update_root};
 use std::{time::SystemTime,
-    collections::HashMap};
+    collections::HashMap,
+    str::FromStr};
 
 
 /// Initiliase transfer protocol:
@@ -102,9 +103,11 @@ pub fn transfer_sender(
 pub fn transfer_receiver(
     state: State<Config>,
     claim: Claims,
+    conn: DataBase,
     transfer_msg4: Json<TransferMsg4>,
 ) -> Result<Json<TransferMsg5>> {
     let id = transfer_msg4.shared_key_id.clone();
+
     info!("TRANSFER: Receiver side. Shared Key ID: {}", id);
 
     // Get TransferData for state_chain_id
@@ -120,17 +123,18 @@ pub fn transfer_receiver(
     }
 
     // Get Party1 (State Entity) private share
-    let party_1_private: Party1Private = db::get(&state.db, &claim.sub, &id, &ecdsa::EcdsaStruct::Party1Private)?
-        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+    let party_one_private: Party1Private =
+        db_ecdsa_get(&conn, Uuid::from_str(&id).unwrap(), &ecdsa::EcdsaStruct::Party1Private)?;
+
     // Get Party2 (Owner 1) public share
-    let party_2_public: GE = db::get(&state.db, &claim.sub, &id, &ecdsa::EcdsaStruct::Party2Public)?
-        .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+    let party_2_public: GE =
+        db_ecdsa_get(&conn, Uuid::from_str(&id).unwrap(), &ecdsa::EcdsaStruct::Party2Public)?;
 
     // TODO: decrypt t2
 
     let x1 = transfer_data.x1;
     let t2 = transfer_msg4.t2;
-    let s1 = party_1_private.get_private_key();
+    let s1 = party_one_private.get_private_key();
 
     // Note:
     //  s2 = o1*o2_inv*s1

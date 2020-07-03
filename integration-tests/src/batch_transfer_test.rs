@@ -196,13 +196,14 @@ mod tests {
         ).is_err());
     }
 
+    /// *** THIS TEST REQUIRES batch_lifetime SERVER SETTING TO BE SET TO < 3 ***
     /// Test punishments and reveals after batch transfer failure.
     /// Set up batch transfer and perform 2 full transfers (wallet[0] -> wallet[1] and wallet[1] -> wallet[2]).
     /// This should result in a single state chain (wallet[0]->wallet[1]) being unpunished after revealing.
     /// (since both sender and receiver get punished in transfer failure)
     /// Allow batch_lifetime time to pass, test punishments are set and test removal of punishment to completed transfer.
-    /// *** THIS TEST REQUIRES batch_lifetime SERVER SETTING TO BE SET TO < 3 ***
-    #[test]
+    // #[test]
+    #[allow(dead_code)]
     fn test_failure_batch_transfer() {
         spawn_server();
 
