@@ -17,7 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 rocket = { version = "0.4.2", default-features = false }
-rocket_contrib = { version = "0.4.2", default-features = false,features = ["json"] }
+rocket_contrib = { version = "0.4.2", default-features = false, features = ["json","postgres_pool"] }
 rocksdb = "0.13.0"
 serde = "1.0"
 serde_json = "1.0"
@@ -27,7 +27,7 @@ rusoto_core = "0.36.0"
 time-test = "0.2.1"
 log = "0.4"
 config = "0.9.2"
-uuid = { version = "0.7", features = ["v4"] }
+uuid = { version = "0.5", features = ["v4"] }
 error-chain = "0.12.0"
 failure = "0.1.5"
 jsonwebtoken = "6.0.1"
@@ -40,6 +40,7 @@ monotree = "0.1.3"
 electrumx_client = { git = "https://github.com/commerceblock/rust-electrumx-client" }
 env_logger = "0.7.1"
 log4rs = "0.12.0"
+postgres = { version = "0.15", features = ["with-uuid"] }
 
 [dependencies.zk-paillier]
 git = "https://github.com/KZen-networks/zk-paillier"

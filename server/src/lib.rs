@@ -1,29 +1,25 @@
 #![allow(unused_parens)]
 #![recursion_limit = "128"]
-#![feature(proc_macro_hygiene)]
-#![feature(decl_macro)]
-#[macro_use]
-extern crate rocket;
+
+#![feature(proc_macro_hygiene, decl_macro)]
+#[macro_use] extern crate rocket;
+#[macro_use] extern crate rocket_contrib;
 extern crate config;
 extern crate curv;
 extern crate kms;
 extern crate multi_party_ecdsa;
-extern crate rocket_contrib;
 extern crate rocksdb;
 extern crate uuid;
 extern crate zk_paillier;
-#[macro_use]
-extern crate failure;
+#[macro_use] extern crate failure;
 
 extern crate error_chain;
 
-#[macro_use]
-extern crate serde_derive;
+#[macro_use] extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 
-#[macro_use]
-extern crate log;
+#[macro_use] extern crate log;
 
 #[cfg(test)]
 extern crate floating_duration;
@@ -43,6 +39,10 @@ pub mod tests;
 pub mod error;
 
 type Result<T> = std::result::Result<T, error::SEError>;
+
+use rocket_contrib::databases::postgres;
+#[database("postgres")]
+pub struct DataBase(postgres::Connection);
 
 pub struct Config {
     pub db: rocksdb::DB,

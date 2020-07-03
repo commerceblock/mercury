@@ -1,6 +1,6 @@
 use super::routes::*;
 use super::storage::db;
-use super::{Config, AuthConfig};
+use super::{Config, AuthConfig, DataBase};
 
 use config;
 use rocket;
@@ -14,6 +14,7 @@ use log4rs::encode::pattern::PatternEncoder;
 use log4rs::config::{Appender, Config as LogConfig, Root};
 
 use std::{collections::HashMap, str::FromStr};
+use crate::storage::db_postgres;
 
 impl Config {
     pub fn load(settings: HashMap<String, String>) -> Config {
@@ -111,6 +112,7 @@ pub fn get_server() -> Rocket {
         )
         .manage(config)
         .manage(auth_config)
+        .attach(DataBase::fairing())
 }
 
 fn get_settings_as_map() -> HashMap<String, String> {

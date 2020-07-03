@@ -102,6 +102,9 @@ pub fn first_message(
     // Check authorisation id is in DB (and check password?)
     let user_session = check_user_auth(&state, &claim, &id)?;
 
+    // If shared key already exists for user then return error
+
+
     // Generate shared key
     let (key_gen_first_msg, comm_witness, ec_key_pair) = if protocol == String::from("deposit") {
         MasterKey1::key_gen_first_message()
@@ -109,7 +112,7 @@ pub fn first_message(
         MasterKey1::key_gen_first_message_predefined(user_session.s2.unwrap())
     };
 
-    // Ssave pos 0
+    // Save pos 0
     db::insert(
         &state.db,
         &claim.sub,

@@ -14,6 +14,7 @@ use std::io::Cursor;
 use std::time::SystemTimeError;
 use monotree::Errors as MonotreeErrors;
 use bitcoin::secp256k1::Error as SecpError;
+use postgres::Error as PostgresError;
 
 
 /// State Entity library specific errors
@@ -38,27 +39,28 @@ impl From<String> for SEError {
         SEError::Generic(e)
     }
 }
-
 impl From<SharedLibError> for SEError {
     fn from(e: SharedLibError) -> SEError {
         SEError::SharedLibError(e.to_string())
     }
 }
-
 impl From<MonotreeErrors> for SEError {
     fn from(e: MonotreeErrors) -> SEError {
         SEError::SMTError(e.to_string())
     }
 }
-
 impl From<SecpError> for SEError {
     fn from(e: SecpError) -> SEError {
         SEError::SigningError(e.to_string())
     }
 }
-
 impl From<SystemTimeError> for SEError {
     fn from(e: SystemTimeError) -> SEError {
+        SEError::Generic(e.to_string())
+    }
+}
+impl From<PostgresError> for SEError {
+    fn from(e: PostgresError) -> SEError {
         SEError::Generic(e.to_string())
     }
 }
