@@ -8,7 +8,7 @@ use curv::{FE, GE, BigInt, PK};
 use kms::ecdsa::two_party::party2;
 use bitcoin::{Transaction, OutPoint};
 
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 /// State Entity protocols
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -21,7 +21,7 @@ pub enum Protocol {
 
 // API structs
 
-/// /api/info return struct
+/// /info/info return struct
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StateEntityFeeInfoAPI {
     pub address: String,  // Receive address for fee payments
@@ -35,16 +35,23 @@ impl fmt::Display for StateEntityFeeInfoAPI {
     }
 }
 
-/// /api/statechain return struct
-#[derive(Serialize, Deserialize, Debug)]
+/// /info/statechain return struct
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StateChainDataAPI {
     pub utxo: OutPoint,
     pub amount: u64,
     pub chain: Vec<State>
 }
 
+/// /info/transfer-batch return struct
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TransferBatchDataAPI {
+    pub state_chains: HashMap<String, bool>,
+    pub finalized: bool
+}
 
-/// /api/statechain post struct
+
+/// /info/statechain post struct
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SmtProofMsgAPI {
     pub root: Root,
@@ -60,6 +67,7 @@ pub struct SmtProofMsgAPI {
 /// by Server before co-signing is performed for validation of tx.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PrepareSignTxMsg {
+    pub shared_key_id: String,
     pub protocol: Protocol,
     pub tx: Transaction,
     pub input_addrs: Vec<PK>,  // pub keys being spent from
@@ -69,7 +77,7 @@ pub struct PrepareSignTxMsg {
 
 
 
-// Co-signing algorithm structs
+// 2P-ECDSA Co-signing algorithm structs
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SignSecondMsgRequest {
@@ -105,19 +113,20 @@ pub struct StateEntityAddress {
     pub proof_key: String,
 }
 
+
 /// Sender -> SE
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMsg1 {
     pub shared_key_id: String,
-    pub state_chain_sig: StateChainSig,
+    pub state_chain_sig: StateChainSig
 }
 /// SE -> Sender
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMsg2 {
-    pub x1: FE,
+    pub x1: FE
 }
 /// Sender -> Receiver
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferMsg3 {
     pub shared_key_id: String,
     pub t1: FE, // t1 = o1x1
@@ -132,9 +141,11 @@ pub struct TransferMsg3 {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMsg4 {
     pub shared_key_id: String,
+    pub state_chain_id: String,
     pub t2: FE, // t2 = t1*o2_inv = o1*x1*o2_inv
     pub state_chain_sig: StateChainSig,
-    pub o2_pub: GE
+    pub o2_pub: GE,
+    pub batch_data: Option<BatchData>
 }
 
 /// State Entity -> Receiver
@@ -144,14 +155,29 @@ pub struct TransferMsg5 {
     pub s2_pub: GE,
 }
 
-impl Default for TransferMsg5 {
-    fn default() -> TransferMsg5 {
-        TransferMsg5 {
-            new_shared_key_id: String::from(""),
-            s2_pub: GE::base_point2(),
-        }
-    }
+/// Coordinator -> StateEntity
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TransferBatchInitMsg {
+    pub id: String,
+    pub signatures: Vec<StateChainSig>,
 }
+
+/// User -> State Entity
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TransferRevealNonce {
+    pub batch_id: String,
+    pub hash: String,
+    pub state_chain_id: String,
+    pub nonce: [u8;32],
+}
+
+/// Data present if transfer is part of an atomic batch transfer
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BatchData {
+    pub id: String,
+    pub commitment: String   // Commitment to transfer input UTXO in case of protocol failure
+}
+
 
 // Withdraw algorithm structs
 /// Owner -> State Entity
@@ -166,4 +192,15 @@ pub struct WithdrawMsg1 {
 pub struct WithdrawMsg2 {
     pub shared_key_id: String,
     pub address: String,
+}
+
+
+
+impl Default for TransferMsg5 {
+    fn default() -> TransferMsg5 {
+        TransferMsg5 {
+            new_shared_key_id: String::from(""),
+            s2_pub: GE::base_point2(),
+        }
+    }
 }

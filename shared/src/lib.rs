@@ -12,6 +12,8 @@ extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 
+pub mod mocks;
+
 extern crate itertools;
 
 extern crate reqwest;
@@ -20,12 +22,12 @@ extern crate merkletree;
 extern crate arrayvec;
 extern crate chrono;
 
-pub mod util;
 pub mod error;
-pub mod structs;
 pub mod state_chain;
-pub mod mocks;
+pub mod structs;
 pub mod mainstay;
+pub mod commitment;
+pub mod util;
 
 type Result<T> = std::result::Result<T, error::SharedLibError>;
 

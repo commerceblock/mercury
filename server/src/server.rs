@@ -8,6 +8,11 @@ use rocket::{Request, Rocket};
 use rocksdb;
 use shared_lib::mainstay;
 
+use log::LevelFilter;
+use log4rs::append::file::FileAppender;
+use log4rs::encode::pattern::PatternEncoder;
+use log4rs::config::{Appender, Config as LogConfig, Root};
+
 use std::{collections::HashMap, str::FromStr};
 
 impl Config {
@@ -33,6 +38,8 @@ impl Config {
             fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
             fee_withdraw: settings.get("fee_withdraw").unwrap().parse::<u64>().unwrap(),
             block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
+            batch_lifetime: settings.get("batch_lifetime").unwrap().parse::<u64>().unwrap(),
+            punishment_duration: settings.get("punishment_duration").unwrap().parse::<u64>().unwrap(),
             mainstay_config: mainstay_config,
         }
     }
@@ -73,6 +80,8 @@ pub fn get_server() -> Rocket {
     let config = Config::load(settings.clone());
     let auth_config = AuthConfig::load(settings.clone());
 
+    set_logging_config(settings.get("log_file"));
+
     rocket::ignite()
         .register(catchers![internal_error, not_found, bad_request])
         .mount(
@@ -92,17 +101,20 @@ pub fn get_server() -> Rocket {
                 schnorr::keygen_second,
                 schnorr::keygen_third,
                 schnorr::sign,
-                state_entity::get_statechain,
-                state_entity::get_smt_root,
-                state_entity::get_smt_proof,
-                state_entity::get_state_entity_fees,
-                state_entity::deposit_init,
-                state_entity::deposit_confirm,
-                state_entity::prepare_sign_tx,
-                state_entity::transfer_sender,
-                state_entity::transfer_receiver,
-                state_entity::withdraw_init,
-                state_entity::withdraw_confirm
+                util::get_statechain,
+                util::get_smt_root,
+                util::get_smt_proof,
+                util::get_state_entity_fees,
+                util::prepare_sign_tx,
+                util::get_transfer_batch_status,
+                deposit::deposit_init,
+                deposit::deposit_confirm,
+                transfer::transfer_sender,
+                transfer::transfer_receiver,
+                transfer::transfer_batch_init,
+                transfer::transfer_reveal_nonce,
+                withdraw::withdraw_init,
+                withdraw::withdraw_confirm
             ],
         )
         .manage(config)
@@ -131,4 +143,22 @@ fn get_db(_settings: HashMap<String, String>) -> rocksdb::DB {
     //     .to_string();
 
     rocksdb::DB::open_default(db::DB_LOC).unwrap()
+}
+
+fn set_logging_config(log_file: Option<&String>) {
+    if log_file.is_none() {
+        let _ = env_logger::try_init();
+    } else {
+        // Write log to file
+        let logfile = FileAppender::builder()
+            .encoder(Box::new(PatternEncoder::new("{l} - {m}\n")))
+            .build(log_file.unwrap()).unwrap();
+        let log_config = LogConfig::builder()
+            .appender(Appender::builder().build("logfile", Box::new(logfile)))
+            .build(Root::builder()
+                       .appender("logfile")
+                       .build(LevelFilter::Info)).unwrap();
+
+        let _ = log4rs::init_config(log_config);
+    }
 }

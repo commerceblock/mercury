@@ -21,7 +21,7 @@ pub fn sign(
 
     let request: party_two::EphKeyGenFirstMsg = eph_key_gen_first_message_party_two;
     let sign_party_one_first_message: party_one::EphKeyGenFirstMsg =
-        requests::postb(client_shim, &format!("/ecdsa/sign/{}/first", id), &request)?;
+        requests::postb(client_shim, &format!("ecdsa/sign/{}/first", id), &request)?;
 
     let party_two_sign_message = mk.sign_second_message(
         &eph_ec_key_pair_party2,
@@ -36,7 +36,7 @@ pub fn sign(
         party_two_sign_message,
     };
 
-    let signature = requests::postb::<&SignSecondMsgRequest,Vec<Vec<u8>>>(client_shim, &format!("/ecdsa/sign/{}/second", id), &request)?;
+    let signature = requests::postb::<&SignSecondMsgRequest,Vec<Vec<u8>>>(client_shim, &format!("ecdsa/sign/{}/second", id), &request)?;
 
     Ok(signature)
 }

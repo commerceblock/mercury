@@ -75,7 +75,7 @@ fn main() {
                 }
                 println!();
             }
-            let (ids, bals) = wallet.get_state_chain_balances();
+            let (ids, _, bals) = wallet.get_state_chains_info();
             if ids.len() > 0 {
                 println!("\n\nState Entity balance: \n\nShared Key ID:\t\t\t\t\tConfirmed:\tUnconfirmed:");
                 for (i,bal) in bals.into_iter().enumerate() {
@@ -148,7 +148,7 @@ fn main() {
                 let transfer_msg = state_entity::transfer::transfer_sender(
                     &mut wallet,
                     &shared_key_id.to_string(),
-                    receiver_addr
+                    receiver_addr,
                 ).unwrap();
                 wallet.save();
                 println!(
@@ -161,14 +161,15 @@ fn main() {
         } else if matches.is_present("transfer-receiver") {
             if let Some(matches) = matches.subcommand_matches("transfer-receiver") {
                 let transfer_msg: TransferMsg3 = serde_json::from_str(matches.value_of("message").unwrap()).unwrap();
-                let new_shared_key_id = state_entity::transfer::transfer_receiver(
+                let finalized_data = state_entity::transfer::transfer_receiver(
                     &mut wallet,
-                    &transfer_msg
+                    &transfer_msg,
+                    &None
                 ).unwrap();
                 wallet.save();
                 println!(
                     "\nNetwork: [{}], \n\nTransfer complete for Shared Key ID: {}.",
-                    network, new_shared_key_id
+                    network, finalized_data.new_shared_key_id
                 );
             }
 

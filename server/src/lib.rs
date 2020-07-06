@@ -55,7 +55,10 @@ pub struct Config {
     pub fee_deposit: u64, // satoshis
     pub fee_withdraw: u64, // satoshis
     pub block_time: u64,
+    pub batch_lifetime: u64,
+    pub punishment_duration: u64,
     pub mainstay_config: Option<mainstay::Config>
+    
 }
 
 #[derive(Deserialize)]
