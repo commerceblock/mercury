@@ -10,7 +10,6 @@ use std::convert::TryInto;
 use std::fmt::Display;
 use chrono::NaiveDateTime;
 
-type SharedLibResult<T> = super::Result<T>;
 type Result<T> = std::result::Result<T, Box<dyn ::std::error::Error> >;
 
 
@@ -209,9 +208,16 @@ pub struct Response {
 
 impl Response {
     pub fn from_json(json_data: &serde_json::Value) -> Result<Self>{       
+        println!("parsing response: {:?}", json_data);
         match json_data.get("response"){
-            Some(r) => Ok(Self{response:r.clone()}),
-            None => Err(SharedLibError::Generic(String::from("Error parsing response")).into())
+            Some(r) => {
+                println!("got response object: {:?}", r);
+                Ok(Self{response:r.clone()})
+            },
+            None => {
+                println!("got response object 2: {:?}", json_data);
+                Ok(Self{response:json_data.clone()})
+            }
         }
     }
 }
@@ -223,6 +229,16 @@ pub struct CommitmentInfo {
     merkle_proof: merkle::Proof
 }
 
+impl CommitmentInfo{
+    pub fn from_json(json_data: &serde_json::Value) -> Result<Self>{
+        let resp = &Response::from_json(json_data)?;
+        let mp = merkle::Proof::from_response(resp)?;
+        match Attestation::from_response(resp){
+            Ok(a) => Ok(Self{attestation: Some(a),merkle_proof:mp}),
+            Err(e) => Err(e)
+        }
+    }
+}
 
 
 #[derive(Serialize, Deserialize, PartialEq)]
@@ -233,46 +249,44 @@ pub struct Attestation {
     inserted_at: NaiveDateTime
 }
 
-#[derive(Debug, Clone)]
-struct ParseError();
-
-impl Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "error parsing mainstay API")
-    }
-}
-
-impl std::error::Error for ParseError {}
-    
-
 impl Attestation {
       pub fn from(merkle_root: Commitment, txid: Commitment, confirmed: bool, inserted_at: NaiveDateTime) -> Self{
         Self{merkle_root:merkle_root, txid:txid, confirmed: confirmed, inserted_at: inserted_at}
     }
 
     pub fn from_json(json_data: &serde_json::Value) -> Result<Self>{    
-        let resp = &Response::from_json(json_data)?;
-        Self::from_response(resp)
+        let err_str = "Mainstay: error parsing Attestation from JSON value";
+        let resp = Response::from_json(json_data);
+        if resp.is_ok(){
+            let resp = resp?;
+            return Ok(Self::from_response(&resp)?);
+        }
+        Ok(Self::from_json_attestation(json_data.get("attestation").ok_or(err_str)?)?)
     }
 
     fn from_response(response: &Response) -> Result<Self>{       
-        let err_str = "Mainstay Attestation: error parsing API response";
-
-        match response.response.get("attestation"){
-            Some(val) => {
-                let mrs = val.get("merkle_root").ok_or(err_str)?.as_str();
-                let mrs = mrs.ok_or(err_str)?;
-                let merkle_root = Commitment::from_str(&mrs)?; 
-                let txid = Commitment::from_str(val.get("txid").ok_or(err_str)?.as_str().ok_or(err_str)?)?;
-                let confirmed = val.get("confirmed").ok_or(err_str)?.as_bool().ok_or(err_str)?;
-                let inserted_at = val.get("inserted_at").ok_or(err_str)?.as_str().ok_or(err_str)?;
-                let inserted_at = NaiveDateTime::parse_from_str(&inserted_at, "%H:%M:%S %d/%m/%y")?;
-
-                Ok(Self::from(merkle_root, txid, confirmed, inserted_at))
-            },
-            None => Err(SharedLibError::Generic(String::from("Error parsing attestation")).into())
-        }
+        let val = response.response.get("attesation").ok_or("Mainstay: error parsing Attestation from API response")?;
+        Ok(Self::from_json_attestation(&val)?)
     }
+
+    fn from_json_attestation(val: &serde_json::Value) -> Result<Self>{          
+        let err_str = "Mainstay Attestation: error parsing API response";
+        println!("parsing attestation: {:?}", val);
+        println!("parsing attestation: merkle_root");
+        let mrs = val.get("merkle_root").ok_or(err_str)?.as_str();
+        let mrs = mrs.ok_or(err_str)?;
+        let merkle_root = Commitment::from_str(&mrs)?; 
+        println!("parsing attestation: txid");
+        let txid = Commitment::from_str(val.get("txid").ok_or(err_str)?.as_str().ok_or(err_str)?)?;
+        println!("parsing attestation: confirmed");
+        let confirmed = val.get("confirmed").ok_or(err_str)?.as_bool().ok_or(err_str)?;
+        println!("parsing attestation: inserted_at");
+        let inserted_at = val.get("inserted_at").ok_or(err_str)?.as_str().ok_or(err_str)?;
+        let inserted_at = NaiveDateTime::parse_from_str(&inserted_at, "%H:%M:%S %d/%m/%y")?;
+
+        Ok(Self::from(merkle_root, txid, confirmed, inserted_at))
+    }
+        
 }
 
 
@@ -318,7 +332,7 @@ pub mod merkle {
 }
 */
 
-    #[derive(Serialize, Deserialize, PartialEq)]
+    #[derive(Serialize, Deserialize, PartialEq, Clone)]
     pub struct Proof {
         merkle_root: Commitment,
         commitment: Commitment,
@@ -326,6 +340,7 @@ pub mod merkle {
     }
 
     impl Proof {
+
         pub fn from(merkle_root: Commitment, commitment: Commitment, ops: Vec<Commitment>) -> Self{
             Self{merkle_root: merkle_root, commitment: commitment, ops: ops}
         }
@@ -353,38 +368,67 @@ pub mod merkle {
             Self::from_commitment(config, commitment)
         }
 
-        pub fn from_json(json_data: &serde_json::Value) -> Result<Self>{
-            //Parse Mainstay API responses and Proof object strings            
-            let mut val: &serde_json::Value;
-
-            match json_data.get("response"){
-                Some(resp) => val = resp,
-                None => val = &json_data
-            };
-
-            match val.get("merkleproof"){
-                Some(resp) => val = resp,
-                None => ()
-            };
-            
-            let merkle_root = Commitment::from_str(val.get("merkle_root").unwrap().as_str().unwrap()).unwrap();
-            let commitment = Commitment::from_str(val.get("commitment").unwrap().as_str().unwrap()).unwrap();
-            let mut ops = Vec::<Commitment>::new();
-            let ops_val = val.get("ops").unwrap();
-            let ops_arr = ops_val.as_array().unwrap();
-            for op in ops_arr {
-                let commit_str = op.get("commitment").unwrap().as_str().unwrap();
-                ops.push(Commitment::from_str(commit_str).unwrap())
+        pub fn from_response(response: &Response) -> Result<Self>{       
+            match response.response.get("merkleproof"){
+                Some(val) => Self::from_merkleproof_json(val),
+                None => {
+                    Self::from_merkleproof_json(&response.response)
+                }
             }
+        }
+
+        fn from_merkleproof_json(val: &serde_json::Value) -> Result<Self>{
+            println!("parsing merkleproof JSON object: {:?}", val);
+
+            let err_str = format!("Mainstay merkle::Proof: error parsing merkleproof for JSON object: {:?}", val);
+            let err_str = err_str.as_str();
             
+            println!("parsing merkle_root");
+            let mrs = val.get("merkle_root").ok_or(format!("{}: merkle_root",err_str))?.as_str();
+            let mrs = mrs.ok_or(format!("{}: merkle_root string",err_str))?;            
+            let merkle_root = Commitment::from_str(&mrs)?; 
+
+            println!("parsing commitment");
+            let coms = val.get("commitment").ok_or(err_str)?.as_str();
+            let coms = coms.ok_or(format!("{}: commitment",err_str))?;
+            let commitment = Commitment::from_str(&coms)?; 
+
+            println!("parsing ops");
+            let mut ops = Vec::<Commitment>::new();
+            let ops_val = val.get("ops").ok_or(format!("{}: ops",err_str))?;
+            let ops_arr = ops_val.as_array().ok_or(format!("{}: ops",err_str))?;
+            for op in ops_arr {
+                let commit_str = op.get("commitment").ok_or(format!("{}: ops.commitment",err_str))?.as_str().ok_or(format!("{}: ops.commitment",err_str))?;
+                ops.push(Commitment::from_str(commit_str)?)
+            }
+            println!("fiished parsing merkleproof JSON object");
             Ok(Proof::from(merkle_root, commitment, ops))
+        }
+
+        pub fn from_json(json_data: &serde_json::Value) -> Result<Self>{
+            println!("trying from response");
+            let resp = Response::from_json(json_data);
+            if resp.is_ok(){
+                println!("response is ok, parsing");
+                return Ok(Self::from_response(&resp?)?);        
+            } 
+                 
+            println!("trying from merkleproof json");
+            let json_data = match json_data.get("merkleproof"){
+                Some(val) => val,
+                None => json_data
+            };
+
+            Ok(Self::from_merkleproof_json(json_data)?)
         }
     }
 
     impl FromStr for Proof {
         type Err = Box<dyn ::std::error::Error>;
         fn from_str(s: &str) -> Result<Self> {
+            println!("parsing merkle::Proof from string: {}",s);
             let json_data : serde_json::Value = serde_json::from_str(s)?;
+            println!("JSON data from string: {:?}",&json_data);
             Self::from_json(&json_data)
         }
     }
@@ -515,9 +559,7 @@ mod tests {
 
         assert!(merkleproof_1 ==merkleproof_2);
         assert!(merkleproof_1 ==merkleproof_3);
-        assert!(merkleproof_1 ==merkleproof_2);
         assert!(merkleproof_1 ==merkleproof_compare);
-
     }
 
     
@@ -525,7 +567,9 @@ mod tests {
     fn test_get_latest_proof() {
         match merkle::Proof::from_latest_proof(&config()){
             Ok(_) => assert!(true),
-            Err(e) => assert!(false)
+            Err(e) => {
+                assert!(false);
+            }
         };
     }
 
