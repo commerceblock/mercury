@@ -11,13 +11,12 @@ use std::fmt::Display;
 use chrono::{DateTime, offset::Utc, NaiveDateTime};
 
 type Result<T> = std::result::Result<T, Box<dyn ::std::error::Error> >;
-type SharedResult<T> = super::Result<T>;
 
 pub type Hash = monotree::Hash;
 
 type Payload<'a> = HashMap::<&'a str,&'a str>;
 
-#[derive(Serialize, Deserialize, PartialEq, Copy, Default)]
+#[derive(Serialize, Deserialize, PartialEq, Copy, Default, Debug)]
 pub struct Commitment(Option<Hash>);
 
 impl std::clone::Clone for Commitment {
@@ -208,7 +207,7 @@ pub struct Response {
 
 //An object that can be retreived from the API that is indexed with a commitment
 //E.g. CommitmentInfo, merkle::Proof
-trait CommitmentIndexed: APIObject {
+pub trait CommitmentIndexed: APIObject {
     fn from_commitment(config: &Config, commitment: &Commitment) ->Result<Self> {
         let command = &format!("commitment/commitment?commitment={}",commitment);
         Self::from_command(command,config)
@@ -220,7 +219,7 @@ trait CommitmentIndexed: APIObject {
     }
 }
 
-trait APIObject: Sized {
+pub trait APIObject: Sized {
     fn from_json(json_data: &serde_json::Value) -> Result<Self>;
 
     fn from_command(command: &str, config: &Config) -> Result<Self> {
@@ -248,12 +247,23 @@ impl APIObject for Response {
     }
 }
 
- #[derive(Serialize, Deserialize, PartialEq)]
+ #[derive(Serialize, Deserialize, PartialEq, Debug)]
 //Information about a commitment: it's attestation, if any, and its proof
 pub struct CommitmentInfo {
     attestation: Option<Attestation>,
     merkleproof: merkle::Proof
 }
+
+/*
+impl std::fmt::Debug for CommitmentInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Point")
+         .field("x", &self.x)
+         .field("y", &self.y)
+         .finish()
+    }
+}
+*/
 
 impl APIObject for CommitmentInfo{
     fn from_json(json_data: &serde_json::Value) -> Result<Self>{
@@ -269,7 +279,7 @@ impl APIObject for CommitmentInfo{
 impl CommitmentIndexed for CommitmentInfo {}
 
 
-#[derive(Serialize, Deserialize, PartialEq)]
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct Attestation {
     merkle_root: Commitment,
     txid: Commitment,
@@ -370,7 +380,7 @@ pub mod merkle {
 }
 */
 
-    #[derive(Serialize, Deserialize, PartialEq, Clone)]
+    #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
     pub struct Proof {
         merkle_root: Commitment,
         commitment: Commitment,

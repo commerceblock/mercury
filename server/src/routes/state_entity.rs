@@ -47,8 +47,14 @@ fn update_root(state: &State<Config>, root: Hash) -> Result<()>{
     db::update_root(&state.db, root)?;
     match &state.mainstay_config {
         Some(c) => {
+            //Attest the commitment to mainstay, then get the merkle proof and save it to the database
             match root.attest(&c) {
-                Ok(_) => Ok(()),
+                Ok(_) => {
+                    match mainstay::CommitmentInfo::from_commitment(root){
+                        Ok(_) => Ok(()),
+                        Err(e) => Err(SEError::SharedLibError(e.to_string()))
+                    }
+                },
                 Err(e) => Err(SEError::SharedLibError(e.to_string()))
             }
         },
