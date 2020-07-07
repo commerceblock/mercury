@@ -35,6 +35,9 @@ extern crate serde_dynamodb;
 
 extern crate hex;
 
+#[macro_use]
+extern crate serial_test;
+
 pub mod auth;
 pub mod routes;
 pub mod server;

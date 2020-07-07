@@ -13,6 +13,7 @@ mod tests {
 
 
     #[test]
+    #[serial]
     fn test_gen_shared_key() {
         spawn_server();
         let mut wallet = gen_wallet();
@@ -24,6 +25,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_failed_auth() {
         spawn_server();
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
@@ -52,7 +54,8 @@ mod tests {
     // }
 
     #[test]
-    fn test_deposit() {
+    #[serial]
+        fn test_deposit() {
         spawn_server();
         let wallet = gen_wallet_with_deposit(10000);
 
@@ -74,7 +77,8 @@ mod tests {
     }
 
     #[test]
-    fn test_get_statechain() {
+    #[serial]
+        fn test_get_statechain() {
         spawn_server();
         let mut wallet = gen_wallet();
 
@@ -88,6 +92,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_transfer() {
         spawn_server();
         let mut wallets = vec!();
@@ -129,6 +134,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_double_transfer() {
         spawn_server();
         let mut wallets = vec!();
@@ -196,6 +202,7 @@ mod tests {
 
 
     #[test]
+    #[serial]
     fn test_withdraw() {
         spawn_server();
         let mut wallet = gen_wallet_with_deposit(10000);
@@ -228,6 +235,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     /// Test wallet load from json correctly when shared key present.
     fn test_wallet_load_with_shared_key() {
         spawn_server();

@@ -159,6 +159,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_db_root_update() {
         let db = rocksdb::DB::open_default(TEST_DB_LOC).unwrap();
         let root1: [u8;32] = [1;32];
