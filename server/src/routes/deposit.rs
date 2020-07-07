@@ -161,7 +161,7 @@ pub fn deposit_confirm(
         &tx_backup.input.get(0).unwrap().previous_output.txid.to_string(),
         &user_session.proof_key
     )?;
-    update_root(&state.db, new_root.unwrap())?;
+    update_root(&state, new_root.unwrap())?;
 
     info!("DEPOSIT: Included in sparse merkle tree. State Chain ID: {}", state_chain.id);
     debug!("DEPOSIT: State Chain ID: {}. New root: {:?}. Previous root: {:?}.", state_chain.id, new_root.unwrap(), root);
