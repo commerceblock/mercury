@@ -28,7 +28,6 @@ pub mod structs;
 pub mod mainstay;
 pub mod commitment;
 pub mod util;
-pub mod mainstay;
 
 type Result<T> = std::result::Result<T, error::SharedLibError>;
 

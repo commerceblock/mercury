@@ -3,7 +3,11 @@ use crate::error::SEError;
 use rocksdb::DB;
 use serde;
 use shared_lib::Root;
-use mainstay::Hash;
+use crate::mainstay::Hash;
+use crate::mainstay;
+use rocket::State;
+use crate::shared_lib::mainstay::Attestable;
+use crate::shared_lib::mainstay::CommitmentIndexed;
 
 static ROOTID: &str = "rootid";
 pub static DB_LOC: &str = "./db";
@@ -95,12 +99,12 @@ pub fn update_root(state: &State<Config>, root: Hash) -> Result<()>{
     Ok(())  
 }
 
-fn update_root_mainstay(config: &mainstay::Config, root: Hash) -> Result<()>{
+fn update_root_mainstay(config: &Option<mainstay::Config>, root: Hash) -> Result<()>{
     match config {
         Some(c) => {
            match root.attest(&c) {
                 Ok(_) => {
-                    match mainstay::CommitmentInfo::from_commitment(root){
+                    match mainstay::CommitmentInfo::from_attestable(c,&root){
                         Ok(_) => Ok(()),
                         Err(e) => Err(SEError::SharedLibError(e.to_string()))
                     }
@@ -189,8 +193,8 @@ mod tests {
         let root1: [u8;32] = [1;32];
         let root2: [u8;32] = [2;32];
 
-        let _ = update_root(&db, root1.clone());
-        let _ = update_root(&db, root2.clone());
+        let _ = update_root_db(&db, root1.clone());
+        let _ = update_root_db(&db, root2.clone());
 
         let root2_id: u32 = get_by_identifier(&db, ROOTID).unwrap().unwrap();
         assert_eq!(root2, get_by_identifier::<[u8;32]>(&db, &idify_root(&root2_id)).unwrap().unwrap());
