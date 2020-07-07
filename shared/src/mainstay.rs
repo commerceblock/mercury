@@ -165,7 +165,7 @@ impl Attestable for Commitment {
 }
 
 impl Commitment {
-    fn from_hash(hash: &Hash) -> Self {
+    pub fn from_hash(hash: &Hash) -> Self {
         Commitment(Some(*hash))
     }
 }
@@ -265,6 +265,22 @@ impl std::fmt::Debug for CommitmentInfo {
 }
 */
 
+impl CommitmentInfo {
+    pub fn merkle_root(&self) -> &Commitment {
+        &self.merkleproof.merkle_root()
+    }
+
+    //Is the commitment attested or not?
+    pub fn is_confirmed(&self) -> bool {
+        match &self.attestation {
+            Some(a) => {
+                return a.confirmed
+            },
+            None => false
+        } 
+    }
+}
+
 impl APIObject for CommitmentInfo{
     fn from_json(json_data: &serde_json::Value) -> Result<Self>{
         let resp = &Response::from_json(json_data)?;
@@ -303,6 +319,10 @@ impl APIObject for Attestation {
 impl Attestation {
       pub fn from(merkle_root: Commitment, txid: Commitment, confirmed: bool, inserted_at: DateTime<Utc>) -> Self{
         Self{merkle_root:merkle_root, txid:txid, confirmed: confirmed, inserted_at: inserted_at}
+    }
+
+    pub fn merkle_root(&self) -> &Commitment {
+        &self.merkle_root
     }
 
     fn from_response(response: &Response) -> Result<Self>{       
@@ -412,6 +432,10 @@ pub mod merkle {
 
         pub fn from(merkle_root: Commitment, commitment: Commitment, ops: Vec<Commitment>) -> Self{
             Self{merkle_root: merkle_root, commitment: commitment, ops: ops}
+        }
+
+        pub fn merkle_root(&self) -> &Commitment {
+            &self.merkle_root
         }
 
         pub fn from_latest_proof(config: &Config) -> Result<Self> {

@@ -8,6 +8,7 @@ use crate::mainstay;
 use rocket::State;
 use crate::shared_lib::mainstay::Attestable;
 use crate::shared_lib::mainstay::CommitmentIndexed;
+use std::convert::TryFrom;
 
 static ROOTID: &str = "rootid";
 pub static DB_LOC: &str = "./db";
@@ -60,9 +61,12 @@ pub fn remove(db: &DB, user_id: &str, id: &str, name: &dyn MPCStruct) -> Result<
     }
 }
 
-
 fn idify_root(id: &u32) -> String {
     format!("{}_{}", id, String::from("root"))
+}
+
+fn idify_commitment_info(commitment: &mainstay::Commitment) -> String {
+    format!("{}_{}", commitment.to_string(), String::from("commitment_info"))
 }
 
 
@@ -92,6 +96,81 @@ where
     }
 }
 
+//Update the database with the mainstay commitment info for a particular root 
+pub fn update_root_commitment_info(state: &State<Config>, root: &Hash) -> Result<Option<bool>>{
+    match &state.mainstay_config {
+        Some(c) => {
+            match mainstay::CommitmentInfo::from_attestable(c,root){
+                Ok(info) => {
+                    update_commitment_info(&state.db, &info)?;
+                    Ok(Some(info.is_confirmed()))
+                },
+                Err(e) => Err(SEError::SharedLibError(e.to_string()))
+            }            
+        },
+        None => Ok(None)
+    }
+}
+
+//Update the database with the latest available mainstay attestation info
+pub fn update_root_attestation(state: &State<Config>, db: &DB) -> Result <()>{
+    match &state.mainstay_config {
+        Some(c)=>{
+            let mut id = get_current_root_id(db)?;   
+            while id > 0 {
+                let root = get_root(db,&id)?.unwrap();         
+                match get_commitment_info(db, &mainstay::Commitment::from_hash(&root))? {
+                    //Is in db?
+                    Some(info) => {
+                        //Is mainstay confirmed?
+                        match info.is_confirmed(){
+                            true => {
+                                return Ok(());
+                            },
+                            false => {
+                                //Update the root commitment info from mainstay. If confirmed, the latest attestation is found; exit.
+                                match update_root_commitment_info(state, &root)?{
+                                    Some(confirmed) => if confirmed {
+                                        return Ok(());
+                                    },
+                                    None => ()
+                                }
+                            }
+                        };
+                    },
+                    None => {
+                        //Update the root commitment info from mainstay. If confirmed, the latest attestation is found; exit.
+                        match update_root_commitment_info(state, &root)?{
+                                        Some(confirmed) => if confirmed {
+                                        return Ok(());
+                                    },
+                                    None => ()
+                        }                    
+                    }
+                };  
+                id = id-1;   
+            }
+            Ok(())
+        }
+        None => Ok(())
+    }
+}
+
+/// get commitment info with commitment
+pub fn get_commitment_info(db: &DB, commitment: &mainstay::Commitment) -> Result<Option<mainstay::CommitmentInfo>>
+{
+    get_by_identifier(db, &idify_commitment_info(commitment))
+}
+
+fn update_commitment_info(db: &DB, info: &mainstay::CommitmentInfo) -> Result<()>{
+    let id = idify_commitment_info(info.merkle_root());
+
+    insert_by_identifier(&db, &id, info.clone())?;
+
+    debug!("Updated commitment_info at id {} with value: {:?}", id, info);
+    Ok(())
+}
+
 //Update the database and the mainstay slot with the SMT root, if applicable
 pub fn update_root(state: &State<Config>, root: Hash) -> Result<()>{
     update_root_db(&state.db, root)?;
@@ -119,10 +198,7 @@ fn update_root_mainstay(config: &Option<mainstay::Config>, root: Hash) -> Result
 /// Update state chain root value
 fn update_root_db(db: &DB, new_root: [u8;32]) -> Result<()> {
         // Get previous ID
-        let mut id = match get_by_identifier(db, ROOTID)? {
-            None =>  0,
-            Some(id_option) => id_option
-        };
+        let mut id = get_current_root_id(db)?;
 
         // update id
         id = id + 1;
@@ -144,17 +220,21 @@ where
     get_by_identifier(db, &idify_root(&id))
 }
 
+pub fn get_current_root_id(db: &DB) -> Result<u32> {
+    // Get previous ID
+    match get_by_identifier::<u32>(db, ROOTID)? {
+        None =>  Ok(0),
+        Some(id_option) => Ok(id_option)
+    }
+}
+
 /// get current statechain Root. This should be done via Mainstay in the future
 pub fn get_current_root<T>(db: &DB) -> Result<Root>
 where
     T: serde::de::DeserializeOwned,
 {
     // Get previous ID
-    let id = match get_by_identifier(db, ROOTID)? {
-        None =>  0,
-        Some(id_option) => id_option
-    };
-
+    let id = get_current_root_id(db)?;
     Ok(Root {
         id,
         value: get_root(db, &id)?
