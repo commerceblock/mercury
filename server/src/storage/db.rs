@@ -1,8 +1,9 @@
-use super::super::Result;
+use super::super::{Result, Config};
 use crate::error::SEError;
 use rocksdb::DB;
 use serde;
 use shared_lib::Root;
+use mainstay::Hash;
 
 static ROOTID: &str = "rootid";
 pub static DB_LOC: &str = "./db";
@@ -87,8 +88,32 @@ where
     }
 }
 
+//Update the database and the mainstay slot with the SMT root, if applicable
+pub fn update_root(state: &State<Config>, root: Hash) -> Result<()>{
+    update_root_db(&state.db, root)?;
+    update_root_mainstay(&state.mainstay_config, root)?;
+    Ok(())  
+}
+
+fn update_root_mainstay(config: &mainstay::Config, root: Hash) -> Result<()>{
+    match config {
+        Some(c) => {
+           match root.attest(&c) {
+                Ok(_) => {
+                    match mainstay::CommitmentInfo::from_commitment(root){
+                        Ok(_) => Ok(()),
+                        Err(e) => Err(SEError::SharedLibError(e.to_string()))
+                    }
+                },
+                Err(e) => Err(SEError::SharedLibError(e.to_string()))
+            }
+        },
+        None => Ok(())
+    }
+}
+
 /// Update state chain root value
-pub fn update_root(db: &DB, new_root: [u8;32]) -> Result<()> {
+fn update_root_db(db: &DB, new_root: [u8;32]) -> Result<()> {
         // Get previous ID
         let mut id = match get_by_identifier(db, ROOTID)? {
             None =>  0,

@@ -268,7 +268,7 @@ pub fn transfer_finalize(
 
     let root = get_current_root::<Root>(&state.db)?;
     let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &funding_txid, &proof_key)?;
-    update_root(&state.db, new_root.unwrap())?;
+    update_root(&state, new_root.unwrap())?;
 
     info!("TRANSFER: Included in sparse merkle tree. State Chain ID: {}", state_chain_id);
     debug!("TRANSFER: State Chain ID: {}. New root: {:?}. Previous root: {:?}.", state_chain_id, new_root.unwrap(), root);
