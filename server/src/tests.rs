@@ -13,6 +13,7 @@ mod tests {
 
     // test ecdsa::sign can be performed only by authorised user
     #[test]
+    #[serial]
     fn test_auth_token() {
         let client = Client::new(server::get_server()).expect("valid rocket instance");
         // get ID
@@ -48,6 +49,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_err_get_statechain() {
         let client = Client::new(server::get_server()).expect("valid rocket instance");
 
@@ -69,6 +71,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_err_get_smt_proof() {
         let client = Client::new(server::get_server()).expect("valid rocket instance");
 
@@ -119,6 +122,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_err_get_transfer_batch_status() {
         let client = Client::new(server::get_server()).expect("valid rocket instance");
 
@@ -140,6 +144,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_get_state_entity_fees() {
         let client = Client::new(server::get_server()).expect("valid rocket instance");
 

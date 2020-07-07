@@ -37,6 +37,9 @@ extern crate hex;
 extern crate shared_lib;
 use shared_lib::mainstay;
 
+#[macro_use]
+extern crate serial_test;
+
 pub mod auth;
 pub mod routes;
 pub mod server;
