@@ -508,7 +508,7 @@ mod tests {
 
         match random_hash.attest(&config) {
             Ok(()) => assert!(true),
-            Err(e) => assert!(false)
+            Err(_) => assert!(false)
         }
 
         //Incorrect token should fail.
@@ -517,7 +517,7 @@ mod tests {
 
         match random_hash.attest(&config) {
             Ok(()) => assert!(false, "should have failed with incorrect token"),
-            Err(e) => {
+            Err(_) => {
                 println!("Correctly failed with incorrect token");
             }
         }
@@ -601,7 +601,7 @@ mod tests {
     fn get_latest_proof() {
         match merkle::Proof::from_latest_proof(&config()){
             Ok(_) => assert!(true),
-            Err(e) => {
+            Err(_) => {
                 assert!(false);
             }
         };
