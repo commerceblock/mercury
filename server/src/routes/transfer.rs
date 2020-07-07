@@ -13,8 +13,9 @@ use shared_lib::{
     Root, commitment::verify_commitment};
 use crate::routes::util::*;
 use crate::error::{SEError,DBErrorType::NoDataForID};
-use crate::routes::ecdsa;
-use crate::storage::{db_postgres::db_ecdsa_get, db::get_current_root};
+use crate::storage::{
+    db_postgres::{Column, Table, db_get_serialized, db_insert, db_update, db_update_serialized, db_get},
+    db::get_current_root};
 
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 
@@ -38,33 +39,38 @@ use std::{time::SystemTime,
 pub fn transfer_sender(
     state: State<Config>,
     claim: Claims,
+    conn: DataBase,
     transfer_msg1: Json<TransferMsg1>,
 ) -> Result<Json<TransferMsg2>> {
-    let shared_key_id = transfer_msg1.shared_key_id.clone();
-    info!("TRANSFER: Sender Side. Shared Key ID: {}", shared_key_id);
+    let user_id = Uuid::from_str(&transfer_msg1.shared_key_id).unwrap();
+
+    info!("TRANSFER: Sender Side. Shared Key ID: {}", user_id);
 
     // Auth user
-    check_user_auth(&state, &claim, &transfer_msg1.shared_key_id)?;
+    check_user_auth(&state, &claim, &conn, &user_id)?;
 
     // Verification/PoW/authoriation failed
     // Err(SEError::AuthError)
 
     // Get state_chain id
-    let user_session: UserSession =
-        db::get(&state.db, &claim.sub, &shared_key_id, &StateEntityStruct::UserSession)?
-            .ok_or(SEError::DBError(NoDataForID, shared_key_id.clone()))?;
-    let state_chain_id =  user_session.state_chain_id
-        .ok_or(SEError::Generic(String::from("Transfer Error: User does not own a state chain.")))?;
+    // let user_session: UserSession =
+    //     db::get(&state.db, &claim.sub, &user_id.to_string(), &StateEntityStruct::UserSession)?
+    //         .ok_or(SEError::DBError(NoDataForID, user_id.to_string().clone()))?;
+    // let state_chain_id =  user_session.state_chain_id
+    //     .ok_or(SEError::Generic(String::from("Transfer Error: User does not own a state chain.")))?;
+    let state_chain_id: Uuid =
+        db_get(&conn, &user_id, Table::UserSession, Column::StateChainId)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::StateChainId))?;
 
     // Check if state chain is still owned by user and not locked
     let state_chain: StateChain =
-        db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
-            .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
+        db::get(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::StateChain)?
+            .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string().clone()))?;
     state_chain.is_locked()?;
-    state_chain.is_owned_by(&shared_key_id)?;
+    state_chain.is_owned_by(&user_id.to_string())?;
 
     // Ensure if transfer has already been completed (but not finalized)
-    match db::get::<TransferData>(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::TransferData)? {
+    match db::get::<TransferData>(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::TransferData)? {
         None => {},
         Some(_) => {
             return Err(SEError::Generic(String::from("Transfer already completed. Waiting for finalize.")));
@@ -78,16 +84,16 @@ pub fn transfer_sender(
     db::insert(
         &state.db,
         &claim.sub,
-        &state_chain_id,
+        &state_chain_id.to_string(),
         &StateEntityStruct::TransferData,
         &TransferData {
-            state_chain_id: state_chain_id.clone(),
+            state_chain_id: state_chain_id.to_string().clone(),
             state_chain_sig: transfer_msg1.state_chain_sig.to_owned(),
             x1: x1.clone(),
         }
     )?;
 
-    info!("TRANSFER: Sender side complete. Previous shared key ID: {}. State Chain ID: {}",shared_key_id,state_chain_id);
+    info!("TRANSFER: Sender side complete. Previous shared key ID: {}. State Chain ID: {}",user_id.to_string(),state_chain_id);
     debug!("TRANSFER: Sender side complete. State Chain ID: {}. State Chain Signature: {:?}. x1: {:?}.", state_chain_id, transfer_msg1.state_chain_sig, x1);
 
     // TODO encrypt x1 with Senders proof key
@@ -106,9 +112,9 @@ pub fn transfer_receiver(
     conn: DataBase,
     transfer_msg4: Json<TransferMsg4>,
 ) -> Result<Json<TransferMsg5>> {
-    let id = transfer_msg4.shared_key_id.clone();
+    let user_id = Uuid::from_str(&transfer_msg4.shared_key_id).unwrap();
 
-    info!("TRANSFER: Receiver side. Shared Key ID: {}", id);
+    info!("TRANSFER: Receiver side. Shared Key ID: {}", user_id);
 
     // Get TransferData for state_chain_id
     let transfer_data: TransferData =
@@ -124,11 +130,13 @@ pub fn transfer_receiver(
 
     // Get Party1 (State Entity) private share
     let party_one_private: Party1Private =
-        db_ecdsa_get(&conn, Uuid::from_str(&id).unwrap(), &ecdsa::EcdsaStruct::Party1Private)?;
+        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::Party1Private)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::Party1Private))?;
 
     // Get Party2 (Owner 1) public share
     let party_2_public: GE =
-        db_ecdsa_get(&conn, Uuid::from_str(&id).unwrap(), &ecdsa::EcdsaStruct::Party2Public)?;
+        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::Party2Public)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::Party2Public))?;
 
     // TODO: decrypt t2
 
@@ -201,6 +209,7 @@ pub fn transfer_receiver(
         transfer_finalize(
             &state,
             &claim,
+            &conn,
             &finalized_data
         )?;
     }
@@ -223,6 +232,7 @@ pub fn transfer_receiver(
 pub fn transfer_finalize(
     state: &State<Config>,
     claim: &Claims,
+    conn: &DataBase,
     finalized_data: &TransferFinalizeData
 ) -> Result<()> {
     let state_chain_id = finalized_data.state_chain_id.clone();
@@ -244,23 +254,31 @@ pub fn transfer_finalize(
     )?;
 
     // Create new UserSession to allow new owner to generate shared wallet
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &finalized_data.new_shared_key_id,
-        &StateEntityStruct::UserSession,
-        &UserSession {
-            id: finalized_data.new_shared_key_id.clone(),
-            auth: String::from("auth"),
-            proof_key: finalized_data.state_chain_sig.data.to_owned(),
-            tx_backup: Some(state_chain.tx_backup.clone()),
-            tx_withdraw: None,
-            sig_hash: None,
-            state_chain_id: Some(state_chain_id.clone()),
-            s2: Some(finalized_data.s2),
-            withdraw_sc_sig: None
-        }
-    )?;
+    // db::insert(
+    //     &state.db,
+    //     &claim.sub,
+    //     &finalized_data.new_shared_key_id,
+    //     &StateEntityStruct::UserSession,
+    //     &UserSession {
+    //         id: finalized_data.new_shared_key_id.clone(),
+    //         auth: String::from("auth"),
+    //         proof_key: finalized_data.state_chain_sig.data.to_owned(),
+    //         tx_backup: Some(state_chain.tx_backup.clone()),
+    //         tx_withdraw: None,
+    //         sig_hash: None,
+    //         state_chain_id: Some(state_chain_id.clone()),
+    //         s2: Some(finalized_data.s2),
+    //         withdraw_sc_sig: None
+    //     }
+    // )?;
+    let new_user_id = Uuid::from_str(&finalized_data.new_shared_key_id.clone()).unwrap();
+    db_insert(&conn, &new_user_id, Table::UserSession)?;
+    db_update(&conn, &new_user_id, String::from("auth"), Table::UserSession, Column::Authentication)?;
+    db_update(&conn, &new_user_id, finalized_data.state_chain_sig.data.to_owned(), Table::UserSession, Column::ProofKey)?;
+    db_update_serialized(&conn, &new_user_id, state_chain.tx_backup.clone(), Table::UserSession, Column::TxBackup)?;
+    db_update(&conn, &new_user_id, Uuid::from_str(&state_chain_id.clone()).unwrap(), Table::UserSession, Column::StateChainId)?;
+    db_update_serialized(&conn, &new_user_id, finalized_data.s2, Table::UserSession, Column::S2)?;
+
 
     info!("TRANSFER: Finalized. New shared key ID: {}. State Chain ID: {}", finalized_data.new_shared_key_id, state_chain_id);
 
@@ -361,6 +379,7 @@ pub fn transfer_batch_init(
 pub fn finalize_batch(
     state: &State<Config>,
     claim: &Claims,
+    conn: &DataBase,
     batch_id: &String
 ) -> Result<()> {
     info!("TRANSFER_FINALIZE_BATCH: ID: {}", batch_id);
@@ -376,6 +395,7 @@ pub fn finalize_batch(
         transfer_finalize(
             &state,
             &claim,
+            &conn,
             &finalized_data
         )?;
     }

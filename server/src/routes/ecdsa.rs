@@ -3,14 +3,21 @@ use super::super::{{Result,Config},
     storage::db};
 
 use crate::error::{DBErrorType::NoDataForID, SEError};
-use crate::{storage::db_postgres::{db_ecdsa_update, db_ecdsa_new, db_ecdsa_get, db_ecdsa_get_complete}, routes::util::{check_user_auth, StateEntityStruct, UserSession}, DataBase};
+use crate::{storage::db_postgres::{
+    db_update_serialized, db_insert, db_get_serialized, Table, Column},
+    routes::util::
+        check_user_auth,
+        DataBase};
 use shared_lib::{
     structs::{Protocol, SignSecondMsgRequest},
     util::reverse_hex_str,
 };
 
-use bitcoin::{secp256k1::Signature, Transaction};
-use curv::{{BigInt, GE},
+use bitcoin::{
+    secp256k1::Signature,
+    Transaction,
+    hashes::sha256d};
+use curv::{{BigInt, GE, FE},
     cryptographic_primitives::proofs::sigma_dlog::*,
     elliptic::curves::traits::ECPoint,
     arithmetic::traits::Converter};
@@ -86,16 +93,16 @@ pub fn first_message(
 ) -> Result<Json<(String, party_one::KeyGenFirstMsg)>> {
     let user_id = Uuid::from_str(&id).unwrap();
     // Check authorisation id is in DB (and check password?)
-    let user_session = check_user_auth(&state, &claim, &id)?;
+    check_user_auth(&state, &claim, &conn, &user_id)?;
 
     // Create new entry in ecdsa table if key not already in table.
-    match db_ecdsa_get_complete(&conn, user_id) {
-        Ok(is_complete) => match is_complete {
-            true =>  { return Err(SEError::Generic(format!("Key Generation already completed for ID {}",user_id)))},
-            false => {} // Key exists but key gen not complete. Carry on without writing user_id.
+    match db_get_serialized::<MasterKey1>(&conn, &user_id, Table::Ecdsa, Column::Party1MasterKey) {
+        Ok(data) => match data {
+            Some(_) =>  { return Err(SEError::Generic(format!("Key Generation already completed for ID {}",user_id)))},
+            None => {} // Key exists but key gen not complete. Carry on without writing user_id.
         },
         Err(_) => {
-            db_ecdsa_new(&conn, &user_id)?;
+            db_insert(&conn, &user_id, Table::Ecdsa)?;
         }
     }
 
@@ -103,13 +110,15 @@ pub fn first_message(
     let (key_gen_first_msg, comm_witness, ec_key_pair) = if protocol == String::from("deposit") {
         MasterKey1::key_gen_first_message()
     } else {
-        MasterKey1::key_gen_first_message_predefined(user_session.s2.unwrap())
+        let s2: FE = db_get_serialized(&conn, &user_id, Table::UserSession, Column::S2)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::S2))?;
+        MasterKey1::key_gen_first_message_predefined(s2)
     };
 
-    db_ecdsa_update(&conn, user_id, &HDPos{pos:0u32}, &EcdsaStruct::POS)?;
-    db_ecdsa_update(&conn, user_id, &key_gen_first_msg, &EcdsaStruct::KeyGenFirstMsg)?;
-    db_ecdsa_update(&conn, user_id, &comm_witness, &EcdsaStruct::CommWitness)?;
-    db_ecdsa_update(&conn, user_id, &ec_key_pair, &EcdsaStruct::EcKeyPair)?;
+    db_update_serialized(&conn, &user_id, &HDPos{pos:0u32}, Table::Ecdsa, Column::POS)?;
+    db_update_serialized(&conn, &user_id, &key_gen_first_msg, Table::Ecdsa, Column::KeyGenFirstMsg)?;
+    db_update_serialized(&conn, &user_id, &comm_witness, Table::Ecdsa, Column::CommWitness)?;
+    db_update_serialized(&conn, &user_id, &ec_key_pair, Table::Ecdsa, Column::EcKeyPair)?;
 
     Ok(Json((id, key_gen_first_msg)))
 }
@@ -123,19 +132,21 @@ pub fn second_message(
     let user_id = Uuid::from_str(&id).unwrap();
 
     let party2_public: GE = dlog_proof.0.pk.clone();
-    db_ecdsa_update(&conn, user_id, &party2_public, &EcdsaStruct::Party2Public)?;
+    db_update_serialized(&conn, &user_id, &party2_public, Table::Ecdsa, Column::Party2Public)?;
 
     let comm_witness: party_one::CommWitness =
-        db_ecdsa_get(&conn, user_id, &EcdsaStruct::CommWitness)?;
+        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::CommWitness)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::CommWitness))?;
 
     let ec_key_pair: party_one::EcKeyPair =
-        db_ecdsa_get(&conn, user_id, &EcdsaStruct::EcKeyPair)?;
+        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::EcKeyPair)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::EcKeyPair))?;
 
     let (kg_party_one_second_message, paillier_key_pair, party_one_private) =
         MasterKey1::key_gen_second_message(comm_witness, &ec_key_pair, &dlog_proof.0);
 
-    db_ecdsa_update(&conn, user_id, &paillier_key_pair, &EcdsaStruct::PaillierKeyPair)?;
-    db_ecdsa_update(&conn, user_id, &party_one_private, &EcdsaStruct::Party1Private)?;
+    db_update_serialized(&conn, &user_id, &paillier_key_pair, Table::Ecdsa, Column::PaillierKeyPair)?;
+    db_update_serialized(&conn, &user_id, &party_one_private, Table::Ecdsa, Column::Party1Private)?;
 
     Ok(Json(kg_party_one_second_message))
 }
@@ -153,14 +164,15 @@ pub fn third_message(
     let user_id = Uuid::from_str(&id).unwrap();
 
     let party_one_private: party_one::Party1Private =
-        db_ecdsa_get(&conn, user_id, &EcdsaStruct::Party1Private)?;
+        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::Party1Private)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::Party1Private))?;
 
     let (party_one_third_message, party_one_pdl_decommit, alpha) =
         MasterKey1::key_gen_third_message(&party_2_pdl_first_message.0, &party_one_private);
 
-    db_ecdsa_update(&conn, user_id, &party_one_pdl_decommit, &EcdsaStruct::PDLDecommit)?;
-    db_ecdsa_update(&conn, user_id, &Alpha{value:alpha}, &EcdsaStruct::Alpha)?;
-    db_ecdsa_update(&conn, user_id, &party_2_pdl_first_message.0, &EcdsaStruct::Party2PDLFirstMsg)?;
+    db_update_serialized(&conn, &user_id, &party_one_pdl_decommit, Table::Ecdsa, Column::PDLDecommit)?;
+    db_update_serialized(&conn, &user_id, &Alpha{value:alpha}, Table::Ecdsa, Column::Alpha)?;
+    db_update_serialized(&conn, &user_id, &party_2_pdl_first_message.0, Table::Ecdsa, Column::Party2PDLFirstMsg)?;
 
     Ok(Json(party_one_third_message))
 }
@@ -178,16 +190,20 @@ pub fn fourth_message(
     let user_id = Uuid::from_str(&id).unwrap();
 
     let party_one_private: party_one::Party1Private =
-        db_ecdsa_get(&conn, user_id, &EcdsaStruct::Party1Private)?;
+        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::Party1Private)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::Party1Private))?;
 
     let party_one_pdl_decommit: party_one::PDLdecommit =
-        db_ecdsa_get(&conn, user_id, &EcdsaStruct::PDLDecommit)?;
+        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::PDLDecommit)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::PDLDecommit))?;
 
     let party_2_pdl_first_message: party_two::PDLFirstMessage =
-        db_ecdsa_get(&conn, user_id, &EcdsaStruct::Party2PDLFirstMsg)?;
+        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::Party2PDLFirstMsg)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::Party2PDLFirstMsg))?;
 
     let alpha: Alpha =
-        db_ecdsa_get(&conn, user_id, &EcdsaStruct::Alpha)?;
+        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::Alpha)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::Alpha))?;
 
     let res = MasterKey1::key_gen_fourth_message(
         &party_2_pdl_first_message,
@@ -208,16 +224,20 @@ pub fn master_key(conn: DataBase, id: String) -> Result<()> {
     let user_id = Uuid::from_str(&id).unwrap();
 
     let party2_public: GE =
-        db_ecdsa_get(&conn, user_id, &EcdsaStruct::Party2Public)?;
+        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::Party2Public)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::Party2Public))?;
 
     let paillier_key_pair: party_one::PaillierKeyPair =
-        db_ecdsa_get(&conn, user_id, &EcdsaStruct::PaillierKeyPair)?;
+        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::PaillierKeyPair)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::PaillierKeyPair))?;
 
     let party_one_private: party_one::Party1Private =
-        db_ecdsa_get(&conn, user_id, &EcdsaStruct::Party1Private)?;
+        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::Party1Private)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::Party1Private))?;
 
     let comm_witness: party_one::CommWitness =
-        db_ecdsa_get(&conn, user_id, &EcdsaStruct::CommWitness)?;
+        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::CommWitness)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::CommWitness))?;
 
     let master_key = MasterKey1::set_master_key(
         &BigInt::from(0),
@@ -227,7 +247,7 @@ pub fn master_key(conn: DataBase, id: String) -> Result<()> {
         paillier_key_pair,
     );
 
-    db_ecdsa_update(&conn, user_id, &master_key, &EcdsaStruct::Party1MasterKey)
+    db_update_serialized(&conn, &user_id, &master_key, Table::Ecdsa, Column::Party1MasterKey)
 }
 
 #[post(
@@ -244,12 +264,12 @@ pub fn sign_first(
 ) -> Result<Json<party_one::EphKeyGenFirstMsg>> {
     let user_id = Uuid::from_str(&id).unwrap();
     // Check authorisation id is in DB (and check password?)
-    check_user_auth(&state, &claim, &id)?;
+    check_user_auth(&state, &claim, &conn, &user_id)?;
 
     let (sign_party_one_first_message, eph_ec_key_pair_party1) = MasterKey1::sign_first_message();
 
-    db_ecdsa_update(&conn, user_id, &eph_key_gen_first_message_party_two.0, &EcdsaStruct::EphKeyGenFirstMsg)?;
-    db_ecdsa_update(&conn, user_id, &eph_ec_key_pair_party1, &EcdsaStruct::EphEcKeyPair)?;
+    db_update_serialized(&conn, &user_id, &eph_key_gen_first_message_party_two.0, Table::Ecdsa, Column::EphKeyGenFirstMsg)?;
+    db_update_serialized(&conn, &user_id, &eph_ec_key_pair_party1, Table::Ecdsa, Column::EphEcKeyPair)?;
 
     Ok(Json(sign_party_one_first_message))
 }
@@ -264,22 +284,31 @@ pub fn sign_second(
 ) -> Result<Json<Vec<Vec<u8>>>> {
     let user_id = Uuid::from_str(&id).unwrap();
     // Check authorisation id is in DB (and check password?)
-    check_user_auth(&state, &claim, &id)?;
+    check_user_auth(&state, &claim, &conn, &user_id)?;
 
     // Get UserSession for this user and check sig hash, backup tx and state chain id exists
-    let mut user_session: UserSession =
-        db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
-            .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-    if user_session.sig_hash.is_none() {
-        return Err(SEError::SigningError(String::from(
-            "No sig_hash found for this user's session.",
-        )));
-    }
-    if user_session.tx_backup.is_none() {
-        return Err(SEError::SigningError(String::from(
-            "No tx_backup found for this user's session.",
-        )));
-    }
+    // let mut user_session: UserSession =
+    //     db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
+    //         .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
+    // if user_session.sig_hash.is_none() {
+    //     return Err(SEError::SigningError(String::from(
+    //         "No sig_hash found for this user's session.",
+    //     )));
+    // }
+    let sig_hash: sha256d::Hash =
+        db_get_serialized(&conn, &user_id, Table::UserSession, Column::SigHash)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::SigHash))?;
+    println!("sig_hash: {:?}",sig_hash);
+
+    let tx_backup_hex: Transaction =
+        db_get_serialized(&conn, &user_id, Table::UserSession, Column::TxBackup)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::TxBackup))?;
+    println!("tx_backup_hex: {:?}",tx_backup_hex);
+    // if user_session.tx_backup.is_none() {
+    //     return Err(SEError::SigningError(String::from(
+    //         "No tx_backup found for this user's session.",
+    //     )));
+    // }
 
     // Check sig hash is of corrcet length. Leading 0s are lost during BigInt conversion so add them
     // back here if necessary.
@@ -293,21 +322,27 @@ pub fn sign_second(
 
     // Check sighash matches message to be signed
     let message_sig_hash = reverse_hex_str(message_hex.clone())?;
-    if user_session.sig_hash.unwrap().to_string() != message_sig_hash {
+    if sig_hash.to_string() != message_sig_hash {
         return Err(SEError::SigningError(format!(
             "Message to be signed does not match verified sig hash. \n{}, {}",
-            user_session.sig_hash.unwrap().to_string(), message_sig_hash
+            sig_hash.to_string(), message_sig_hash
         )));
     }
 
     let shared_key: MasterKey1 =
-        db_ecdsa_get(&conn, user_id, &EcdsaStruct::Party1MasterKey)?;
+        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::Party1MasterKey)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::Party1MasterKey))?;
+    println!("shared_key: {:?}",shared_key.public);
 
     let eph_ec_key_pair_party1: party_one::EphEcKeyPair =
-        db_ecdsa_get(&conn, user_id, &EcdsaStruct::EphEcKeyPair)?;
+        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::EphEcKeyPair)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::EphEcKeyPair))?;
+    println!("eph_ec_key_pair_party1: {:?}",eph_ec_key_pair_party1);
 
     let eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg =
-        db_ecdsa_get(&conn, user_id, &EcdsaStruct::EphKeyGenFirstMsg)?;
+        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::EphKeyGenFirstMsg)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::EphKeyGenFirstMsg))?;
+    println!("eph_key_gen_first_message_party_two: {:?}",eph_key_gen_first_message_party_two);
 
     let signature;
     match shared_key.sign_second_message(
@@ -326,10 +361,13 @@ pub fn sign_second(
 
     // Get transaction which is being signed.
     let mut tx: Transaction = match request.protocol {
-        Protocol::Withdraw => user_session.tx_withdraw.clone().unwrap().to_owned(),
+        Protocol::Withdraw => {
+                db_get_serialized::<Transaction>(&conn, &user_id, Table::UserSession, Column::TxWithdraw)?
+                    .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::TxWithdraw))?
+        }
         _ => {
             // despoit() and transfer() both sign tx_backup
-            user_session.tx_backup.clone().unwrap().to_owned()
+            tx_backup_hex
         }
     };
 
@@ -361,25 +399,27 @@ pub fn sign_second(
     match request.protocol {
         Protocol::Withdraw => {
             // Store signed withdraw tx in UserSession DB object
-            user_session.tx_withdraw = Some(tx);
-            info!("WITHDRAW: Tx signed and stored. User ID: {}", user_session.id);
+            // user_session.tx_withdraw = Some(tx);
+            db_update_serialized(&conn, &user_id, &tx, Table::UserSession, Column::TxWithdraw)?;
+            info!("WITHDRAW: Tx signed and stored. User ID: {}", user_id);
             // Do not return withdraw tx witness until /withdraw/confirm is complete
             witness = vec![];
         }
         _ => {
             // Store signed backup tx in UserSession DB object
-            user_session.tx_backup = Some(tx.to_owned());
-            info!("DEPOSIT/TRANSFER: Backup Tx signed and stored. User: {}", user_session.id);
+            // user_session.tx_backup = Some(tx.to_owned());
+            db_update_serialized(&conn, &user_id, &tx, Table::UserSession, Column::TxBackup)?;
+            info!("DEPOSIT/TRANSFER: Backup Tx signed and stored. User: {}", user_id);
         }
     };
 
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &id,
-        &StateEntityStruct::UserSession,
-        &user_session,
-    )?;
+    // db::insert(
+    //     &state.db,
+    //     &claim.sub,
+    //     &id,
+    //     &StateEntityStruct::UserSession,
+    //     &user_session,
+    // )?;
 
     Ok(Json(witness))
 }

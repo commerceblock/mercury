@@ -14,7 +14,10 @@ use shared_lib::{
 
 use crate::routes::transfer::finalize_batch;
 use crate::error::{SEError,DBErrorType::NoDataForID};
-use crate::storage::db::{get_root, get_current_root};
+use crate::storage::{
+    db_postgres::{db_get_serialized, Table, Column, db_get, db_update_serialized},
+    db::{get_root, get_current_root}};
+use crate::DataBase;
 
 use bitcoin::{Transaction,
     hashes::sha256d};
@@ -24,7 +27,8 @@ use monotree::Proof;
 use rocket_contrib::json::Json;
 use rocket::State;
 use db::DB_SC_LOC;
-use std::{collections::HashMap, time::{Duration, SystemTime}};
+use std::{collections::HashMap, time::{Duration, SystemTime}, str::FromStr};
+use uuid::Uuid;
 
 
 /// Structs for DB storage.
@@ -113,17 +117,22 @@ pub struct TransferFinalizeData {
 
 /// Check if user has passed authentication.
 pub fn check_user_auth(
-    state: &State<Config>,
-    claim: &Claims,
-    id: &String
-) -> Result<UserSession> {
+    _state: &State<Config>,
+    _claim: &Claims,
+    conn: &DataBase,
+    user_id: &Uuid
+) -> Result<()> {
     // check authorisation id is in DB (and check password?)
-    db::get(
-        &state.db,
-        &claim.sub,
-        &id,
-        &StateEntityStruct::UserSession).unwrap()
-    .ok_or(SEError::AuthError)
+    if let Err(_) = db_get::<Uuid>(&conn, &user_id, Table::UserSession, Column::Id) {
+        return Err(SEError::AuthError)
+    }
+    Ok(())
+    // db::get(
+    //     &state.db,
+    //     &claim.sub,
+    //     &id,
+    //     &StateEntityStruct::UserSession).unwrap()
+    // .ok_or(SEError::AuthError)
 }
 
 // Set state chain time-out
@@ -215,6 +224,7 @@ pub fn get_smt_root(
 pub fn get_transfer_batch_status(
     state: State<Config>,
     claim: Claims,
+    conn: DataBase,
     batch_id: String,
 ) -> Result<Json<TransferBatchDataAPI>> {
     let mut transfer_batch_data: TransferBatchData =
@@ -247,6 +257,7 @@ pub fn get_transfer_batch_status(
             finalize_batch(
                 &state,
                 &claim,
+                &conn,
                 &batch_id
             )?;
             info!("TRANSFER_BATCH: All transfers complete in batch. Finalized. ID: {}.", batch_id);
@@ -269,38 +280,43 @@ pub fn get_transfer_batch_status(
 pub fn prepare_sign_tx(
     state: State<Config>,
     claim: Claims,
+    conn: DataBase,
     prepare_sign_msg: Json<PrepareSignTxMsg>,
 ) -> Result<Json<()>> {
-    let shared_key_id = prepare_sign_msg.shared_key_id.clone();
+    let user_id = Uuid::from_str(&prepare_sign_msg.shared_key_id).unwrap();
 
     // Auth user
-    check_user_auth(&state, &claim, &shared_key_id)?;
+    check_user_auth(&state, &claim, &conn, &user_id)?;
 
     let prepare_sign_msg: PrepareSignTxMsg = prepare_sign_msg.into_inner();
 
-    // Get user session for this user
-    let mut user_session: UserSession =
-        db::get(&state.db, &claim.sub, &shared_key_id, &StateEntityStruct::UserSession)?
-            .ok_or(SEError::DBError(NoDataForID, shared_key_id.clone()))?;
+    // // Get user session for this user
+    // let mut user_session: UserSession =
+    //     db::get(&state.db, &claim.sub, &shared_key_id, &StateEntityStruct::UserSession)?
+    //         .ok_or(SEError::DBError(NoDataForID, shared_key_id.clone()))?;
 
     // Which protocol are we signing for?
     match prepare_sign_msg.protocol {
         Protocol::Withdraw => {
 
-            // Verify withdrawl has been authorised via presense of withdraw_sc_sig
-            if user_session.withdraw_sc_sig.is_none() {
-                return Err(SEError::Generic(String::from("Withdraw has not been authorised. /withdraw/init must be called first.")));
-            }
+            // Verify withdrawal has been authorised via presense of withdraw_sc_sig
+            db_get_serialized::<StateChainSig>(&conn, &user_id, Table::UserSession, Column::WithdrawScSig)?
+                .ok_or(SEError::Generic(String::from("Withdraw has not been authorised. /withdraw/init must be called first.")))?;
 
             // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data
             tx_withdraw_verify(&prepare_sign_msg, &state.fee_address, &state.fee_withdraw)?;
 
             // Check funding txid UTXO info
-            let state_chain_id = user_session.state_chain_id.clone() // check exists
-                .ok_or(SEError::Generic(String::from("No state chain session found for this user.")))?;
+            // let state_chain_id = user_session.state_chain_id.clone() // check exists
+            //     .ok_or(SEError::Generic(String::from("No state chain session found for this user.")))?;
+            let state_chain_id: Uuid =
+                db_get(&conn, &user_id, Table::UserSession, Column::StateChainId)?
+                    .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::StateChainId))?;
+
             let state_chain: StateChain =
-                db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
-                    .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
+                db::get(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::StateChain)?
+                    .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string().clone()))?;
+
             let tx_backup_input = state_chain.tx_backup.input.get(0).unwrap().previous_output.to_owned();
             if prepare_sign_msg.tx.input.get(0).unwrap().previous_output.to_owned() != tx_backup_input {
                 return Err(SEError::Generic(String::from("Incorrect withdraw transacton input.")));
@@ -315,18 +331,21 @@ pub fn prepare_sign_tx(
                 &state.network
             );
 
-            user_session.sig_hash = Some(sig_hash);
-            user_session.tx_withdraw = Some(prepare_sign_msg.tx);
+            // user_session.sig_hash = Some(sig_hash);
+            // user_session.tx_withdraw = Some(prepare_sign_msg.tx);
+            //
+            // db::insert(
+            //     &state.db,
+            //     &claim.sub,
+            //     &shared_key_id,
+            //     &StateEntityStruct::UserSession,
+            //     &user_session
+            // )?;
+            db_update_serialized(&conn, &user_id, sig_hash, Table::UserSession, Column::SigHash)?;
+            db_update_serialized(&conn, &user_id, prepare_sign_msg.tx, Table::UserSession, Column::TxWithdraw)?;
 
-            db::insert(
-                &state.db,
-                &claim.sub,
-                &shared_key_id,
-                &StateEntityStruct::UserSession,
-                &user_session
-            )?;
 
-            info!("WITHDRAW: Withdraw tx ready for signing. Shared Key ID: {}. State Chain ID: {}.",shared_key_id, state_chain_id);
+            info!("WITHDRAW: Withdraw tx ready for signing. User ID: {:?}. State Chain ID: {}.",user_id, state_chain_id);
         }
         _ => {
             // Verify unsigned backup tx to ensure co-sign will be signing the correct data
@@ -340,24 +359,27 @@ pub fn prepare_sign_tx(
                 &state.network
             );
 
-            user_session.sig_hash = Some(sig_hash.clone());
+            // user_session.sig_hash = Some(sig_hash.clone());
+            db_update_serialized(&conn, &user_id, sig_hash, Table::UserSession, Column::SigHash)?;
+
             // Only in deposit case add backup tx to UserSession
             if prepare_sign_msg.protocol == Protocol::Deposit {
-                user_session.tx_backup = Some(prepare_sign_msg.tx.clone());
+                // user_session.tx_backup = Some(prepare_sign_msg.tx.clone());
+                db_update_serialized(&conn, &user_id, prepare_sign_msg.tx, Table::UserSession, Column::TxBackup)?;
             }
 
-            info!("DEPOSIT: Backup tx ready for signing. Shared Key ID: {}.", shared_key_id);
+            info!("DEPOSIT: Backup tx ready for signing. Shared Key ID: {}.", user_id);
         }
     }
 
-    // Update DB UserSession object
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &shared_key_id,
-        &StateEntityStruct::UserSession,
-        &user_session
-    )?;
+    // // Update DB UserSession object
+    // db::insert(
+    //     &state.db,
+    //     &claim.sub,
+    //     &shared_key_id,
+    //     &StateEntityStruct::UserSession,
+    //     &user_session
+    // )?;
 
     Ok(Json(()))
 }

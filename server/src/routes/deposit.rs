@@ -12,9 +12,11 @@ use shared_lib::{
     state_chain::*,
     Root,
     mocks::mock_electrum::MockElectrum};
-use crate::routes::util::{UserSession, StateEntityStruct};
+use crate::routes::util::StateEntityStruct;
 use crate::error::{SEError,DBErrorType::NoDataForID};
-use crate::storage::db::get_current_root;
+use crate::storage::db_postgres::{Table, Column, db_insert, db_get_serialized, db_update, db_get};
+use crate::DataBase;
+use bitcoin::Transaction;
 
 use electrumx_client::{
     interface::Electrumx,
@@ -23,21 +25,23 @@ use electrumx_client::{
 use rocket_contrib::json::Json;
 use rocket::State;
 use uuid::Uuid;
-use db::{DB_SC_LOC, update_root};
+use db::{DB_SC_LOC, update_root, get_current_root};
 use std::{thread,
     time::Duration};
+use std::str::FromStr;
 
 /// Initiliase deposit protocol:
 ///     - Generate and return shared wallet ID
 ///     - Can do auth or other DoS mitigation here
 #[post("/deposit/init", format = "json", data = "<deposit_msg1>")]
 pub fn deposit_init(
-    state: State<Config>,
-    claim: Claims,
+    _state: State<Config>,
+    _claim: Claims,
+    conn: DataBase,
     deposit_msg1: Json<DepositMsg1>,
 ) -> Result<Json<String>> {
     // Generate shared wallet ID (user ID)
-    let user_id = Uuid::new_v4().to_string();
+    let user_id = Uuid::new_v4();
 
     // if Verification/PoW/authoriation failed {
     //      warn!("Failed authorisation.")
@@ -46,28 +50,32 @@ pub fn deposit_init(
 
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &user_id,
-        &StateEntityStruct::UserSession,
-        &UserSession {
-            id: user_id.clone(),
-            auth: deposit_msg1.auth.clone(),
-            proof_key: deposit_msg1.proof_key.to_owned(),
-            state_chain_id: None,
-            tx_backup: None,
-            tx_withdraw: None,
-            sig_hash: None,
-            s2: None,
-            withdraw_sc_sig: None
-        }
-    )?;
+    db_insert(&conn, &user_id, Table::UserSession)?;
+    db_update(&conn, &user_id, deposit_msg1.auth.clone(), Table::UserSession, Column::Authentication)?;
+    db_update(&conn, &user_id, deposit_msg1.proof_key.to_owned(), Table::UserSession, Column::ProofKey)?;
+
+    // db::insert(
+    //     &state.db,
+    //     &claim.sub,
+    //     &user_id,
+    //     &StateEntityStruct::UserSession,
+    //     &UserSession {
+    //         id: user_id.clone(),
+    //         auth: deposit_msg1.auth.clone(),
+    //         proof_key: deposit_msg1.proof_key.to_owned(),
+    //         state_chain_id: None,
+    //         tx_backup: None,
+    //         tx_withdraw: None,
+    //         sig_hash: None,
+    //         s2: None,
+    //         withdraw_sc_sig: None
+    //     }
+    // )?;
 
     info!("DEPOSIT: Protocol initiated. User ID generated: {}",user_id);
     debug!("DEPOSIT: User ID: {} corresponding Proof key: {}", user_id, deposit_msg1.proof_key.to_owned());
 
-    Ok(Json(user_id))
+    Ok(Json(user_id.to_string()))
 }
 
 /// Query an Electrum Server for a transaction's confirmation status.
@@ -117,30 +125,42 @@ pub fn verify_tx_confirmed(txid: &String, state: &State<Config>) -> Result<()> {
 pub fn deposit_confirm(
     state: State<Config>,
     claim: Claims,
+    conn: DataBase,
     deposit_msg2: Json<DepositMsg2>,
 ) -> Result<Json<String>> {
-    let shared_key_id = deposit_msg2.shared_key_id.clone();
-    // Get UserSession info
-    let mut user_session: UserSession =
-    db::get(&state.db, &claim.sub, &shared_key_id, &StateEntityStruct::UserSession)?
-        .ok_or(SEError::DBError(NoDataForID, shared_key_id.clone()))?;
+    // let shared_key_id = deposit_msg2.shared_key_id.clone();
+    let user_id = Uuid::from_str(&deposit_msg2.shared_key_id.clone()).unwrap();
+
+    // // Get UserSession info
+    // let mut user_session: UserSession =
+    // db::get(&state.db, &claim.sub, &shared_key_id, &StateEntityStruct::UserSession)?
+    //     .ok_or(SEError::DBError(NoDataForID, shared_key_id.clone()))?;
+
+    let tx_backup: Transaction =
+        db_get_serialized(&conn, &user_id, Table::UserSession, Column::TxBackup)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::TxBackup))?;
+
 
     // Ensure backup tx exists and is signed
-    let tx_backup = user_session.tx_backup.clone()
-        .ok_or(SEError::DBError(NoDataForID, String::from("Signed Back up transaction not found.")))?;
+    // let tx_backup = user_session.tx_backup.clone()
+    //     .ok_or(SEError::DBError(NoDataForID, String::from("Signed Back up transaction not found.")))?;
     if tx_backup.input[0].witness.len() == 0 {
         return Err(SEError::DBError(NoDataForID, String::from("Signed Back up transaction not found.")));
     }
 
     // Wait for funding tx existence in blockchain and confs
-    verify_tx_confirmed(&user_session.tx_backup.clone().unwrap().input[0].previous_output.txid.to_string(), &state)?;
+    verify_tx_confirmed(&tx_backup.input[0].previous_output.txid.to_string(), &state)?;
 
     // Create state chain DB object
+    let proof_key: String =
+        db_get(&conn, &user_id, Table::UserSession, Column::ProofKey)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::ProofKey))?;
+
     let state_chain = StateChain::new(
-        user_session.proof_key.clone(),
+        proof_key.clone(),
         tx_backup.clone(),
         tx_backup.output.last().unwrap().value+FEE,
-        shared_key_id.to_owned()
+        user_id.to_owned().to_string()
     );
 
     db::insert(
@@ -150,7 +170,7 @@ pub fn deposit_confirm(
         &StateEntityStruct::StateChain,
         &state_chain
     )?;
-    info!("DEPOSIT: State Chain created. ID: {} For user ID: {}", state_chain.id, user_session.id);
+    info!("DEPOSIT: State Chain created. ID: {} For user ID: {}", state_chain.id, user_id);
 
 
     // Update sparse merkle tree with new StateChain entry
@@ -159,7 +179,7 @@ pub fn deposit_confirm(
         DB_SC_LOC,
         &root.value,
         &tx_backup.input.get(0).unwrap().previous_output.txid.to_string(),
-        &user_session.proof_key
+        &proof_key
     )?;
     update_root(&state.db, new_root.unwrap())?;
 
@@ -167,14 +187,16 @@ pub fn deposit_confirm(
     debug!("DEPOSIT: State Chain ID: {}. New root: {:?}. Previous root: {:?}.", state_chain.id, new_root.unwrap(), root);
 
     // Update UserSession with StateChain's ID
-    user_session.state_chain_id = Some(state_chain.id.to_owned());
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &shared_key_id.clone(),
-        &StateEntityStruct::UserSession,
-        &user_session
-    )?;
+    db_update(&conn, &user_id, Uuid::from_str(&state_chain.id).unwrap(), Table::UserSession, Column::StateChainId)?;
+
+    // user_session.state_chain_id = Some(state_chain.id.to_owned());
+    // db::insert(
+    //     &state.db,
+    //     &claim.sub,
+    //     &shared_key_id.clone(),
+    //     &StateEntityStruct::UserSession,
+    //     &user_session
+    // )?;
 
     Ok(Json(state_chain.id))
 }
