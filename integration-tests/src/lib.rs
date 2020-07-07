@@ -16,6 +16,9 @@ use std::{thread, time};
 use std::time::Instant;
 use floating_duration::TimeFormat;
 
+#[macro_use]
+extern crate serial_test;
+
 /// Spawn a fresh StateChain entity server
 pub fn spawn_server() {
     // Rocket server is blocking, so we spawn a new thread.

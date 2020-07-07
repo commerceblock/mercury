@@ -19,6 +19,7 @@ mod tests {
 
     /// Test batch transfer signature generation
     #[test]
+    #[serial]
     fn test_batch_sigs() {
         spawn_server();
         let mut wallet = gen_wallet();
@@ -102,6 +103,7 @@ mod tests {
 
     /// Perform batch transfer with tests and checks throughout
     #[test]
+    #[serial]
     fn test_batch_transfer() {
         spawn_server();
 
@@ -203,6 +205,7 @@ mod tests {
     /// Allow batch_lifetime time to pass, test punishments are set and test removal of punishment to completed transfer.
     /// *** THIS TEST REQUIRES batch_lifetime SERVER SETTING TO BE SET TO < 3 ***
     #[test]
+    #[serial]
     fn test_failure_batch_transfer() {
         spawn_server();
 
