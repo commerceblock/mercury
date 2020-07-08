@@ -15,25 +15,29 @@ use log4rs::config::{Appender, Config as LogConfig, Root};
 
 use std::{collections::HashMap, str::FromStr};
 
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
 impl Config {
-    pub fn load(settings: HashMap<String, String>) -> Config {
-        let db = get_db(settings.clone());
+    pub fn load(settings: HashMap<String, String>) -> Result<Config> {
+        let db = get_db(settings.clone())?;
         let fee_address = settings.get("fee_address").unwrap().to_string();
         if let Err(e) = bitcoin::Address::from_str(&fee_address) {
             panic!("Invalid fee address: {}",e)
         };
-        Config {
-            db,
-            electrum_server: settings.get("electrum_server").unwrap().to_string(),
-            network: settings.get("network").unwrap().to_string(),
-            testing_mode: bool::from_str(settings.get("testing_mode").unwrap()).unwrap(),
-            fee_address,
-            fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
-            fee_withdraw: settings.get("fee_withdraw").unwrap().parse::<u64>().unwrap(),
-            block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
-            batch_lifetime: settings.get("batch_lifetime").unwrap().parse::<u64>().unwrap(),
-            punishment_duration: settings.get("punishment_duration").unwrap().parse::<u64>().unwrap(),
-        }
+        Ok(
+            Config {
+                db,
+                electrum_server: settings.get("electrum_server").unwrap().to_string(),
+                network: settings.get("network").unwrap().to_string(),
+                testing_mode: bool::from_str(settings.get("testing_mode").unwrap()).unwrap(),
+                fee_address,
+                fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
+                fee_withdraw: settings.get("fee_withdraw").unwrap().parse::<u64>().unwrap(),
+                block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
+                batch_lifetime: settings.get("batch_lifetime").unwrap().parse::<u64>().unwrap(),
+                punishment_duration: settings.get("punishment_duration").unwrap().parse::<u64>().unwrap(),
+            }
+        )
     }
 }
 
@@ -66,15 +70,15 @@ fn not_found(req: &Request) -> String {
     format!("Unknown route '{}'.", req.uri())
 }
 
-pub fn get_server() -> Rocket {
+pub fn get_server() -> Result<Rocket> {
     let settings = get_settings_as_map();
 
-    let config = Config::load(settings.clone());
+    let config = Config::load(settings.clone())?;
     let auth_config = AuthConfig::load(settings.clone());
 
     set_logging_config(settings.get("log_file"));
 
-    rocket::ignite()
+    let rock = rocket::ignite()
         .register(catchers![internal_error, not_found, bad_request])
         .mount(
             "/",
@@ -110,7 +114,8 @@ pub fn get_server() -> Rocket {
             ],
         )
         .manage(config)
-        .manage(auth_config)
+        .manage(auth_config);
+    Ok(rock)
 }
 
 fn get_settings_as_map() -> HashMap<String, String> {
@@ -128,13 +133,13 @@ fn get_settings_as_map() -> HashMap<String, String> {
     settings.try_into::<HashMap<String, String>>().unwrap()
 }
 
-fn get_db(_settings: HashMap<String, String>) -> rocksdb::DB {
+fn get_db(_settings: HashMap<String, String>) -> Result<rocksdb::DB> {
     // let env = settings
     //     .get("env")
     //     .unwrap_or(&"dev".to_string())
     //     .to_string();
 
-    rocksdb::DB::open_default(db::DB_LOC).unwrap()
+    Ok(rocksdb::DB::open_default(db::DB_LOC)?)
 }
 
 fn set_logging_config(log_file: Option<&String>) {
