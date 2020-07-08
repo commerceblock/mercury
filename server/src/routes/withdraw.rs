@@ -125,7 +125,7 @@ pub fn withdraw_confirm(
 
     let root = get_current_root::<Root>(&state.db)?;
     let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &funding_txid, &withdraw_msg2.address)?;
-    update_root(&state, new_root.unwrap())?;
+    update_root(&state.db, &state.mainstay_config, new_root.unwrap())?;
 
     info!("WITHDRAW: Complete. Shared Key ID: {}. State Chain: {}",shared_key_id, state_chain_id);
 
