@@ -3,21 +3,21 @@
 //! StateEntity Withdraw protocol.
 
 use super::super::{{Result,Config},
-        auth::jwt::Claims,
-        storage::db};
+        auth::jwt::Claims};
 extern crate shared_lib;
 use shared_lib::{structs::*,
     state_chain::*,
     Root};
 
 use crate::DataBase;
-use crate::routes::util::{StateEntityStruct, check_user_auth};
+use crate::routes::util::check_user_auth;
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::storage::{
     db_postgres::{db_get, Table, Column, db_get_serialized, db_update_serialized, db_update, db_get_statechain},
     db::{get_current_root, DB_SC_LOC, update_root}};
 
 use bitcoin::Transaction;
+use chrono::NaiveDateTime;
 use rocket_contrib::json::Json;
 use rocket::State;
 use uuid::Uuid;
@@ -62,6 +62,11 @@ pub fn withdraw_init(
     //     db_get(&conn, &user_id, Table::StateChain, Column::LockedUntil)?
     //         .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::LockedUntil))?;
     // check_locked(sc_locked_until)?;
+    let sc_locked_until: NaiveDateTime =
+        db_get(&conn, &state_chain_id, Table::StateChain, Column::LockedUntil)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::LockedUntil))?;
+    is_locked(sc_locked_until)?;
+
     let sc_owner_id: Uuid =
         db_get(&conn, &state_chain_id, Table::StateChain, Column::OwnerId)?
             .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::OwnerId))?;
@@ -99,7 +104,6 @@ pub fn withdraw_init(
 #[post("/withdraw/confirm", format = "json", data = "<withdraw_msg2>")]
 pub fn withdraw_confirm(
     state: State<Config>,
-    claim: Claims,
     conn: DataBase,
     withdraw_msg2: Json<WithdrawMsg2>,
 ) -> Result<Json<Vec<Vec<u8>>>> {
@@ -136,7 +140,7 @@ pub fn withdraw_confirm(
     //     db::get(&state.db, &claim.sub, &state_chain_id.to_string().to_owned(), &StateEntityStruct::StateChain)?
     //         .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string().to_owned()))?;
     let mut state_chain: StateChain =
-    db_get_statechain(&conn, &state_chain_id)?;
+        db_get_statechain(&conn, &state_chain_id)?;
 
     state_chain.add(withdraw_sc_sig.to_owned())?;
     // state_chain.amount = 0;     // signals withdrawn funds

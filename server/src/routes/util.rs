@@ -15,7 +15,7 @@ use shared_lib::{
 use crate::routes::transfer::finalize_batch;
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::storage::{
-    db_postgres::{db_get_serialized, Table, Column, db_get, db_update_serialized},
+    db_postgres::{db_get_serialized, Table, Column, db_get, db_update_serialized, db_update},
     db::{get_root, get_current_root}};
 use crate::DataBase;
 
@@ -27,8 +27,9 @@ use monotree::Proof;
 use rocket_contrib::json::Json;
 use rocket::State;
 use db::DB_SC_LOC;
-use std::{collections::HashMap, time::{Duration, SystemTime}, str::FromStr};
+use std::{collections::HashMap, time::SystemTime, str::FromStr};
 use uuid::Uuid;
+use chrono::NaiveDateTime;
 
 
 /// Structs for DB storage.
@@ -137,28 +138,38 @@ pub fn check_user_auth(
 }
 
 // Set state chain time-out
-pub fn punish_state_chain(
+pub fn state_chain_punish(
     state: &State<Config>,
-    claim: &Claims,
+    conn: &DataBase,
     state_chain_id: Uuid
 ) -> Result<()> {
-    let mut state_chain: StateChain =
-        db::get(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::StateChain)?
-            .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string()))?;
+    // let mut state_chain: StateChain =
+    //     db::get(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::StateChain)?
+    //         .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string()))?;
 
-    if state_chain.is_locked().is_err() {
-        return Err(SEError::Generic(String::from("State chain is already locked. This should not be possible.")));
-    }
+    // if state_chain.is_locked().is_err() {
+    //     return Err(SEError::Generic(String::from("State chain is already locked. This should not be possible.")));
+    // }
+    // let sc_locked_until: Date =
+    //     db_get(&conn, &user_id, Table::StateChain, Column::LockedUntil)?
+    //         .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::LockedUntil))?;
+    // check_locked(sc_locked_until)?;
+    let sc_locked_until: NaiveDateTime =
+        db_get(&conn, &state_chain_id, Table::StateChain, Column::LockedUntil)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::LockedUntil))?;
+    is_locked(sc_locked_until)?;
 
     // set punishment
-    state_chain.locked_until = SystemTime::now() + Duration::from_secs(state.punishment_duration);
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &state_chain_id.to_string(),
-        &StateEntityStruct::StateChain,
-        &state_chain
-    )?;
+    // state_chain.locked_until = SystemTime::now() + Duration::from_secs(state.punishment_duration);
+    // db::insert(
+    //     &state.db,
+    //     &claim.sub,
+    //     &state_chain_id.to_string(),
+    //     &StateEntityStruct::StateChain,
+    //     &state_chain
+    // )?;
+    db_update(&conn, &state_chain_id, get_locked_until(state.punishment_duration as i64)?, Table::StateChain, Column::LockedUntil)?;
+
 
     info!("PUNISHMENT: State Chain ID: {} locked for {}s.", state_chain_id, state.punishment_duration);
     Ok(())
@@ -254,7 +265,7 @@ pub fn get_transfer_batch_status(
             info!("TRANSFER_BATCH: Lifetime reached. ID: {}.", batch_id);
             // Set punishments for all statechains involved in batch
             for (state_chain_id, _) in transfer_batch_data.state_chains {
-                punish_state_chain(&state, &claim, state_chain_id.clone())?;
+                state_chain_punish(&state, &conn, state_chain_id.clone())?;
                 transfer_batch_data.punished_state_chains.push(state_chain_id.clone());
 
                 // Remove TransferData involved

@@ -1,7 +1,7 @@
 //! DB
 //!
 //! Postgres DB access and update tools.
-//! Use db_get, db_update for rust types convertable to postgres types (String, int, Uuid, bool).
+//! Use db_get, db_update for rust types convertable to postgres types (String, int, bool, Uuid, chrono::NaiveDateTime).
 //! Use db_get_serialized, db_update_serialized for custom types.
 
 
@@ -11,7 +11,6 @@ use rocket_contrib::databases::postgres::Connection;
 use crate::error::{DBErrorType::{UpdateFailed,NoDataForID}, SEError};
 use uuid::Uuid;
 use shared_lib::state_chain::StateChain;
-use std::time::SystemTime;
 
 #[derive(Debug)]
 pub enum Table {
@@ -82,7 +81,7 @@ pub fn db_insert(conn: &Connection, id: &Uuid, table: Table) -> Result<u64> {
     Ok(statement.execute(&[id])?)
 }
 
-// Update item in table with PostgreSql data types (String, int, Uuid, bool)
+// Update item in table with PostgreSql data types (String, int, bool, Uuid, chrono::NaiveDateTime)
 pub fn db_update<T>(conn: &Connection, id: &Uuid, data: T, table: Table, column: Column) -> Result<()>
 where
     T: rocket_contrib::databases::postgres::types::ToSql
@@ -153,17 +152,10 @@ pub fn db_get_statechain(conn: &Connection, id: &Uuid) -> Result<StateChain> {
 
     let id = row.get_opt::<usize,Uuid>(0).unwrap()?;
     let chain = serde_json::from_str(&row.get_opt::<usize,String>(1).unwrap()?).unwrap();
-    let amount = row.get_opt::<usize,i64>(2).unwrap()?;
-    // let locked_until = row.get_opt::<usize,String>(3).unwrap()?;
-    let locked_until = SystemTime::now();
-    let owner_id = row.get_opt::<usize,Uuid>(4).unwrap()?;
 
     Ok(StateChain {
         id,
         chain,
-        amount,
-        locked_until,
-        owner_id
     })
 }
 

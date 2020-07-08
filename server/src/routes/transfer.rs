@@ -24,6 +24,7 @@ use curv::{
     {BigInt,FE,GE}};
 use rocket_contrib::json::Json;
 use rocket::State;
+use chrono::NaiveDateTime;
 use uuid::Uuid;
 use db::{DB_SC_LOC, update_root};
 use std::{time::SystemTime,
@@ -69,15 +70,16 @@ pub fn transfer_sender(
     // state_chain.is_locked()?;
     // state_chain.is_owned_by(&user_id)?;
 
-    // let sc_locked_until: Date =
-    //     db_get(&conn, &user_id, Table::StateChain, Column::LockedUntil)?
-    //         .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::LockedUntil))?;
-    // check_locked(sc_locked_until)?;
+    let sc_locked_until: NaiveDateTime =
+        db_get(&conn, &state_chain_id, Table::StateChain, Column::LockedUntil)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::LockedUntil))?;
+    is_locked(sc_locked_until)?;
+
     let sc_owner_id: Uuid =
         db_get(&conn, &state_chain_id, Table::StateChain, Column::OwnerId)?
             .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::OwnerId))?;
     if sc_owner_id != user_id {
-        return Err(SEError::Generic(format!("State Chain not owned by User ID: {}.",state_chain_id)));
+        return Err(SEError::Generic(format!("State Chain not owned by User ID: {}.", user_id)));
     }
 
     // Ensure if transfer has already been completed (but not finalized)
@@ -363,9 +365,15 @@ pub fn transfer_batch_init(
         sig.verify(&proof_key)?;
 
         // Ensure state chains are all available
-        match state_chain.is_locked() {
-            Err(_) => return Err(SEError::Generic(format!("State Chain ID {} is locked.",sig.data))),
-            Ok(_) => {}
+        // match state_chain.is_locked() {
+        //     Err(_) => return Err(SEError::Generic(format!("State Chain ID {} is locked.",sig.data))),
+        //     Ok(_) => {}
+        // }
+        let sc_locked_until: NaiveDateTime =
+            db_get(&conn, &state_chain_id, Table::StateChain, Column::LockedUntil)?
+                .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::LockedUntil))?;
+        if let Err(_) = is_locked(sc_locked_until) {
+            return Err(SEError::Generic(format!("State Chain ID {} is locked.",sig.data)));
         }
 
         // Add to TransferBatchData object
@@ -482,7 +490,7 @@ pub fn transfer_reveal_nonce(
         //     &StateEntityStruct::StateChain,
         //     &state_chain
         // )?;
-        db_update(&conn, &state_chain_id, "new date".to_string(), Table::StateChain, Column::OwnerId)?;
+        db_update(&conn, &state_chain_id, get_time_now(), Table::StateChain, Column::LockedUntil)?;
 
 
         info!("TRANSFER_REVEAL_NONCE: State Chain unlocked. ID: {}", state_chain_id);

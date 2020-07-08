@@ -6,6 +6,7 @@ extern crate rocket;
 extern crate rocket_contrib;
 extern crate rocksdb;
 extern crate uuid;
+extern crate chrono;
 
 #[macro_use]
 extern crate serde_derive;

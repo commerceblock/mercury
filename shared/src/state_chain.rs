@@ -23,10 +23,10 @@ use monotree::{{Monotree, Proof},
     hasher::{Hasher,Blake2b}};
 
 use uuid::Uuid;
-use std::str::FromStr;
+use chrono::{Utc,NaiveDateTime,Duration};
 use std::{
-    time::SystemTime,
-    convert::TryInto};
+    convert::TryInto,
+    str::FromStr};
 
 /// A list of States in which each State signs for the next State.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -34,25 +34,16 @@ pub struct StateChain {
     pub id: Uuid,
     /// chain of transitory key history
     pub chain: Vec<State>,
-    /// Amount
-    pub amount: i64, // 0 means state chain is ended.
-    /// Gets set to a time in the future before which this state chain cannot be acted upon.
-    pub locked_until: SystemTime,
-    /// Owner's UserSession id
-    pub owner_id: Uuid
 }
 
 impl StateChain {
-    pub fn new(data: String, amount: i64, owner_id: Uuid) -> Self {
+    pub fn new(data: String) -> Self {
         StateChain {
             id: Uuid::new_v4(),
             chain: vec!( State {
                 data,
                 next_state: None
             }),
-            amount,
-            locked_until: SystemTime::now(),
-            owner_id
         }
     }
 
@@ -79,24 +70,30 @@ impl StateChain {
             next_state: None
         }))
     }
+}
 
-    /// Check if state chain is available for transfer/withdrawal
-    pub fn is_locked(&self) -> Result<()> {
-        match self.locked_until.duration_since(SystemTime::now()) {
-            Ok(secs_left) => return Err(SharedLibError::Generic(
-                format!("State Chain locked for {} minutes.", (secs_left.as_secs()/60)+1))),
-            Err(_) => return Ok(())
-        }
+pub fn get_time_now() -> NaiveDateTime {
+    Utc::now().naive_utc()
+}
+
+// Get NaiveDateTime for punishment set from now
+pub fn get_locked_until(punishment_duration: i64) -> Result<NaiveDateTime> {
+    let current_time = get_time_now();
+    match current_time.checked_add_signed(Duration::seconds(punishment_duration)) {
+        None => return Err(SharedLibError::Generic(format!("State Chain locked duration overflow."))),
+        Some(v) => return Ok(v)
     }
+}
 
-    /// Check if state chain is still owned by this user
-    pub fn is_owned_by(&self, shared_key_id: &Uuid) -> Result<()> {
-        if &self.owner_id == shared_key_id {
-            Ok(())
-        } else {
-            return Err(SharedLibError::Generic(
-                format!("State Chain not owned by this wallet.")));
-        }
+/// Check if state chain is available for transfer/withdrawal
+pub fn is_locked(locked_until: NaiveDateTime) -> Result<()> {
+    let current_time = Utc::now().naive_utc().timestamp();
+    let time_left = locked_until.timestamp() - current_time;
+
+    match time_left > 0 {
+        true => return Err(SharedLibError::Generic(
+            format!("State Chain locked for {} minutes.", (time_left/60)+1))),
+        false => return Ok(())
     }
 }
 
@@ -182,8 +179,6 @@ mod tests {
 
     use super::*;
     use bitcoin::secp256k1::{SecretKey, Secp256k1, PublicKey};
-    use std::time::Duration;
-
     pub static DB_LOC: &str = "./db";
 
     #[test]
@@ -194,8 +189,6 @@ mod tests {
 
         let mut state_chain = StateChain::new(
             proof_key1_pub.to_string(),
-            1000,
-            Uuid::new_v4()
         );
 
         assert_eq!(state_chain.chain.len(),1);
@@ -218,21 +211,10 @@ mod tests {
 
     #[test]
     fn test_state_chain_locked() {
-        let secp = Secp256k1::new();
-        let proof_key1_priv = SecretKey::from_slice(&[1;32]).unwrap();
-        let proof_key1_pub = PublicKey::from_secret_key(&secp, &proof_key1_priv);
-
-        let mut state_chain = StateChain::new(
-            proof_key1_pub.to_string(),
-            1000,
-            Uuid::new_v4()
-        );
-
-        state_chain.locked_until = SystemTime::now() - Duration::from_secs(5);
-        assert!(state_chain.is_locked().is_ok());
-
-        state_chain.locked_until = SystemTime::now() + Duration::from_secs(5);
-        assert!(state_chain.is_locked().is_err());
+        let locked_until = Utc::now().naive_utc() - Duration::seconds(5);
+        assert!(is_locked(locked_until).is_ok());
+        let locked_until = Utc::now().naive_utc() + Duration::seconds(5);
+        assert!(is_locked(locked_until).is_err());
     }
 
     #[test]
