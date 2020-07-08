@@ -106,10 +106,10 @@ pub fn update_root_commitment_info(db: &DB, mc: &Option<mainstay::Config>, root:
                         Some(e) => {
                             //Find the specific type of mainstay error and act accordingly
                             match e {
-                                MainstayError::Generic(ref e) => Err(SEError::SharedLibError(e.to_string())),
-                                MainstayError::FormatError(ref e) => Err(SEError::SharedLibError(e.to_string())),
+                                MainstayError::Generic(_) => Err(SEError::SharedLibError(e.to_string())),
+                                MainstayError::FormatError(_) => Err(SEError::SharedLibError(e.to_string())),
                                 //Not found is ok - return Ok(None)
-                                MainstayError::NotFoundError(ref e) => Ok(None),
+                                MainstayError::NotFoundError(_) => Ok(None),
                             }
                         },
                         None => Err(SEError::SharedLibError(e.to_string()))
@@ -124,7 +124,7 @@ pub fn update_root_commitment_info(db: &DB, mc: &Option<mainstay::Config>, root:
 //Update the database with the latest available mainstay attestation info
 pub fn update_root_attestation(db: &DB, mc: &Option<mainstay::Config>) -> Result <()>{
     match mc {
-        Some(c)=>{
+        Some(_)=>{
             let current_id = get_current_root_id(db)?;  
             for x in 0..=current_id {
                 let id = current_id - x;
@@ -312,7 +312,7 @@ mod tests {
     fn test_db_root_update() {
         let db = rocksdb::DB::open_default(TEST_DB_LOC).unwrap();
         let root1: [u8;32] = monotree::utils::random_hash();
-        let root2: [u8;32] = monotree::utils::random_hash();;
+        let root2: [u8;32] = monotree::utils::random_hash();
 
         let _ = update_root_db(&db, root1.clone());
         let _ = update_root_db(&db, root2.clone());

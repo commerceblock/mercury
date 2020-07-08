@@ -417,15 +417,15 @@ fn get_val<'a>(val: &'a serde_json::Value, key: &str) -> Result<&'a serde_json::
 }
 
 fn get_str<'a>(val: &'a serde_json::Value, key: &str) -> Result<&'a str> {
-    val.get(key).ok_or(NotFoundError(key.to_string()))?.as_str().ok_or(FormatError(key.to_string()).into())
+    get_val(val,key)?.as_str().ok_or(FormatError(key.to_string()).into())
 }
 
 fn get_bool(val: &serde_json::Value, key: &str) -> Result<bool> {
-    val.get(key).ok_or(NotFoundError(key.to_string()))?.as_bool().ok_or(FormatError(key.to_string()).into())
+    get_val(val,key)?.as_bool().ok_or(FormatError(key.to_string()).into())
 }
 
 fn get_array<'a>(val: &'a serde_json::Value, key: &str) -> Result<&'a std::vec::Vec<serde_json::Value>> {
-    val.get(key).ok_or(NotFoundError(key.to_string()))?.as_array().ok_or(FormatError(key.to_string()).into())
+    get_val(val,key)?.as_array().ok_or(FormatError(key.to_string()).into())
 }
 
 fn get_commitment(val: &serde_json::Value, key: &str) -> Result<Commitment> {
@@ -571,8 +571,6 @@ pub mod merkle {
 
         fn from_merkleproof_json(val: &serde_json::Value) -> Result<Self>{
             debug!("parsing merkleproof JSON object: {:?}", val);
-
-            let err = MainstayError::from(format!("Mainstay merkle::Proof: error parsing merkleproof for JSON object: {:?}", val));
                         
             debug!("parsing merkle_root");
             let merkle_root = get_commitment(val,"merkle_root")?; 
