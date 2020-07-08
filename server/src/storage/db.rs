@@ -141,6 +141,7 @@ mod tests {
     const TEST_DB_LOC: &str = "/tmp/db-statechain";
 
     #[test]
+    #[serial]
     fn test_db_get_insert() {
         let db = rocksdb::DB::open_default(TEST_DB_LOC).unwrap();
 

@@ -76,7 +76,7 @@ pub fn spawn_server() -> Result<(), SpawnError> {
         tx.send(
             match server::get_server(){
                 Ok(s) => (s.launch().into()),
-                Err(e) => SpawnError::GetServer
+                Err(_) => SpawnError::GetServer
             }
         )
         

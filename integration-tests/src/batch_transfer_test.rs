@@ -17,26 +17,11 @@ mod tests {
         str::FromStr,
         time::Duration};
 
-    #[test]
-    #[serial]
-    fn test_spawn_server() {
-        //First spawn attempt: new server spawned
-        match spawn_server(){
-            Ok(_) => assert!(true),
-            Err(e) => assert!(false, "expected initial spawn attempt to result in Ok")
-        }
-        //Second spawn attempt: launch error
-        match spawn_server(){
-            Ok(_) => assert!(false, "expected spawn spawn attempt to result in Error"),
-            Err(e) => assert!(true)
-        }
-    }
-
     /// Test batch transfer signature generation
     #[test]
     #[serial]
     fn test_batch_sigs() {
-        spawn_server();
+        let _ = spawn_server();
         let mut wallet = gen_wallet();
         let num_state_chains = 3;
         // make deposits
@@ -120,7 +105,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_batch_transfer() {
-        spawn_server();
+        let _ = spawn_server();
 
         let num_state_chains = 3; // must be > 1
         let mut amounts = vec!();
@@ -222,7 +207,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_failure_batch_transfer() {
-        spawn_server();
+        let _ = spawn_server();
 
         let num_state_chains = 3; // must be > 2
         let mut amounts = vec!();
