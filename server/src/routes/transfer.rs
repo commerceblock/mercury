@@ -14,7 +14,7 @@ use shared_lib::{
 use crate::routes::util::*;
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::storage::{
-    db_postgres::{Column, Table, db_get_serialized, db_insert, db_update, db_update_serialized, db_get, db_get_statechain},
+    db_postgres::{Column, Table, db_get_serialized, db_insert, db_update, db_update_serialized, db_get},
     db::get_current_root};
 
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
@@ -24,6 +24,7 @@ use curv::{
     {BigInt,FE,GE}};
 use rocket_contrib::json::Json;
 use rocket::State;
+use chrono::NaiveDateTime;
 use uuid::Uuid;
 use db::{DB_SC_LOC, update_root};
 use std::{time::SystemTime,
@@ -69,15 +70,16 @@ pub fn transfer_sender(
     // state_chain.is_locked()?;
     // state_chain.is_owned_by(&user_id)?;
 
-    // let sc_locked_until: Date =
-    //     db_get(&conn, &user_id, Table::StateChain, Column::LockedUntil)?
-    //         .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::LockedUntil))?;
-    // check_locked(sc_locked_until)?;
+    let sc_locked_until: NaiveDateTime =
+        db_get(&conn, &state_chain_id, Table::StateChain, Column::LockedUntil)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::LockedUntil))?;
+    is_locked(sc_locked_until)?;
+
     let sc_owner_id: Uuid =
         db_get(&conn, &state_chain_id, Table::StateChain, Column::OwnerId)?
             .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::OwnerId))?;
     if sc_owner_id != user_id {
-        return Err(SEError::Generic(format!("State Chain not owned by User ID: {}.",state_chain_id)));
+        return Err(SEError::Generic(format!("State Chain not owned by User ID: {}.", user_id)));
     }
 
     // Ensure if transfer has already been completed (but not finalized)
@@ -254,7 +256,8 @@ pub fn transfer_finalize(
     //     db::get(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::StateChain)?
     //         .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string()))?;
     let mut state_chain: StateChain =
-        db_get_statechain(&conn, &state_chain_id)?;
+        db_get_serialized(&conn, &state_chain_id, Table::StateChain, Column::Chain)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Chain))?;
 
     state_chain.add(finalized_data.state_chain_sig.to_owned())?;
     // state_chain.owner_id = finalized_data.new_shared_key_id;
@@ -266,7 +269,7 @@ pub fn transfer_finalize(
     //     &StateEntityStruct::StateChain,
     //     &state_chain
     // )?;
-    db_update_serialized(&conn, &state_chain_id, state_chain.chain.clone(), Table::StateChain, Column::Chain)?;
+    db_update_serialized(&conn, &state_chain_id, state_chain.clone(), Table::StateChain, Column::Chain)?;
     db_update(&conn, &state_chain_id, finalized_data.new_shared_key_id, Table::StateChain, Column::OwnerId)?;
 
 
@@ -357,15 +360,22 @@ pub fn transfer_batch_init(
         //     db::get(&state.db, &claim.sub, &sig.data, &StateEntityStruct::StateChain)?
         //         .ok_or(SEError::DBError(NoDataForID, sig.data.clone()))?;
         let state_chain: StateChain =
-            db_get_statechain(&conn, &state_chain_id)?;
+            db_get_serialized(&conn, &state_chain_id, Table::StateChain, Column::Chain)?
+                .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Chain))?;
 
         let proof_key = state_chain.get_tip()?.data;
         sig.verify(&proof_key)?;
 
         // Ensure state chains are all available
-        match state_chain.is_locked() {
-            Err(_) => return Err(SEError::Generic(format!("State Chain ID {} is locked.",sig.data))),
-            Ok(_) => {}
+        // match state_chain.is_locked() {
+        //     Err(_) => return Err(SEError::Generic(format!("State Chain ID {} is locked.",sig.data))),
+        //     Ok(_) => {}
+        // }
+        let sc_locked_until: NaiveDateTime =
+            db_get(&conn, &state_chain_id, Table::StateChain, Column::LockedUntil)?
+                .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::LockedUntil))?;
+        if let Err(_) = is_locked(sc_locked_until) {
+            return Err(SEError::Generic(format!("State Chain ID {} is locked.",sig.data)));
         }
 
         // Add to TransferBatchData object
@@ -482,7 +492,7 @@ pub fn transfer_reveal_nonce(
         //     &StateEntityStruct::StateChain,
         //     &state_chain
         // )?;
-        db_update(&conn, &state_chain_id, "new date".to_string(), Table::StateChain, Column::OwnerId)?;
+        db_update(&conn, &state_chain_id, get_time_now(), Table::StateChain, Column::LockedUntil)?;
 
 
         info!("TRANSFER_REVEAL_NONCE: State Chain unlocked. ID: {}", state_chain_id);

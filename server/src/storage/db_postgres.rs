@@ -1,7 +1,7 @@
 //! DB
 //!
 //! Postgres DB access and update tools.
-//! Use db_get, db_update for rust types convertable to postgres types (String, int, Uuid, bool).
+//! Use db_get, db_update for rust types convertable to postgres types (String, int, bool, Uuid, chrono::NaiveDateTime).
 //! Use db_get_serialized, db_update_serialized for custom types.
 
 
@@ -10,8 +10,6 @@ use super::super::Result;
 use rocket_contrib::databases::postgres::Connection;
 use crate::error::{DBErrorType::{UpdateFailed,NoDataForID}, SEError};
 use uuid::Uuid;
-use shared_lib::state_chain::StateChain;
-use std::time::SystemTime;
 
 #[derive(Debug)]
 pub enum Table {
@@ -82,7 +80,7 @@ pub fn db_insert(conn: &Connection, id: &Uuid, table: Table) -> Result<u64> {
     Ok(statement.execute(&[id])?)
 }
 
-// Update item in table with PostgreSql data types (String, int, Uuid, bool)
+// Update item in table with PostgreSql data types (String, int, bool, Uuid, chrono::NaiveDateTime)
 pub fn db_update<T>(conn: &Connection, id: &Uuid, data: T, table: Table, column: Column) -> Result<()>
 where
     T: rocket_contrib::databases::postgres::types::ToSql
@@ -140,38 +138,13 @@ where
     }
 }
 
-// Get entire row from statechain table.
-// Err if ID not found. Return None if data item empty.
-pub fn db_get_statechain(conn: &Connection, id: &Uuid) -> Result<StateChain> {
-    let statement = conn.prepare("SELECT * FROM statechain WHERE id = $1")?;
-    let rows = statement.query(&[&id])?;
-
-    if rows.is_empty() {
-        return Err(SEError::DBError(NoDataForID, id.to_string().clone()))
-    };
-    let row = rows.get(0);
-
-    let id = row.get_opt::<usize,Uuid>(0).unwrap()?;
-    let chain = serde_json::from_str(&row.get_opt::<usize,String>(1).unwrap()?).unwrap();
-    let amount = row.get_opt::<usize,i64>(2).unwrap()?;
-    // let locked_until = row.get_opt::<usize,String>(3).unwrap()?;
-    let locked_until = SystemTime::now();
-    let owner_id = row.get_opt::<usize,Uuid>(4).unwrap()?;
-
-    Ok(StateChain {
-        id,
-        chain,
-        amount,
-        locked_until,
-        owner_id
-    })
-}
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
     use std::{env, str::FromStr};
+    use shared_lib::state_chain::StateChain;
 
     #[test]
     fn test_db_postgres() {
@@ -181,17 +154,11 @@ mod tests {
         let url = &rocket_url[16..68];
 
         let conn = Connection::connect(url, TlsMode::None).unwrap();
-        let user_id = Uuid::from_str(&"73c70459-3c8d-4628-891d-55276dc107fe").unwrap();
-        let res = db_get_statechain(&conn, &user_id);
-        println!("res: {:?}",res);
+        let user_id = Uuid::from_str(&"dc30b024-4e22-4f39-b804-2b221e3bd4e9").unwrap();
 
-        let user_id = Uuid::from_str(&"0af4a3dc-a10b-47c8-b10c-01d4bdf6d5e0").unwrap();
-        let res = db_get_statechain(&conn, &user_id);
-        println!("res: {:?}",res);
+        let res =
+            db_get_serialized::<StateChain>(&conn, &user_id, Table::StateChain, Column::Chain);
 
-        let user_id = Uuid::from_str(&"1af4a3dc-a10b-47c8-b10c-01d4bdf6d5e0").unwrap();
-        let res = db_get_statechain(&conn, &user_id);
         println!("res: {:?}",res);
-
     }
 }

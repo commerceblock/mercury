@@ -150,15 +150,14 @@ pub fn deposit_confirm(
     verify_tx_confirmed(&tx_backup.input[0].previous_output.txid.to_string(), &state)?;
 
     // Create state chain DB object
+    let state_chain_id = Uuid::new_v4();
     let proof_key: String =
         db_get(&conn, &user_id, Table::UserSession, Column::ProofKey)?
             .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::ProofKey))?;
 
+    let amount = (tx_backup.output.last().unwrap().value  + FEE) as i64;
     let state_chain = StateChain::new(
         proof_key.clone(),
-        // tx_backup.clone(),
-        (tx_backup.output.last().unwrap().value  + FEE) as i64,
-        user_id.to_owned()
     );
 
     // db::insert(
@@ -168,13 +167,13 @@ pub fn deposit_confirm(
     //     &StateEntityStruct::StateChain,
     //     &state_chain
     // )?;
-    db_insert(&conn, &state_chain.id, Table::StateChain)?;
-    db_update_serialized(&conn, &state_chain.id, state_chain.chain, Table::StateChain, Column::Chain)?;
-    db_update(&conn, &state_chain.id, state_chain.amount as i64, Table::StateChain, Column::Amount)?;
-    // db_update_serialized(&conn, &state_chain.id, state_chain.tx_backup, Table::StateChain, Column::LockedUntil)?;
-    db_update(&conn, &state_chain.id, state_chain.owner_id, Table::StateChain, Column::OwnerId)?;
+    db_insert(&conn, &state_chain_id, Table::StateChain)?;
+    db_update_serialized(&conn, &state_chain_id, state_chain, Table::StateChain, Column::Chain)?;
+    db_update(&conn, &state_chain_id, amount, Table::StateChain, Column::Amount)?;
+    db_update(&conn, &state_chain_id, get_time_now(), Table::StateChain, Column::LockedUntil)?;
+    db_update(&conn, &state_chain_id, user_id.to_owned(), Table::StateChain, Column::OwnerId)?;
 
-    info!("DEPOSIT: State Chain created. ID: {} For user ID: {}", state_chain.id, user_id);
+    info!("DEPOSIT: State Chain created. ID: {} For user ID: {}", state_chain_id, user_id);
 
 
     // Update sparse merkle tree with new StateChain entry
@@ -187,11 +186,11 @@ pub fn deposit_confirm(
     )?;
     update_root(&state.db, new_root.unwrap())?;
 
-    info!("DEPOSIT: Included in sparse merkle tree. State Chain ID: {}", state_chain.id);
-    debug!("DEPOSIT: State Chain ID: {}. New root: {:?}. Previous root: {:?}.", state_chain.id, new_root.unwrap(), root);
+    info!("DEPOSIT: Included in sparse merkle tree. State Chain ID: {}", state_chain_id);
+    debug!("DEPOSIT: State Chain ID: {}. New root: {:?}. Previous root: {:?}.", state_chain_id, new_root.unwrap(), root);
 
     // Update UserSession with StateChain's ID
-    db_update(&conn, &user_id, state_chain.id, Table::UserSession, Column::StateChainId)?;
+    db_update(&conn, &user_id, state_chain_id, Table::UserSession, Column::StateChainId)?;
 
     // user_session.state_chain_id = Some(state_chain.id.to_owned());
     // db::insert(
@@ -202,5 +201,5 @@ pub fn deposit_confirm(
     //     &user_session
     // )?;
 
-    Ok(Json(state_chain.id))
+    Ok(Json(state_chain_id))
 }

@@ -10,6 +10,7 @@ extern crate kms;
 extern crate multi_party_ecdsa;
 extern crate rocksdb;
 extern crate uuid;
+extern crate chrono;
 extern crate zk_paillier;
 #[macro_use] extern crate failure;
 

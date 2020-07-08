@@ -163,7 +163,7 @@ mod tests {
             &mut wallets[0],
             &shared_key_ids[0],    // shared wallet id
             receiver_addr.clone()) {
-                Err(e) => assert!(e.to_string().contains("State Chain not owned by this wallet.")),
+                Err(e) => assert!(e.to_string().contains("State Chain not owned by User ID:")),
                 _ => assert!(false)
         }
 
@@ -195,7 +195,7 @@ mod tests {
         ).is_err());
     }
 
-    /// *** THIS TEST REQUIRES batch_lifetime SERVER SETTING TO BE SET TO < 3 ***
+    /// *** THIS TEST REQUIRES batch_lifetime SERVER SETTING TO BE SET TO 5 ***
     /// Test punishments and reveals after batch transfer failure.
     /// Set up batch transfer and perform 2 full transfers (wallet[0] -> wallet[1] and wallet[1] -> wallet[2]).
     /// This should result in a single state chain (wallet[0]->wallet[1]) being unpunished after revealing.
