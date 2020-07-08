@@ -15,7 +15,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_gen_shared_key() {
-        spawn_server();
+        let _ = spawn_server();
         let mut wallet = gen_wallet();
         let proof_key = wallet.se_proof_keys.get_new_key().unwrap();
         let init_res = client_lib::state_entity::deposit::session_init(&mut wallet, &proof_key.to_string());
@@ -27,7 +27,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_failed_auth() {
-        spawn_server();
+        let _ = spawn_server();
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
         let secret_key: FE = ECScalar::new_random();
         let err = ecdsa::get_master_key(&"Invalid id".to_string(), &client_shim, &secret_key, &1000, false);
@@ -36,7 +36,7 @@ mod tests {
 
     // #[test]
     // fn test_schnorr() {
-    //     spawn_server();
+    //     let _ = spawn_server();
     //
     //     let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
     //
@@ -56,7 +56,7 @@ mod tests {
     #[test]
     #[serial]
         fn test_deposit() {
-        spawn_server();
+        let _ = spawn_server();
         let wallet = gen_wallet_with_deposit(10000);
 
         let state_chains_info = wallet.get_state_chains_info();
@@ -79,7 +79,7 @@ mod tests {
     #[test]
     #[serial]
         fn test_get_statechain() {
-        spawn_server();
+        let _ = spawn_server();
         let mut wallet = gen_wallet();
 
         let err = state_entity::api::get_statechain(&wallet.client_shim, &String::from("id"));
@@ -94,7 +94,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_transfer() {
-        spawn_server();
+        let _ = spawn_server();
         let mut wallets = vec!();
         wallets.push(gen_wallet_with_deposit(10000)); // sender
         wallets.push(gen_wallet()); // receiver
@@ -136,7 +136,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_double_transfer() {
-        spawn_server();
+        let _ = spawn_server();
         let mut wallets = vec!();
         wallets.push(gen_wallet_with_deposit(10000)); // sender
         wallets.push(gen_wallet()); // receiver1
@@ -204,7 +204,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_withdraw() {
-        spawn_server();
+        let _ = spawn_server();
         let mut wallet = gen_wallet_with_deposit(10000);
 
         let deposit_resp = run_deposit(&mut wallet, &10000);
@@ -238,7 +238,7 @@ mod tests {
     #[serial]
     /// Test wallet load from json correctly when shared key present.
     fn test_wallet_load_with_shared_key() {
-        spawn_server();
+        let _ = spawn_server();
 
         let mut wallet = gen_wallet();
         run_deposit(&mut wallet, &10000);

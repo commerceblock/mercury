@@ -13,7 +13,7 @@ use rand::Rng;
 use std::str::FromStr;
 
 pub fn run_simulation() {
-    spawn_server();
+    let _ = spawn_server();
 
     // Begin with a few clients
     let mut wallets = vec!();

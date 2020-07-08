@@ -15,7 +15,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_auth_token() {
-        let client = Client::new(server::get_server()).expect("valid rocket instance");
+        let client = Client::new(server::get_server().unwrap()).expect("valid rocket instance");
         // get ID
         let deposit_msg1 = DepositMsg1{
             auth: String::from("auth"),
@@ -51,7 +51,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_err_get_statechain() {
-        let client = Client::new(server::get_server()).expect("valid rocket instance");
+        let client = Client::new(server::get_server().unwrap()).expect("valid rocket instance");
 
         // get_statechain invalid id
         let mut response = client
@@ -73,7 +73,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_err_get_smt_proof() {
-        let client = Client::new(server::get_server()).expect("valid rocket instance");
+        let client = Client::new(server::get_server().unwrap()).expect("valid rocket instance");
 
         // None root
         let smt_proof_msg = SmtProofMsgAPI {
@@ -124,7 +124,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_err_get_transfer_batch_status() {
-        let client = Client::new(server::get_server()).expect("valid rocket instance");
+        let client = Client::new(server::get_server().unwrap()).expect("valid rocket instance");
 
         // get_transfer_batch_status invalid id
         let mut response = client
@@ -146,7 +146,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_get_state_entity_fees() {
-        let client = Client::new(server::get_server()).expect("valid rocket instance");
+        let client = Client::new(server::get_server().unwrap()).expect("valid rocket instance");
 
         let mut response = client
             .post("/info/fee")
