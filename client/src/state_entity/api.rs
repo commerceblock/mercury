@@ -10,6 +10,7 @@ use crate::ClientShim;
 use super::super::utilities::requests;
 
 use monotree::Proof;
+use uuid::Uuid;
 
 /// Get state chain fee
 pub fn get_statechain_fee_info(client_shim: &ClientShim) -> Result<StateEntityFeeInfoAPI> {
@@ -17,7 +18,7 @@ pub fn get_statechain_fee_info(client_shim: &ClientShim) -> Result<StateEntityFe
 }
 
 /// Get state chain by ID
-pub fn get_statechain(client_shim: &ClientShim, state_chain_id: &String) -> Result<StateChainDataAPI> {
+pub fn get_statechain(client_shim: &ClientShim, state_chain_id: &Uuid) -> Result<StateChainDataAPI> {
     requests::post(client_shim,&format!("info/statechain/{}",state_chain_id))
 }
 
@@ -36,6 +37,6 @@ pub fn get_smt_proof(client_shim: &ClientShim, root: &Root, funding_txid: &Strin
 }
 
 /// Get transaction batch session status
-pub fn get_transfer_batch_status(client_shim: &ClientShim, batch_id: &String) -> Result<TransferBatchDataAPI> {
+pub fn get_transfer_batch_status(client_shim: &ClientShim, batch_id: &Uuid) -> Result<TransferBatchDataAPI> {
     requests::post(client_shim,&format!("info/transfer-batch/{}",batch_id))
 }

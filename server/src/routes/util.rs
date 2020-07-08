@@ -78,7 +78,7 @@ pub struct UserSession {
 /// Key: state_chain_id
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct TransferData {
-    pub state_chain_id: String,
+    pub state_chain_id: Uuid,
     pub state_chain_sig: StateChainSig,
     pub x1: FE,
 }
@@ -88,11 +88,11 @@ pub struct TransferData {
 /// When all transfers in the batch are complete these transfers are finalized atomically.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferBatchData {
-    pub id: String,
+    pub id: Uuid,
     pub start_time: SystemTime, // time batch transfer began
-    pub state_chains: HashMap<String, bool>,
+    pub state_chains: HashMap<Uuid, bool>,
     pub finalized_data: Vec<TransferFinalizeData>,
-    pub punished_state_chains: Vec<String>, // If transfer batch fails these state chain Id's were punished.
+    pub punished_state_chains: Vec<Uuid>, // If transfer batch fails these state chain Id's were punished.
     pub finalized: bool
 }
 
@@ -108,10 +108,11 @@ impl TransferBatchData {
 /// Struct holds data when transfer is complete but not yet finalized
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferFinalizeData {
-    pub new_shared_key_id: String,
-    pub state_chain_id: String,
+    pub new_shared_key_id: Uuid,
+    pub state_chain_id: Uuid,
     pub state_chain_sig: StateChainSig,
     pub s2: FE,
+    pub new_tx_backup: Transaction,
     pub batch_data: Option<BatchData>,
 }
 
@@ -139,11 +140,11 @@ pub fn check_user_auth(
 pub fn punish_state_chain(
     state: &State<Config>,
     claim: &Claims,
-    state_chain_id: String
+    state_chain_id: Uuid
 ) -> Result<()> {
     let mut state_chain: StateChain =
-        db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
-            .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
+        db::get(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::StateChain)?
+            .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string()))?;
 
     if state_chain.is_locked().is_err() {
         return Err(SEError::Generic(String::from("State chain is already locked. This should not be possible.")));
@@ -154,7 +155,7 @@ pub fn punish_state_chain(
     db::insert(
         &state.db,
         &claim.sub,
-        &state_chain_id,
+        &state_chain_id.to_string(),
         &StateEntityStruct::StateChain,
         &state_chain
     )?;
@@ -178,18 +179,34 @@ pub fn get_state_entity_fees(
 /// API: Return StateChain info: funding txid and state chain list of proof keys and signatures.
 #[post("/info/statechain/<state_chain_id>", format = "json")]
 pub fn get_statechain(
-    state: State<Config>,
-    claim: Claims,
+    conn: DataBase,
     state_chain_id: String,
 ) -> Result<Json<StateChainDataAPI>> {
-    let state_chain: StateChain =
-        db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
-            .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
+    let state_chain_id = Uuid::from_str(&state_chain_id).unwrap();
+    // let state_chain: StateChain =
+    //     db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
+    //         .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
+    let amount: i64 =
+        db_get(&conn, &state_chain_id, Table::StateChain, Column::Amount)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Amount))?;
+
+    let chain =
+        db_get_serialized(&conn, &state_chain_id, Table::StateChain, Column::Chain)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Chain))?;
+
+    let owner_id: Uuid =
+        db_get(&conn, &state_chain_id, Table::StateChain, Column::OwnerId)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::OwnerId))?;
+
+    let tx_backup: Transaction =
+        db_get_serialized(&conn, &owner_id, Table::UserSession, Column::TxBackup)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, owner_id, Column::TxBackup))?;
+
     Ok(Json({
         StateChainDataAPI {
-            amount: state_chain.amount,
-            utxo: state_chain.tx_backup.input.get(0).unwrap().previous_output,
-            chain: state_chain.chain
+            amount: amount as u64,
+            utxo: tx_backup.input.get(0).unwrap().previous_output,
+            chain
         }
     }))
 }
@@ -241,7 +258,7 @@ pub fn get_transfer_batch_status(
                 transfer_batch_data.punished_state_chains.push(state_chain_id.clone());
 
                 // Remove TransferData involved
-                db::remove(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::TransferData)?;
+                db::remove(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::TransferData)?;
                 info!("TRANSFER_BATCH: Transfer data marked as archived. State Chain ID: {}.", state_chain_id);
             }
             info!("TRANSFER_BATCH: Punished all state chains in failed batch. ID: {}.",batch_id);
@@ -283,7 +300,7 @@ pub fn prepare_sign_tx(
     conn: DataBase,
     prepare_sign_msg: Json<PrepareSignTxMsg>,
 ) -> Result<Json<()>> {
-    let user_id = Uuid::from_str(&prepare_sign_msg.shared_key_id).unwrap();
+    let user_id = prepare_sign_msg.shared_key_id;
 
     // Auth user
     check_user_auth(&state, &claim, &conn, &user_id)?;
@@ -313,11 +330,15 @@ pub fn prepare_sign_tx(
                 db_get(&conn, &user_id, Table::UserSession, Column::StateChainId)?
                     .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::StateChainId))?;
 
-            let state_chain: StateChain =
-                db::get(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::StateChain)?
-                    .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string().clone()))?;
+            // let state_chain: StateChain =
+            //     db::get(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::StateChain)?
+            //         .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string().clone()))?;
 
-            let tx_backup_input = state_chain.tx_backup.input.get(0).unwrap().previous_output.to_owned();
+            let tx_backup: Transaction =
+                db_get_serialized(&conn, &user_id, Table::UserSession, Column::TxBackup)?
+                    .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::TxBackup))?;
+
+            let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
             if prepare_sign_msg.tx.input.get(0).unwrap().previous_output.to_owned() != tx_backup_input {
                 return Err(SEError::Generic(String::from("Incorrect withdraw transacton input.")));
             }

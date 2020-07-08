@@ -10,11 +10,11 @@ use server_lib::server;
 use shared_lib::{
     mocks::mock_electrum::MockElectrum,
     structs::{BatchData, PrepareSignTxMsg}, commitment::make_commitment, state_chain::StateChainSig};
-use rand::random;
 use bitcoin::{Transaction, PublicKey};
 use std::{thread, time};
 use std::time::Instant;
 use floating_duration::TimeFormat;
+use uuid::Uuid;
 
 /// Spawn a fresh StateChain entity server
 pub fn spawn_server() {
@@ -61,7 +61,7 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
 
 /// Run deposit on a wallet for some amount
 /// Returns shared_key_id, state_chain_id, funding txid, signed backup tx, back up transacion data and proof_key
-pub fn run_deposit(wallet: &mut Wallet, amount: &u64) -> (String, String, String, Transaction, PrepareSignTxMsg, PublicKey)  {
+pub fn run_deposit(wallet: &mut Wallet, amount: &u64) -> (Uuid, Uuid, String, Transaction, PrepareSignTxMsg, PublicKey)  {
     let start = Instant::now();
     let resp = state_entity::deposit::deposit(
         wallet,
@@ -73,7 +73,7 @@ pub fn run_deposit(wallet: &mut Wallet, amount: &u64) -> (String, String, String
 }
 
 /// Run withdraw of shared key ID given
-pub fn run_withdraw(wallet: &mut Wallet, shared_key_id: &String) -> (String, String, u64) {
+pub fn run_withdraw(wallet: &mut Wallet, shared_key_id: &Uuid) -> (String, Uuid, u64) {
     let start = Instant::now();
     let resp = state_entity::withdraw::withdraw(wallet, &shared_key_id).unwrap();
     println!("(Withdraw Took: {})", TimeFormat(start.elapsed()));
@@ -83,7 +83,7 @@ pub fn run_withdraw(wallet: &mut Wallet, shared_key_id: &String) -> (String, Str
 
 /// Run a transfer between two wallets. Input vector of wallets with sender and receiver indexes in vector.
 /// Return new shared key id.
-pub fn run_transfer(wallets: &mut Vec<Wallet>, sender_index: usize, receiver_index: usize, shared_key_id: &String) -> String {
+pub fn run_transfer(wallets: &mut Vec<Wallet>, sender_index: usize, receiver_index: usize, shared_key_id: &Uuid) -> Uuid {
 
     let (_, funding_txid, _, _, _) = wallets[sender_index].get_shared_key_info(shared_key_id).unwrap();
     let receiver_addr = wallets[receiver_index].get_new_state_entity_address(&funding_txid).unwrap();
@@ -115,9 +115,9 @@ pub fn run_transfer_with_commitment(
     sender_index: usize,
     receiver_index: usize,
     funding_txid: &String,
-    shared_key_id: &String,
-    state_chain_id: &String,
-    batch_id: &String
+    shared_key_id: &Uuid,
+    state_chain_id: &Uuid,
+    batch_id: &Uuid
 ) -> (TransferFinalizeData, String, [u8;32]) {
     let start = Instant::now();
 
@@ -130,7 +130,7 @@ pub fn run_transfer_with_commitment(
             receiver_addr.clone(),
     ).unwrap();
 
-    let (commitment, nonce) = make_commitment(state_chain_id);
+    let (commitment, nonce) = make_commitment(&state_chain_id.to_string());
 
     let transfer_finalized_data =
         state_entity::transfer::transfer_receiver(
@@ -154,13 +154,13 @@ pub fn run_batch_transfer(
     wallets: &mut Vec<Wallet>,      // vec of all wallets
     swap_map: &Vec<(usize,usize)>,   // mapping of sender -> receiver
     funding_txids: &Vec<String>,
-    shared_key_ids: &Vec<String>,
-    state_chain_ids: &Vec<String>,
-) -> (String, Vec<TransferFinalizeData>, Vec<String>, Vec<[u8;32]>, Vec<StateChainSig>) {
+    shared_key_ids: &Vec<Uuid>,
+    state_chain_ids: &Vec<Uuid>,
+) -> (Uuid, Vec<TransferFinalizeData>, Vec<String>, Vec<[u8;32]>, Vec<StateChainSig>) {
     let num_state_chains = swap_map.len();
 
     // Create new batch transfer ID
-    let batch_id = random::<u64>().to_string();
+    let batch_id = Uuid::new_v4();
 
     // Gen transfer-batch signatures for each state chain (each wallet's SCE coins)
     let mut transfer_sigs = vec!();
@@ -228,7 +228,7 @@ pub fn finalize_batch_transfer(
 pub fn batch_transfer_verify_amounts(
     wallets: &mut Vec<Wallet>,
     amounts: &Vec<u64>,
-    state_chain_ids: &Vec<String>,
+    state_chain_ids: &Vec<Uuid>,
     swap_map: &Vec<(usize,usize)>   // mapping of sender -> receiver
 ) {
     // Check amounts have correctly rotated

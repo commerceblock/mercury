@@ -9,6 +9,7 @@ use kms::ecdsa::two_party::party2;
 use bitcoin::{Transaction, OutPoint};
 
 use std::{collections::HashMap, fmt};
+use uuid::Uuid;
 
 /// State Entity protocols
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -46,7 +47,7 @@ pub struct StateChainDataAPI {
 /// /info/transfer-batch return struct
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferBatchDataAPI {
-    pub state_chains: HashMap<String, bool>,
+    pub state_chains: HashMap<Uuid, bool>,
     pub finalized: bool
 }
 
@@ -67,7 +68,7 @@ pub struct SmtProofMsgAPI {
 /// by Server before co-signing is performed for validation of tx.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PrepareSignTxMsg {
-    pub shared_key_id: String,
+    pub shared_key_id: Uuid,
     pub protocol: Protocol,
     pub tx: Transaction,
     pub input_addrs: Vec<PK>,  // pub keys being spent from
@@ -100,7 +101,7 @@ pub struct DepositMsg1 {
 /// Client -> SE
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DepositMsg2 {
-    pub shared_key_id: String,
+    pub shared_key_id: Uuid,
 }
 
 // Transfer algorithm structs
@@ -117,7 +118,7 @@ pub struct StateEntityAddress {
 /// Sender -> SE
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMsg1 {
-    pub shared_key_id: String,
+    pub shared_key_id: Uuid,
     pub state_chain_sig: StateChainSig
 }
 /// SE -> Sender
@@ -128,10 +129,10 @@ pub struct TransferMsg2 {
 /// Sender -> Receiver
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferMsg3 {
-    pub shared_key_id: String,
+    pub shared_key_id: Uuid,
     pub t1: FE, // t1 = o1x1
     pub state_chain_sig: StateChainSig,
-    pub state_chain_id: String,
+    pub state_chain_id: Uuid,
     pub tx_backup_psm: PrepareSignTxMsg,
     pub rec_addr: StateEntityAddress     // receivers state entity address (btc address and proof key)
 }
@@ -140,41 +141,42 @@ pub struct TransferMsg3 {
 /// Receiver -> State Entity
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferMsg4 {
-    pub shared_key_id: String,
-    pub state_chain_id: String,
+    pub shared_key_id: Uuid,
+    pub state_chain_id: Uuid,
     pub t2: FE, // t2 = t1*o2_inv = o1*x1*o2_inv
     pub state_chain_sig: StateChainSig,
     pub o2_pub: GE,
+    pub tx_backup: Transaction,
     pub batch_data: Option<BatchData>
 }
 
 /// State Entity -> Receiver
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferMsg5 {
-    pub new_shared_key_id: String,
+    pub new_shared_key_id: Uuid,
     pub s2_pub: GE,
 }
 
 /// Coordinator -> StateEntity
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferBatchInitMsg {
-    pub id: String,
+    pub id: Uuid,
     pub signatures: Vec<StateChainSig>,
 }
 
 /// User -> State Entity
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferRevealNonce {
-    pub batch_id: String,
+    pub batch_id: Uuid,
     pub hash: String,
-    pub state_chain_id: String,
+    pub state_chain_id: Uuid,
     pub nonce: [u8;32],
 }
 
 /// Data present if transfer is part of an atomic batch transfer
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BatchData {
-    pub id: String,
+    pub id: Uuid,
     pub commitment: String   // Commitment to transfer input UTXO in case of protocol failure
 }
 
@@ -183,14 +185,14 @@ pub struct BatchData {
 /// Owner -> State Entity
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WithdrawMsg1 {
-    pub shared_key_id: String,
+    pub shared_key_id: Uuid,
     pub state_chain_sig: StateChainSig,
 }
 
 /// Owner -> State Entity
 #[derive(Serialize, Deserialize, Debug)]
 pub struct WithdrawMsg2 {
-    pub shared_key_id: String,
+    pub shared_key_id: Uuid,
     pub address: String,
 }
 
@@ -199,7 +201,7 @@ pub struct WithdrawMsg2 {
 impl Default for TransferMsg5 {
     fn default() -> TransferMsg5 {
         TransferMsg5 {
-            new_shared_key_id: String::from(""),
+            new_shared_key_id: Uuid::new_v4(),
             s2_pub: GE::base_point2(),
         }
     }

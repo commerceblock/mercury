@@ -34,19 +34,20 @@ use bitcoin::{PublicKey, Address};
 use curv::elliptic::curves::traits::{ECPoint, ECScalar};
 use curv::{FE, GE};
 use std::str::FromStr;
+use uuid::Uuid;
 
 
 /// Transfer coins to new Owner from this wallet
 pub fn transfer_sender(
     wallet: &mut Wallet,
-    shared_key_id: &String,
+    shared_key_id: &Uuid,
     receiver_addr: StateEntityAddress
 ) -> Result<TransferMsg3> {
     // Get required shared key data
     let state_chain_id;
     let mut prepare_sign_msg;
     {
-        let shared_key = wallet.get_shared_key(shared_key_id)?;
+        let shared_key = wallet.get_shared_key(&shared_key_id)?;
         state_chain_id = shared_key.state_chain_id.clone()
             .ok_or(CError::WalletError(KeyMissingData))?;
         prepare_sign_msg = shared_key.tx_backup_psm.clone()
@@ -67,7 +68,7 @@ pub fn transfer_sender(
     // Init transfer: Send statechain signature or batch data
     let transfer_msg2: TransferMsg2 = requests::postb(&wallet.client_shim,&format!("transfer/sender"),
         &TransferMsg1 {
-            shared_key_id: shared_key_id.to_string(),
+            shared_key_id: shared_key_id.to_owned(),
             state_chain_sig: state_chain_sig.clone(),
         }
     )?;
@@ -90,17 +91,17 @@ pub fn transfer_sender(
     let t1 = o1 * transfer_msg2.x1;
 
     let transfer_msg3 = TransferMsg3 {
-        shared_key_id: shared_key_id.to_string(),
+        shared_key_id: shared_key_id.to_owned(),
         t1, // should be encrypted
         state_chain_sig,
-        state_chain_id: state_chain_id.to_string(),
+        state_chain_id: state_chain_id.to_owned(),
         tx_backup_psm: prepare_sign_msg.to_owned(),
         rec_addr: receiver_addr
     };
 
     // Mark funds as spent in wallet
     {
-        let mut shared_key = wallet.get_shared_key_mut(shared_key_id)?;
+        let mut shared_key = wallet.get_shared_key_mut(&shared_key_id)?;
         shared_key.unspent = false;
     }
 
@@ -154,7 +155,7 @@ pub fn transfer_receiver(
         s2_pub: transfer_msg5.s2_pub,
         state_chain_data,
         proof_key: transfer_msg3.rec_addr.proof_key.clone(),
-        state_chain_id: transfer_msg3.state_chain_id.clone(),
+        state_chain_id: transfer_msg3.state_chain_id,
         tx_backup_psm
     };
 
@@ -196,11 +197,12 @@ pub fn try_o2(wallet: &mut Wallet, state_chain_data: &StateChainDataAPI, transfe
 
     let transfer_msg5: TransferMsg5 = requests::postb(&wallet.client_shim,&format!("transfer/receiver"),
         &TransferMsg4 {
-            shared_key_id: transfer_msg3.shared_key_id.clone(),
-            state_chain_id: transfer_msg3.state_chain_id.clone(),
+            shared_key_id: transfer_msg3.shared_key_id,
+            state_chain_id: transfer_msg3.state_chain_id,
             t2, // should be encrypted
             state_chain_sig: transfer_msg3.state_chain_sig.clone(),
             o2_pub,
+            tx_backup: transfer_msg3.tx_backup_psm.tx.clone(),
             batch_data: batch_data.to_owned()
         })?;
     Ok((o2,transfer_msg5))
@@ -208,12 +210,12 @@ pub fn try_o2(wallet: &mut Wallet, state_chain_data: &StateChainDataAPI, transfe
 
 #[derive(Clone)]
 pub struct TransferFinalizeData {
-    pub new_shared_key_id: String,
+    pub new_shared_key_id: Uuid,
     pub o2: FE,
     pub s2_pub: GE,
     pub state_chain_data: StateChainDataAPI,
     pub proof_key: String,
-    pub state_chain_id: String,
+    pub state_chain_id: Uuid,
     pub tx_backup_psm: PrepareSignTxMsg,
 }
 
@@ -249,7 +251,7 @@ pub fn transfer_receiver_finalize(
     // Add state chain id, proof key and SMT inclusion proofs to local SharedKey data
     {
         let shared_key = wallet.get_shared_key_mut(&finalize_data.new_shared_key_id)?;
-        shared_key.state_chain_id = Some(finalize_data.state_chain_id.to_string());
+        shared_key.state_chain_id = Some(finalize_data.state_chain_id);
         shared_key.tx_backup_psm = Some(finalize_data.tx_backup_psm.clone());
         shared_key.add_proof_data(&rec_proof_key, &root, &proof);
     }
@@ -258,7 +260,7 @@ pub fn transfer_receiver_finalize(
 }
 
 /// Sign data signalling intention to carry out transfer_batch protocol with given state chain
-pub fn transfer_batch_sign(wallet: &mut Wallet, state_chain_id: &String, batch_id: &String) -> Result<StateChainSig> {
+pub fn transfer_batch_sign(wallet: &mut Wallet, state_chain_id: &Uuid, batch_id: &Uuid) -> Result<StateChainSig> {
     // First sign state chain
     let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id)?;
     let state_chain = state_chain_data.chain;
@@ -267,12 +269,12 @@ pub fn transfer_batch_sign(wallet: &mut Wallet, state_chain_id: &String, batch_i
     Ok(StateChainSig::new(
         &proof_key_derivation.unwrap().private_key.key,
         &format!("TRANSFER_BATCH:{}",batch_id.to_owned()),
-        &state_chain_id
+        &state_chain_id.to_string()
     )?)
 }
 
 /// Request StateEntity start transfer_batch protocol
-pub fn transfer_batch_init(client_shim: &ClientShim, signatures: &Vec<StateChainSig>, batch_id: &String) -> Result<()> {
+pub fn transfer_batch_init(client_shim: &ClientShim, signatures: &Vec<StateChainSig>, batch_id: &Uuid) -> Result<()> {
     requests::postb(&client_shim,&format!("transfer/batch/init  "),
         &TransferBatchInitMsg {
             id: batch_id.clone(),
@@ -283,7 +285,7 @@ pub fn transfer_batch_init(client_shim: &ClientShim, signatures: &Vec<StateChain
 
 /// Reveal nonce to State Entity. Used when transfer batch has failed and punishment is removed
 /// from honest participants.
-pub fn transfer_reveal_nonce(client_shim: &ClientShim, state_chain_id: &String, batch_id: &String, hash: &String, nonce: &[u8;32]) -> Result<()> {
+pub fn transfer_reveal_nonce(client_shim: &ClientShim, state_chain_id: &Uuid, batch_id: &Uuid, hash: &String, nonce: &[u8;32]) -> Result<()> {
     requests::postb(&client_shim,&format!("transfer/batch/reveal"),
         &TransferRevealNonce {
             batch_id: batch_id.to_owned(),

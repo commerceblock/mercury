@@ -15,6 +15,7 @@ bitcoin = "0.20.0"
 rand = "0.6.5"
 env_logger = "0.7.1"
 floating-duration = "0.1.2"
+uuid = { version = "0.5", features = ["v4", "serde"] }
 
 [dependencies.curv]
 git = "https://github.com/KZen-networks/curv"

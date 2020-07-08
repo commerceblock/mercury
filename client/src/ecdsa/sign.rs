@@ -6,6 +6,7 @@ use super::super::ClientShim;
 use kms::ecdsa::two_party::MasterKey2;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
 use curv::BigInt;
+use uuid::Uuid;
 
 
 /// Co-sign message with shared key
@@ -14,7 +15,7 @@ pub fn sign(
     message: BigInt,
     mk: &MasterKey2,
     protocol: Protocol,
-    id: &String,
+    id: &Uuid,
 ) -> Result<Vec<Vec<u8>>> {
     let (eph_key_gen_first_message_party_two, eph_comm_witness, eph_ec_key_pair_party2) =
         MasterKey2::sign_first_message();

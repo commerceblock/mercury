@@ -23,7 +23,7 @@ log = "0.4"
 clap = { version = "2.32", features = ["yaml"] }
 reqwest = "0.9.5"
 failure = "0.1.5"
-uuid = { version = "0.7", features = ["v4"] }
+uuid = { version = "0.5", features = ["v4", "serde"] }
 itertools = "0.8.0"
 hex = "0.3.2"
 bitcoin = { version = "0.20", features = [ "use-serde" ] }

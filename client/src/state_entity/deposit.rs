@@ -22,11 +22,12 @@ use super::api::{get_smt_proof, get_smt_root, get_statechain_fee_info};
 
 use bitcoin::{Transaction, PublicKey, consensus};
 use curv::elliptic::curves::traits::ECPoint;
+use uuid::Uuid;
 
 
 /// Message to server initiating state entity protocol.
 /// Shared wallet ID returned
-pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<String> {
+pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<Uuid> {
     requests::postb(&wallet.client_shim,&format!("deposit/init"),
         &DepositMsg1 {
             auth: "auth".to_string(),
@@ -38,7 +39,7 @@ pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<String> {
 /// Deposit coins into state entity. Returns shared_key_id, state_chain_id, funding txid,
 /// signed backup tx, back up transacion data and proof_key
 pub fn deposit(wallet: &mut Wallet, amount: &u64)
-    -> Result<(String, String, String, Transaction, PrepareSignTxMsg, PublicKey)>
+    -> Result<(Uuid, Uuid, String, Transaction, PrepareSignTxMsg, PublicKey)>
 {
     // Get state entity fee info
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
@@ -55,7 +56,7 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     let proof_key = wallet.se_proof_keys.get_new_key()?;
 
     // Init. session - Receive shared wallet ID
-    let shared_key_id: String = session_init(wallet, &proof_key.to_string())?;
+    let shared_key_id: Uuid = session_init(wallet, &proof_key.to_string())?;
 
     // 2P-ECDSA with state entity to create a Shared key
     let shared_key = wallet.gen_shared_key(&shared_key_id, amount)?;
@@ -105,7 +106,7 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     debug!("Deposit: Funding tx broadcast. txid: {}", funding_txid);
 
     // Wait for server confirmation of funding tx and receive new StateChain's id
-    let state_chain_id: String = requests::postb(&wallet.client_shim,&format!("/deposit/confirm"),
+    let state_chain_id: Uuid = requests::postb(&wallet.client_shim,&format!("/deposit/confirm"),
         &DepositMsg2 {
             shared_key_id: shared_key_id.to_owned()
         }
@@ -123,7 +124,7 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     // Add proof and state chain id to Shared key
     {
         let shared_key = wallet.get_shared_key_mut(&shared_key_id)?;
-        shared_key.state_chain_id = Some(state_chain_id.to_string());
+        shared_key.state_chain_id = Some(state_chain_id);
         shared_key.tx_backup_psm = Some(tx_backup_psm.to_owned());
         shared_key.add_proof_data(&proof_key.to_string(), &root, &proof);
     }

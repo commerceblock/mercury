@@ -10,6 +10,7 @@ use curv::elliptic::curves::traits::ECScalar;
 use curv::FE;
 use bitcoin::secp256k1::key::SecretKey;
 use monotree::Proof;
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct InclusionProofSMT {
@@ -18,10 +19,10 @@ pub struct InclusionProofSMT {
 }
 #[derive(Serialize, Deserialize)]
 pub struct SharedKey {
-    pub id: String,
+    pub id: Uuid,
     pub share: MasterKey2,
     pub value: u64, //Satoshis
-    pub state_chain_id: Option<String>,
+    pub state_chain_id: Option<Uuid>,
     pub tx_backup_psm: Option<PrepareSignTxMsg>, // back up transaction data
     pub proof_key: Option<String>,
     pub smt_proof: Option<InclusionProofSMT>,
@@ -29,7 +30,7 @@ pub struct SharedKey {
 }
 
 impl SharedKey {
-    pub fn new(id: &String, client_shim: &ClientShim, secret_key: &SecretKey, value: &u64, is_transfer: bool) -> Result<SharedKey> {
+    pub fn new(id: &Uuid, client_shim: &ClientShim, secret_key: &SecretKey, value: &u64, is_transfer: bool) -> Result<SharedKey> {
         let mut key_share_priv: FE = ECScalar::zero();  // convert to curv lib
         key_share_priv.set_element(*secret_key);
         ecdsa::get_master_key(id, client_shim, &key_share_priv, value, is_transfer)

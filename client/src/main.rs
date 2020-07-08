@@ -17,6 +17,7 @@ use electrumx_client::{
 use bitcoin::consensus;
 use std::collections::HashMap;
 use std::str::FromStr;
+use uuid::Uuid;
 
 fn main() {
     let yaml = load_yaml!("../cli.yml");
@@ -130,7 +131,7 @@ fn main() {
                 let shared_key_id: &str = matches.value_of("key").unwrap();
                 let (txid, state_chain_id, amount) = state_entity::withdraw::withdraw(
                     &mut wallet,
-                    &shared_key_id.to_string()
+                    &Uuid::from_str(&shared_key_id).unwrap()
                 ).unwrap();
                 wallet.save();
                 println!(
@@ -147,7 +148,7 @@ fn main() {
                 let receiver_addr: StateEntityAddress = serde_json::from_str(matches.value_of("addr").unwrap()).unwrap();
                 let transfer_msg = state_entity::transfer::transfer_sender(
                     &mut wallet,
-                    &shared_key_id.to_string(),
+                    &Uuid::from_str(&shared_key_id).unwrap(),
                     receiver_addr,
                 ).unwrap();
                 wallet.save();
@@ -236,7 +237,7 @@ fn main() {
                 let id: &str = matches.value_of("id").unwrap();
                 let state_chain_info = state_entity::api::get_statechain(
                     &client_shim,
-                    &id.to_string()
+                    &Uuid::from_str(&id).unwrap()
                 ).unwrap();
                 println!(
                     "\nState Chain with Id {} info: \n",

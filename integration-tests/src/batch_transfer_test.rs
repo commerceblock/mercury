@@ -12,7 +12,6 @@ mod tests {
 
     use bitcoin::PublicKey;
     use client_lib::state_entity;
-    use rand::random;
     use std::{thread,
         str::FromStr,
         time::Duration};
@@ -30,7 +29,7 @@ mod tests {
         }
 
         // Create new batch transfer ID
-        let mut batch_id = random::<u64>().to_string();
+        let mut batch_id = Uuid::new_v4();
 
         // Gen valid transfer-batch signatures for each state chain
         let mut transfer_sigs = vec!();
@@ -54,7 +53,7 @@ mod tests {
         let mut transfer_sigs = vec!();
         for i in 0..num_state_chains {
             if i == num_state_chains-1 {
-                batch_id = String::from("12345");
+                batch_id = Uuid::new_v4();
             }
             transfer_sigs.push(
                 state_entity::transfer::transfer_batch_sign(
@@ -153,7 +152,7 @@ mod tests {
             assert!(
                 verify_commitment(
                     &commitments[i],
-                    &state_chain_ids[i],
+                    &state_chain_ids[i].to_string(),
                     &nonces[i]
                 ).is_ok());
         }
@@ -189,7 +188,7 @@ mod tests {
         // attempt to reveal nonce when batch transfer is over
         assert!(state_entity::transfer::transfer_reveal_nonce(
             &wallets[0].client_shim,
-            &transfer_sigs[0].data,
+            &Uuid::from_str(&transfer_sigs[0].data).unwrap(),
             &batch_id,
             &commitments[0],
             &nonces[0]
@@ -231,7 +230,7 @@ mod tests {
         }
 
         // Create new batch transfer ID
-        let batch_id = random::<u64>().to_string();
+        let batch_id = Uuid::new_v4();
 
         // Gen transfer-batch signatures for each state chain (each wallet's SCE coins)
         let mut transfer_sigs = vec!();
@@ -291,7 +290,7 @@ mod tests {
         // attempt to reveal nonce early
         assert!(state_entity::transfer::transfer_reveal_nonce(
             &wallets[0].client_shim,
-            &transfer_sigs[0].data,
+            &Uuid::from_str(&transfer_sigs[0].data).unwrap(),
             &batch_id,
             &commitment1,
             &nonce1

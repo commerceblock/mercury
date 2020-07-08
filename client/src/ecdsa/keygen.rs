@@ -6,12 +6,13 @@ use crate::wallet::shared_key::SharedKey;
 use super::super::utilities::requests;
 use super::super::ClientShim;
 use super::super::Result;
+use uuid::Uuid;
 
 
 const KG_PATH_PRE: &str = "ecdsa/keygen";
 
-pub fn get_master_key(id: &String, client_shim: &ClientShim, secret_key: &FE, value: &u64, is_transfer: bool) -> Result<SharedKey> {
-    let (id, kg_party_one_first_message): (String, party_one::KeyGenFirstMsg)
+pub fn get_master_key(id: &Uuid, client_shim: &ClientShim, secret_key: &FE, value: &u64, is_transfer: bool) -> Result<SharedKey> {
+    let (id, kg_party_one_first_message): (Uuid, party_one::KeyGenFirstMsg)
         = if is_transfer {
             requests::post(client_shim, &format!("{}/{}/first/transfer", KG_PATH_PRE, id))?
         } else {
@@ -65,7 +66,7 @@ pub fn get_master_key(id: &String, client_shim: &ClientShim, secret_key: &FE, va
     );
 
     Ok(SharedKey {
-        id: id.to_string(),
+        id,
         share: master_key,
         value: value.to_owned(),
         state_chain_id: None,

@@ -90,7 +90,7 @@ pub fn first_message(
     conn: DataBase,
     id: String,
     protocol: String,
-) -> Result<Json<(String, party_one::KeyGenFirstMsg)>> {
+) -> Result<Json<(Uuid, party_one::KeyGenFirstMsg)>> {
     let user_id = Uuid::from_str(&id).unwrap();
     // Check authorisation id is in DB (and check password?)
     check_user_auth(&state, &claim, &conn, &user_id)?;
@@ -120,7 +120,7 @@ pub fn first_message(
     db_update_serialized(&conn, &user_id, &comm_witness, Table::Ecdsa, Column::CommWitness)?;
     db_update_serialized(&conn, &user_id, &ec_key_pair, Table::Ecdsa, Column::EcKeyPair)?;
 
-    Ok(Json((id, key_gen_first_msg)))
+    Ok(Json((user_id, key_gen_first_msg)))
 }
 
 #[post("/ecdsa/keygen/<id>/second", format = "json", data = "<dlog_proof>")]

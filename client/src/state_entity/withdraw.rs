@@ -24,16 +24,17 @@ use bitcoin::{PublicKey, consensus};
 use curv::elliptic::curves::traits::ECPoint;
 
 use std::str::FromStr;
+use uuid::Uuid;
 
 /// Withdraw coins from state entity. Returns signed withdraw transaction, state_chain_id and withdrawn amount.
-pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
-    -> Result<(String, String, u64)>
+pub fn withdraw(wallet: &mut Wallet, shared_key_id: &Uuid)
+    -> Result<(String, Uuid, u64)>
 {
     // first get required shared key data
     let state_chain_id;
     let pk;
     {
-        let shared_key = wallet.get_shared_key(shared_key_id)?;
+        let shared_key = wallet.get_shared_key(&shared_key_id)?;
         pk = shared_key.share.public.q.get_element();
         state_chain_id = shared_key.state_chain_id.clone()
             .ok_or(CError::WalletError(WalletErrorType::KeyMissingData))?;
@@ -92,7 +93,7 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
 
     let witness: Vec<Vec<u8>> = requests::postb(&wallet.client_shim,&format!("/withdraw/confirm"),
         &WithdrawMsg2 {
-            shared_key_id: shared_key_id.clone(),
+            shared_key_id: shared_key_id.to_owned(),
             address: rec_address.to_string(),
         })?;
 
@@ -101,7 +102,7 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
 
     // Mark funds as withdrawn in wallet
     {
-        let mut shared_key = wallet.get_shared_key_mut(shared_key_id)?;
+        let mut shared_key = wallet.get_shared_key_mut(&shared_key_id)?;
         shared_key.unspent = false;
     }
 

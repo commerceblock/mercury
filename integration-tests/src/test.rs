@@ -28,7 +28,8 @@ mod tests {
         spawn_server();
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
         let secret_key: FE = ECScalar::new_random();
-        let err = ecdsa::get_master_key(&"Invalid id".to_string(), &client_shim, &secret_key, &1000, false);
+        let invalid_key = Uuid::new_v4();
+        let err = ecdsa::get_master_key(&invalid_key, &client_shim, &secret_key, &1000, false);
         assert!(err.is_err());
     }
 
@@ -78,12 +79,12 @@ mod tests {
         spawn_server();
         let mut wallet = gen_wallet();
 
-        let err = state_entity::api::get_statechain(&wallet.client_shim, &String::from("id"));
+        let err = state_entity::api::get_statechain(&wallet.client_shim, &Uuid::new_v4());
         assert!(err.is_err());
 
         let deposit = run_deposit(&mut wallet, &10000);
 
-        let state_chain = state_entity::api::get_statechain(&wallet.client_shim, &String::from(deposit.1.clone())).unwrap();
+        let state_chain = state_entity::api::get_statechain(&wallet.client_shim, &deposit.1.clone()).unwrap();
         assert_eq!(state_chain.chain.last().unwrap().data, deposit.5.to_string());
     }
 
@@ -204,7 +205,7 @@ mod tests {
         assert!(wallet.get_shared_key(&deposit_resp.0).unwrap().unspent);
 
         // Try withdraw wrong key
-        assert!(state_entity::withdraw::withdraw(&mut wallet, &"key".to_string()).is_err());
+        assert!(state_entity::withdraw::withdraw(&mut wallet, &Uuid::new_v4()).is_err());
 
         // Check withdraw method completes without Err
         state_entity::withdraw::withdraw(&mut wallet, &deposit_resp.0)

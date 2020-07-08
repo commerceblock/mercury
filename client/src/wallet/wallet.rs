@@ -302,7 +302,7 @@ impl Wallet {
     }
 
     /// create new 2P-ECDSA key with state entity
-    pub fn gen_shared_key(&mut self, id: &String, value: &u64) -> Result<&SharedKey> {
+    pub fn gen_shared_key(&mut self, id: &Uuid, value: &u64) -> Result<&SharedKey> {
         let key_share_pub = self.se_key_shares.get_new_key()?;
         let key_share_priv = self.se_key_shares.get_key_derivation(&key_share_pub).unwrap().private_key.key;
 
@@ -312,14 +312,14 @@ impl Wallet {
     }
 
     /// create new 2P-ECDSA key with pre-definfed private key
-    pub fn gen_shared_key_fixed_secret_key(&mut self, id: &String, secret_key: &SecretKey, value: &u64) -> Result<()> {
+    pub fn gen_shared_key_fixed_secret_key(&mut self, id: &Uuid, secret_key: &SecretKey, value: &u64) -> Result<()> {
         self.shared_keys.push(
             SharedKey::new(id, &self.client_shim, secret_key, value, true)?);
         Ok(())
     }
 
     /// Get shared key by id. Return None if no shared key with given id.
-    pub fn get_shared_key(&self, id: &String) -> Result<&SharedKey> {
+    pub fn get_shared_key(&self, id: &Uuid) -> Result<&SharedKey> {
         for shared in &self.shared_keys {
             if shared.id == *id {
                 return Ok(shared);
@@ -329,7 +329,7 @@ impl Wallet {
     }
 
     /// Return Shared key info: StateChain ID, Funding Txid, proof key, value, unspent
-    pub fn get_shared_key_info(&self, id: &String) -> Result<(String, String, String, u64, bool)> {
+    pub fn get_shared_key_info(&self, id: &Uuid) -> Result<(Uuid, String, String, u64, bool)> {
         let shared_key = self.get_shared_key(id)?;
         Ok((
             shared_key.state_chain_id.clone().unwrap(),
@@ -341,7 +341,7 @@ impl Wallet {
     }
 
     /// Get mutable reference to shared key by id. Return None if no shared key with given id.
-    pub fn get_shared_key_mut(&mut self, id: &String) -> Result<&mut SharedKey> {
+    pub fn get_shared_key_mut(&mut self, id: &Uuid) -> Result<&mut SharedKey> {
         for shared in &mut self.shared_keys {
             if shared.id == *id {
                 return Ok(shared);
@@ -405,9 +405,9 @@ impl Wallet {
     }
 
     /// Return balances of unspent shared keys
-    pub fn get_state_chains_info(&self) -> (Vec<String>, Vec<String>, Vec<GetBalanceResponse>) {
-        let mut state_chain_key_ids: Vec<String> = vec!();
-        let mut state_chain_ids: Vec<String> = vec!();
+    pub fn get_state_chains_info(&self) -> (Vec<Uuid>, Vec<Uuid>, Vec<GetBalanceResponse>) {
+        let mut state_chain_key_ids: Vec<Uuid> = vec!();
+        let mut state_chain_ids: Vec<Uuid> = vec!();
         let mut state_chain_balances: Vec<GetBalanceResponse> = vec!();
         for shared_key in &self.shared_keys {
             if shared_key.unspent {

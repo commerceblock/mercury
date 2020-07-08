@@ -11,16 +11,15 @@ use shared_lib::{structs::*,
     Root};
 
 use crate::DataBase;
-use crate::routes::util::{UserSession, StateEntityStruct, check_user_auth};
+use crate::routes::util::{StateEntityStruct, check_user_auth};
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::storage::{
-    db_postgres::{db_get, Table, Column, db_get_serialized, db_update_serialized, db_update},
+    db_postgres::{db_get, Table, Column, db_get_serialized, db_update_serialized, db_update, db_get_statechain},
     db::{get_current_root, DB_SC_LOC, update_root}};
 
 use bitcoin::Transaction;
 use rocket_contrib::json::Json;
 use rocket::State;
-use std::str::FromStr;
 use uuid::Uuid;
 
 /// User request withdraw:
@@ -33,7 +32,7 @@ pub fn withdraw_init(
     conn: DataBase,
     withdraw_msg1: Json<WithdrawMsg1>,
 ) -> Result<Json<()>> {
-    let user_id = Uuid::from_str(&withdraw_msg1.shared_key_id).unwrap();
+    let user_id = withdraw_msg1.shared_key_id;
 
     info!("WITHDRAW: Init. Shared Key ID: {}", user_id);
 
@@ -52,15 +51,28 @@ pub fn withdraw_init(
     // Get statechain
     // let state_chain_id = user_session.state_chain_id.clone()
     //     .ok_or(SEError::Generic(String::from("No state chain session found for this user.")))?;
-    let state_chain: StateChain =
-        db::get(&state.db, &claim.sub, &state_chain_id.to_string().to_owned(), &StateEntityStruct::StateChain)?
-            .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string().to_owned()))?;
-    // Check if state chain is still owned by user and not locked
-    state_chain.is_locked()?;
-    state_chain.is_owned_by(&user_id.to_string())?;
+    // let state_chain: StateChain =
+    //     db::get(&state.db, &claim.sub, &state_chain_id.to_string().to_owned(), &StateEntityStruct::StateChain)?
+    //         .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string().to_owned()))?;
+    // // Check if state chain is still owned by user and not locked
+    // state_chain.is_locked()?;
+    // state_chain.is_owned_by(&user_id)?;
+
+    // let sc_locked_until: Date =
+    //     db_get(&conn, &user_id, Table::StateChain, Column::LockedUntil)?
+    //         .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::LockedUntil))?;
+    // check_locked(sc_locked_until)?;
+    let sc_owner_id: Uuid =
+        db_get(&conn, &state_chain_id, Table::StateChain, Column::OwnerId)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::OwnerId))?;
+    if sc_owner_id != user_id {
+        return Err(SEError::Generic(format!("State Chain not owned by User ID: {}.",state_chain_id)));
+    }
 
 
     // Verify new StateChainSig
+    let state_chain: StateChain =
+        db_get_statechain(&conn, &state_chain_id)?;
     let prev_proof_key = state_chain.get_tip()?.data;
     withdraw_msg1.state_chain_sig.verify(&prev_proof_key)?;
 
@@ -91,7 +103,7 @@ pub fn withdraw_confirm(
     conn: DataBase,
     withdraw_msg2: Json<WithdrawMsg2>,
 ) -> Result<Json<Vec<Vec<u8>>>> {
-    let user_id = Uuid::from_str(&withdraw_msg2.shared_key_id).unwrap();
+    let user_id = withdraw_msg2.shared_key_id;
     info!("WITHDRAW: Confirm. Shared Key ID: {}", user_id.to_string());
 
     // Get UserSession data
@@ -120,20 +132,23 @@ pub fn withdraw_confirm(
     let state_chain_id: Uuid =
         db_get(&conn, &user_id, Table::UserSession, Column::StateChainId)?
             .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::StateChainId))?;
-
+    // let mut state_chain: StateChain =
+    //     db::get(&state.db, &claim.sub, &state_chain_id.to_string().to_owned(), &StateEntityStruct::StateChain)?
+    //         .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string().to_owned()))?;
     let mut state_chain: StateChain =
-        db::get(&state.db, &claim.sub, &state_chain_id.to_string().to_owned(), &StateEntityStruct::StateChain)?
-            .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string().to_owned()))?;
+    db_get_statechain(&conn, &state_chain_id)?;
 
     state_chain.add(withdraw_sc_sig.to_owned())?;
-    state_chain.amount = 0;     // signals withdrawn funds
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &state_chain_id.to_string(),
-        &StateEntityStruct::StateChain,
-        &state_chain
-    )?;
+    // state_chain.amount = 0;     // signals withdrawn funds
+    // db::insert(
+    //     &state.db,
+    //     &claim.sub,
+    //     &state_chain_id.to_string(),
+    //     &StateEntityStruct::StateChain,
+    //     &state_chain
+    // )?;
+    db_update_serialized(&conn, &state_chain_id, state_chain.chain.clone(), Table::StateChain, Column::Chain)?;
+    db_update(&conn, &state_chain_id, 0 as i64, Table::StateChain, Column::Amount)?;
 
     // Remove state_chain_id from user session to signal end of session
     // user_session.state_chain_id = None;
@@ -145,7 +160,6 @@ pub fn withdraw_confirm(
     //     &user_session
     // )?;
     db_update::<Option<Uuid>>(&conn, &user_id, None, Table::UserSession, Column::StateChainId)?;
-
 
     // Update sparse merkle tree
     // let tx_withdraw = user_session.tx_withdraw.unwrap();
