@@ -13,6 +13,8 @@ use std::error;
 use rocket::response::Responder;
 use rocket::http::{ Status, ContentType };
 use std::io::Cursor;
+use merkletree::hash::{Algorithm};
+use std::hash::Hasher;
 
 type Result<T> = std::result::Result<T, Box<dyn error::Error> >;
 
@@ -30,7 +32,7 @@ pub enum MainstayError {
     /// Invalid argument error
     FormatError(String),
     /// Item not found error
-    NotFoundError(String)
+    NotFoundError(String),
     /// Cryptographic proof error
     ProofError(String)
 }
@@ -53,7 +55,7 @@ impl fmt::Display for MainstayError {
             MainstayError::Generic(ref e) => write!(f, "MainstayError: {}", e),
             MainstayError::FormatError(ref e) => write!(f,"MainstayError::FormatError: {}",e),
             MainstayError::NotFoundError(ref e) => write!(f,"MainstayError::NotFoundError: {}",e),
-            MainstayError::NotFoundError(ref e) => write!(f,"MainstayError::ProofError: {}",e),
+            MainstayError::ProofError(ref e) => write!(f,"MainstayError::ProofError: {}",e),
         }
     }
 }
@@ -77,6 +79,7 @@ impl Responder<'static> for MainstayError {
 
 use MainstayError::NotFoundError;
 use MainstayError::FormatError;
+use MainstayError::ProofError;
 
 impl Commitment {
     pub fn get_hash(&self) -> Option<Hash> {
@@ -104,7 +107,7 @@ impl Display for Commitment {
 impl FromStr for Commitment {
     type Err = Box<dyn error::Error>;
     fn from_str(s: &str) -> Result<Self> {
-        match hex::decode(s).unwrap()[..].try_into()
+        match hex::decode(s)?[..].try_into()
         {
             Ok(h) => Ok(Self(Some(h))),
             Err(e) =>  Err(MainstayError::Generic(e.to_string()).into())
@@ -481,24 +484,35 @@ pub mod merkle {
     use super::*;
     //Double sha256
     #[allow(unused_imports)]
-    use bitcoin::hashes::sha256d::Hash as SHAHash;
-
-
-    use std::hash::Hasher;
+    use bitcoin::hashes::sha256::HashEngine as SHAHashEngine;
+    use bitcoin::hashes::sha256d::Hash as SHAHash; 
+    use bitcoin_hashes::Hash as HashesHash;
+    use bitcoin_hashes::HashEngine as HashesHashEngine;
+    use merkletree::hash::Hashable;
     use crypto::digest::Digest;
     use bitcoin::util::hash::BitcoinHash;
-    use merkletree::hash::{Algorithm, Hashable};
-#[allow(unused_imports)]
+ 
+    
+    #[allow(unused_imports)]
     use merkletree::hash;
     use crypto::sha3::{Sha3, Sha3Mode};
+    use crypto::sha2::{Sha256};
 
 
-    pub struct HashAlgo(Sha3);
+    use merkletree::store::VecStore;
+    use merkletree::merkle::MerkleTree;
+
+    
+    //pub struct HashAlgo(Sha256);
+    pub struct HashAlgo(SHAHashEngine);
+    
 
     
     impl HashAlgo {
         pub fn new() -> HashAlgo {
-            HashAlgo(Sha3::new(Sha3Mode::Sha3_256))
+            //HashAlgo(Sha3::new(Sha3Mode::Sha3_256))
+            let engine = SHAHash::engine();
+            HashAlgo(engine)
         }
     }
 
@@ -521,19 +535,14 @@ pub mod merkle {
     }
 
     impl Algorithm<[u8; 32]> for HashAlgo {
-            #[inline]
-            fn hash(&mut self) -> [u8; 32] {
-                let mut h = [0u8; 32];
-                self.0.result(&mut h);
-                //Double hash
-                self.0.result(&mut h);
-                h
-            }
+        #[inline]
+        fn hash(&mut self) -> [u8; 32] {
+            SHAHash::from_engine(self.0.clone()).into_inner()
+        }
     
-            #[inline]
-            fn reset(&mut self) {
-                self.0.reset();
-            }
+        #[inline]
+        fn reset(&mut self) {
+            self.0 = SHAHash::engine();
         }
     }
     
@@ -567,6 +576,7 @@ pub mod merkle {
     }
 
     impl Proof {
+
 
         pub fn from(merkle_root: Commitment, commitment: Commitment, ops: Vec<Commitment>) -> Self{
             Self{merkle_root: merkle_root, commitment: commitment, ops: ops}
@@ -609,14 +619,45 @@ pub mod merkle {
             for op in ops_arr {
                 ops.push(get_commitment(op,"commitment")?)
             }
-            debug!("fiished parsing merkleproof JSON object");
+            debug!("finished parsing merkleproof JSON object");
             Ok(Proof::from(merkle_root, commitment, ops))
         }
 
         pub fn verify(&self) -> Result<()>{
-            let t: MerkleTree<[u8; 32], ExampleAlgorithm, VecStore<_>> = MerkleTree::try_from_iter(vec![h1, h2, h3, h4].into_iter().map(Ok)).unwrap();
-            println!("{:?}", t.root());
-            Ok(())
+            let mut h1 = [0u8; 32];
+            let mut h2 = [0u8; 32];
+            let mut h3 = [0u8; 32];
+            let mut h4 = [0u8; 32];
+            h1[0] = 0x11;
+            h2[0] = 0x22;
+            h3[0] = 0x33;
+            h4[0] = 0x44;
+
+            //let iter1 = vec![h1, h2, h3, h4].into_iter().map(Ok);
+            
+            //let t : MerkleTree<[u8; 32], HashAlgo, VecStore<_>> = MerkleTree::try_from_iter(vec![h1, h2, h3, h4].into_iter().map(Ok))?;
+
+            println!("length of ops: {}", self.ops.len());
+
+            let mut vec_ops = self.ops.clone();
+            if vec_ops.len() % 2 > 0 {
+                vec_ops.push(Commitment::from_hash(&[0u8; 32]))
+            }
+
+            println!("vec ops: {:?}", vec_ops);
+
+            let t: MerkleTree<[u8; 32], HashAlgo, VecStore<_>> = MerkleTree::try_from_iter(
+                vec_ops.into_iter().map(|x| x.get_hash().unwrap()).map(Ok)
+            )?;
+
+            //let iter2 = vec_ops.into_iter().map(|x| x.get_hash().unwrap()).map(Ok);
+
+            //println!("iter1, iter2:: {:?}, {:?}", iter1, iter2);
+                        
+            match t.root() == self.merkle_root.get_hash().unwrap(){
+                true => Ok(()),
+                false => Err(MainstayError::ProofError(format!("calculated root: {:?}, expected root: {:?}", t.root(), self.merkle_root)).into()),
+            }
         }
     }
 
@@ -637,7 +678,17 @@ mod tests {
     use crate::util::keygen::generate_keypair;
         
     #[test]
-    fn commit() {
+    fn test_hash() { 
+        let commitment : Hash = Commitment::from_str("31e66288b9074bcfeb3bc5734f2d0b189ad601b61f86b8241ee427648b59fdbc").unwrap().get_hash().unwrap();
+        let mut hasher = merkle::HashAlgo::new();
+        hasher.write(&commitment);
+        let hash = hasher.hash();
+        let expected_hash  : Hash = Commitment::from_str("bd23c4720e83435818a1074b33891a05e2112c5e510bdffdc3e276ad3b7f378b").unwrap().get_hash().unwrap();
+        assert_eq!(hash, expected_hash);
+    }
+
+    #[test]
+    fn test_commit() {
                 
         let random_hash = Commitment::from_hash(&monotree::utils::random_hash());
 
@@ -680,7 +731,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_response() {
+    fn test_proof() {
 
         let data_str = "{\"response\":{
                 \"attestation\":{\"merkle_root\":\"47fc767ebc5095133d6de9a060c248c115b3fdf5f30921de2ee111225690de01\",
@@ -731,11 +782,19 @@ mod tests {
         assert!(merkleproof_1 ==merkleproof_2);
         assert!(merkleproof_1 ==merkleproof_3);
         assert!(merkleproof_1 ==merkleproof_compare);
+        
+        match merkleproof_1.verify(){
+            Ok(_) => (),
+            Err(e) => {
+                assert!(false, e.to_string());
+                ()
+            }
+        }
     }
 
     
     #[test]
-    fn get_latest_proof() {
+    fn test_get_latest_proof() {
         let config = Config::from_test().expect(Config::info());        
 
         match merkle::Proof::from_latest_proof(&config){
@@ -747,7 +806,7 @@ mod tests {
     }
 
     #[test]
-    fn get_proof_from_commitment() {
+    fn test_get_proof_from_commitment() {
         let config = Config::from_test().expect(Config::info());        
         
         //Retrieve the proof for a commitment
@@ -767,7 +826,7 @@ mod tests {
     }
 
     #[test]
-    fn get_commitment_info() {
+    fn test_get_commitment_info() {
         let config = Config::from_test().expect(Config::info());        
     
        //Retrieve the proof for a commitment

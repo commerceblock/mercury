@@ -1,6 +1,7 @@
 //
 extern crate hex;
 extern crate bitcoin;
+extern crate bitcoin_hashes;
 extern crate kms;
 extern crate rocket;
 extern crate rocket_contrib;
@@ -27,6 +28,8 @@ extern crate chrono;
 
 #[macro_use]
 extern crate crypto;
+
+extern crate is_odd;
 
 pub mod error;
 pub mod state_chain;

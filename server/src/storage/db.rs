@@ -6,6 +6,8 @@ use shared_lib::Root;
 use crate::mainstay::Hash;
 use crate::mainstay;
 use crate::shared_lib::mainstay::{Attestable, CommitmentIndexed, MainstayError};
+#[allow(unused_imports)]
+use std::str::FromStr;
 
 static ROOTID: &str = "rootid";
 pub static DB_LOC: &str = "./db";
@@ -109,6 +111,7 @@ pub fn update_root_commitment_info(db: &DB, mc: &Option<mainstay::Config>, root:
                                 MainstayError::FormatError(_) => Err(SEError::SharedLibError(e.to_string())),
                                 //Not found is ok - return Ok(None)
                                 MainstayError::NotFoundError(_) => Ok(None),
+                                MainstayError::ProofError(_) => Ok(None),
                             }
                         },
                         None => Err(SEError::SharedLibError(e.to_string()))
