@@ -14,7 +14,7 @@ use shared_lib::{
 use crate::routes::util::*;
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::storage::{
-    db_postgres::{Column, Table, db_get_serialized, db_insert, db_update, db_update_serialized, db_get},
+    db_postgres::{Column, Table, db_get_serialized, db_insert, db_update, db_update_serialized, db_get, db_remove},
     db::get_current_root};
 
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
@@ -83,28 +83,34 @@ pub fn transfer_sender(
     }
 
     // Ensure if transfer has already been completed (but not finalized)
-    match db::get::<TransferData>(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::TransferData)? {
-        None => {},
-        Some(_) => {
-            return Err(SEError::Generic(String::from("Transfer already completed. Waiting for finalize.")));
-        }
+    // match db::get::<TransferData>(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::TransferData)? {
+    //     None => {},
+    //     Some(_) => {
+    //         return Err(SEError::Generic(String::from("Transfer already completed. Waiting for finalize.")));
+    //     }
+    // }
+    if db_get::<Uuid>(&conn, &state_chain_id, Table::TransferData, Column::Id).is_ok() {
+        return Err(SEError::Generic(String::from("Transfer already completed. Waiting for finalize.")));
     }
 
     // Generate x1
     let x1: FE = ECScalar::new_random();
 
     // Create TransferData DB entry
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &state_chain_id.to_string(),
-        &StateEntityStruct::TransferData,
-        &TransferData {
-            state_chain_id,
-            state_chain_sig: transfer_msg1.state_chain_sig.to_owned(),
-            x1: x1.clone(),
-        }
-    )?;
+    // db::insert(
+    //     &state.db,
+    //     &claim.sub,
+    //     &state_chain_id.to_string(),
+    //     &StateEntityStruct::TransferData,
+    //     &TransferData {
+    //         state_chain_id,
+    //         state_chain_sig: transfer_msg1.state_chain_sig.to_owned(),
+    //         x1: x1.clone(),
+    //     }
+    // )?;
+    db_insert(&conn, &state_chain_id, Table::TransferData)?;
+    db_update_serialized(&conn, &state_chain_id, transfer_msg1.state_chain_sig.to_owned(), Table::TransferData, Column::StateChainSig)?;
+    db_update_serialized(&conn, &state_chain_id, x1.clone(), Table::TransferData, Column::X1)?;
 
     info!("TRANSFER: Sender side complete. Previous shared key ID: {}. State Chain ID: {}",user_id.to_string(),state_chain_id);
     debug!("TRANSFER: Sender side complete. State Chain ID: {}. State Chain Signature: {:?}. x1: {:?}.", state_chain_id, transfer_msg1.state_chain_sig, x1);
@@ -126,15 +132,28 @@ pub fn transfer_receiver(
     transfer_msg4: Json<TransferMsg4>,
 ) -> Result<Json<TransferMsg5>> {
     let user_id = transfer_msg4.shared_key_id;
+    let state_chain_id = transfer_msg4.state_chain_id;
 
     info!("TRANSFER: Receiver side. Shared Key ID: {}", user_id);
 
     // Get TransferData for state_chain_id
-    let transfer_data: TransferData =
-        db::get(&state.db, &claim.sub, &transfer_msg4.state_chain_id.to_string(), &StateEntityStruct::TransferData)?
-            .ok_or(SEError::DBError(NoDataForID, transfer_msg4.state_chain_id.to_string().clone()))?;
-    let state_chain_sig = transfer_data.state_chain_sig;
-    let state_chain_id = transfer_data.state_chain_id.clone();
+    // let transfer_data: TransferData =
+    //     db::get(&state.db, &claim.sub, &transfer_msg4.state_chain_id.to_string(), &StateEntityStruct::TransferData)?
+    //         .ok_or(SEError::DBError(NoDataForID, transfer_msg4.state_chain_id.to_string().clone()))?;
+    let state_chain_id: Uuid =
+        db_get(&conn, &state_chain_id, Table::TransferData, Column::Id)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Id))?;
+
+    let state_chain_sig: StateChainSig =
+        db_get_serialized(&conn, &state_chain_id, Table::TransferData, Column::StateChainSig)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::StateChainSig))?;
+
+    let x1: FE =
+        db_get_serialized(&conn, &state_chain_id, Table::TransferData, Column::X1)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::X1))?;
+
+    // let state_chain_sig = transfer_data.state_chain_sig;
+    // let state_chain_id = transfer_data.state_chain_id.clone();
 
     // Ensure state_chain_sigs are the same
     if state_chain_sig != transfer_msg4.state_chain_sig.to_owned() {
@@ -153,7 +172,7 @@ pub fn transfer_receiver(
 
     // TODO: decrypt t2
 
-    let x1 = transfer_data.x1;
+    // let x1 = transfer_data.x1;
     let t2 = transfer_msg4.t2;
     let s1 = party_one_private.get_private_key();
 
@@ -221,14 +240,13 @@ pub fn transfer_receiver(
         // Update DB and SMT with new transfer data
         transfer_finalize(
             &state,
-            &claim,
             &conn,
             &finalized_data
         )?;
     }
 
     info!("TRANSFER: Receiver side complete. State Chain ID: {}",new_shared_key_id);
-    debug!("TRANSFER: Receiver side complete. State Chain ID: {}. New Shared Key ID: {}. Finalized data: {:?}",state_chain_id,transfer_data.state_chain_id,finalized_data);
+    debug!("TRANSFER: Receiver side complete. State Chain ID: {}. New Shared Key ID: {}. Finalized data: {:?}",state_chain_id,state_chain_id,finalized_data);
 
     Ok(Json(
         TransferMsg5 {
@@ -244,7 +262,6 @@ pub fn transfer_receiver(
 /// transfers completion in the batch transfer case.
 pub fn transfer_finalize(
     state: &State<Config>,
-    claim: &Claims,
     conn: &DataBase,
     finalized_data: &TransferFinalizeData
 ) -> Result<()> {
@@ -316,7 +333,8 @@ pub fn transfer_finalize(
     debug!("TRANSFER: State Chain ID: {}. New root: {:?}. Previous root: {:?}.", state_chain_id, new_root.unwrap(), root);
 
     // Remove TransferData for this transfer
-    db::remove(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::TransferData)?;
+    // db::remove(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::TransferData)?;
+    db_remove(&conn, &state_chain_id, Table::TransferData)?;
 
     Ok(())
 }
@@ -427,7 +445,6 @@ pub fn finalize_batch(
     for finalized_data in transfer_batch_data.finalized_data.clone() {
         transfer_finalize(
             &state,
-            &claim,
             &conn,
             &finalized_data
         )?;

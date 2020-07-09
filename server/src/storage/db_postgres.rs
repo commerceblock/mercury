@@ -17,6 +17,7 @@ pub enum Table {
     Ecdsa,
     UserSession,
     StateChain,
+    TransferData
 }
 impl Table {
     fn to_string(&self) -> String {
@@ -47,6 +48,13 @@ pub enum Column {
     LockedUntil,
     OwnerId,
 
+    // TransferData
+    // Id,
+    StateChainSig,
+    X1,
+
+    // Ecdsa
+    // Id,
     KeyGenFirstMsg,
     CommWitness,
     EcKeyPair,
@@ -118,6 +126,16 @@ where
     }
 }
 
+// Remove row in table
+pub fn db_remove(conn: &Connection, id: &Uuid, table: Table) -> Result<()> {
+    let statement = conn.prepare(&format!("DELETE FROM {} WHERE id = $1;",table.to_string()))?;
+    if statement.execute(&[&id])? == 0 {
+        return Err(SEError::DBError(UpdateFailed, id.to_string()));
+    }
+
+    Ok(())
+}
+
 // Update item in table whose type is serialized to String
 pub fn db_update_serialized<T>(conn: &Connection, id: &Uuid, data: T, table: Table, column: Column) -> Result<()>
 where
@@ -143,7 +161,6 @@ mod tests {
 
     use super::*;
     use std::{env, str::FromStr};
-    use shared_lib::state_chain::StateChain;
 
     #[test]
     fn test_db_postgres() {
@@ -153,10 +170,10 @@ mod tests {
         let url = &rocket_url[16..68];
 
         let conn = Connection::connect(url, TlsMode::None).unwrap();
-        let user_id = Uuid::from_str(&"dc30b024-4e22-4f39-b804-2b221e3bd4e9").unwrap();
+        let user_id = Uuid::from_str(&"9eb05678-5275-451b-910c-a7179057d91d").unwrap();
 
         let res =
-            db_get_serialized::<StateChain>(&conn, &user_id, Table::StateChain, Column::Chain);
+            db_remove(&conn, &user_id, Table::TransferData);
 
         println!("res: {:?}",res);
     }

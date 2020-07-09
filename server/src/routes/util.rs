@@ -15,7 +15,7 @@ use shared_lib::{
 use crate::routes::transfer::finalize_batch;
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::storage::{
-    db_postgres::{db_get_serialized, Table, Column, db_get, db_update_serialized, db_update},
+    db_postgres::{db_get_serialized, Table, Column, db_get, db_update_serialized, db_update, db_remove},
     db::{get_root, get_current_root}};
 use crate::DataBase;
 
@@ -269,7 +269,9 @@ pub fn get_transfer_batch_status(
                 transfer_batch_data.punished_state_chains.push(state_chain_id.clone());
 
                 // Remove TransferData involved
-                db::remove(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::TransferData)?;
+                // db::remove(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::TransferData)?;
+                db_remove(&conn, &state_chain_id, Table::TransferData)?;
+
                 info!("TRANSFER_BATCH: Transfer data marked as archived. State Chain ID: {}.", state_chain_id);
             }
             info!("TRANSFER_BATCH: Punished all state chains in failed batch. ID: {}.",batch_id);
