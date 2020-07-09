@@ -1,6 +1,6 @@
 use super::super::Result;
 use crate::error::SEError;
-use rocksdb::DB;
+use rocksdb::{DB, Direction, IteratorMode};
 use serde;
 use shared_lib::Root;
 

@@ -18,8 +18,48 @@ pub enum Protocol {
     Withdraw
 }
 
-
 // API structs
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WatcherStruct {
+    pub tx: Transaction,  // Watched transaction
+    pub index: u64, // index number
+    pub locktime: u32 // nLocktime (block height)
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WatcherStatusAPI {
+    pub blockhash: String,  // current block hash
+    pub height: u64, // current blockheight
+    pub count: u64 // current total active backups
+}
+impl fmt::Display for WatcherStatusAPI {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Blockhash: {},\nBlock height: {}\nTx count: {}",
+            self.blockhash, self.height, self.count)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct MasterTxMsg {
+    pub hex: String  // tx to watch
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WatchTxConfirm {
+    pub confirmed: bool,  // good tx
+    pub index: u64 // tx index
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct QueryTxMsg {
+    pub txid: String  // txid being queried
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct QueryTxReturn {
+    pub latest: bool,  // is transaction latest and valid
+    pub status: u64 // tx status: number of blocks to validity, 0 = broadcast, -1 = confirmed
+}
 
 /// /info/info return struct
 #[derive(Serialize, Deserialize, Debug)]

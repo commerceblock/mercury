@@ -41,6 +41,9 @@ pub mod server;
 pub mod storage;
 pub mod tests;
 pub mod error;
+pub mod rpc_client;
+pub mod utils;
+pub mod watcher;
 
 type Result<T> = std::result::Result<T, error::SEError>;
 
@@ -54,7 +57,10 @@ pub struct Config {
     pub fee_withdraw: u64, // satoshis
     pub block_time: u64,
     pub batch_lifetime: u64,
-    pub punishment_duration: u64
+    pub punishment_duration: u64,
+    pub watcher_minions: String, //list of minion servers
+    pub watch_only: bool, //set if watch only server instance
+    pub bitcoind: String //bitcoind RPC credentials and address
 }
 
 #[derive(Deserialize)]

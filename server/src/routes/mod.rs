@@ -4,4 +4,5 @@ pub mod ping;
 pub mod util;
 pub mod deposit;
 pub mod transfer;
+pub mod watch;
 pub mod withdraw;

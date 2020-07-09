@@ -14,3 +14,11 @@ fee_withdraw = 300
 
 punishment_duration = "3600" # 1 hour
 batch_lifetime = "3" # 
+
+# watching settings
+# as master
+minions = '["127.0.0.1:70001","127.0.0.1:70002","127.0.0.1:70003","127.0.0.1:70004"]'
+
+# as minion
+watch_only = "true"
+bitcoind = "exch:goodpass@localhost:8332"

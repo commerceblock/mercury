@@ -6,12 +6,8 @@ use config;
 use rocket;
 use rocket::{Request, Rocket};
 use rocksdb;
-use env_logger;
-
-use log::LevelFilter;
-use log4rs::append::file::FileAppender;
-use log4rs::encode::pattern::PatternEncoder;
-use log4rs::config::{Appender, Config as LogConfig, Root};
+use std::thread;
+use crate::watcher::watch_node;
 
 use std::{collections::HashMap, str::FromStr};
 
@@ -33,6 +29,9 @@ impl Config {
             block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
             batch_lifetime: settings.get("batch_lifetime").unwrap().parse::<u64>().unwrap(),
             punishment_duration: settings.get("punishment_duration").unwrap().parse::<u64>().unwrap(),
+            watcher_minions: settings.get("minions").unwrap().to_string(),
+            watch_only: bool::from_str(settings.get("watch_only").unwrap()).unwrap(),
+            bitcoind: settings.get("bitcoind").unwrap().to_string()
         }
     }
 }
@@ -72,45 +71,62 @@ pub fn get_server() -> Rocket {
     let config = Config::load(settings.clone());
     let auth_config = AuthConfig::load(settings.clone());
 
-    set_logging_config(settings.get("log_file"));
+    if config.watch_only {
 
-    rocket::ignite()
-        .register(catchers![internal_error, not_found, bad_request])
-        .mount(
-            "/",
-            routes![
-                ping::ping,
-                ecdsa::first_message,
-                ecdsa::second_message,
-                ecdsa::third_message,
-                ecdsa::fourth_message,
-                ecdsa::chain_code_first_message,
-                ecdsa::chain_code_second_message,
-                ecdsa::sign_first,
-                ecdsa::sign_second,
-                ecdsa::recover,
-                schnorr::keygen_first,
-                schnorr::keygen_second,
-                schnorr::keygen_third,
-                schnorr::sign,
-                util::get_statechain,
-                util::get_smt_root,
-                util::get_smt_proof,
-                util::get_state_entity_fees,
-                util::prepare_sign_tx,
-                util::get_transfer_batch_status,
-                deposit::deposit_init,
-                deposit::deposit_confirm,
-                transfer::transfer_sender,
-                transfer::transfer_receiver,
-                transfer::transfer_batch_init,
-                transfer::transfer_reveal_nonce,
-                withdraw::withdraw_init,
-                withdraw::withdraw_confirm
-            ],
-        )
-        .manage(config)
-        .manage(auth_config)
+        thread::spawn(|| watch_node(config));        
+
+        rocket::ignite()
+            .register(catchers![internal_error, not_found, bad_request])
+            .mount(
+                "/",
+                routes![
+                    watch::sendtx,
+                    watch::querytx,
+                    watch::get_status
+                ],
+            )
+            .manage(config)
+            .manage(auth_config)
+    }
+    else {
+        rocket::ignite()
+            .register(catchers![internal_error, not_found, bad_request])
+            .mount(
+                "/",
+                routes![
+                    ping::ping,
+                    ecdsa::first_message,
+                    ecdsa::second_message,
+                    ecdsa::third_message,
+                    ecdsa::fourth_message,
+                    ecdsa::chain_code_first_message,
+                    ecdsa::chain_code_second_message,
+                    ecdsa::sign_first,
+                    ecdsa::sign_second,
+                    ecdsa::recover,
+                    schnorr::keygen_first,
+                    schnorr::keygen_second,
+                    schnorr::keygen_third,
+                    schnorr::sign,
+                    util::get_statechain,
+                    util::get_smt_root,
+                    util::get_smt_proof,
+                    util::get_state_entity_fees,
+                    util::prepare_sign_tx,
+                    util::get_transfer_batch_status,
+                    deposit::deposit_init,
+                    deposit::deposit_confirm,
+                    transfer::transfer_sender,
+                    transfer::transfer_receiver,
+                    transfer::transfer_batch_init,
+                    transfer::transfer_reveal_nonce,
+                    withdraw::withdraw_init,
+                    withdraw::withdraw_confirm
+                ],
+            )
+            .manage(config)
+            .manage(auth_config)
+    }
 }
 
 fn get_settings_as_map() -> HashMap<String, String> {
@@ -135,22 +151,4 @@ fn get_db(_settings: HashMap<String, String>) -> rocksdb::DB {
     //     .to_string();
 
     rocksdb::DB::open_default(db::DB_LOC).unwrap()
-}
-
-fn set_logging_config(log_file: Option<&String>) {
-    if log_file.is_none() {
-        let _ = env_logger::try_init();
-    } else {
-        // Write log to file
-        let logfile = FileAppender::builder()
-            .encoder(Box::new(PatternEncoder::new("{l} - {m}\n")))
-            .build(log_file.unwrap()).unwrap();
-        let log_config = LogConfig::builder()
-            .appender(Appender::builder().build("logfile", Box::new(logfile)))
-            .build(Root::builder()
-                       .appender("logfile")
-                       .build(LevelFilter::Info)).unwrap();
-
-        let _ = log4rs::init_config(log_config);
-    }
 }

@@ -260,6 +260,22 @@ pub fn transfer_finalize(
 
     info!("TRANSFER: Finalized. New shared key ID: {}. State Chain ID: {}", finalized_data.new_shared_key_id, state_chain_id);
 
+
+    // send final backup tx to minions
+    let minionlist: serde_json::Value =
+        serde_json::from_str(state.minions).expect("Minion list not well-formatted");
+
+    for minion in minionlist:
+        let tx: state_chain.tx_backup.clone();
+        let watch_msg: WatcherStruct = requests::postb(&minion,&format!("/watch/send"),
+            &WatcherStruct {
+                tx: tx,
+                index: 0,
+                locktime: tx.lock_time 
+        }
+    )?;
+
+
     // Update sparse merkle tree with new StateChain entry
     let funding_txid = state_chain.tx_backup.input.get(0).unwrap().previous_output.txid.to_string();
     let proof_key = state_chain.chain.last()

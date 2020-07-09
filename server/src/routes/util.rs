@@ -33,7 +33,8 @@ pub enum StateEntityStruct {
     UserSession,
     StateChain, // struct def in shared_lib
     TransferData,
-    TransferBatchData
+    TransferBatchData,
+    WatcherStruct
 }
 impl db::MPCStruct for StateEntityStruct {
     fn to_string(&self) -> String {
@@ -99,6 +100,14 @@ impl TransferBatchData {
         }
         false
     }
+}
+
+/// Struct to hold data on a backup transaction being watched for
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WatcherStruct {
+    pub tx: Transaction,  // Watched transaction
+    pub index: u64, // index number
+    pub locktime: u32 // nLocktime (block height)
 }
 
 /// Struct holds data when transfer is complete but not yet finalized
