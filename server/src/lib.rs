@@ -37,6 +37,7 @@ extern crate hex;
 extern crate shared_lib;
 use shared_lib::mainstay;
 
+#[cfg(test)]
 #[macro_use]
 extern crate serial_test;
 

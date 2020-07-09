@@ -6,7 +6,6 @@ use shared_lib::Root;
 use crate::mainstay::Hash;
 use crate::mainstay;
 use crate::shared_lib::mainstay::{Attestable, CommitmentIndexed, MainstayError};
-use std::str::FromStr;
 
 static ROOTID: &str = "rootid";
 pub static DB_LOC: &str = "./db";
@@ -335,7 +334,9 @@ mod tests {
     #[test]
     #[serial]
     fn test_db_commitment_info_update() {
-        let mc = Some(mainstay::Config::from_test());
+        let mc = mainstay::Config::from_test();
+        assert!(mc.is_some(),"To configure mainstay tests set the following environment variables: MERC_MS_TEST_SLOT=<slot> MERC_MS_TEST_TOKEN=<token>");
+
         let db = rocksdb::DB::open_default(TEST_DB_LOC).unwrap();
 
         //root1 has already been attested to mainstay

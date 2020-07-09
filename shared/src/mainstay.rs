@@ -245,28 +245,31 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn from_test() -> Self {
-        Self { position: Self::test_slot(), token: Self::test_token(), ..Default::default() }
-    }
-
-    pub fn test_slot() -> u32 {
-        match std::env::var("MERC_MS_TEST_SLOT_1="){
-            Ok(s) => s.parse::<u32>().unwrap(),   
-            Err(_)=> {
-                assert!(false);
-                Default::default()
-            }
+    pub fn from_test() -> Option<Self> {
+        match (Self::test_slot(), Self::test_token()) {
+            (Some(s), Some(t)) => Some(Self { position: s, token: t, ..Default::default() }),
+            (Some(_), None) => None,
+            (None, Some(_)) => None,
+            (None, None) => None
         }
     }
 
-    pub fn test_token() -> String {
-        match std::env::var("MERC_MS_TEST_TOKEN_1"){
-            Ok(t) => t,   
-            Err(_)=> {
-                assert!(false);
-                Default::default()
-            }
+    pub fn test_slot() -> Option<u32> {
+        match std::env::var("MERC_MS_TEST_SLOT="){
+            Ok(s) => s.parse::<u32>().ok(),
+            Err(_)=> None
         }
+    }
+
+    pub fn test_token() -> Option<String> {
+        match std::env::var("MERC_MS_TEST_TOKEN"){
+            Ok(t) => t.parse::<String>().ok(),
+            Err(_)=> None
+        }
+    }
+
+    pub fn info() -> &'static str{
+        "To configure mainstay tests set the following environment variables: MERC_MS_TEST_SLOT=<slot> MERC_MS_TEST_TOKEN=<token>"
     }
 }
 
@@ -477,13 +480,16 @@ impl Attestation {
 pub mod merkle {
     use super::*;
     //Double sha256
-    //use bitcoin::hashes::sha256d;
+    #[allow(unused_imports)]
+    use bitcoin::hashes::sha256d::Hash as SHAHash;
+
 
     use std::hash::Hasher;
     use crypto::digest::Digest;
     use bitcoin::util::hash::BitcoinHash;
     use merkletree::hash::{Algorithm, Hashable};
-    use fmt;
+#[allow(unused_imports)]
+    use merkletree::hash;
     use crypto::sha3::{Sha3, Sha3Mode};
 
 
@@ -635,8 +641,8 @@ mod tests {
                 
         let random_hash = Commitment::from_hash(&monotree::utils::random_hash());
 
-        let config = Config::from_test();
-
+        let config = Config::from_test().expect(Config::info());        
+             
         match random_hash.attest(&config) {
             Ok(()) => assert!(true),
             Err(_) => assert!(false)
@@ -644,7 +650,7 @@ mod tests {
 
         //Incorrect token should fail.
         let token = String::from("wrong_token");
-        let config = Config { position: Config::test_slot(), token: token, ..Default::default() };        
+        let config = Config { position: Config::test_slot().unwrap(), token: token, ..Default::default() };        
 
         match random_hash.attest(&config) {
             Ok(()) => assert!(false, "should have failed with incorrect token"),
@@ -730,40 +736,55 @@ mod tests {
     
     #[test]
     fn get_latest_proof() {
-        match merkle::Proof::from_latest_proof(&Config::from_test()){
+        let config = Config::from_test().expect(Config::info());        
+
+        match merkle::Proof::from_latest_proof(&config){
             Ok(_) => assert!(true),
-            Err(_) => {
-                assert!(false);
+            Err(e) => {
+                assert!(false, e.to_string());
             }
         };
     }
 
     #[test]
     fn get_proof_from_commitment() {
+        let config = Config::from_test().expect(Config::info());        
+        
         //Retrieve the proof for a commitment
         let commitment = &Commitment::from_str("31e66288b9074bcfeb3bc5734f2d0b189ad601b61f86b8241ee427648b59fdbc").unwrap();
-        
-        let config = Config::from_test();
 
         let proof1 = merkle::Proof::from_commitment(&config, commitment).unwrap();
         
         let proof2 = merkle::Proof::from_attestable::<Commitment>(&config, commitment).unwrap();
 
         assert!(proof1 == proof2);
+
+        //Don't retreive the proof for a non-existent commitment
+        let commitment = &Commitment::from_hash(&monotree::utils::random_hash());
+
+        assert!(merkle::Proof::from_commitment(&config, commitment).is_err(), "should not be able to retrieve proof for random commitment");
+        assert!(merkle::Proof::from_attestable::<Commitment>(&config, commitment).is_err(), "should not be able to retrieve proof for random commitment");
     }
 
     #[test]
     fn get_commitment_info() {
-        //Retrieve the proof for a commitment
+        let config = Config::from_test().expect(Config::info());        
+    
+       //Retrieve the proof for a commitment
         let commitment = &Commitment::from_str("31e66288b9074bcfeb3bc5734f2d0b189ad601b61f86b8241ee427648b59fdbc").unwrap();
-        
-        let config = Config::from_test();
 
         let proof1 = CommitmentInfo::from_commitment(&config, commitment).unwrap();
         
         let proof2 = merkle::Proof::from_attestable::<Commitment>(&config, commitment).unwrap();
 
         assert!(proof1.merkleproof == proof2);
+
+        //Don't retreive the proof for a non-existent commitment
+        let commitment = &Commitment::from_hash(&monotree::utils::random_hash());
+
+        assert!(CommitmentInfo::from_commitment(&config, commitment).is_err(), "should not be able to retrieve random commitment");
+        assert!(merkle::Proof::from_attestable::<Commitment>(&config, commitment).is_err(), "should not be able to retrieve random commitment");
+
     }
 
     #[test]
