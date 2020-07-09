@@ -18,7 +18,7 @@ type Result<T> = std::result::Result<T, Box<dyn error::Error> >;
 
 pub type Hash = monotree::Hash;
 
-type Payload<'a> = HashMap::<&'a str,&'a str>;
+type Payload<'a> = HashMap<&'a str,&'a str>;
 
 #[derive(Serialize, Deserialize, PartialEq, Copy, Default, Debug)]
 pub struct Commitment(Option<Hash>);
