@@ -6,7 +6,6 @@ use shared_lib::Root;
 use crate::mainstay::Hash;
 use crate::mainstay;
 use crate::shared_lib::mainstay::{Attestable, CommitmentIndexed, MainstayError};
-use std::str::FromStr;
 
 static ROOTID: &str = "rootid";
 pub static DB_LOC: &str = "./db";

@@ -477,12 +477,14 @@ impl Attestation {
 pub mod merkle {
     use super::*;
     //Double sha256
+    #[allow(unused_imports)]
     use bitcoin::hashes::sha256d::Hash as SHAHash;
 
     //use fmt;
     //use std::hash::Hasher;
     //use crypto::sha3::{Sha3, Sha3Mode};
     //use crypto::digest::Digest;
+    #[allow(unused_imports)]
     use merkletree::hash;
     //::{Algorithm, Hashable};
 

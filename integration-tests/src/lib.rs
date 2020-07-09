@@ -22,6 +22,7 @@ use rocket::error::LaunchError;
 use std::fmt;
 use std::error;
 
+#[cfg(test)]
 #[macro_use]
 extern crate serial_test;
 
