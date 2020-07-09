@@ -335,7 +335,9 @@ mod tests {
     #[test]
     #[serial]
     fn test_db_commitment_info_update() {
-        let mc = Some(mainstay::Config::from_test());
+        let mc = mainstay::Config::from_test();
+        assert!(mc.is_some(),"To configure mainstay tests set the following environment variables: MERC_MS_TEST_SLOT=<slot> MERC_MS_TEST_TOKEN=<token>");
+
         let db = rocksdb::DB::open_default(TEST_DB_LOC).unwrap();
 
         //root1 has already been attested to mainstay
