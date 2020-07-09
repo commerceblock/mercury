@@ -33,6 +33,7 @@ merkletree = "0.20.0"
 arrayvec = "0.5.1"
 chrono="0.4.0"
 log = "0.4"
+rust-crypto = "0.2.36"
 
 
 [dependencies.curv]

@@ -18,7 +18,7 @@ type Result<T> = std::result::Result<T, Box<dyn error::Error> >;
 
 pub type Hash = monotree::Hash;
 
-type Payload<'a> = HashMap::<&'a str,&'a str>;
+type Payload<'a> = HashMap<&'a str,&'a str>;
 
 #[derive(Serialize, Deserialize, PartialEq, Copy, Default, Debug)]
 pub struct Commitment(Option<Hash>);
@@ -31,6 +31,8 @@ pub enum MainstayError {
     FormatError(String),
     /// Item not found error
     NotFoundError(String)
+    /// Cryptographic proof error
+    ProofError(String)
 }
 
 impl From<String> for MainstayError {
@@ -51,6 +53,7 @@ impl fmt::Display for MainstayError {
             MainstayError::Generic(ref e) => write!(f, "MainstayError: {}", e),
             MainstayError::FormatError(ref e) => write!(f,"MainstayError::FormatError: {}",e),
             MainstayError::NotFoundError(ref e) => write!(f,"MainstayError::NotFoundError: {}",e),
+            MainstayError::NotFoundError(ref e) => write!(f,"MainstayError::ProofError: {}",e),
         }
     }
 }
@@ -474,44 +477,60 @@ impl Attestation {
 pub mod merkle {
     use super::*;
     //Double sha256
-    use bitcoin::hashes::sha256d::Hash as SHAHash;
+    //use bitcoin::hashes::sha256d;
 
-    //use fmt;
-    //use std::hash::Hasher;
-    //use crypto::sha3::{Sha3, Sha3Mode};
-    //use crypto::digest::Digest;
-    use merkletree::hash;
-    //::{Algorithm, Hashable};
+    use std::hash::Hasher;
+    use crypto::digest::Digest;
+    use bitcoin::util::hash::BitcoinHash;
+    use merkletree::hash::{Algorithm, Hashable};
+    use fmt;
+    use crypto::sha3::{Sha3, Sha3Mode};
 
-/*
-    pub struct HashAlgo(SHAHash);
 
+    pub struct HashAlgo(Sha3);
+
+    
     impl HashAlgo {
         pub fn new() -> HashAlgo {
-            let shaHash = SHAHash::new();
-            HashAlgo(SHAHash::new());
+            HashAlgo(Sha3::new(Sha3Mode::Sha3_256))
         }
     }
 
     impl Default for HashAlgo {
         fn default() -> HashAlgo {
-            HashAlgo::new();
+            HashAlgo::new()
         }
     }
 
+    impl Hasher for HashAlgo {
+        #[inline]
+        fn write(&mut self, msg: &[u8]) {
+            self.0.input(msg);
+        }
 
-    //use std::str::FromStr;
-*/
+        #[inline]
+        fn finish(&self) -> u64 {
+            unimplemented!()
+        }
+    }
 
-/*
-"attestation":
-{
-    "merkle_root": "f46a58a0cc796fade0c7854f169eb86a06797ac493ea35f28dbe35efee62399b",
-    "txid": "38fa2c6e103673925aaec50e5aadcbb6fd0bf1677c5c88e27a9e4b0229197b13",
-    "confirmed": true,
-    "inserted_at": "16:06:41 23/01/19"
-}
-*/
+    impl Algorithm<[u8; 32]> for HashAlgo {
+            #[inline]
+            fn hash(&mut self) -> [u8; 32] {
+                let mut h = [0u8; 32];
+                self.0.result(&mut h);
+                //Double hash
+                self.0.result(&mut h);
+                h
+            }
+    
+            #[inline]
+            fn reset(&mut self) {
+                self.0.reset();
+            }
+        }
+    }
+    
 
     #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
     pub struct Proof {
@@ -586,6 +605,12 @@ pub mod merkle {
             }
             debug!("fiished parsing merkleproof JSON object");
             Ok(Proof::from(merkle_root, commitment, ops))
+        }
+
+        pub fn verify(&self) -> Result<()>{
+            let t: MerkleTree<[u8; 32], ExampleAlgorithm, VecStore<_>> = MerkleTree::try_from_iter(vec![h1, h2, h3, h4].into_iter().map(Ok)).unwrap();
+            println!("{:?}", t.root());
+            Ok(())
         }
     }
 
