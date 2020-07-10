@@ -28,7 +28,6 @@ extern crate chrono;
 
 #[macro_use]
 extern crate crypto;
-
 extern crate is_odd;
 
 pub mod error;

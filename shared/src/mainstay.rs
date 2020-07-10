@@ -16,6 +16,7 @@ use std::io::Cursor;
 use merkletree::hash::{Algorithm};
 use std::hash::Hasher;
 
+
 type Result<T> = std::result::Result<T, Box<dyn error::Error> >;
 
 pub type Hash = monotree::Hash;
@@ -242,7 +243,7 @@ impl Commitment {
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     url: String,
-    position: u32,
+    position: u64,
     token: String,
     key: Option<PrivateKey>
 }
@@ -257,9 +258,9 @@ impl Config {
         }
     }
 
-    pub fn test_slot() -> Option<u32> {
+    pub fn test_slot() -> Option<u64> {
         match std::env::var("MERC_MS_TEST_SLOT="){
-            Ok(s) => s.parse::<u32>().ok(),
+            Ok(s) => s.parse::<u64>().ok(),
             Err(_)=> None
         }
     }
@@ -288,7 +289,7 @@ impl FromStr for Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Self { url: String::from("https://mainstay.xyz/api/v1"), key: None, position: u32::default(),  token: String::default()}
+        Self { url: String::from("https://mainstay.xyz/api/v1"), key: None, position: u64::default(),  token: String::default()}
     }
 }
 
@@ -347,6 +348,7 @@ impl APIObject for Response {
             }
         }
     }
+
 }
 
  #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -433,6 +435,10 @@ fn get_bool(val: &serde_json::Value, key: &str) -> Result<bool> {
     get_val(val,key)?.as_bool().ok_or(FormatError(key.to_string()).into())
 }
 
+fn get_u64(val: &serde_json::Value, key: &str) -> Result<u64> {
+    get_val(val,key)?.as_u64().ok_or(FormatError(key.to_string()).into())
+}
+
 fn get_array<'a>(val: &'a serde_json::Value, key: &str) -> Result<&'a std::vec::Vec<serde_json::Value>> {
     get_val(val,key)?.as_array().ok_or(FormatError(key.to_string()).into())
 }
@@ -491,6 +497,7 @@ pub mod merkle {
     use merkletree::hash::Hashable;
     use crypto::digest::Digest;
     use bitcoin::util::hash::BitcoinHash;
+    use merkletree::proof::Proof as MTProof;
  
     
     #[allow(unused_imports)]
@@ -545,6 +552,18 @@ pub mod merkle {
             self.0 = SHAHash::engine();
         }
     }
+
+    impl Algorithm<SHAHash> for HashAlgo {
+        #[inline]
+        fn hash(&mut self) -> SHAHash {
+            SHAHash::from_engine(self.0.clone())
+        }
+    
+        #[inline]
+        fn reset(&mut self) {
+            self.0 = SHAHash::engine();
+        }
+    }
     
 
     #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
@@ -552,7 +571,8 @@ pub mod merkle {
         merkle_root: Commitment,
         commitment: Commitment,
         ops: Vec<Commitment>,
-        append: Vec<bool>
+        append: Vec<bool>,
+        position: u64
     }
 
     impl CommitmentIndexed for Proof{}
@@ -574,14 +594,14 @@ pub mod merkle {
 
             Ok(Self::from_merkleproof_json(json_data)?)
         }
+
     }
 
     impl Proof {
 
-
-        pub fn from(merkle_root: Commitment, commitment: Commitment, ops: Vec<Commitment>, app: Vec<bool>) -> Result<Self>{
+        pub fn from(merkle_root: Commitment, commitment: Commitment, ops: Vec<Commitment>, app: Vec<bool>, pos: u64) -> Result<Self>{
             match ops.len() == app.len(){
-                true => Ok(Self{merkle_root: merkle_root, commitment: commitment, ops: ops, append: app}),
+                true => Ok(Self{merkle_root: merkle_root, commitment: commitment, ops: ops, append: app, position: pos}),
                 false => Err(FormatError("ops and append must be of the same length".to_string()).into())
             }   
         }
@@ -592,11 +612,6 @@ pub mod merkle {
 
         pub fn merkle_root(&self) -> &Commitment {
             &self.merkle_root
-        }
-
-        pub fn from_latest_proof(config: &Config) -> Result<Self> {
-            let command = format!("commitment/latestproof?position={}",config.position);
-            Self::from_command(&command, config)
         }
 
         pub fn from_response(response: &Response) -> Result<Self>{       
@@ -626,50 +641,51 @@ pub mod merkle {
                 append.push(get_bool(op,"append")?);
             }
 
+            let position = get_u64(val, "position")?;
+                
             debug!("finished parsing merkleproof JSON object");
-            Ok(Proof::from(merkle_root, commitment, ops, append)?)
+            Ok(Proof::from(merkle_root, commitment, ops, append, position)?)
         }
 
-        pub fn verify(&self) -> Result<()>{
-            let mut h1 = [0u8; 32];
-            let mut h2 = [0u8; 32];
-            let mut h3 = [0u8; 32];
-            let mut h4 = [0u8; 32];
-            h1[0] = 0x11;
-            h2[0] = 0x22;
-            h3[0] = 0x33;
-            h4[0] = 0x44;
 
-            //let iter1 = vec![h1, h2, h3, h4].into_iter().map(Ok);
-            
-            //let t : MerkleTree<[u8; 32], HashAlgo, VecStore<_>> = MerkleTree::try_from_iter(vec![h1, h2, h3, h4].into_iter().map(Ok))?;
+        fn hash_merkle_root(&self) -> Hash {            
+            let mut h = self.commitment.get_hash().unwrap();
+            //Reverse byte order for the MT hash
+            h.reverse();
+            let merkle_branch = self.ops.iter().cloned().map(|l| l.get_hash().unwrap());
 
-            println!("length of ops: {}", self.ops.len());
+            let mut i = 0;
+            for mut leaf in merkle_branch {
+                //Reverse byte order for the MT hash
+                leaf.reverse();
+                let mut hasher = merkle::HashAlgo::new();    
+                //let mut engine = SHAHash::engine();
+                let pos = self.position.clone();
+                if (pos >> i) & 1 != 0 {
+                    hasher.write(&leaf);
+                    hasher.write(&h);
+                } else {
+                    hasher.write(&h);
+                    hasher.write(&leaf);
+                }
+                h = hasher.hash();
+                i = i + 1;
+            }
+            //Revert to the original byte order
+            h.reverse();
+            h
+        }
+        
 
-            let mut vec_path = Vec::<Commitment>::default();
-            vec_path.push(self.commitment);
-            vec_path.extend(self.ops.clone());
-
-            //if vec_ops.len() % 2 > 0 {
-            //    vec_ops.push(Commitment::from_hash(&[0u8; 32]))
-            //}
-
-            println!("vec path: {:?}", vec_path);
-
-            let t: MerkleTree<[u8; 32], HashAlgo, VecStore<_>> = MerkleTree::try_from_iter(
-                vec_path.into_iter().map(|x| x.get_hash().unwrap()).map(Ok)
-            )?;
-
-            //let iter2 = vec_ops.into_iter().map(|x| x.get_hash().unwrap()).map(Ok);
-
-            //println!("iter1, iter2:: {:?}, {:?}", iter1, iter2);
-                        
-            match t.root() == self.merkle_root.get_hash().unwrap(){
-                true => Ok(()),
-                false => Err(MainstayError::ProofError(format!("calculated root: {:?}, expected root: {:?}", t.root(), self.merkle_root)).into()),
+        pub fn verify(&self) -> Result<bool>{
+            let rootc = self.hash_merkle_root();
+            let root = self.merkle_root.get_hash().unwrap(); 
+            match rootc == root {
+                true=> Ok(true),
+                false => Ok(false)
             }
         }
-    }
+}
 
     impl FromStr for Proof {
         type Err = Box<dyn error::Error>;
@@ -692,7 +708,7 @@ mod tests {
         let commitment : Hash = Commitment::from_str("31e66288b9074bcfeb3bc5734f2d0b189ad601b61f86b8241ee427648b59fdbc").unwrap().get_hash().unwrap();
         let mut hasher = merkle::HashAlgo::new();
         hasher.write(&commitment);
-        let hash = hasher.hash();
+        let hash: Hash = hasher.hash();
         let expected_hash  : Hash = Commitment::from_str("bd23c4720e83435818a1074b33891a05e2112c5e510bdffdc3e276ad3b7f378b").unwrap().get_hash().unwrap();
         assert_eq!(hash, expected_hash);
     }
@@ -790,9 +806,11 @@ mod tests {
 
         let mut append= Vec::<bool>::new();
 
+        let position = 1;
+
         //Expect format error
         let fe_str=&format!("expected {}, got ", &FormatError(String::default()).to_string());
-        match merkle::Proof::from(merkle_root.clone(), commitment.clone(), ops.clone(), append.clone()){
+        match merkle::Proof::from(merkle_root.clone(), commitment.clone(), ops.clone(), append.clone(), position){
             Err(e) =>  match e.downcast_ref::<MainstayError>() {
                 Some(e) => {
                     //Find the specific type of mainstay error and act accordingly
@@ -813,33 +831,26 @@ mod tests {
         append.push(true);
         append.push(true);
 
-        let merkleproof_compare = merkle::Proof::from(merkle_root, commitment, ops, append).unwrap();
+        let merkleproof_compare = merkle::Proof::from(merkle_root, commitment, ops, append, position).unwrap();
 
         assert!(merkleproof_1 ==merkleproof_2);
         assert!(merkleproof_1 ==merkleproof_3);
         assert!(merkleproof_1 ==merkleproof_compare);
         
         match merkleproof_1.verify(){
-            Ok(_) => (),
+            Ok(r) => assert!(r,"verify proof returned false"),
             Err(e) => {
                 assert!(false, e.to_string());
                 ()
             }
         }
+
+
+
+
     }
 
-    
-    #[test]
-    fn test_get_latest_proof() {
-        let config = Config::from_test().expect(Config::info());        
-
-        match merkle::Proof::from_latest_proof(&config){
-            Ok(_) => assert!(true),
-            Err(e) => {
-                assert!(false, e.to_string());
-            }
-        };
-    }
+  
 
     #[test]
     fn test_get_proof_from_commitment() {
