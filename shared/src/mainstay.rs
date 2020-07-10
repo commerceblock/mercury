@@ -551,7 +551,8 @@ pub mod merkle {
     pub struct Proof {
         merkle_root: Commitment,
         commitment: Commitment,
-        ops: Vec<Commitment>
+        ops: Vec<Commitment>,
+        append: Vec<bool>
     }
 
     impl CommitmentIndexed for Proof{}
@@ -578,8 +579,11 @@ pub mod merkle {
     impl Proof {
 
 
-        pub fn from(merkle_root: Commitment, commitment: Commitment, ops: Vec<Commitment>) -> Self{
-            Self{merkle_root: merkle_root, commitment: commitment, ops: ops}
+        pub fn from(merkle_root: Commitment, commitment: Commitment, ops: Vec<Commitment>, app: Vec<bool>) -> Result<Self>{
+            match ops.len() == app.len(){
+                true => Ok(Self{merkle_root: merkle_root, commitment: commitment, ops: ops, append: app}),
+                false => Err(FormatError("ops and append must be of the same length".to_string()).into())
+            }   
         }
 
         pub fn commitment(&self) -> &Commitment {
@@ -605,7 +609,7 @@ pub mod merkle {
         }
 
         fn from_merkleproof_json(val: &serde_json::Value) -> Result<Self>{
-            debug!("parsing merkleproof JSON object: {:?}", val);
+            println!("parsing merkleproof JSON object: {:?}", val);
                         
             debug!("parsing merkle_root");
             let merkle_root = get_commitment(val,"merkle_root")?; 
@@ -613,14 +617,17 @@ pub mod merkle {
             debug!("parsing commitment");
             let commitment = get_commitment(val, "commitment")?; 
 
-            debug!("parsing ops");
+            debug!("parsing ops and append");
             let mut ops = Vec::<Commitment>::new();
+            let mut append = Vec::<bool>::new();
             let ops_arr = get_array(val, "ops")?;
             for op in ops_arr {
-                ops.push(get_commitment(op,"commitment")?)
+                ops.push(get_commitment(op,"commitment")?);
+                append.push(get_bool(op,"append")?);
             }
+
             debug!("finished parsing merkleproof JSON object");
-            Ok(Proof::from(merkle_root, commitment, ops))
+            Ok(Proof::from(merkle_root, commitment, ops, append)?)
         }
 
         pub fn verify(&self) -> Result<()>{
@@ -639,18 +646,18 @@ pub mod merkle {
 
             println!("length of ops: {}", self.ops.len());
 
-            let mut vec_path : Vec<Commitment>;
+            let mut vec_path = Vec::<Commitment>::default();
             vec_path.push(self.commitment);
-            vec_path.extend(self.ops);
+            vec_path.extend(self.ops.clone());
 
             //if vec_ops.len() % 2 > 0 {
             //    vec_ops.push(Commitment::from_hash(&[0u8; 32]))
             //}
 
-            println!("vec ops: {:?}", vec_ops);
+            println!("vec path: {:?}", vec_path);
 
             let t: MerkleTree<[u8; 32], HashAlgo, VecStore<_>> = MerkleTree::try_from_iter(
-                vec_ops.into_iter().map(|x| x.get_hash().unwrap()).map(Ok)
+                vec_path.into_iter().map(|x| x.get_hash().unwrap()).map(Ok)
             )?;
 
             //let iter2 = vec_ops.into_iter().map(|x| x.get_hash().unwrap()).map(Ok);
@@ -773,14 +780,40 @@ mod tests {
         let merkleproof_2 = merkle::Proof::from_str(response_str).unwrap();
         let merkleproof_3 = merkle::Proof::from_str(merkleproof_str).unwrap();
 
+        let merkle_root = Commitment::from_str("47fc767ebc5095133d6de9a060c248c115b3fdf5f30921de2ee111225690de01").unwrap();    
+        let commitment = Commitment::from_str("71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d").unwrap();
+
         let mut ops= Vec::<Commitment>::new();
         ops.push(Commitment::from_str("31e66288b9074bcfeb3bc5734f2d0b189ad601b61f86b8241ee427648b59fdbc").unwrap());
         ops.push(Commitment::from_str("60da74551926c4283dd4b4e295d2a1eb5147b5cf6c7c2019e8b64c22a1ba5bab").unwrap());
         ops.push(Commitment::from_str("94adb04ab09036fbc6cc164ec6df4d9d8fba45bcd7901a03d2e91b123071a5ec").unwrap());
-        let merkle_root = Commitment::from_str("47fc767ebc5095133d6de9a060c248c115b3fdf5f30921de2ee111225690de01").unwrap();
-        let commitment = Commitment::from_str("71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d").unwrap();
 
-        let merkleproof_compare = merkle::Proof::from(merkle_root, commitment, ops);
+        let mut append= Vec::<bool>::new();
+
+        //Expect format error
+        let fe_str=&format!("expected {}, got ", &FormatError(String::default()).to_string());
+        match merkle::Proof::from(merkle_root.clone(), commitment.clone(), ops.clone(), append.clone()){
+            Err(e) =>  match e.downcast_ref::<MainstayError>() {
+                Some(e) => {
+                    //Find the specific type of mainstay error and act accordingly
+                    match e {
+                        MainstayError::Generic(_) => assert!(false, "{} {}", fe_str, e),
+                        MainstayError::FormatError(_) => assert!(true),
+                        MainstayError::NotFoundError(_) => assert!(false, "{} {}", fe_str, e),
+                        MainstayError::ProofError(_) => assert!(false, "{} {}", fe_str, e),
+                    }
+                },
+                None => assert!(false, "{} {}", fe_str, "None"),
+            }
+            Ok(_) => assert!(false, "{} {}", fe_str, "Ok"),
+        };
+
+        //Now format correctly 
+        append.push(false);
+        append.push(true);
+        append.push(true);
+
+        let merkleproof_compare = merkle::Proof::from(merkle_root, commitment, ops, append).unwrap();
 
         assert!(merkleproof_1 ==merkleproof_2);
         assert!(merkleproof_1 ==merkleproof_3);
