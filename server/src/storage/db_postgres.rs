@@ -17,7 +17,8 @@ pub enum Table {
     Ecdsa,
     UserSession,
     StateChain,
-    TransferData
+    Transfer,
+    TransferBatch,
 }
 impl Table {
     fn to_string(&self) -> String {
@@ -48,10 +49,18 @@ pub enum Column {
     LockedUntil,
     OwnerId,
 
-    // TransferData
+    // Transfer
     // Id,
     StateChainSig,
     X1,
+
+    // TransferBatch
+    // Id,
+    StartTime,
+    StateChains,
+    FinalizedData,
+    PunishedStateChains,
+    Finalized,
 
     // Ecdsa
     // Id,
@@ -173,7 +182,7 @@ mod tests {
         let user_id = Uuid::from_str(&"9eb05678-5275-451b-910c-a7179057d91d").unwrap();
 
         let res =
-            db_remove(&conn, &user_id, Table::TransferData);
+            db_remove(&conn, &user_id, Table::Transfer);
 
         println!("res: {:?}",res);
     }

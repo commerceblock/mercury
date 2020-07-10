@@ -29,7 +29,7 @@ use rocket::State;
 use db::DB_SC_LOC;
 use std::{collections::HashMap, time::SystemTime, str::FromStr};
 use uuid::Uuid;
-use chrono::NaiveDateTime;
+use chrono::{Utc,NaiveDateTime};
 
 
 /// Structs for DB storage.
@@ -97,13 +97,14 @@ pub struct TransferBatchData {
     pub finalized: bool
 }
 
-impl TransferBatchData {
-    pub fn is_ended(&self, batch_lifetime: u64) -> bool {
-        if SystemTime::now().duration_since(self.start_time).unwrap().as_secs() > batch_lifetime {
-            return true
-        }
-        false
+/// Check if Transfer Batch is out of time
+pub fn transfer_batch_is_ended(start_time: NaiveDateTime, batch_lifetime: i64) -> bool {
+    let current_time = Utc::now().naive_utc().timestamp();
+
+    if current_time - start_time.timestamp() > batch_lifetime {
+        return true
     }
+    false
 }
 
 /// Struct holds data when transfer is complete but not yet finalized
@@ -251,44 +252,60 @@ pub fn get_smt_root(
 #[post("/info/transfer-batch/<batch_id>", format = "json")]
 pub fn get_transfer_batch_status(
     state: State<Config>,
-    claim: Claims,
     conn: DataBase,
     batch_id: String,
 ) -> Result<Json<TransferBatchDataAPI>> {
-    let mut transfer_batch_data: TransferBatchData =
-        db::get(&state.db, &claim.sub, &batch_id, &StateEntityStruct::TransferBatchData)?
-            .ok_or(SEError::DBError(NoDataForID, batch_id.clone()))?;
+    let batch_id = Uuid::from_str(&batch_id).unwrap();
+
+    // let mut transfer_batch_data: TransferBatchData =
+    //     db::get(&state.db, &claim.sub, &batch_id, &StateEntityStruct::TransferBatchData)?
+    //         .ok_or(SEError::DBError(NoDataForID, batch_id.clone()))?;
+
+    let state_chains: HashMap<Uuid, bool> =
+        db_get_serialized(&conn, &batch_id, Table::TransferBatch, Column::StateChains)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::StateChains))?;
+
+    let start_time: NaiveDateTime =
+        db_get(&conn, &batch_id, Table::TransferBatch, Column::StartTime)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::StartTime))?;
 
     // Check batch is still within lifetime
-    if transfer_batch_data.is_ended(state.batch_lifetime) {
-        if transfer_batch_data.punished_state_chains.len() == 0 { // Punishments not yet set
+    // if transfer_batch_data.is_ended(state.batch_lifetime) {
+    if transfer_batch_is_ended(start_time, state.batch_lifetime as i64) {
+        let mut punished_state_chains: Vec<Uuid> =
+            db_get_serialized(&conn, &batch_id, Table::TransferBatch, Column::PunishedStateChains)?
+                .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::PunishedStateChains))?;
+        if punished_state_chains.len() == 0 { // Punishments not yet set
             info!("TRANSFER_BATCH: Lifetime reached. ID: {}.", batch_id);
             // Set punishments for all statechains involved in batch
-            for (state_chain_id, _) in transfer_batch_data.state_chains {
+            for (state_chain_id, _) in state_chains {
                 state_chain_punish(&state, &conn, state_chain_id.clone())?;
-                transfer_batch_data.punished_state_chains.push(state_chain_id.clone());
+                punished_state_chains.push(state_chain_id.clone());
 
-                // Remove TransferData involved
+                // Remove TransferData involved. Ignore failed update err since Transfer data may not exist.
                 // db::remove(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::TransferData)?;
-                db_remove(&conn, &state_chain_id, Table::TransferData)?;
+                let _ = db_remove(&conn, &state_chain_id, Table::Transfer);
 
-                info!("TRANSFER_BATCH: Transfer data marked as archived. State Chain ID: {}.", state_chain_id);
+                info!("TRANSFER_BATCH: Transfer data deleted. State Chain ID: {}.", state_chain_id);
             }
+            db_update_serialized(&conn, &batch_id, punished_state_chains, Table::TransferBatch, Column::PunishedStateChains)?;
             info!("TRANSFER_BATCH: Punished all state chains in failed batch. ID: {}.",batch_id);
         }
         return Err(SEError::Generic(String::from("Transfer Batch ended.")))
     }
 
     // Check if all transfers are complete. If so then all transfers in batch can be finalized.
-    if !transfer_batch_data.finalized {
-        let mut state_chains_copy = transfer_batch_data.state_chains.clone();
+    let finalized: bool =
+        db_get(&conn, &batch_id, Table::TransferBatch, Column::Finalized)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::Finalized))?;
+    if !finalized {
+        let mut state_chains_copy = state_chains.clone();
         state_chains_copy.retain(|_, &mut v| v == false);
         if state_chains_copy.len() == 0 {
             finalize_batch(
                 &state,
-                &claim,
                 &conn,
-                &batch_id
+                batch_id
             )?;
             info!("TRANSFER_BATCH: All transfers complete in batch. Finalized. ID: {}.", batch_id);
         }
@@ -296,8 +313,8 @@ pub fn get_transfer_batch_status(
 
     // return status of transfers
     Ok(Json(TransferBatchDataAPI{
-        state_chains: transfer_batch_data.state_chains,
-        finalized: transfer_batch_data.finalized
+        state_chains,
+        finalized
     }))
 }
 

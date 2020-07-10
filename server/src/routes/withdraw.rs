@@ -154,7 +154,7 @@ pub fn withdraw_confirm(
     //     &StateEntityStruct::StateChain,
     //     &state_chain
     // )?;
-    db_update_serialized(&conn, &state_chain_id, state_chain.chain.clone(), Table::StateChain, Column::Chain)?;
+    db_update_serialized(&conn, &state_chain_id, state_chain.clone(), Table::StateChain, Column::Chain)?;
     db_update(&conn, &state_chain_id, 0 as i64, Table::StateChain, Column::Amount)?;
 
     // Remove state_chain_id from user session to signal end of session

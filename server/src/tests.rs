@@ -10,6 +10,8 @@ mod tests {
     use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
 
     use serde_json;
+    use uuid::Uuid;
+    use std::str::FromStr;
 
     // test ecdsa::sign can be performed only by authorised user
     #[test]
@@ -26,7 +28,8 @@ mod tests {
             .body(body)
             .header(ContentType::JSON)
             .dispatch();
-        let id: String = serde_json::from_str(&response.body_string().unwrap()).unwrap();
+        let id_str: String = serde_json::from_str(&response.body_string().unwrap()).unwrap();
+        let id = Uuid::from_str(&id_str).unwrap();
 
         let mut response = client
             .post(format!("/ecdsa/keygen/{}/first/deposit",id))
@@ -35,11 +38,11 @@ mod tests {
         assert_eq!(response.status(), Status::Ok);
 
         let (res, _): (String, party_one::KeyGenFirstMsg) = serde_json::from_str(&response.body_string().unwrap()).unwrap();
-        assert_eq!(res, id);
+        assert_eq!(res, id_str);
 
         // use incorrect ID
         let mut response = client
-            .post(format!("/ecdsa/keygen/{}/first/deposit","invalidID".to_string()))
+            .post(format!("/ecdsa/keygen/{}/first/deposit",Uuid::new_v4()))
             .header(ContentType::JSON)
             .dispatch();
 
@@ -52,12 +55,13 @@ mod tests {
         let client = Client::new(server::get_server()).expect("valid rocket instance");
 
         // get_statechain invalid id
+        let invalid_id = Uuid::new_v4();
         let mut response = client
-            .post(format!("/info/statechain/{}","invalidID".to_string()))
+            .post(format!("/info/statechain/{}",invalid_id))
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();
-        assert_eq!(res, "DB Error: No data for such identifier. (value: invalidID)".to_string());
+        assert_eq!(res, format!("DB Error: No data for identifier. (id: {})",invalid_id));
 
         // get_statechain no ID
         let mut response = client
@@ -84,7 +88,7 @@ mod tests {
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();
-        assert_eq!(res, format!("DB Error: No data for such identifier. (value: Root id: {})",smt_proof_msg.root.id));
+        assert_eq!(res, format!("DB Error: No data for identifier. (id: Root id: {})",smt_proof_msg.root.id));
 
         // invalid root for tree
         let mut response = client   // first grab current root id
@@ -105,7 +109,7 @@ mod tests {
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();
-        assert_eq!(res, format!("DB Error: No data for such identifier. (value: Root id: {})",smt_proof_msg.root.id));
+        assert_eq!(res, format!("DB Error: No data for identifier. (id: Root id: {})",smt_proof_msg.root.id));
 
         // Invalid data sent in body - should be of type SmtProofMsgAPI
         let body = String::from("Body String");
@@ -123,12 +127,13 @@ mod tests {
         let client = Client::new(server::get_server()).expect("valid rocket instance");
 
         // get_transfer_batch_status invalid id
+        let invalid_id = Uuid::new_v4();
         let mut response = client
-            .post(format!("/info/transfer-batch/{}","invalidID".to_string()))
+            .post(format!("/info/transfer-batch/{}",invalid_id))
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();
-        assert_eq!(res, "DB Error: No data for such identifier. (value: invalidID)".to_string());
+        assert_eq!(res, format!("DB Error: No data for identifier. (id: {})",invalid_id));
 
         // get_transfer_batch_status no ID
         let mut response = client

@@ -27,8 +27,7 @@ use rocket::State;
 use chrono::NaiveDateTime;
 use uuid::Uuid;
 use db::{DB_SC_LOC, update_root};
-use std::{time::SystemTime,
-    collections::HashMap,
+use std::{collections::HashMap,
     str::FromStr};
 
 
@@ -63,6 +62,17 @@ pub fn transfer_sender(
         db_get(&conn, &user_id, Table::UserSession, Column::StateChainId)?
             .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::StateChainId))?;
 
+    // Ensure if transfer has already been completed (but not finalized)
+    // match db::get::<TransferData>(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::TransferData)? {
+    //     None => {},
+    //     Some(_) => {
+    //         return Err(SEError::Generic(String::from("Transfer already completed. Waiting for finalize.")));
+    //     }
+    // }
+    if db_get::<Uuid>(&conn, &state_chain_id, Table::Transfer, Column::Id).is_ok() {
+        return Err(SEError::Generic(String::from("Transfer already completed. Waiting for finalize.")));
+    }
+
     // Check if state chain is still owned by user and not locked
     // let state_chain: StateChain =
     //     db::get(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::StateChain)?
@@ -82,21 +92,11 @@ pub fn transfer_sender(
         return Err(SEError::Generic(format!("State Chain not owned by User ID: {}.", user_id)));
     }
 
-    // Ensure if transfer has already been completed (but not finalized)
-    // match db::get::<TransferData>(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::TransferData)? {
-    //     None => {},
-    //     Some(_) => {
-    //         return Err(SEError::Generic(String::from("Transfer already completed. Waiting for finalize.")));
-    //     }
-    // }
-    if db_get::<Uuid>(&conn, &state_chain_id, Table::TransferData, Column::Id).is_ok() {
-        return Err(SEError::Generic(String::from("Transfer already completed. Waiting for finalize.")));
-    }
 
     // Generate x1
     let x1: FE = ECScalar::new_random();
 
-    // Create TransferData DB entry
+    // Create Transfer DB entry
     // db::insert(
     //     &state.db,
     //     &claim.sub,
@@ -108,9 +108,9 @@ pub fn transfer_sender(
     //         x1: x1.clone(),
     //     }
     // )?;
-    db_insert(&conn, &state_chain_id, Table::TransferData)?;
-    db_update_serialized(&conn, &state_chain_id, transfer_msg1.state_chain_sig.to_owned(), Table::TransferData, Column::StateChainSig)?;
-    db_update_serialized(&conn, &state_chain_id, x1.clone(), Table::TransferData, Column::X1)?;
+    db_insert(&conn, &state_chain_id, Table::Transfer)?;
+    db_update_serialized(&conn, &state_chain_id, transfer_msg1.state_chain_sig.to_owned(), Table::Transfer, Column::StateChainSig)?;
+    db_update_serialized(&conn, &state_chain_id, x1.clone(), Table::Transfer, Column::X1)?;
 
     info!("TRANSFER: Sender side complete. Previous shared key ID: {}. State Chain ID: {}",user_id.to_string(),state_chain_id);
     debug!("TRANSFER: Sender side complete. State Chain ID: {}. State Chain Signature: {:?}. x1: {:?}.", state_chain_id, transfer_msg1.state_chain_sig, x1);
@@ -127,7 +127,6 @@ pub fn transfer_sender(
 #[post("/transfer/receiver", format = "json", data = "<transfer_msg4>")]
 pub fn transfer_receiver(
     state: State<Config>,
-    claim: Claims,
     conn: DataBase,
     transfer_msg4: Json<TransferMsg4>,
 ) -> Result<Json<TransferMsg5>> {
@@ -136,20 +135,20 @@ pub fn transfer_receiver(
 
     info!("TRANSFER: Receiver side. Shared Key ID: {}", user_id);
 
-    // Get TransferData for state_chain_id
+    // Get Transfer Data for state_chain_id
     // let transfer_data: TransferData =
     //     db::get(&state.db, &claim.sub, &transfer_msg4.state_chain_id.to_string(), &StateEntityStruct::TransferData)?
     //         .ok_or(SEError::DBError(NoDataForID, transfer_msg4.state_chain_id.to_string().clone()))?;
     let state_chain_id: Uuid =
-        db_get(&conn, &state_chain_id, Table::TransferData, Column::Id)?
+        db_get(&conn, &state_chain_id, Table::Transfer, Column::Id)?
             .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Id))?;
 
     let state_chain_sig: StateChainSig =
-        db_get_serialized(&conn, &state_chain_id, Table::TransferData, Column::StateChainSig)?
+        db_get_serialized(&conn, &state_chain_id, Table::Transfer, Column::StateChainSig)?
             .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::StateChainSig))?;
 
     let x1: FE =
-        db_get_serialized(&conn, &state_chain_id, Table::TransferData, Column::X1)?
+        db_get_serialized(&conn, &state_chain_id, Table::Transfer, Column::X1)?
             .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::X1))?;
 
     // let state_chain_sig = transfer_data.state_chain_sig;
@@ -212,29 +211,44 @@ pub fn transfer_receiver(
         batch_data: transfer_msg4.batch_data.clone()
     };
 
-    // If batch transfer then mark StateChain as complete and store finalized data in TransferBatchData.
+    // If batch transfer then mark StateChain as complete and store finalized data in TransferBatch table.
     // This is so the transfers can be finalized when all transfers in the batch are complete.
     if transfer_msg4.batch_data.is_some() {
         let batch_id = transfer_msg4.batch_data.clone().unwrap().id;
         info!("TRANSFER: Transfer as part of batch {}. State Chain ID: {}",batch_id,state_chain_id);
-        let mut transfer_batch_data: TransferBatchData =
-            db::get(&state.db, &claim.sub, &batch_id.to_string(), &StateEntityStruct::TransferBatchData)?
-                .ok_or(SEError::DBError(NoDataForID, batch_id.to_string().clone()))?;
+        // let mut transfer_batch_data: TransferBatchData =
+        //     db::get(&state.db, &claim.sub, &batch_id.to_string(), &StateEntityStruct::TransferBatchData)?
+        //         .ok_or(SEError::DBError(NoDataForID, batch_id.to_string().clone()))?;
 
         // Ensure batch transfer is still active
-        if transfer_batch_data.is_ended(state.batch_lifetime) {
-            return Err(SEError::Generic(String::from("Transfer batch ended. Too late to complete transfer.")));
-        }
+        // if transfer_batch_data.is_ended(state.batch_lifetime) {
+        //     return Err(SEError::Generic(String::from("Transfer batch ended. Too late to complete transfer.")));
+        // }
+        let mut state_chains: HashMap<Uuid, bool> =
+            db_get_serialized(&conn, &batch_id, Table::TransferBatch, Column::StateChains)?
+                .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::StateChains))?;
 
-        transfer_batch_data.state_chains.insert(state_chain_id.clone(), true);
-        transfer_batch_data.finalized_data.push(finalized_data.clone());
-        db::insert(
-            &state.db,
-            &claim.sub,
-            &batch_id.to_string(),
-            &StateEntityStruct::TransferBatchData,
-            &transfer_batch_data
-        )?;
+        // transfer_batch_data.state_chains.insert(state_chain_id.clone(), true);
+        state_chains.insert(state_chain_id.clone(), true);
+
+        db_update_serialized(&conn, &batch_id, state_chains, Table::TransferBatch, Column::StateChains)?;
+
+        // transfer_batch_data.finalized_data.push(finalized_data.clone());
+        let mut finalized_data_vec: Vec<TransferFinalizeData> =
+            db_get_serialized(&conn, &batch_id, Table::TransferBatch, Column::FinalizedData)?
+                .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::FinalizedData))?;
+
+        finalized_data_vec.push(finalized_data.clone());
+
+        db_update_serialized(&conn, &batch_id, finalized_data_vec, Table::TransferBatch, Column::FinalizedData)?;
+
+        // db::insert(
+        //     &state.db,
+        //     &claim.sub,
+        //     &batch_id.to_string(),
+        //     &StateEntityStruct::TransferBatchData,
+        //     &transfer_batch_data
+        // )?;
     // If not batch then finalize transfer now
     } else {
         // Update DB and SMT with new transfer data
@@ -334,7 +348,7 @@ pub fn transfer_finalize(
 
     // Remove TransferData for this transfer
     // db::remove(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::TransferData)?;
-    db_remove(&conn, &state_chain_id, Table::TransferData)?;
+    db_remove(&conn, &state_chain_id, Table::Transfer)?;
 
     Ok(())
 }
@@ -345,15 +359,16 @@ pub fn transfer_finalize(
 ///     - Create TransferBatchData DB object
 #[post("/transfer/batch/init", format = "json", data = "<transfer_batch_init_msg>")]
 pub fn transfer_batch_init(
-    state: State<Config>,
-    claim: Claims,
     conn: DataBase,
     transfer_batch_init_msg: Json<TransferBatchInitMsg>
 ) -> Result<Json<()>> {
     let batch_id = transfer_batch_init_msg.id.clone();
     info!("TRANSFER_BATCH_INIT: ID: {}", batch_id);
 
-    if db::get::<TransferBatchData>(&state.db, &claim.sub, &batch_id.to_string(), &StateEntityStruct::TransferBatchData)?.is_some() {
+    // if db::get::<TransferBatchData>(&state.db, &claim.sub, &batch_id.to_string(), &StateEntityStruct::TransferBatchData)?.is_some() {
+    //     return Err(SEError::Generic(format!("Batch transfer with ID {} already exists.",batch_id.to_string())))
+    // }
+    if db_get::<Uuid>(&conn, &batch_id, Table::TransferBatch, Column::Id).is_ok() {
         return Err(SEError::Generic(format!("Batch transfer with ID {} already exists.",batch_id.to_string())))
     }
 
@@ -405,20 +420,27 @@ pub fn transfer_batch_init(
     }
 
     // Create new TransferBatchData and add to DB
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &batch_id.to_string(),
-        &StateEntityStruct::TransferBatchData,
-        &TransferBatchData {
-            id: batch_id,
-            start_time: SystemTime::now(),
-            state_chains,
-            finalized_data: vec!(),
-            punished_state_chains: vec!(),
-            finalized: false
-        }
-    )?;
+    // db::insert(
+    //     &state.db,
+    //     &claim.sub,
+    //     &batch_id.to_string(),
+    //     &StateEntityStruct::TransferBatchData,
+    //     &TransferBatchData {
+    //         id: batch_id,
+    //         start_time: SystemTime::now(),
+    //         state_chains,
+    //         finalized_data: vec!(),
+    //         punished_state_chains: vec!(),
+    //         finalized: false
+    //     }
+    // )?;
+    db_insert(&conn, &batch_id, Table::TransferBatch)?;
+    db_update(&conn, &batch_id, get_time_now(), Table::TransferBatch, Column::StartTime)?;
+    db_update_serialized(&conn, &batch_id, state_chains, Table::TransferBatch, Column::StateChains)?;
+    db_update_serialized(&conn, &batch_id, Vec::<TransferFinalizeData>::new(), Table::TransferBatch, Column::FinalizedData)?;
+    db_update_serialized(&conn, &batch_id, Vec::<String>::new(), Table::TransferBatch, Column::PunishedStateChains)?;
+    db_update(&conn, &batch_id, false, Table::TransferBatch, Column::Finalized)?;
+
 
     info!("TRANSFER_BATCH_INIT: Batch ID {} initiated.",batch_id);
     debug!("TRANSFER_BATCH_INIT: Batch ID {}. Signatures: {:?}.", batch_id, transfer_batch_init_msg.signatures);
@@ -429,20 +451,27 @@ pub fn transfer_batch_init(
 /// Finalize all transfers in a batch.
 pub fn finalize_batch(
     state: &State<Config>,
-    claim: &Claims,
     conn: &DataBase,
-    batch_id: &String
+    batch_id: Uuid
 ) -> Result<()> {
     info!("TRANSFER_FINALIZE_BATCH: ID: {}", batch_id);
-    let mut transfer_batch_data: TransferBatchData =
-        db::get(&state.db, &claim.sub, &batch_id, &StateEntityStruct::TransferBatchData)?
-            .ok_or(SEError::DBError(NoDataForID, batch_id.clone()))?;
+    // let mut transfer_batch_data: TransferBatchData =
+    //     db::get(&state.db, &claim.sub, &batch_id, &StateEntityStruct::TransferBatchData)?
+    //         .ok_or(SEError::DBError(NoDataForID, batch_id.clone()))?;
 
-    if transfer_batch_data.state_chains.len() != transfer_batch_data.finalized_data.len() {
-        return Err(SEError::Generic(String::from("TransferBatchData has unequal finalized data to state chains.")))
+    let state_chains: HashMap<Uuid, bool> =
+        db_get_serialized(&conn, &batch_id, Table::TransferBatch, Column::StateChains)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::StateChains))?;
+
+    let finalized_data_vec: Vec<TransferFinalizeData> =
+        db_get_serialized(&conn, &batch_id, Table::TransferBatch, Column::FinalizedData)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::FinalizedData))?;
+
+    if state_chains.len() != finalized_data_vec.len() {
+        return Err(SEError::Generic(String::from("TransferBatch has unequal finalized data to state chains.")))
     }
 
-    for finalized_data in transfer_batch_data.finalized_data.clone() {
+    for finalized_data in finalized_data_vec.clone() {
         transfer_finalize(
             &state,
             &conn,
@@ -450,14 +479,15 @@ pub fn finalize_batch(
         )?;
     }
 
-    transfer_batch_data.finalized = true;
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &batch_id,
-        &StateEntityStruct::TransferBatchData,
-        &transfer_batch_data
-    )?;
+    // transfer_batch_data.finalized = true;
+    // db::insert(
+    //     &state.db,
+    //     &claim.sub,
+    //     &batch_id,
+    //     &StateEntityStruct::TransferBatchData,
+    //     &transfer_batch_data
+    // )?;
+    db_update(&conn, &batch_id, true, Table::TransferBatch, Column::Finalized)?;
 
     Ok(())
 }
@@ -467,7 +497,6 @@ pub fn finalize_batch(
 #[post("/transfer/batch/reveal", format = "json", data = "<transfer_reveal_nonce>")]
 pub fn transfer_reveal_nonce(
     state: State<Config>,
-    claim: Claims,
     conn: DataBase,
     transfer_reveal_nonce: Json<TransferRevealNonce>,
 ) -> Result<Json<()>> {
@@ -475,17 +504,27 @@ pub fn transfer_reveal_nonce(
     let state_chain_id = transfer_reveal_nonce.state_chain_id;
     info!("TRANSFER_REVEAL_NONCE: Batch ID: {}. State Chain ID: {}", batch_id, state_chain_id);
 
-    let mut transfer_batch_data: TransferBatchData =
-        db::get(&state.db, &claim.sub, &batch_id.to_string(), &StateEntityStruct::TransferBatchData)?
-            .ok_or(SEError::DBError(NoDataForID, batch_id.to_string()))?;
-
-    if transfer_batch_data.finalized {
+    // let mut transfer_batch_data: TransferBatchData =
+    //     db::get(&state.db, &claim.sub, &batch_id.to_string(), &StateEntityStruct::TransferBatchData)?
+    //         .ok_or(SEError::DBError(NoDataForID, batch_id.to_string()))?;
+    let finalized: bool =
+        db_get(&conn, &batch_id, Table::TransferBatch, Column::Finalized)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::Finalized))?;
+    if finalized {
         return Err(SEError::Generic(String::from("Transfer Batch completed successfully.")));
     }
-    if !transfer_batch_data.is_ended(state.batch_lifetime) {
+
+    let start_time: NaiveDateTime =
+        db_get(&conn, &batch_id, Table::TransferBatch, Column::StartTime)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::StartTime))?;
+    if !transfer_batch_is_ended(start_time, state.batch_lifetime as i64) {
         return Err(SEError::Generic(String::from("Transfer Batch still live.")));
     }
-    if transfer_batch_data.state_chains.get(&state_chain_id).is_none() {
+
+    let state_chains: HashMap<Uuid, bool> =
+        db_get_serialized(&conn, &batch_id, Table::TransferBatch, Column::StateChains)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::StateChains))?;
+    if state_chains.get(&state_chain_id).is_none() {
         return Err(SEError::Generic(String::from("State chain ID not in this batch.")));
     }
 
@@ -496,7 +535,7 @@ pub fn transfer_reveal_nonce(
     )?;
 
     // If state chain completed + commitment revealed then punishment can be removed from state chain
-    if *transfer_batch_data.state_chains.get(&state_chain_id).unwrap() {
+    if *state_chains.get(&state_chain_id).unwrap() {
         // let mut state_chain: StateChain =
         //     db::get(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::StateChain)?
         //         .ok_or(SEError::DBError(NoDataForID, transfer_reveal_nonce.state_chain_id.to_string()))?;
@@ -515,16 +554,25 @@ pub fn transfer_reveal_nonce(
         info!("TRANSFER_REVEAL_NONCE: State Chain unlocked. ID: {}", state_chain_id);
 
         // remove from transfer batch punished list
-        transfer_batch_data.punished_state_chains.retain(|x| x != &state_chain_id);
+        // transfer_batch_data.punished_state_chains.retain(|x| x != &state_chain_id);
+        let mut punished_state_chains: Vec<Uuid> =
+            db_get_serialized(&conn, &batch_id, Table::TransferBatch, Column::PunishedStateChains)?
+                .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::PunishedStateChains))?;
+
+        punished_state_chains.retain(|x| x != &state_chain_id);
+
+        db_update_serialized(&conn, &batch_id, punished_state_chains, Table::TransferBatch, Column::PunishedStateChains)?;
+
+
     }
 
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &transfer_reveal_nonce.batch_id.to_string(),
-        &StateEntityStruct::TransferBatchData,
-        &transfer_batch_data
-    )?;
+    // db::insert(
+    //     &state.db,
+    //     &claim.sub,
+    //     &transfer_reveal_nonce.batch_id.to_string(),
+    //     &StateEntityStruct::TransferBatchData,
+    //     &transfer_batch_data
+    // )?;
 
     Ok(Json(()))
 }
