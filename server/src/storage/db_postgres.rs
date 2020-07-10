@@ -8,6 +8,7 @@
 use super::super::Result;
 
 use rocket_contrib::databases::postgres::Connection;
+use rocket_contrib::databases::postgres::types::ToSql;
 use crate::error::{DBErrorType::{UpdateFailed,NoDataForID}, SEError};
 use uuid::Uuid;
 
@@ -150,23 +151,61 @@ pub fn db_remove(conn: &Connection, id: &Uuid, table: Table) -> Result<()> {
     Ok(())
 }
 
-// Update item in table whose type is serialized to String
-pub fn db_update_serialized<T>(conn: &Connection, id: &Uuid, data: T, table: Table, column: Column) -> Result<()>
+
+pub fn db_update_row(conn: &Connection, id: &Uuid, table: Table, column: Vec<Column>, data: Vec<&dyn ToSql>) -> Result<()>
+{
+    let num_items = data.len();
+    let statement = conn.prepare(&format!(
+        "UPDATE {} SET {} WHERE id = ${}",
+            table.to_string(),
+            format_stmt_multiple_columns(column),
+            num_items+1
+        ))?;
+
+    let mut owned_data = data.clone();
+    owned_data.push(id);
+
+    if statement.execute(&owned_data)? == 0 {
+        return Err(SEError::DBError(UpdateFailed, id.to_string()));
+    }
+
+    Ok(())
+}
+
+/// Returns str list of column names for SQL statement.
+pub fn format_stmt_multiple_columns(cols: Vec<Column>) -> String {
+    let cols_len = cols.len();
+    let mut str = "".to_owned();
+    for (i, col) in cols.iter().enumerate() {
+        str.push_str(&col.to_string());
+        str.push_str(&format!("=${}",i+1));
+        if i != cols_len-1 {
+            str.push_str(",");
+        }
+    }
+    str
+}
+
+
+/// Serialize data into string. To add custom types to Postgres they must be serialized to String.
+pub fn db_ser<T>(data: T) -> Result<String>
 where
     T: serde::ser::Serialize
 {
-    let item_string = serde_json::to_string(&data).unwrap();
-    db_update(conn, id, item_string, table, column)
+    match serde_json::to_string(&data) {
+        Ok(v) => Ok(v),
+        Err(_) => Err(SEError::Generic(String::from("Failed to serialize data.")))
+    }
 }
 
-// Get item in table whose type is serialized to String
-pub fn db_get_serialized<T>(conn: &Connection, id: &Uuid, table: Table, column: Column) -> Result<Option<T>>
+/// Deserialize custom type data from string. Reverse of db_ser().
+pub fn db_deser<T>(data: String) -> Result<T>
 where
-    T: serde::de::DeserializeOwned,
+    T: serde::de::DeserializeOwned
 {
-    match db_get::<String>(conn, id, table, column)? {
-        Some(data) => return Ok(Some(serde_json::from_str(&data).unwrap())),
-        None => Ok(None)
+    match serde_json::from_str(&data) {
+        Ok(v) => Ok(v),
+        Err(_) => Err(SEError::Generic(String::from("Failed to deserialize string.")))
     }
 }
 
@@ -175,6 +214,7 @@ mod tests {
 
     use super::*;
     use std::{env, str::FromStr};
+    use shared_lib::state_chain::StateChain;
 
     #[test]
     fn test_db_postgres() {
@@ -184,11 +224,28 @@ mod tests {
         let url = &rocket_url[16..68];
 
         let conn = Connection::connect(url, TlsMode::None).unwrap();
-        let user_id = Uuid::from_str(&"9eb05678-5275-451b-910c-a7179057d91d").unwrap();
+        let user_id = Uuid::from_str(&"052563d0-5b43-4138-b13d-58a434a21eac").unwrap();
 
+        let state_chain = StateChain::new("data".to_string());
         let res =
-            db_remove(&conn, &user_id, Table::Transfer);
+            db_update_row(&conn, &user_id, Table::StateChain,
+                vec!(
+                    Column::Chain,
+                    Column::Amount,
+                    Column::OwnerId
+                ),
+                vec!(
+                    &db_ser(state_chain).unwrap(),
+                    &(1234 as i64),
+                    &Uuid::new_v4()
+                ));
+
 
         println!("res: {:?}",res);
+
+        // let res: StateChain =
+        //     db_deser(db_get(&conn, &user_id, Table::StateChain, Column::Chain).unwrap().unwrap()).unwrap();
+        // println!("res: {:?}",res);
+
     }
 }

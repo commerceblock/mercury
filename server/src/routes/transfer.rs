@@ -14,7 +14,7 @@ use shared_lib::{
 use crate::routes::util::*;
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::storage::{
-    db_postgres::{Column, Table, db_get_serialized, db_insert, db_update, db_update_serialized, db_get, db_remove},
+    db_postgres::{Column, Table, db_insert, db_update, db_get, db_remove, db_ser, db_deser},
     db::get_current_root};
 
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
@@ -109,8 +109,8 @@ pub fn transfer_sender(
     //     }
     // )?;
     db_insert(&conn, &state_chain_id, Table::Transfer)?;
-    db_update_serialized(&conn, &state_chain_id, transfer_msg1.state_chain_sig.to_owned(), Table::Transfer, Column::StateChainSig)?;
-    db_update_serialized(&conn, &state_chain_id, x1.clone(), Table::Transfer, Column::X1)?;
+    db_update(&conn, &state_chain_id, db_ser(transfer_msg1.state_chain_sig.to_owned())?, Table::Transfer, Column::StateChainSig)?;
+    db_update(&conn, &state_chain_id, db_ser(x1.to_owned())?, Table::Transfer, Column::X1)?;
 
     info!("TRANSFER: Sender side complete. Previous shared key ID: {}. State Chain ID: {}",user_id.to_string(),state_chain_id);
     debug!("TRANSFER: Sender side complete. State Chain ID: {}. State Chain Signature: {:?}. x1: {:?}.", state_chain_id, transfer_msg1.state_chain_sig, x1);
@@ -144,12 +144,12 @@ pub fn transfer_receiver(
             .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Id))?;
 
     let state_chain_sig: StateChainSig =
-        db_get_serialized(&conn, &state_chain_id, Table::Transfer, Column::StateChainSig)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::StateChainSig))?;
+        db_deser(db_get(&conn, &state_chain_id, Table::Transfer, Column::StateChainSig)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::StateChainSig))?)?;
 
     let x1: FE =
-        db_get_serialized(&conn, &state_chain_id, Table::Transfer, Column::X1)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::X1))?;
+        db_deser(db_get(&conn, &state_chain_id, Table::Transfer, Column::X1)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::X1))?)?;
 
     // let state_chain_sig = transfer_data.state_chain_sig;
     // let state_chain_id = transfer_data.state_chain_id.clone();
@@ -161,13 +161,13 @@ pub fn transfer_receiver(
 
     // Get Party1 (State Entity) private share
     let party_one_private: Party1Private =
-        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::Party1Private)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::Party1Private))?;
+        db_deser(db_get(&conn, &user_id, Table::Ecdsa, Column::Party1Private)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::Party1Private))?)?;
 
     // Get Party2 (Owner 1) public share
     let party_2_public: GE =
-        db_get_serialized(&conn, &user_id, Table::Ecdsa, Column::Party2Public)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::Party2Public))?;
+        db_deser(db_get(&conn, &user_id, Table::Ecdsa, Column::Party2Public)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::Party2Public))?)?;
 
     // TODO: decrypt t2
 
@@ -225,22 +225,22 @@ pub fn transfer_receiver(
         //     return Err(SEError::Generic(String::from("Transfer batch ended. Too late to complete transfer.")));
         // }
         let mut state_chains: HashMap<Uuid, bool> =
-            db_get_serialized(&conn, &batch_id, Table::TransferBatch, Column::StateChains)?
-                .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::StateChains))?;
+            db_deser(db_get(&conn, &batch_id, Table::TransferBatch, Column::StateChains)?
+                .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::StateChains))?)?;
 
         // transfer_batch_data.state_chains.insert(state_chain_id.clone(), true);
         state_chains.insert(state_chain_id.clone(), true);
 
-        db_update_serialized(&conn, &batch_id, state_chains, Table::TransferBatch, Column::StateChains)?;
+        db_update(&conn, &batch_id, db_ser(state_chains)?, Table::TransferBatch, Column::StateChains)?;
 
         // transfer_batch_data.finalized_data.push(finalized_data.clone());
         let mut finalized_data_vec: Vec<TransferFinalizeData> =
-            db_get_serialized(&conn, &batch_id, Table::TransferBatch, Column::FinalizedData)?
-                .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::FinalizedData))?;
+            db_deser(db_get(&conn, &batch_id, Table::TransferBatch, Column::FinalizedData)?
+                .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::FinalizedData))?)?;
 
         finalized_data_vec.push(finalized_data.clone());
 
-        db_update_serialized(&conn, &batch_id, finalized_data_vec, Table::TransferBatch, Column::FinalizedData)?;
+        db_update(&conn, &batch_id, db_ser(finalized_data_vec)?, Table::TransferBatch, Column::FinalizedData)?;
 
         // db::insert(
         //     &state.db,
@@ -287,8 +287,8 @@ pub fn transfer_finalize(
     //     db::get(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::StateChain)?
     //         .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string()))?;
     let mut state_chain: StateChain =
-        db_get_serialized(&conn, &state_chain_id, Table::StateChain, Column::Chain)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Chain))?;
+        db_deser(db_get(&conn, &state_chain_id, Table::StateChain, Column::Chain)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Chain))?)?;
 
     state_chain.add(finalized_data.state_chain_sig.to_owned())?;
     // state_chain.owner_id = finalized_data.new_shared_key_id;
@@ -300,7 +300,7 @@ pub fn transfer_finalize(
     //     &StateEntityStruct::StateChain,
     //     &state_chain
     // )?;
-    db_update_serialized(&conn, &state_chain_id, state_chain.clone(), Table::StateChain, Column::Chain)?;
+    db_update(&conn, &state_chain_id, db_ser(state_chain.clone())?, Table::StateChain, Column::Chain)?;
     db_update(&conn, &state_chain_id, finalized_data.new_shared_key_id, Table::StateChain, Column::OwnerId)?;
 
 
@@ -326,13 +326,12 @@ pub fn transfer_finalize(
     db_insert(&conn, &new_user_id, Table::UserSession)?;
     db_update(&conn, &new_user_id, String::from("auth"), Table::UserSession, Column::Authentication)?;
     db_update(&conn, &new_user_id, finalized_data.state_chain_sig.data.to_owned(), Table::UserSession, Column::ProofKey)?;
-    db_update_serialized(&conn, &new_user_id, finalized_data.new_tx_backup.clone(), Table::UserSession, Column::TxBackup)?;
+    db_update(&conn, &new_user_id, db_ser(finalized_data.new_tx_backup.clone())?, Table::UserSession, Column::TxBackup)?;
     db_update(&conn, &new_user_id, state_chain_id, Table::UserSession, Column::StateChainId)?;
-    db_update_serialized(&conn, &new_user_id, finalized_data.s2, Table::UserSession, Column::S2)?;
+    db_update(&conn, &new_user_id, db_ser(finalized_data.s2)?, Table::UserSession, Column::S2)?;
 
     // Insert into BackupTx table
-    db_insert(&conn, &state_chain_id, Table::BackupTxs)?;
-    db_update_serialized(&conn, &state_chain_id, finalized_data.new_tx_backup.clone(), Table::BackupTxs, Column::TxBackup)?;
+    db_update(&conn, &state_chain_id, db_ser(finalized_data.new_tx_backup.clone())?, Table::BackupTxs, Column::TxBackup)?;
 
     info!("TRANSFER: Finalized. New shared key ID: {}. State Chain ID: {}", finalized_data.new_shared_key_id, state_chain_id);
 
@@ -396,8 +395,8 @@ pub fn transfer_batch_init(
         //     db::get(&state.db, &claim.sub, &sig.data, &StateEntityStruct::StateChain)?
         //         .ok_or(SEError::DBError(NoDataForID, sig.data.clone()))?;
         let state_chain: StateChain =
-            db_get_serialized(&conn, &state_chain_id, Table::StateChain, Column::Chain)?
-                .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Chain))?;
+            db_deser(db_get(&conn, &state_chain_id, Table::StateChain, Column::Chain)?
+                .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Chain))?)?;
 
         let proof_key = state_chain.get_tip()?.data;
         sig.verify(&proof_key)?;
@@ -439,9 +438,9 @@ pub fn transfer_batch_init(
     // )?;
     db_insert(&conn, &batch_id, Table::TransferBatch)?;
     db_update(&conn, &batch_id, get_time_now(), Table::TransferBatch, Column::StartTime)?;
-    db_update_serialized(&conn, &batch_id, state_chains, Table::TransferBatch, Column::StateChains)?;
-    db_update_serialized(&conn, &batch_id, Vec::<TransferFinalizeData>::new(), Table::TransferBatch, Column::FinalizedData)?;
-    db_update_serialized(&conn, &batch_id, Vec::<String>::new(), Table::TransferBatch, Column::PunishedStateChains)?;
+    db_update(&conn, &batch_id, db_ser(state_chains)?, Table::TransferBatch, Column::StateChains)?;
+    db_update(&conn, &batch_id, db_ser(Vec::<TransferFinalizeData>::new())?, Table::TransferBatch, Column::FinalizedData)?;
+    db_update(&conn, &batch_id, db_ser(Vec::<String>::new())?, Table::TransferBatch, Column::PunishedStateChains)?;
     db_update(&conn, &batch_id, false, Table::TransferBatch, Column::Finalized)?;
 
 
@@ -463,12 +462,12 @@ pub fn finalize_batch(
     //         .ok_or(SEError::DBError(NoDataForID, batch_id.clone()))?;
 
     let state_chains: HashMap<Uuid, bool> =
-        db_get_serialized(&conn, &batch_id, Table::TransferBatch, Column::StateChains)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::StateChains))?;
+        db_deser(db_get(&conn, &batch_id, Table::TransferBatch, Column::StateChains)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::StateChains))?)?;
 
     let finalized_data_vec: Vec<TransferFinalizeData> =
-        db_get_serialized(&conn, &batch_id, Table::TransferBatch, Column::FinalizedData)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::FinalizedData))?;
+        db_deser(db_get(&conn, &batch_id, Table::TransferBatch, Column::FinalizedData)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::FinalizedData))?)?;
 
     if state_chains.len() != finalized_data_vec.len() {
         return Err(SEError::Generic(String::from("TransferBatch has unequal finalized data to state chains.")))
@@ -525,8 +524,8 @@ pub fn transfer_reveal_nonce(
     }
 
     let state_chains: HashMap<Uuid, bool> =
-        db_get_serialized(&conn, &batch_id, Table::TransferBatch, Column::StateChains)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::StateChains))?;
+        db_deser(db_get(&conn, &batch_id, Table::TransferBatch, Column::StateChains)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::StateChains))?)?;
     if state_chains.get(&state_chain_id).is_none() {
         return Err(SEError::Generic(String::from("State chain ID not in this batch.")));
     }
@@ -559,12 +558,12 @@ pub fn transfer_reveal_nonce(
         // remove from transfer batch punished list
         // transfer_batch_data.punished_state_chains.retain(|x| x != &state_chain_id);
         let mut punished_state_chains: Vec<Uuid> =
-            db_get_serialized(&conn, &batch_id, Table::TransferBatch, Column::PunishedStateChains)?
-                .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::PunishedStateChains))?;
+            db_deser(db_get(&conn, &batch_id, Table::TransferBatch, Column::PunishedStateChains)?
+                .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::PunishedStateChains))?)?;
 
         punished_state_chains.retain(|x| x != &state_chain_id);
 
-        db_update_serialized(&conn, &batch_id, punished_state_chains, Table::TransferBatch, Column::PunishedStateChains)?;
+        db_update(&conn, &batch_id, db_ser(punished_state_chains)?, Table::TransferBatch, Column::PunishedStateChains)?;
 
 
     }

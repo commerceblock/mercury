@@ -13,7 +13,7 @@ use shared_lib::{
     Root,
     mocks::mock_electrum::MockElectrum};
 use crate::error::{SEError,DBErrorType::NoDataForID};
-use crate::storage::db_postgres::{Table, Column, db_insert, db_get_serialized, db_update, db_get, db_update_serialized};
+use crate::storage::db_postgres::{Table, Column, db_insert, db_update, db_get, db_deser, db_ser};
 use crate::DataBase;
 use bitcoin::Transaction;
 
@@ -135,8 +135,8 @@ pub fn deposit_confirm(
     //     .ok_or(SEError::DBError(NoDataForID, shared_key_id.clone()))?;
 
     let tx_backup: Transaction =
-        db_get_serialized(&conn, &user_id, Table::UserSession, Column::TxBackup)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::TxBackup))?;
+        db_deser(db_get(&conn, &user_id, Table::UserSession, Column::TxBackup)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::TxBackup))?)?;
 
 
     // Ensure backup tx exists and is signed
@@ -168,14 +168,14 @@ pub fn deposit_confirm(
     //     &state_chain
     // )?;
     db_insert(&conn, &state_chain_id, Table::StateChain)?;
-    db_update_serialized(&conn, &state_chain_id, state_chain, Table::StateChain, Column::Chain)?;
+    db_update(&conn, &state_chain_id, db_ser(state_chain)?, Table::StateChain, Column::Chain)?;
     db_update(&conn, &state_chain_id, amount, Table::StateChain, Column::Amount)?;
     db_update(&conn, &state_chain_id, get_time_now(), Table::StateChain, Column::LockedUntil)?;
     db_update(&conn, &state_chain_id, user_id.to_owned(), Table::StateChain, Column::OwnerId)?;
 
     // Insert into BackupTx table
     db_insert(&conn, &state_chain_id, Table::BackupTxs)?;
-    db_update_serialized(&conn, &state_chain_id, tx_backup.clone(), Table::BackupTxs, Column::TxBackup)?;
+    db_update(&conn, &state_chain_id, db_ser(tx_backup.clone())?, Table::BackupTxs, Column::TxBackup)?;
 
     info!("DEPOSIT: State Chain created. ID: {} For user ID: {}", state_chain_id, user_id);
 

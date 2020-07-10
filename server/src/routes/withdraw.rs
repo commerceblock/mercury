@@ -13,7 +13,7 @@ use crate::DataBase;
 use crate::routes::util::check_user_auth;
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::storage::{
-    db_postgres::{db_get, Table, Column, db_get_serialized, db_update_serialized, db_update},
+    db_postgres::{db_get, Table, Column, db_update, db_deser, db_ser},
     db::{get_current_root, DB_SC_LOC, update_root}};
 
 use bitcoin::Transaction;
@@ -77,8 +77,8 @@ pub fn withdraw_init(
 
     // Verify new StateChainSig
     let state_chain: StateChain =
-        db_get_serialized(&conn, &state_chain_id, Table::StateChain, Column::Chain)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Chain))?;
+        db_deser(db_get(&conn, &state_chain_id, Table::StateChain, Column::Chain)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Chain))?)?;
 
     let prev_proof_key = state_chain.get_tip()?.data;
     withdraw_msg1.state_chain_sig.verify(&prev_proof_key)?;
@@ -92,7 +92,7 @@ pub fn withdraw_init(
     //     &StateEntityStruct::UserSession,
     //     &user_session
     // )?;
-    db_update_serialized(&conn, &user_id, &withdraw_msg1.state_chain_sig.clone(), Table::UserSession, Column::WithdrawScSig)?;
+    db_update(&conn, &user_id, db_ser(withdraw_msg1.state_chain_sig.clone())?, Table::UserSession, Column::WithdrawScSig)?;
 
     info!("WITHDRAW: Authorised. Shared Key ID: {}. State Chain: {}",user_id, state_chain_id);
 
@@ -117,12 +117,12 @@ pub fn withdraw_confirm(
     //     db::get(&state.db, &claim.sub, &shared_key_id, &StateEntityStruct::UserSession)?
     //         .ok_or(SEError::DBError(NoDataForID, shared_key_id.clone()))?;
     let tx_withdraw: Transaction =
-        db_get_serialized(&conn, &user_id, Table::UserSession, Column::TxWithdraw)?
-            .ok_or(SEError::Generic("Withdraw Error: No withdraw tx has been signed.".to_string()))?;
+        db_deser(db_get(&conn, &user_id, Table::UserSession, Column::TxWithdraw)?
+            .ok_or(SEError::Generic("Withdraw Error: No withdraw tx has been signed.".to_string()))?)?;
 
     let withdraw_sc_sig: StateChainSig =
-        db_get_serialized(&conn, &user_id, Table::UserSession, Column::WithdrawScSig)?
-            .ok_or(SEError::Generic("Withdraw Error: No state chain signature exists for this user.".to_string()))?;
+        db_deser(db_get(&conn, &user_id, Table::UserSession, Column::WithdrawScSig)?
+            .ok_or(SEError::Generic("Withdraw Error: No state chain signature exists for this user.".to_string()))?)?;
 
     // Check withdraw tx and statechain signature exists
     // if user_session.tx_withdraw.is_none() {
@@ -142,8 +142,8 @@ pub fn withdraw_confirm(
     //     db::get(&state.db, &claim.sub, &state_chain_id.to_string().to_owned(), &StateEntityStruct::StateChain)?
     //         .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string().to_owned()))?;
     let mut state_chain: StateChain =
-        db_get_serialized(&conn, &state_chain_id, Table::StateChain, Column::Chain)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Chain))?;
+        db_deser(db_get(&conn, &state_chain_id, Table::StateChain, Column::Chain)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Chain))?)?;
 
     state_chain.add(withdraw_sc_sig.to_owned())?;
     // state_chain.amount = 0;     // signals withdrawn funds
@@ -154,7 +154,7 @@ pub fn withdraw_confirm(
     //     &StateEntityStruct::StateChain,
     //     &state_chain
     // )?;
-    db_update_serialized(&conn, &state_chain_id, state_chain.clone(), Table::StateChain, Column::Chain)?;
+    db_update(&conn, &state_chain_id, db_ser(state_chain.clone())?, Table::StateChain, Column::Chain)?;
     db_update(&conn, &state_chain_id, 0 as i64, Table::StateChain, Column::Amount)?;
 
     // Remove state_chain_id from user session to signal end of session

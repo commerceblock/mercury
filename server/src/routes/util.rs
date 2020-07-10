@@ -15,7 +15,7 @@ use shared_lib::{
 use crate::routes::transfer::finalize_batch;
 use crate::error::{SEError,DBErrorType::NoDataForID};
 use crate::storage::{
-    db_postgres::{db_get_serialized, Table, Column, db_get, db_update_serialized, db_update, db_remove},
+    db_postgres::{Table, Column, db_get, db_update, db_remove, db_deser, db_ser},
     db::{get_root, get_current_root}};
 use crate::DataBase;
 
@@ -203,16 +203,16 @@ pub fn get_statechain(
             .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Amount))?;
 
     let state_chain: StateChain =
-        db_get_serialized(&conn, &state_chain_id, Table::StateChain, Column::Chain)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Chain))?;
+        db_deser(db_get(&conn, &state_chain_id, Table::StateChain, Column::Chain)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Chain))?)?;
 
     let owner_id: Uuid =
         db_get(&conn, &state_chain_id, Table::StateChain, Column::OwnerId)?
             .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::OwnerId))?;
 
     let tx_backup: Transaction =
-        db_get_serialized(&conn, &owner_id, Table::UserSession, Column::TxBackup)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, owner_id, Column::TxBackup))?;
+        db_deser(db_get(&conn, &owner_id, Table::UserSession, Column::TxBackup)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, owner_id, Column::TxBackup))?)?;
 
     Ok(Json({
         StateChainDataAPI {
@@ -262,8 +262,8 @@ pub fn get_transfer_batch_status(
     //         .ok_or(SEError::DBError(NoDataForID, batch_id.clone()))?;
 
     let state_chains: HashMap<Uuid, bool> =
-        db_get_serialized(&conn, &batch_id, Table::TransferBatch, Column::StateChains)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::StateChains))?;
+        db_deser(db_get(&conn, &batch_id, Table::TransferBatch, Column::StateChains)?
+            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::StateChains))?)?;
 
     let start_time: NaiveDateTime =
         db_get(&conn, &batch_id, Table::TransferBatch, Column::StartTime)?
@@ -273,8 +273,8 @@ pub fn get_transfer_batch_status(
     // if transfer_batch_data.is_ended(state.batch_lifetime) {
     if transfer_batch_is_ended(start_time, state.batch_lifetime as i64) {
         let mut punished_state_chains: Vec<Uuid> =
-            db_get_serialized(&conn, &batch_id, Table::TransferBatch, Column::PunishedStateChains)?
-                .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::PunishedStateChains))?;
+            db_deser(db_get(&conn, &batch_id, Table::TransferBatch, Column::PunishedStateChains)?
+                .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::PunishedStateChains))?)?;
         if punished_state_chains.len() == 0 { // Punishments not yet set
             info!("TRANSFER_BATCH: Lifetime reached. ID: {}.", batch_id);
             // Set punishments for all statechains involved in batch
@@ -288,7 +288,7 @@ pub fn get_transfer_batch_status(
 
                 info!("TRANSFER_BATCH: Transfer data deleted. State Chain ID: {}.", state_chain_id);
             }
-            db_update_serialized(&conn, &batch_id, punished_state_chains, Table::TransferBatch, Column::PunishedStateChains)?;
+            db_update(&conn, &batch_id, db_ser(punished_state_chains)?, Table::TransferBatch, Column::PunishedStateChains)?;
             info!("TRANSFER_BATCH: Punished all state chains in failed batch. ID: {}.",batch_id);
         }
         return Err(SEError::Generic(String::from("Transfer Batch ended.")))
@@ -347,7 +347,7 @@ pub fn prepare_sign_tx(
         Protocol::Withdraw => {
 
             // Verify withdrawal has been authorised via presense of withdraw_sc_sig
-            db_get_serialized::<StateChainSig>(&conn, &user_id, Table::UserSession, Column::WithdrawScSig)?
+            db_get::<String>(&conn, &user_id, Table::UserSession, Column::WithdrawScSig)?
                 .ok_or(SEError::Generic(String::from("Withdraw has not been authorised. /withdraw/init must be called first.")))?;
 
             // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data
@@ -365,8 +365,8 @@ pub fn prepare_sign_tx(
             //         .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string().clone()))?;
 
             let tx_backup: Transaction =
-                db_get_serialized(&conn, &user_id, Table::UserSession, Column::TxBackup)?
-                    .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::TxBackup))?;
+                db_deser(db_get(&conn, &user_id, Table::UserSession, Column::TxBackup)?
+                    .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::TxBackup))?)?;
 
             let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
             if prepare_sign_msg.tx.input.get(0).unwrap().previous_output.to_owned() != tx_backup_input {
@@ -392,8 +392,8 @@ pub fn prepare_sign_tx(
             //     &StateEntityStruct::UserSession,
             //     &user_session
             // )?;
-            db_update_serialized(&conn, &user_id, sig_hash, Table::UserSession, Column::SigHash)?;
-            db_update_serialized(&conn, &user_id, prepare_sign_msg.tx, Table::UserSession, Column::TxWithdraw)?;
+            db_update(&conn, &user_id, db_ser(sig_hash)?, Table::UserSession, Column::SigHash)?;
+            db_update(&conn, &user_id, db_ser(prepare_sign_msg.tx)?, Table::UserSession, Column::TxWithdraw)?;
 
 
             info!("WITHDRAW: Withdraw tx ready for signing. User ID: {:?}. State Chain ID: {}.",user_id, state_chain_id);
@@ -411,12 +411,12 @@ pub fn prepare_sign_tx(
             );
 
             // user_session.sig_hash = Some(sig_hash.clone());
-            db_update_serialized(&conn, &user_id, sig_hash, Table::UserSession, Column::SigHash)?;
+            db_update(&conn, &user_id, db_ser(sig_hash)?, Table::UserSession, Column::SigHash)?;
 
             // Only in deposit case add backup tx to UserSession
             if prepare_sign_msg.protocol == Protocol::Deposit {
                 // user_session.tx_backup = Some(prepare_sign_msg.tx.clone());
-                db_update_serialized(&conn, &user_id, prepare_sign_msg.tx, Table::UserSession, Column::TxBackup)?;
+                db_update(&conn, &user_id, db_ser(prepare_sign_msg.tx)?, Table::UserSession, Column::TxBackup)?;
             }
 
             info!("DEPOSIT: Backup tx ready for signing. Shared Key ID: {}.", user_id);
