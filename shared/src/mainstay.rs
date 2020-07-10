@@ -525,20 +525,7 @@ pub mod merkle {
             self.0 = SHAHash::engine();
         }
     }
-
-    impl Algorithm<SHAHash> for HashAlgo {
-        #[inline]
-        fn hash(&mut self) -> SHAHash {
-            SHAHash::from_engine(self.0.clone())
-        }
     
-        #[inline]
-        fn reset(&mut self) {
-            self.0 = SHAHash::engine();
-        }
-    }
-    
-
     #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
     pub struct Proof {
         merkle_root: Commitment,
@@ -625,16 +612,12 @@ pub mod merkle {
             let mut h = self.commitment.get_hash();
             //Reverse byte order for the MT hash
             h.reverse();
-            let merkle_branch = self.ops.iter().cloned().map(|l| l.get_hash());
-
+            let mut hasher = merkle::HashAlgo::new();    
             let mut i = 0;
-            for mut leaf in merkle_branch {
+            for mut leaf in self.ops.iter().map(|l| l.get_hash()) {
                 //Reverse byte order for the MT hash
                 leaf.reverse();
-                let mut hasher = merkle::HashAlgo::new();    
-                //let mut engine = SHAHash::engine();
-                let pos = self.position.clone();
-                if (pos >> i) & 1 != 0 {
+                if (self.position >> i) & 1 != 0 {
                     hasher.write(&leaf);
                     hasher.write(&h);
                 } else {
@@ -643,6 +626,7 @@ pub mod merkle {
                 }
                 h = hasher.hash();
                 i = i + 1;
+                hasher.reset();
             }
             //Revert to the original byte order
             h.reverse();
