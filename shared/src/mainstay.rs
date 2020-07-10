@@ -639,7 +639,10 @@ pub mod merkle {
 
             println!("length of ops: {}", self.ops.len());
 
-            let mut vec_ops = self.ops.clone();
+            let mut vec_path : Vec<Commitment>;
+            vec_path.push(self.commitment);
+            vec_path.extend(self.ops);
+
             if vec_ops.len() % 2 > 0 {
                 vec_ops.push(Commitment::from_hash(&[0u8; 32]))
             }
