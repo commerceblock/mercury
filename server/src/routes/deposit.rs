@@ -173,6 +173,10 @@ pub fn deposit_confirm(
     db_update(&conn, &state_chain_id, get_time_now(), Table::StateChain, Column::LockedUntil)?;
     db_update(&conn, &state_chain_id, user_id.to_owned(), Table::StateChain, Column::OwnerId)?;
 
+    // Insert into BackupTx table
+    db_insert(&conn, &state_chain_id, Table::BackupTxs)?;
+    db_update_serialized(&conn, &state_chain_id, tx_backup.clone(), Table::BackupTxs, Column::TxBackup)?;
+
     info!("DEPOSIT: State Chain created. ID: {} For user ID: {}", state_chain_id, user_id);
 
 

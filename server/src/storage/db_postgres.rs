@@ -17,6 +17,7 @@ pub enum Table {
     Ecdsa,
     UserSession,
     StateChain,
+    BackupTxs,
     Transfer,
     TransferBatch,
 }
@@ -48,6 +49,10 @@ pub enum Column {
     Amount,
     LockedUntil,
     OwnerId,
+
+    // BackupTxs
+    //Id,
+    // TxBackup,
 
     // Transfer
     // Id,

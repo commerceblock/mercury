@@ -330,6 +330,9 @@ pub fn transfer_finalize(
     db_update(&conn, &new_user_id, state_chain_id, Table::UserSession, Column::StateChainId)?;
     db_update_serialized(&conn, &new_user_id, finalized_data.s2, Table::UserSession, Column::S2)?;
 
+    // Insert into BackupTx table
+    db_insert(&conn, &state_chain_id, Table::BackupTxs)?;
+    db_update_serialized(&conn, &state_chain_id, finalized_data.new_tx_backup.clone(), Table::BackupTxs, Column::TxBackup)?;
 
     info!("TRANSFER: Finalized. New shared key ID: {}. State Chain ID: {}", finalized_data.new_shared_key_id, state_chain_id);
 
