@@ -361,12 +361,12 @@ impl fmt::Debug for CommitmentInfo {
 */
 
 impl CommitmentInfo {
-    pub fn merkle_root(&self) -> &Commitment {
-        &self.merkleproof.merkle_root()
+    pub fn merkle_root(&self) -> Commitment {
+        self.merkleproof.merkle_root()
     }
 
-    pub fn commitment(&self) -> &Commitment {
-        &self.merkleproof.commitment()
+    pub fn commitment(&self) -> Commitment {
+        self.merkleproof.commitment()
     }
 
     //Is the commitment attested or not?
@@ -566,12 +566,24 @@ pub mod merkle {
             }   
         }
 
-        pub fn commitment(&self) -> &Commitment {
-            &self.commitment
+        pub fn commitment(&self) -> Commitment {
+            self.commitment
         }
 
-        pub fn merkle_root(&self) -> &Commitment {
-            &self.merkle_root
+        pub fn merkle_root(&self) -> Commitment {
+            self.merkle_root
+        }
+
+        pub fn append(&self) -> Vec<bool> {
+            self.append.clone()
+        }
+
+        pub fn ops(&self) -> Vec<Commitment> {
+            self.ops.clone()
+        }
+
+        pub fn position(&self) -> u64 {
+            self.position
         }
 
         pub fn from_response(response: &Response) -> Result<Self>{       
@@ -633,14 +645,8 @@ pub mod merkle {
             h
         }
         
-
-        pub fn verify(&self) -> Result<bool>{
-            let rootc = self.hash_merkle_root();
-            let root = self.merkle_root.get_hash(); 
-            match rootc == root {
-                true=> Ok(true),
-                false => Ok(false)
-            }
+        pub fn verify(&self) -> bool {
+            self.hash_merkle_root() == self.merkle_root.get_hash()
         }
 }
 
@@ -749,7 +755,7 @@ mod tests {
                 \"commitment\":\"94adb04ab09036fbc6cc164ec6df4d9d8fba45bcd7901a03d2e91b123071a5ec\"}]}";
 
 
-        let merkleproof_1 = merkle::Proof::from_str(data_str).unwrap();
+        let mp_1 = merkle::Proof::from_str(data_str).unwrap();
         let merkleproof_2 = merkle::Proof::from_str(response_str).unwrap();
         let merkleproof_3 = merkle::Proof::from_str(merkleproof_str).unwrap();
 
@@ -788,21 +794,19 @@ mod tests {
 
         let merkleproof_compare = merkle::Proof::from(merkle_root, commitment, ops, append, position).unwrap();
 
-        assert!(merkleproof_1 ==merkleproof_2);
-        assert!(merkleproof_1 ==merkleproof_3);
-        assert!(merkleproof_1 ==merkleproof_compare);
+        assert!(mp_1 ==merkleproof_2);
+        assert!(mp_1 ==merkleproof_3);
+        assert!(mp_1 ==merkleproof_compare);
         
-        match merkleproof_1.verify(){
-            Ok(r) => assert!(r,"verify proof returned false"),
-            Err(e) => {
-                assert!(false, e.to_string());
-                ()
-            }
-        }
-
-
-
-
+        assert!(mp_1.verify(),"verify proof returned false");
+        //Verify again
+        assert!(mp_1.verify(),"verify proof returned false");
+        //Ensure incorrect proof fails
+        let mut wrong_commit = mp_1.commitment().get_hash();
+        wrong_commit.reverse();
+        let wrong_commit = Commitment::from_hash(&wrong_commit);
+        let invalid_proof = merkle::Proof::from(mp_1.merkle_root(), wrong_commit, mp_1.ops(), mp_1.append(), mp_1.position()).unwrap();
+        assert!(invalid_proof.verify()==false,"verification of invalid merkle proof should return false");
     }
 
   

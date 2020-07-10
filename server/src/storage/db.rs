@@ -208,7 +208,7 @@ impl<'a> GetCommitmentInfo<'a> {
 }
 
 fn update_commitment_info(db: &DB, info: &mainstay::CommitmentInfo) -> Result<()>{
-    let id = idify_commitment_info(info.commitment());
+    let id = idify_commitment_info(&info.commitment());
 
     insert_by_identifier(&db, &id, info.clone())?;
 
