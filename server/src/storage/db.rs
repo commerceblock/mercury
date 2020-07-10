@@ -107,11 +107,9 @@ pub fn update_root_commitment_info(db: &DB, mc: &Option<mainstay::Config>, root:
                         Some(e) => {
                             //Find the specific type of mainstay error and act accordingly
                             match e {
-                                MainstayError::Generic(_) => Err(SEError::SharedLibError(e.to_string())),
-                                MainstayError::FormatError(_) => Err(SEError::SharedLibError(e.to_string())),
                                 //Not found is ok - return Ok(None)
                                 MainstayError::NotFoundError(_) => Ok(None),
-                                MainstayError::ProofError(_) => Ok(None),
+                                _ => Err(SEError::SharedLibError(e.to_string())),
                             }
                         },
                         None => Err(SEError::SharedLibError(e.to_string()))
@@ -344,7 +342,7 @@ mod tests {
 
         //root1 has already been attested to mainstay
         let com1 = mainstay::Commitment::from_str("31e66288b9074bcfeb3bc5734f2d0b189ad601b61f86b8241ee427648b59fdbc").unwrap();
-        let root1 = com1.get_hash().unwrap();
+        let root1 = com1.get_hash();
         let root2: [u8;32] = monotree::utils::random_hash();
 
         assert!(update_root(&db, &mc, root1.clone()).is_ok());

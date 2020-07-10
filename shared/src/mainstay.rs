@@ -24,7 +24,7 @@ pub type Hash = monotree::Hash;
 type Payload<'a> = HashMap<&'a str,&'a str>;
 
 #[derive(Serialize, Deserialize, PartialEq, Copy, Default, Debug)]
-pub struct Commitment(Option<Hash>);
+pub struct Commitment(Hash);
 
 #[derive(Debug, Deserialize)]
 pub enum MainstayError {
@@ -34,8 +34,6 @@ pub enum MainstayError {
     FormatError(String),
     /// Item not found error
     NotFoundError(String),
-    /// Cryptographic proof error
-    ProofError(String)
 }
 
 impl From<String> for MainstayError {
@@ -56,7 +54,6 @@ impl fmt::Display for MainstayError {
             MainstayError::Generic(ref e) => write!(f, "MainstayError: {}", e),
             MainstayError::FormatError(ref e) => write!(f,"MainstayError::FormatError: {}",e),
             MainstayError::NotFoundError(ref e) => write!(f,"MainstayError::NotFoundError: {}",e),
-            MainstayError::ProofError(ref e) => write!(f,"MainstayError::ProofError: {}",e),
         }
     }
 }
@@ -80,10 +77,9 @@ impl Responder<'static> for MainstayError {
 
 use MainstayError::NotFoundError;
 use MainstayError::FormatError;
-use MainstayError::ProofError;
 
 impl Commitment {
-    pub fn get_hash(&self) -> Option<Hash> {
+    pub fn get_hash(&self) -> Hash {
         self.0
     }
 }
@@ -96,12 +92,7 @@ impl std::clone::Clone for Commitment {
 
 impl Display for Commitment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.0 {
-            Some(v) => {
-                write!(f, "{}", hex::encode(v))
-            },
-            None => write!(f, "")
-        }
+        write!(f, "{}", hex::encode(self.0))
     }
 }
 
@@ -110,7 +101,7 @@ impl FromStr for Commitment {
     fn from_str(s: &str) -> Result<Self> {
         match hex::decode(s)?[..].try_into()
         {
-            Ok(h) => Ok(Self(Some(h))),
+            Ok(h) => Ok(Self(h)),
             Err(e) =>  Err(MainstayError::Generic(e.to_string()).into())
         }
     }
@@ -164,9 +155,9 @@ pub trait Attestable:  {
         let commitment: &Commitment = &self.commitment()?;
         let signature = match config.key {
             Some(k) => {
-                self.sign(&k)?
+                Some(self.sign(&k)?.to_string())
             },
-            None => Commitment(None)
+            None => None
         };
 
         let mut payload = Payload::new();
@@ -177,7 +168,7 @@ pub trait Attestable:  {
         payload.insert("position", &pos);
         payload.insert("token", &tok); 
        
-        let req = Request::from(Some(&payload), &String::from("commitment/send"), config, Some(signature.to_string()))?.0;        
+        let req = Request::from(Some(&payload), &String::from("commitment/send"), config, signature)?.0;        
         let mut res = req.send()?;
         let err_base = "commitment failed";
         
@@ -209,13 +200,13 @@ pub trait Attestable:  {
 
     fn sign(&self, priv_key: &PrivateKey) -> Result<Commitment>{
         let commitment = &self.commitment()?;
-        let hash = &commitment.0.unwrap();
+        let hash = &commitment.0;
         let secp = Secp256k1::new();
-        let message = &bitcoin::secp256k1::Message::from_slice(hash).unwrap();
+        let message = &bitcoin::secp256k1::Message::from_slice(hash)?;
         let signature = secp.sign(message, &priv_key.key).serialize_der().to_vec();
         let mut sig : Hash = Default::default();
         sig.copy_from_slice(&signature);
-        Ok(Commitment(Some(sig)))
+        Ok(Commitment(sig))
     }
 }
 
@@ -235,7 +226,7 @@ impl Attestable for Commitment {
 
 impl Commitment {
     pub fn from_hash(hash: &Hash) -> Self {
-        Commitment(Some(*hash))
+        Commitment(*hash)
     }
 }
 
@@ -494,27 +485,9 @@ pub mod merkle {
     use bitcoin::hashes::sha256d::Hash as SHAHash; 
     use bitcoin_hashes::Hash as HashesHash;
     use bitcoin_hashes::HashEngine as HashesHashEngine;
-    use merkletree::hash::Hashable;
-    use crypto::digest::Digest;
-    use bitcoin::util::hash::BitcoinHash;
-    use merkletree::proof::Proof as MTProof;
- 
     
-    #[allow(unused_imports)]
-    use merkletree::hash;
-    use crypto::sha3::{Sha3, Sha3Mode};
-    use crypto::sha2::{Sha256};
-
-
-    use merkletree::store::VecStore;
-    use merkletree::merkle::MerkleTree;
-
-    
-    //pub struct HashAlgo(Sha256);
     pub struct HashAlgo(SHAHashEngine);
-    
 
-    
     impl HashAlgo {
         pub fn new() -> HashAlgo {
             //HashAlgo(Sha3::new(Sha3Mode::Sha3_256))
@@ -649,10 +622,10 @@ pub mod merkle {
 
 
         fn hash_merkle_root(&self) -> Hash {            
-            let mut h = self.commitment.get_hash().unwrap();
+            let mut h = self.commitment.get_hash();
             //Reverse byte order for the MT hash
             h.reverse();
-            let merkle_branch = self.ops.iter().cloned().map(|l| l.get_hash().unwrap());
+            let merkle_branch = self.ops.iter().cloned().map(|l| l.get_hash());
 
             let mut i = 0;
             for mut leaf in merkle_branch {
@@ -679,7 +652,7 @@ pub mod merkle {
 
         pub fn verify(&self) -> Result<bool>{
             let rootc = self.hash_merkle_root();
-            let root = self.merkle_root.get_hash().unwrap(); 
+            let root = self.merkle_root.get_hash(); 
             match rootc == root {
                 true=> Ok(true),
                 false => Ok(false)
@@ -705,11 +678,11 @@ mod tests {
         
     #[test]
     fn test_hash() { 
-        let commitment : Hash = Commitment::from_str("31e66288b9074bcfeb3bc5734f2d0b189ad601b61f86b8241ee427648b59fdbc").unwrap().get_hash().unwrap();
+        let commitment : Hash = Commitment::from_str("31e66288b9074bcfeb3bc5734f2d0b189ad601b61f86b8241ee427648b59fdbc").unwrap().get_hash();
         let mut hasher = merkle::HashAlgo::new();
         hasher.write(&commitment);
         let hash: Hash = hasher.hash();
-        let expected_hash  : Hash = Commitment::from_str("bd23c4720e83435818a1074b33891a05e2112c5e510bdffdc3e276ad3b7f378b").unwrap().get_hash().unwrap();
+        let expected_hash  : Hash = Commitment::from_str("bd23c4720e83435818a1074b33891a05e2112c5e510bdffdc3e276ad3b7f378b").unwrap().get_hash();
         assert_eq!(hash, expected_hash);
     }
 
@@ -815,10 +788,8 @@ mod tests {
                 Some(e) => {
                     //Find the specific type of mainstay error and act accordingly
                     match e {
-                        MainstayError::Generic(_) => assert!(false, "{} {}", fe_str, e),
                         MainstayError::FormatError(_) => assert!(true),
-                        MainstayError::NotFoundError(_) => assert!(false, "{} {}", fe_str, e),
-                        MainstayError::ProofError(_) => assert!(false, "{} {}", fe_str, e),
+                        _ => assert!(false, "{} {}", fe_str, e),                        
                     }
                 },
                 None => assert!(false, "{} {}", fe_str, "None"),

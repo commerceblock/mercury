@@ -26,10 +26,6 @@ extern crate merkletree;
 extern crate arrayvec;
 extern crate chrono;
 
-#[macro_use]
-extern crate crypto;
-extern crate is_odd;
-
 pub mod error;
 pub mod state_chain;
 pub mod structs;
