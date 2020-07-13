@@ -24,6 +24,8 @@ extern crate itertools;
 extern crate uuid;
 extern crate base64;
 
+extern crate shared_lib;
+
 pub mod ecdsa;
 pub mod wallet;
 pub mod schnorr;

@@ -11,6 +11,7 @@ use super::key_paths::{funding_txid_to_int, KeyPathWithAddresses, KeyPath};
 use crate::error::{CError, WalletErrorType};
 use crate::wallet::shared_key::SharedKey;
 use crate::ClientShim;
+use crate::shared_lib::mainstay::{CommitmentInfo};
 
 use bitcoin::{{Network, PublicKey, Address, TxIn, OutPoint},
     hashes::sha256d,
@@ -43,7 +44,9 @@ pub struct Wallet {
     pub se_proof_keys: KeyPath, // for use as State Entity proof keys
     pub se_key_shares: KeyPath, // for derivation of private key shares used in shared_keys
 
-    pub shared_keys: Vec<SharedKey> // vector of keys co-owned with state entities
+    pub shared_keys: Vec<SharedKey>, // vector of keys co-owned with state entities
+
+    pub ms_commitment_infos: Vec<CommitmentInfo> //Vector of mainstay commitment infos  
 }
 impl Wallet {
     pub fn new(seed: &[u8], network: &String, client_shim: ClientShim, electrumx_client: Box<dyn Electrumx>) -> Wallet {
@@ -73,7 +76,8 @@ impl Wallet {
             se_backup_keys,
             se_proof_keys,
             se_key_shares,
-            shared_keys: vec!()
+            shared_keys: vec!(),
+            ms_commitment_infos: vec!()
         }
     }
 
@@ -109,11 +113,12 @@ impl Wallet {
             "se_proof_keys_pos_encoded": serde_json::to_string(&se_proof_keys_pos_encoded).unwrap(),
             "se_key_shares_last_derivation_pos": self.se_key_shares.last_derived_pos,
             "se_key_shares_pos_encoded": serde_json::to_string(&se_key_shares_pos_encoded).unwrap(),
-            "shared_keys": serde_json::to_string(&self.shared_keys).unwrap()
+            "shared_keys": serde_json::to_string(&self.shared_keys).unwrap(),
+            "ms_commitment_infos": serde_json::to_string(&self.ms_commitment_infos).unwrap(),
         })
     }
 
-    /// load wallet from jon
+    /// load wallet from json
     pub fn from_json(json: serde_json::Value, client_shim: ClientShim, electrumx_client: Box<dyn Electrumx>) -> Result<Self> {
         let secp = Secp256k1::new();
         let network = json["network"].as_str().unwrap().to_string();
@@ -153,7 +158,8 @@ impl Wallet {
             se_backup_keys,
             se_proof_keys,
             se_key_shares,
-            shared_keys: vec!()
+            shared_keys: vec!(),
+            ms_commitment_infos: vec!()
         };
 
         // re-derive keys which have been previously derived
@@ -198,6 +204,12 @@ impl Wallet {
         if shared_keys_str.len() != 2 { // is not empty
             let shared_keys:Vec<SharedKey> = serde_json::from_str(shared_keys_str).unwrap();
             wallet.shared_keys = shared_keys;
+        }
+
+        let ci_str = &json["ms_commitment_infos"].as_str().unwrap();
+        if ci_str.len() > 2 { // is not empty
+            let cis:Vec<CommitmentInfo> = serde_json::from_str(ci_str).unwrap();
+            wallet.ms_commitment_infos = cis;
         }
 
         debug!("(wallet id: {}) Loaded wallet to memory", wallet.id);

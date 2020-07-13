@@ -342,7 +342,7 @@ mod tests {
 
         //root1 has already been attested to mainstay
         let com1 = mainstay::Commitment::from_str("31e66288b9074bcfeb3bc5734f2d0b189ad601b61f86b8241ee427648b59fdbc").unwrap();
-        let root1 = com1.to_Hash();
+        let root1 = com1.to_hash();
         let root2: [u8;32] = monotree::utils::random_hash();
 
         assert!(update_root(&db, &mc, root1.clone()).is_ok());
