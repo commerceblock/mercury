@@ -79,7 +79,7 @@ use MainstayError::NotFoundError;
 use MainstayError::FormatError;
 
 impl Commitment {
-    pub fn get_hash(&self) -> Hash {
+    pub fn to_Hash(&self) -> Hash {
         self.0
     }
 }
@@ -621,12 +621,12 @@ pub mod merkle {
 
 
         fn hash_merkle_root(&self) -> Hash {            
-            let mut h = self.commitment.get_hash();
+            let mut h = self.commitment.to_Hash();
             //Reverse byte order for the MT hash
             h.reverse();
             let mut hasher = merkle::HashAlgo::new();    
             let mut i = 0;
-            for mut leaf in self.ops.iter().map(|l| l.get_hash()) {
+            for mut leaf in self.ops.iter().map(|l| l.to_Hash()) {
                 //Reverse byte order for the MT hash
                 leaf.reverse();
                 if (self.position >> i) & 1 != 0 {
@@ -646,7 +646,7 @@ pub mod merkle {
         }
         
         pub fn verify(&self) -> bool {
-            self.hash_merkle_root() == self.merkle_root.get_hash()
+            self.hash_merkle_root() == self.merkle_root.to_Hash()
         }
 }
 
@@ -668,11 +668,11 @@ mod tests {
         
     #[test]
     fn test_hash() { 
-        let commitment : Hash = Commitment::from_str("31e66288b9074bcfeb3bc5734f2d0b189ad601b61f86b8241ee427648b59fdbc").unwrap().get_hash();
+        let commitment : Hash = Commitment::from_str("31e66288b9074bcfeb3bc5734f2d0b189ad601b61f86b8241ee427648b59fdbc").unwrap().to_Hash();
         let mut hasher = merkle::HashAlgo::new();
         hasher.write(&commitment);
         let hash: Hash = hasher.hash();
-        let expected_hash  : Hash = Commitment::from_str("bd23c4720e83435818a1074b33891a05e2112c5e510bdffdc3e276ad3b7f378b").unwrap().get_hash();
+        let expected_hash  : Hash = Commitment::from_str("bd23c4720e83435818a1074b33891a05e2112c5e510bdffdc3e276ad3b7f378b").unwrap().to_Hash();
         assert_eq!(hash, expected_hash);
     }
 
@@ -802,7 +802,7 @@ mod tests {
         //Verify again
         assert!(mp_1.verify(),"verify proof returned false");
         //Ensure incorrect proof fails
-        let mut wrong_commit = mp_1.commitment().get_hash();
+        let mut wrong_commit = mp_1.commitment().to_Hash();
         wrong_commit.reverse();
         let wrong_commit = Commitment::from_hash(&wrong_commit);
         let invalid_proof = merkle::Proof::from(mp_1.merkle_root(), wrong_commit, mp_1.ops(), mp_1.append(), mp_1.position()).unwrap();
