@@ -135,14 +135,6 @@ pub fn second_message(
 
     let party2_public: GE = dlog_proof.0.pk.clone();
 
-    // let comm_witness: party_one::CommWitness =
-    //     db_deser(db_get(&conn, &user_id, Table::Ecdsa, Column::CommWitness)?
-    //         .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::CommWitness))?)?;
-    //
-    // let ec_key_pair: party_one::EcKeyPair =
-    //     db_deser(db_get(&conn, &user_id, Table::Ecdsa, Column::EcKeyPair)?
-    //         .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::EcKeyPair))?)?;
-
     let (comm_witness_str, ec_key_pair_str) = db_get_2::<String,String>(&conn, &user_id,
         Table::Ecdsa, vec!(Column::CommWitness, Column::EcKeyPair))?;
     let comm_witness: party_one::CommWitness = db_deser(comm_witness_str)?;
@@ -175,7 +167,6 @@ pub fn third_message(
 
     let (party_one_third_message, party_one_pdl_decommit, alpha) =
         MasterKey1::key_gen_third_message(&party_two_pdl_first_message.0, &party_one_private);
-
 
     db_update_row(&conn, &user_id, Table::Ecdsa,
         vec!(
@@ -268,7 +259,7 @@ pub fn sign_first(
     eph_key_gen_first_message_party_two: Json<party_two::EphKeyGenFirstMsg>,
 ) -> Result<Json<party_one::EphKeyGenFirstMsg>> {
     let user_id = Uuid::from_str(&id).unwrap();
-    // Check authorisation id is in DB (and check password?)
+
     check_user_auth(&conn, &user_id)?;
 
     let (sign_party_one_first_message, eph_ec_key_pair_party1) = MasterKey1::sign_first_message();
@@ -290,28 +281,8 @@ pub fn sign_second(
     // Check authorisation id is in DB (and check password?)
     check_user_auth(&conn, &user_id)?;
 
-    // Get UserSession for this user and check sig hash, backup tx and state chain id exists
-    // let mut user_session: UserSession =
-    //     db::get(&state.db, &claim.sub, &id, &StateEntityStruct::UserSession)?
-    //         .ok_or(SEError::DBError(NoDataForID, id.clone()))?;
-    // if user_session.sig_hash.is_none() {
-    //     return Err(SEError::SigningError(String::from(
-    //         "No sig_hash found for this user's session.",
-    //     )));
-    // }
-
-    // let tx_backup_hex: Transaction =
-    //     db_deser(db_get(&conn, &user_id, Table::UserSession, Column::TxBackup)?
-    //         .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::TxBackup))?)?;
-    // println!("tx_backup_hex: {:?}",tx_backup_hex);
-
+    // Get validated sig hash for this user
     let sig_hash: sha256d::Hash = db_deser(db_get_1(&conn, &user_id, Table::UserSession, vec!(Column::SigHash))?)?;
-
-    // if user_session.tx_backup.is_none() {
-    //     return Err(SEError::SigningError(String::from(
-    //         "No tx_backup found for this user's session.",
-    //     )));
-    // }
 
     // Check sig hash is of corrcet length. Leading 0s are lost during BigInt conversion so add them
     // back here if necessary.
@@ -400,7 +371,6 @@ pub fn sign_second(
     match request.protocol {
         Protocol::Withdraw => {
             // Store signed withdraw tx in UserSession DB object
-            // user_session.tx_withdraw = Some(tx);ß
             db_update_row(&conn, &user_id, Table::UserSession,vec!(Column::TxWithdraw),vec!(&db_ser(tx)?))?;
 
             info!("WITHDRAW: Tx signed and stored. User ID: {}", user_id);
@@ -409,19 +379,10 @@ pub fn sign_second(
         }
         _ => {
             // Store signed backup tx in UserSession DB object
-            // user_session.tx_backup = Some(tx.to_owned());
             db_update_row(&conn, &user_id, Table::UserSession,vec!(Column::TxBackup),vec!(&db_ser(tx)?))?;
             info!("DEPOSIT/TRANSFER: Backup Tx signed and stored. User: {}", user_id);
         }
     };
-
-    // db::insert(
-    //     &state.db,
-    //     &claim.sub,
-    //     &id,
-    //     &StateEntityStruct::UserSession,
-    //     &user_session,
-    // )?;
 
     Ok(Json(witness))
 }

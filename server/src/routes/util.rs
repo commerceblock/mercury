@@ -123,20 +123,10 @@ pub fn check_user_auth(
     user_id: &Uuid
 ) -> Result<()> {
     // check authorisation id is in DB (and check password?)
-    // if let Err(_) = db_get::<Uuid>(&conn, &user_id, Table::UserSession, Column::Id) {
-    //     return Err(SEError::AuthError)
-    // }
     if let Err(_) = db_get_1::<Uuid>(&conn, &user_id, Table::UserSession, vec!(Column::Id)) {
         return Err(SEError::AuthError)
     }
-
     Ok(())
-    // db::get(
-    //     &state.db,
-    //     &claim.sub,
-    //     &id,
-    //     &StateEntityStruct::UserSession).unwrap()
-    // .ok_or(SEError::AuthError)
 }
 
 // Set state chain time-out
@@ -145,36 +135,13 @@ pub fn state_chain_punish(
     conn: &DataBase,
     state_chain_id: Uuid
 ) -> Result<()> {
-    // let mut state_chain: StateChain =
-    //     db::get(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::StateChain)?
-    //         .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string()))?;
-
-    // if state_chain.is_locked().is_err() {
-    //     return Err(SEError::Generic(String::from("State chain is already locked. This should not be possible.")));
-    // }
-    // let sc_locked_until: Date =
-    //     db_get(&conn, &user_id, Table::StateChain, Column::LockedUntil)?
-    //         .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::LockedUntil))?;
-    // check_locked(sc_locked_until)?;
-    // let sc_locked_until: NaiveDateTime =
-    //     db_get(&conn, &state_chain_id, Table::StateChain, Column::LockedUntil)?
-    //         .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::LockedUntil))?;
-    // is_locked(sc_locked_until)?;
     let (sc_locked_until) =
             db_get_1::<NaiveDateTime>(&conn, &state_chain_id, Table::StateChain,
             vec!(Column::LockedUntil))?;
 
-    is_locked(sc_locked_until)?;
-
-    // set punishment
-    // state_chain.locked_until = SystemTime::now() + Duration::from_secs(state.punishment_duration);
-    // db::insert(
-    //     &state.db,
-    //     &claim.sub,
-    //     &state_chain_id.to_string(),
-    //     &StateEntityStruct::StateChain,
-    //     &state_chain
-    // )?;
+    if is_locked(sc_locked_until).is_err() {
+        return Err(SEError::Generic(String::from("State chain is already locked. This should not be possible.")));
+    }
 
     db_update_row(&conn, &state_chain_id, Table::StateChain,
         vec!(Column::LockedUntil),
@@ -203,9 +170,6 @@ pub fn get_statechain(
     state_chain_id: String,
 ) -> Result<Json<StateChainDataAPI>> {
     let state_chain_id = Uuid::from_str(&state_chain_id).unwrap();
-    // let state_chain: StateChain =
-    //     db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
-    //         .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
 
     let (amount,
         state_chain_str) =
@@ -289,7 +253,6 @@ pub fn get_transfer_batch_status(
                     punished_state_chains.push(state_chain_id.clone());
 
                     // Remove TransferData involved. Ignore failed update err since Transfer data may not exist.
-                    // db::remove(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::TransferData)?;
                     let _ = db_remove(&conn, &state_chain_id, Table::Transfer);
 
                     info!("TRANSFER_BATCH: Transfer data deleted. State Chain ID: {}.", state_chain_id);
@@ -324,16 +287,9 @@ pub fn prepare_sign_tx(
     prepare_sign_msg: Json<PrepareSignTxMsg>,
 ) -> Result<Json<()>> {
     let user_id = prepare_sign_msg.shared_key_id;
-
-    // Auth user
     check_user_auth(&conn, &user_id)?;
 
     let prepare_sign_msg: PrepareSignTxMsg = prepare_sign_msg.into_inner();
-
-    // // Get user session for this user
-    // let mut user_session: UserSession =
-    //     db::get(&state.db, &claim.sub, &shared_key_id, &StateEntityStruct::UserSession)?
-    //         .ok_or(SEError::DBError(NoDataForID, shared_key_id.clone()))?;
 
     // Which protocol are we signing for?
     match prepare_sign_msg.protocol {
@@ -347,18 +303,11 @@ pub fn prepare_sign_tx(
             // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data
             tx_withdraw_verify(&prepare_sign_msg, &state.fee_address, &state.fee_withdraw)?;
 
-            // Check funding txid UTXO info
-            // let state_chain_id = user_session.state_chain_id.clone() // check exists
-            //     .ok_or(SEError::Generic(String::from("No state chain session found for this user.")))?;
-
-            // let state_chain: StateChain =
-            //     db::get(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::StateChain)?
-            //         .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string().clone()))?;
-
             let (tx_backup_str) =
                 db_get_1::<String>(&conn, &user_id, Table::UserSession, vec!(Column::TxBackup))?;
             let tx_backup: Transaction = db_deser(tx_backup_str)?;
 
+            // Check funding txid UTXO info
             let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
             if prepare_sign_msg.tx.input.get(0).unwrap().previous_output.to_owned() != tx_backup_input {
                 return Err(SEError::Generic(String::from("Incorrect withdraw transacton input.")));
@@ -373,16 +322,6 @@ pub fn prepare_sign_tx(
                 &state.network
             );
 
-            // user_session.sig_hash = Some(sig_hash);
-            // user_session.tx_withdraw = Some(prepare_sign_msg.tx);
-            //
-            // db::insert(
-            //     &state.db,
-            //     &claim.sub,
-            //     &shared_key_id,
-            //     &StateEntityStruct::UserSession,
-            //     &user_session
-            // )?;
             db_update_row(&conn, &user_id, Table::UserSession,
                 vec!(Column::SigHash, Column::TxWithdraw),
                 vec!(&db_ser(sig_hash)?, &db_ser(prepare_sign_msg.tx)?))?;
@@ -401,13 +340,11 @@ pub fn prepare_sign_tx(
                 &state.network
             );
 
-            // user_session.sig_hash = Some(sig_hash.clone());
             db_update_row(&conn, &user_id, Table::UserSession,
                 vec!(Column::SigHash),vec!(&db_ser(sig_hash)?))?;
 
             // Only in deposit case add backup tx to UserSession
             if prepare_sign_msg.protocol == Protocol::Deposit {
-                // user_session.tx_backup = Some(prepare_sign_msg.tx.clone());
                 db_update_row(&conn, &user_id, Table::UserSession,
                     vec!(Column::TxBackup),vec!(&db_ser(prepare_sign_msg.tx)?))?;
             }
@@ -415,15 +352,6 @@ pub fn prepare_sign_tx(
             info!("DEPOSIT: Backup tx ready for signing. Shared Key ID: {}.", user_id);
         }
     }
-
-    // // Update DB UserSession object
-    // db::insert(
-    //     &state.db,
-    //     &claim.sub,
-    //     &shared_key_id,
-    //     &StateEntityStruct::UserSession,
-    //     &user_session
-    // )?;
 
     Ok(Json(()))
 }
