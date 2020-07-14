@@ -25,12 +25,18 @@ impl Config {
             panic!("Invalid fee address: {}",e)
         };
         //mainstay_config is optional
-        let mainstay_config = match settings.get("mainstay_config"){
-            Some(o) => {
-                Some(o.parse::<mainstay::Config>().unwrap())
-            },
-            None => None
-        };
+        //let mainstay_config = match settings.get("mainstay_config"){
+        //    Some(o) => {
+        //        Some(o.parse::<mainstay::Config>().unwrap())
+        //    },
+        //    None => None
+        //};
+
+        let mainstay_config = mainstay::Config::from_test();
+        if mainstay_config.is_none()  {
+            panic!("expected mainstay config");
+        }
+        
         Ok(
             Config {
                 db,
@@ -43,7 +49,7 @@ impl Config {
                 block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
                 batch_lifetime: settings.get("batch_lifetime").unwrap().parse::<u64>().unwrap(),
                 punishment_duration: settings.get("punishment_duration").unwrap().parse::<u64>().unwrap(),
-            mainstay_config: mainstay_config,
+                mainstay_config: mainstay_config,
             }
         )
     }
@@ -107,6 +113,7 @@ pub fn get_server() -> Result<Rocket> {
                 schnorr::sign,
                 util::get_statechain,
                 util::get_smt_root,
+                util::get_confirmed_smt_root,
                 util::get_smt_proof,
                 util::get_state_entity_fees,
                 util::prepare_sign_tx,

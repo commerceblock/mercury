@@ -26,6 +26,11 @@ pub fn get_smt_root(client_shim: &ClientShim) -> Result<Root> {
     requests::post(&client_shim,&format!("info/root"))
 }
 
+/// Get state entity's sparse merkle tree root that has been confirmed by mainstay
+pub fn get_confirmed_smt_root(client_shim: &ClientShim) -> Result<Option<Root>> {
+    requests::post(&client_shim,&format!("info/confirmed_root"))
+}
+
 /// Get state chain inclusion proof
 pub fn get_smt_proof(client_shim: &ClientShim, root: &Root, funding_txid: &String) -> Result<Option<Proof>> {
     let smt_proof_msg = SmtProofMsgAPI {

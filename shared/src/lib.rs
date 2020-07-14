@@ -35,8 +35,13 @@ pub mod util;
 
 type Result<T> = std::result::Result<T, error::SharedLibError>;
 
+pub type Hash = monotree::Hash;
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Root {
     pub id: u32,
-    pub value: Option<[u8;32]>
+    pub value: Option<Hash>,
+    pub commitment_info: Option<mainstay::CommitmentInfo>
 }
+
+

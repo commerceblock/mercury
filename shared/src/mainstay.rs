@@ -26,6 +26,32 @@ type Payload<'a> = HashMap<&'a str,&'a str>;
 #[derive(Serialize, Deserialize, PartialEq, Copy, Default, Debug)]
 pub struct Commitment(Hash);
 
+impl APIObject for Commitment {
+    fn from_json(json_data: &serde_json::Value) -> Result<Self> {
+        println!("commitment from json");
+        Self::check_for_error(json_data)?;
+        let resp = Response::from_json(json_data);
+        if resp.is_ok(){
+            let resp = resp?;
+            return Ok(Self::from_response(&resp)?);
+        }
+        Ok(Self::from_str(get_str(json_data, "commitment")?)?)
+    }
+}
+
+impl Commitment {
+    pub fn from_latest(conf: &Config) -> Result<Self>{
+        let command = &format!("latestcommitment?position={}",conf.position);
+        println!("commitment from latest");
+        Self::from_command(command, conf)
+    }
+
+    fn from_response(response: &Response) -> Result<Self>{       
+        println!("commitment from response");
+        Ok(Self::from_str(get_str(&response.response, "commitment")?)?)
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub enum MainstayError {
     /// Generic error from string error message
@@ -34,6 +60,23 @@ pub enum MainstayError {
     FormatError(String),
     /// Item not found error
     NotFoundError(String),
+    ConfigurationError(String),
+    /// Error from the mainstay API
+    APIError(String)
+}
+
+impl PartialEq for MainstayError {
+    fn eq(&self, other: &Self) -> bool {
+        use MainstayError::*;
+        match (self, other) {
+            (Generic(ref a), Generic(ref b)) => a == b,
+            (FormatError(ref a), FormatError (ref b)) => a == b,
+            (NotFoundError(ref a), NotFoundError(ref b)) => a == b,
+            (ConfigurationError(ref a), ConfigurationError(ref b)) => a == b,
+            (APIError(ref a), APIError(ref b)) => a == b,
+            _ => false
+        }
+    }
 }
 
 impl From<String> for MainstayError {
@@ -54,6 +97,8 @@ impl fmt::Display for MainstayError {
             MainstayError::Generic(ref e) => write!(f, "MainstayError: {}", e),
             MainstayError::FormatError(ref e) => write!(f,"MainstayError::FormatError: {}",e),
             MainstayError::NotFoundError(ref e) => write!(f,"MainstayError::NotFoundError: {}",e),
+            MainstayError::ConfigurationError(ref e) => write!(f,"MainstayError::ConfigurationError: {}",e),
+            MainstayError::APIError(ref e) => write!(f,"MainstayError::APIError: {}",e),
         }
     }
 }
@@ -76,6 +121,8 @@ impl Responder<'static> for MainstayError {
 }
 
 use MainstayError::NotFoundError;
+use MainstayError::APIError;
+use MainstayError::ConfigurationError;
 use MainstayError::FormatError;
 
 impl Commitment {
@@ -250,7 +297,7 @@ impl Config {
     }
 
     pub fn test_slot() -> Option<u64> {
-        match std::env::var("MERC_MS_TEST_SLOT="){
+        match std::env::var("MERC_MS_TEST_SLOT"){
             Ok(s) => s.parse::<u64>().ok(),
             Err(_)=> None
         }
@@ -271,6 +318,9 @@ impl Config {
 impl FromStr for Config {
     type Err = Box<dyn error::Error>;
     fn from_str(s: &str) -> Result<Self> {
+        if s == "test" {
+            return Config::from_test().ok_or(ConfigurationError(Config::info().to_string()).into());
+        }
         match serde_json::from_str(s){
             Ok(p) => Ok(p),
             Err(e) =>  Err(MainstayError::Generic(e.to_string()).into())
@@ -318,11 +368,29 @@ pub trait APIObject: Sized {
             Err(e) => Err(MainstayError::Generic(e.to_string()).into())
         }   
     }
+
+    fn check_for_error(json_data: &serde_json::Value) -> Result<()> {
+        match get_str(json_data, "error"){
+            Ok(e) => Err(APIError(e.to_string()).into()),
+            Err(e) => {
+                match e.downcast_ref::<MainstayError>() {
+                    Some(e_ms) => {
+                        match e_ms {
+                            MainstayError::NotFoundError(_) => Ok(()),
+                            _ => Err(e.into())
+                        }
+                    },
+                    None => Err(e.into())
+                }
+            }
+        }
+    }
 }
 
 impl APIObject for Response {
     fn from_json(json_data: &serde_json::Value) -> Result<Self>{       
         debug!("parsing response: {:?}", json_data);
+        Self::check_for_error(json_data)?;
         match json_data.get("response"){
             Some(r) => {
                 debug!("got response object: {:?}", r);
@@ -342,7 +410,7 @@ impl APIObject for Response {
 
 }
 
- #[derive(Serialize, Deserialize, PartialEq, Debug)]
+ #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 //Information about a commitment: it's attestation, if any, and its proof
 pub struct CommitmentInfo {
     attestation: Option<Attestation>,
@@ -378,10 +446,20 @@ impl CommitmentInfo {
             None => false
         } 
     }
+
+    pub fn verify(&self) -> bool {
+        self.merkleproof.verify()
+    }
+
+    pub fn from_latest(conf: &Config) -> Result<Self>{
+        Self::from_commitment(conf, &Commitment::from_latest(conf)?)
+    }
+
 }
 
 impl APIObject for CommitmentInfo{
     fn from_json(json_data: &serde_json::Value) -> Result<Self>{
+        Self::check_for_error(json_data)?;
         let resp = &Response::from_json(json_data)?;
         let mp = merkle::Proof::from_response(resp)?;
         match Attestation::from_response(resp){
@@ -394,7 +472,7 @@ impl APIObject for CommitmentInfo{
 impl CommitmentIndexed for CommitmentInfo {}
 
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct Attestation {
     merkle_root: Commitment,
     txid: Commitment,
@@ -404,6 +482,7 @@ pub struct Attestation {
 
 impl APIObject for Attestation {
     fn from_json(json_data: &serde_json::Value) -> Result<Self>{    
+        Self::check_for_error(json_data)?;
         let resp = Response::from_json(json_data);
         if resp.is_ok(){
             let resp = resp?;
@@ -453,7 +532,8 @@ impl Attestation {
         Ok(Self::from_json_attestation(&val)?)
     }
 
-    fn from_json_attestation(val: &serde_json::Value) -> Result<Self>{          
+    fn from_json_attestation(val: &serde_json::Value) -> Result<Self>{  
+        Self::check_for_error(val)?;        
         debug!("parsing attestation: {:?}", val);
         debug!("parsing attestation: merkle_root");
         let merkle_root = get_commitment(val,"merkle_root")?; 
@@ -539,6 +619,7 @@ pub mod merkle {
 
     impl APIObject for Proof {
         fn from_json(json_data: &serde_json::Value) -> Result<Self>{
+            Self::check_for_error(json_data)?;
             debug!("trying from response");
             let resp = Response::from_json(json_data);
             if resp.is_ok(){
@@ -809,18 +890,34 @@ mod tests {
         assert!(invalid_proof.verify()==false,"verification of invalid merkle proof should return false");
     }
 
-  
+    #[test]
+    fn test_get_proof_from_confirmed() {
+        let result = test_get_proof_from_commitment(&Commitment::from_str("31e66288b9074bcfeb3bc5734f2d0b189ad601b61f86b8241ee427648b59fdbc").unwrap());
+        assert!(result.is_ok());
+    }
 
     #[test]
-    fn test_get_proof_from_commitment() {
-        let config = Config::from_test().expect(Config::info());        
-        
-        //Retrieve the proof for a commitment
-        let commitment = &Commitment::from_str("31e66288b9074bcfeb3bc5734f2d0b189ad601b61f86b8241ee427648b59fdbc").unwrap();
+    fn test_get_proof_from_unconfirmed() {
+        let exp_err_string = "Not found".to_string();
+        let exp_err_type = APIError; 
+        let exp_err = &exp_err_type(exp_err_string); 
 
-        let proof1 = merkle::Proof::from_commitment(&config, commitment).unwrap();
+        match test_get_proof_from_commitment(
+            &Commitment::from_hash(&monotree::utils::random_hash())){
+                Ok(_) => assert!(false, format!("expected {}", exp_err)),
+                Err(e) => match e.downcast_ref::<MainstayError>()  {
+                    Some(e_ms) => assert!(e_ms == exp_err, format!("expected {}", exp_err)),
+                    None => assert!(false, format!("expected {}", exp_err)),
+                }
+        };
+    }
+
+    fn test_get_proof_from_commitment(commitment: &Commitment) -> Result<()> {
+        let config = Config::from_test().expect(Config::info());        
+
+        let proof1 = merkle::Proof::from_commitment(&config, commitment)?;
         
-        let proof2 = merkle::Proof::from_attestable::<Commitment>(&config, commitment).unwrap();
+        let proof2 = merkle::Proof::from_attestable::<Commitment>(&config, commitment)?;
 
         assert!(proof1 == proof2);
 
@@ -829,6 +926,7 @@ mod tests {
 
         assert!(merkle::Proof::from_commitment(&config, commitment).is_err(), "should not be able to retrieve proof for random commitment");
         assert!(merkle::Proof::from_attestable::<Commitment>(&config, commitment).is_err(), "should not be able to retrieve proof for random commitment");
+        Ok(())
     }
 
     #[test]
@@ -857,5 +955,14 @@ mod tests {
         let com1 = Commitment::from_hash(&monotree::utils::random_hash());
         let com2 = Commitment::from_str(&com1.to_string()).unwrap();
         assert!(com1 == com2, format!("{} does not equal {}", com1, com2));
+    }
+
+    #[test]
+    fn test_from_latest(){
+        let config = &Config::from_test().expect(Config::info());        
+        match CommitmentInfo::from_latest(config) {
+            Ok(ci) => assert!(ci.verify(), "invalid commitment info"),
+            Err(e) => assert!(false, e.to_string())
+        };
     }
 }

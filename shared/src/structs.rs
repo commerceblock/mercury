@@ -59,7 +59,6 @@ pub struct SmtProofMsgAPI {
 }
 
 
-
 // PrepareSignTx structs
 
 

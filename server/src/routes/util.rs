@@ -199,14 +199,21 @@ pub fn get_smt_proof(
     Ok(Json(gen_proof_smt(DB_SC_LOC, &smt_proof_msg.root.value, &smt_proof_msg.funding_txid)?))
 }
 
-/// API: Get root of sparse merkle tree. Will be via Mainstay in the future.
+/// API: Get root of sparse merkle tree. 
 #[post("/info/root", format = "json")]
 pub fn get_smt_root(
     state: State<Config>,
 ) -> Result<Json<Root>> {
-    Ok(Json(get_current_root::<Root>(&state.db)?))
+    Ok(Json(get_current_root::<Root>(&state.db, &state.mainstay_config)?))
 }
 
+/// API: Get root of sparse merkle tree that has been mainstay-confirmed 
+#[post("/info/confirmed_root", format = "json")]
+pub fn get_confirmed_smt_root(
+    state: State<Config>,
+) -> Result<Json<Option<Root>>> {
+    Ok(Json(db::get_confirmed_root::<Option<Root>>(&state.db, &state.mainstay_config)?))
+}
 
 /// API: Return a TransferBatchData status.
 /// Triggers check for all transfers complete - if so then finalize all.

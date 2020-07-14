@@ -123,7 +123,7 @@ pub fn withdraw_confirm(
     let tx_withdraw = user_session.tx_withdraw.unwrap();
     let funding_txid = tx_withdraw.input.get(0).unwrap().previous_output.txid.to_string();
 
-    let root = get_current_root::<Root>(&state.db)?;
+    let root = get_current_root::<Root>(&state.db, &state.mainstay_config)?;
     let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &funding_txid, &withdraw_msg2.address)?;
     update_root(&state.db, &state.mainstay_config, new_root.unwrap())?;
 

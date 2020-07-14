@@ -154,7 +154,7 @@ pub fn deposit_confirm(
 
 
     // Update sparse merkle tree with new StateChain entry
-    let root = get_current_root::<Root>(&state.db)?;
+    let root = get_current_root::<Root>(&state.db, &state.mainstay_config)?;
     let new_root = update_statechain_smt(
         DB_SC_LOC,
         &root.value,

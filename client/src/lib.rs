@@ -40,7 +40,7 @@ type Result<T> = std::result::Result<T, error::CError>;
 pub struct ClientShim {
     pub client: reqwest::Client,
     pub auth_token: Option<String>,
-    pub endpoint: String,
+    pub endpoint: String
 }
 
 impl ClientShim {

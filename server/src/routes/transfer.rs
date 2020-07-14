@@ -266,7 +266,7 @@ pub fn transfer_finalize(
         .ok_or(SEError::Generic(String::from("StateChain empty")))?
         .data.clone();
 
-    let root = get_current_root::<Root>(&state.db)?;
+    let root = get_current_root::<Root>(&state.db, &state.mainstay_config)?;
     let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &funding_txid, &proof_key)?;
     update_root(&state.db, &state.mainstay_config, new_root.unwrap())?;
 

@@ -77,7 +77,7 @@ mod tests {
 
         // None root
         let smt_proof_msg = SmtProofMsgAPI {
-            root: Root {id:0, value: None},
+            root: Root {id:0, value: None, commitment_info: None},
             funding_txid: String::from("c1562f7f15d6b8a51ea2e7035b9cdb8c6c0c41fecb62d459a3a6bf738ff0db0e")
         };
         let body = serde_json::to_string(&smt_proof_msg).unwrap();
@@ -98,7 +98,7 @@ mod tests {
         let current_root: Root = serde_json::from_str(&res).unwrap();
 
         let smt_proof_msg = SmtProofMsgAPI {
-            root: Root {id: current_root.id+1, value: Some([1;32])},    // alter ID to become invalid
+            root: Root {id: current_root.id+1, value: Some([1;32]), commitment_info: None},    // alter ID to become invalid
             funding_txid: String::from("c1562f7f15d6b8a51ea2e7035b9cdb8c6c0c41fecb62d459a3a6bf738ff0db0e")
         };
         let body = serde_json::to_string(&smt_proof_msg).unwrap();

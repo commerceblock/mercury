@@ -112,7 +112,9 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     )?;
 
     // Verify proof key inclusion in SE sparse merkle tree
+    println!("getting smt root");
     let root = get_smt_root(&wallet.client_shim)?;
+    println!("getting smt proof");
     let proof = get_smt_proof(&wallet.client_shim, &root, &funding_txid)?;
     assert!(verify_statechain_smt(
         &root.value,
@@ -128,5 +130,6 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
         shared_key.add_proof_data(&proof_key.to_string(), &root, &proof);
     }
 
+    println!("finished");
     Ok((shared_key_id, state_chain_id, funding_txid, tx_backup_signed, tx_backup_psm, proof_key))
 }

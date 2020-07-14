@@ -11,7 +11,6 @@ use super::key_paths::{funding_txid_to_int, KeyPathWithAddresses, KeyPath};
 use crate::error::{CError, WalletErrorType};
 use crate::wallet::shared_key::SharedKey;
 use crate::ClientShim;
-use crate::shared_lib::mainstay::{CommitmentInfo};
 
 use bitcoin::{{Network, PublicKey, Address, TxIn, OutPoint},
     hashes::sha256d,
@@ -45,8 +44,7 @@ pub struct Wallet {
     pub se_key_shares: KeyPath, // for derivation of private key shares used in shared_keys
 
     pub shared_keys: Vec<SharedKey>, // vector of keys co-owned with state entities
-
-    pub ms_commitment_infos: Vec<CommitmentInfo> //Vector of mainstay commitment infos  
+    pub require_mainstay: bool
 }
 impl Wallet {
     pub fn new(seed: &[u8], network: &String, client_shim: ClientShim, electrumx_client: Box<dyn Electrumx>) -> Wallet {
@@ -77,8 +75,16 @@ impl Wallet {
             se_proof_keys,
             se_key_shares,
             shared_keys: vec!(),
-            ms_commitment_infos: vec!()
+            require_mainstay: false
         }
+    }
+
+    pub fn set_require_mainstay(&mut self, val: bool){
+        self.require_mainstay=val;
+    }
+
+    pub fn require_mainstay(&self) -> bool{
+        self.require_mainstay
     }
 
     /// serialize wallet to json
@@ -114,7 +120,7 @@ impl Wallet {
             "se_key_shares_last_derivation_pos": self.se_key_shares.last_derived_pos,
             "se_key_shares_pos_encoded": serde_json::to_string(&se_key_shares_pos_encoded).unwrap(),
             "shared_keys": serde_json::to_string(&self.shared_keys).unwrap(),
-            "ms_commitment_infos": serde_json::to_string(&self.ms_commitment_infos).unwrap(),
+            "require_mainstay": self.require_mainstay
         })
     }
 
@@ -159,7 +165,7 @@ impl Wallet {
             se_proof_keys,
             se_key_shares,
             shared_keys: vec!(),
-            ms_commitment_infos: vec!()
+            require_mainstay: json.get("require_mainstay").unwrap().as_bool().unwrap()
         };
 
         // re-derive keys which have been previously derived
@@ -204,12 +210,6 @@ impl Wallet {
         if shared_keys_str.len() != 2 { // is not empty
             let shared_keys:Vec<SharedKey> = serde_json::from_str(shared_keys_str).unwrap();
             wallet.shared_keys = shared_keys;
-        }
-
-        let ci_str = &json["ms_commitment_infos"].as_str().unwrap();
-        if ci_str.len() > 2 { // is not empty
-            let cis:Vec<CommitmentInfo> = serde_json::from_str(ci_str).unwrap();
-            wallet.ms_commitment_infos = cis;
         }
 
         debug!("(wallet id: {}) Loaded wallet to memory", wallet.id);
