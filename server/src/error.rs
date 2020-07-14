@@ -26,9 +26,9 @@ pub enum SEError {
     AuthError,
     /// Error in co-signing
     SigningError(String),
-    /// DB error
-    DBError(DBErrorType, String),
-    /// DB error with column
+    /// DB error no ID found
+    DBError(DBErrorType, Uuid),
+    /// DB error no data in column for ID
     DBErrorWC(DBErrorType, Uuid, Column),
     /// Inherit errors from Util
     SharedLibError(String),
@@ -92,7 +92,7 @@ impl fmt::Display for SEError {
             SEError::Generic(ref e) => write!(f, "Error: {}", e),
             SEError::AuthError => write!(f,"Authentication Error: User authorisation failed"),
             SEError::DBError(ref e, ref id) => write!(f, "DB Error: {} (id: {})", e.as_str(), id),
-            SEError::DBErrorWC(ref e, ref id, ref col) => write!(f, "DB Error: {} (id: {} col: {})", e.as_str(), id.to_string(), col.to_string()),
+            SEError::DBErrorWC(ref e, ref id, ref col) => write!(f, "DB Error: {} (id: {} col: {})", e.as_str(), id, col.to_string()),
             SEError::SigningError(ref e) => write!(f,"Signing Error: {}",e),
             SEError::SharedLibError(ref e) => write!(f,"SharedLibError Error: {}",e),
             SEError::SMTError(ref e) => write!(f,"SMT Error: {}",e),

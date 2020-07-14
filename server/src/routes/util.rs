@@ -3,7 +3,6 @@
 //! StateEntity protocol utilities. DB structs, info api calls and other miscellaneous functions
 
 use super::super::{{Result,Config},
-    auth::jwt::Claims,
     storage::db};
 extern crate shared_lib;
 use shared_lib::{
@@ -13,9 +12,9 @@ use shared_lib::{
     Root};
 
 use crate::routes::transfer::finalize_batch;
-use crate::error::{SEError,DBErrorType::NoDataForID};
+use crate::error::SEError;
 use crate::storage::{
-    db_postgres::{Table, Column, db_get, db_update, db_remove, db_deser, db_ser},
+    db_postgres::{Table, Column, db_remove, db_deser, db_ser, db_update_row, db_get_1, db_get_3, db_get_2},
     db::{get_root, get_current_root}};
 use crate::DataBase;
 
@@ -120,15 +119,17 @@ pub struct TransferFinalizeData {
 
 /// Check if user has passed authentication.
 pub fn check_user_auth(
-    _state: &State<Config>,
-    _claim: &Claims,
     conn: &DataBase,
     user_id: &Uuid
 ) -> Result<()> {
     // check authorisation id is in DB (and check password?)
-    if let Err(_) = db_get::<Uuid>(&conn, &user_id, Table::UserSession, Column::Id) {
+    // if let Err(_) = db_get::<Uuid>(&conn, &user_id, Table::UserSession, Column::Id) {
+    //     return Err(SEError::AuthError)
+    // }
+    if let Err(_) = db_get_1::<Uuid>(&conn, &user_id, Table::UserSession, vec!(Column::Id)) {
         return Err(SEError::AuthError)
     }
+
     Ok(())
     // db::get(
     //     &state.db,
@@ -155,9 +156,14 @@ pub fn state_chain_punish(
     //     db_get(&conn, &user_id, Table::StateChain, Column::LockedUntil)?
     //         .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::LockedUntil))?;
     // check_locked(sc_locked_until)?;
-    let sc_locked_until: NaiveDateTime =
-        db_get(&conn, &state_chain_id, Table::StateChain, Column::LockedUntil)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::LockedUntil))?;
+    // let sc_locked_until: NaiveDateTime =
+    //     db_get(&conn, &state_chain_id, Table::StateChain, Column::LockedUntil)?
+    //         .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::LockedUntil))?;
+    // is_locked(sc_locked_until)?;
+    let (sc_locked_until) =
+            db_get_1::<NaiveDateTime>(&conn, &state_chain_id, Table::StateChain,
+            vec!(Column::LockedUntil))?;
+
     is_locked(sc_locked_until)?;
 
     // set punishment
@@ -169,8 +175,10 @@ pub fn state_chain_punish(
     //     &StateEntityStruct::StateChain,
     //     &state_chain
     // )?;
-    db_update(&conn, &state_chain_id, get_locked_until(state.punishment_duration as i64)?, Table::StateChain, Column::LockedUntil)?;
 
+    db_update_row(&conn, &state_chain_id, Table::StateChain,
+        vec!(Column::LockedUntil),
+        vec!(&get_locked_until(state.punishment_duration as i64)?))?;
 
     info!("PUNISHMENT: State Chain ID: {} locked for {}s.", state_chain_id, state.punishment_duration);
     Ok(())
@@ -198,21 +206,15 @@ pub fn get_statechain(
     // let state_chain: StateChain =
     //     db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
     //         .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
-    let amount: i64 =
-        db_get(&conn, &state_chain_id, Table::StateChain, Column::Amount)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Amount))?;
 
-    let state_chain: StateChain =
-        db_deser(db_get(&conn, &state_chain_id, Table::StateChain, Column::Chain)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::Chain))?)?;
+    let (amount,
+        state_chain_str) =
+            db_get_2::<i64,String>(&conn, &state_chain_id, Table::StateChain,
+            vec!(Column::Amount, Column::Chain))?;
+    let state_chain: StateChain = db_deser(state_chain_str)?;
 
-    let owner_id: Uuid =
-        db_get(&conn, &state_chain_id, Table::StateChain, Column::OwnerId)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, state_chain_id, Column::OwnerId))?;
-
-    let tx_backup: Transaction =
-        db_deser(db_get(&conn, &owner_id, Table::UserSession, Column::TxBackup)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, owner_id, Column::TxBackup))?)?;
+    let (tx_backup_str) = db_get_1::<String>(&conn, &state_chain_id, Table::BackupTxs,vec!(Column::TxBackup))?;
+    let tx_backup: Transaction = db_deser(tx_backup_str)?;
 
     Ok(Json({
         StateChainDataAPI {
@@ -231,7 +233,7 @@ pub fn get_smt_proof(
 ) -> Result<Json<Option<Proof>>> {
     // ensure root exists
     if get_root::<[u8;32]>(&state.db, &smt_proof_msg.root.id)?.is_none() {
-        return Err(SEError::DBError(NoDataForID, format!("Root id: {}",smt_proof_msg.root.id.to_string())));
+        return Err(SEError::Generic(format!("DB Error: Could not find root. Root id: {}",smt_proof_msg.root.id.to_string())));
     }
 
     Ok(Json(gen_proof_smt(DB_SC_LOC, &smt_proof_msg.root.value, &smt_proof_msg.funding_txid)?))
@@ -257,47 +259,12 @@ pub fn get_transfer_batch_status(
 ) -> Result<Json<TransferBatchDataAPI>> {
     let batch_id = Uuid::from_str(&batch_id).unwrap();
 
-    // let mut transfer_batch_data: TransferBatchData =
-    //     db::get(&state.db, &claim.sub, &batch_id, &StateEntityStruct::TransferBatchData)?
-    //         .ok_or(SEError::DBError(NoDataForID, batch_id.clone()))?;
-
-    let state_chains: HashMap<Uuid, bool> =
-        db_deser(db_get(&conn, &batch_id, Table::TransferBatch, Column::StateChains)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::StateChains))?)?;
-
-    let start_time: NaiveDateTime =
-        db_get(&conn, &batch_id, Table::TransferBatch, Column::StartTime)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::StartTime))?;
-
-    // Check batch is still within lifetime
-    // if transfer_batch_data.is_ended(state.batch_lifetime) {
-    if transfer_batch_is_ended(start_time, state.batch_lifetime as i64) {
-        let mut punished_state_chains: Vec<Uuid> =
-            db_deser(db_get(&conn, &batch_id, Table::TransferBatch, Column::PunishedStateChains)?
-                .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::PunishedStateChains))?)?;
-        if punished_state_chains.len() == 0 { // Punishments not yet set
-            info!("TRANSFER_BATCH: Lifetime reached. ID: {}.", batch_id);
-            // Set punishments for all statechains involved in batch
-            for (state_chain_id, _) in state_chains {
-                state_chain_punish(&state, &conn, state_chain_id.clone())?;
-                punished_state_chains.push(state_chain_id.clone());
-
-                // Remove TransferData involved. Ignore failed update err since Transfer data may not exist.
-                // db::remove(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::TransferData)?;
-                let _ = db_remove(&conn, &state_chain_id, Table::Transfer);
-
-                info!("TRANSFER_BATCH: Transfer data deleted. State Chain ID: {}.", state_chain_id);
-            }
-            db_update(&conn, &batch_id, db_ser(punished_state_chains)?, Table::TransferBatch, Column::PunishedStateChains)?;
-            info!("TRANSFER_BATCH: Punished all state chains in failed batch. ID: {}.",batch_id);
-        }
-        return Err(SEError::Generic(String::from("Transfer Batch ended.")))
-    }
+    let (state_chains_str,start_time, finalized) =
+        db_get_3::<String,NaiveDateTime,bool>(&conn, &batch_id, Table::TransferBatch,
+            vec!(Column::StateChains, Column::StartTime, Column::Finalized))?;
+    let state_chains: HashMap<Uuid, bool> = db_deser(state_chains_str)?;
 
     // Check if all transfers are complete. If so then all transfers in batch can be finalized.
-    let finalized: bool =
-        db_get(&conn, &batch_id, Table::TransferBatch, Column::Finalized)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, batch_id, Column::Finalized))?;
     if !finalized {
         let mut state_chains_copy = state_chains.clone();
         state_chains_copy.retain(|_, &mut v| v == false);
@@ -308,6 +275,33 @@ pub fn get_transfer_batch_status(
                 batch_id
             )?;
             info!("TRANSFER_BATCH: All transfers complete in batch. Finalized. ID: {}.", batch_id);
+        }
+        // Check batch is still within lifetime
+        if transfer_batch_is_ended(start_time, state.batch_lifetime as i64) {
+            let mut punished_state_chains: Vec<Uuid> =
+                db_deser(db_get_1(&conn, &batch_id, Table::TransferBatch, vec!(Column::PunishedStateChains))?)?;
+
+            if punished_state_chains.len() == 0 { // Punishments not yet set
+                info!("TRANSFER_BATCH: Lifetime reached. ID: {}.", batch_id);
+                // Set punishments for all statechains involved in batch
+                for (state_chain_id, _) in state_chains {
+                    state_chain_punish(&state, &conn, state_chain_id.clone())?;
+                    punished_state_chains.push(state_chain_id.clone());
+
+                    // Remove TransferData involved. Ignore failed update err since Transfer data may not exist.
+                    // db::remove(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::TransferData)?;
+                    let _ = db_remove(&conn, &state_chain_id, Table::Transfer);
+
+                    info!("TRANSFER_BATCH: Transfer data deleted. State Chain ID: {}.", state_chain_id);
+                }
+
+                db_update_row(&conn, &batch_id, Table::TransferBatch,
+                    vec!(Column::PunishedStateChains),
+                    vec!(&db_ser(punished_state_chains)?))?;
+
+                info!("TRANSFER_BATCH: Punished all state chains in failed batch. ID: {}.",batch_id);
+            }
+            return Err(SEError::Generic(String::from("Transfer Batch ended.")))
         }
     }
 
@@ -326,14 +320,13 @@ pub fn get_transfer_batch_status(
 #[post("/prepare-sign", format = "json", data = "<prepare_sign_msg>")]
 pub fn prepare_sign_tx(
     state: State<Config>,
-    claim: Claims,
     conn: DataBase,
     prepare_sign_msg: Json<PrepareSignTxMsg>,
 ) -> Result<Json<()>> {
     let user_id = prepare_sign_msg.shared_key_id;
 
     // Auth user
-    check_user_auth(&state, &claim, &conn, &user_id)?;
+    check_user_auth(&conn, &user_id)?;
 
     let prepare_sign_msg: PrepareSignTxMsg = prepare_sign_msg.into_inner();
 
@@ -347,8 +340,9 @@ pub fn prepare_sign_tx(
         Protocol::Withdraw => {
 
             // Verify withdrawal has been authorised via presense of withdraw_sc_sig
-            db_get::<String>(&conn, &user_id, Table::UserSession, Column::WithdrawScSig)?
-                .ok_or(SEError::Generic(String::from("Withdraw has not been authorised. /withdraw/init must be called first.")))?;
+            if let Err(_) = db_get_1::<String>(&conn, &user_id, Table::UserSession, vec!(Column::WithdrawScSig)) {
+                return Err(SEError::Generic(String::from("Withdraw has not been authorised. /withdraw/init must be called first.")))
+            }
 
             // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data
             tx_withdraw_verify(&prepare_sign_msg, &state.fee_address, &state.fee_withdraw)?;
@@ -356,17 +350,14 @@ pub fn prepare_sign_tx(
             // Check funding txid UTXO info
             // let state_chain_id = user_session.state_chain_id.clone() // check exists
             //     .ok_or(SEError::Generic(String::from("No state chain session found for this user.")))?;
-            let state_chain_id: Uuid =
-                db_get(&conn, &user_id, Table::UserSession, Column::StateChainId)?
-                    .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::StateChainId))?;
 
             // let state_chain: StateChain =
             //     db::get(&state.db, &claim.sub, &state_chain_id.to_string(), &StateEntityStruct::StateChain)?
             //         .ok_or(SEError::DBError(NoDataForID, state_chain_id.to_string().clone()))?;
 
-            let tx_backup: Transaction =
-                db_deser(db_get(&conn, &user_id, Table::UserSession, Column::TxBackup)?
-                    .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::TxBackup))?)?;
+            let (tx_backup_str) =
+                db_get_1::<String>(&conn, &user_id, Table::UserSession, vec!(Column::TxBackup))?;
+            let tx_backup: Transaction = db_deser(tx_backup_str)?;
 
             let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
             if prepare_sign_msg.tx.input.get(0).unwrap().previous_output.to_owned() != tx_backup_input {
@@ -392,11 +383,11 @@ pub fn prepare_sign_tx(
             //     &StateEntityStruct::UserSession,
             //     &user_session
             // )?;
-            db_update(&conn, &user_id, db_ser(sig_hash)?, Table::UserSession, Column::SigHash)?;
-            db_update(&conn, &user_id, db_ser(prepare_sign_msg.tx)?, Table::UserSession, Column::TxWithdraw)?;
+            db_update_row(&conn, &user_id, Table::UserSession,
+                vec!(Column::SigHash, Column::TxWithdraw),
+                vec!(&db_ser(sig_hash)?, &db_ser(prepare_sign_msg.tx)?))?;
 
-
-            info!("WITHDRAW: Withdraw tx ready for signing. User ID: {:?}. State Chain ID: {}.",user_id, state_chain_id);
+            info!("WITHDRAW: Withdraw tx ready for signing. User ID: {:?}.",user_id);
         }
         _ => {
             // Verify unsigned backup tx to ensure co-sign will be signing the correct data
@@ -411,12 +402,14 @@ pub fn prepare_sign_tx(
             );
 
             // user_session.sig_hash = Some(sig_hash.clone());
-            db_update(&conn, &user_id, db_ser(sig_hash)?, Table::UserSession, Column::SigHash)?;
+            db_update_row(&conn, &user_id, Table::UserSession,
+                vec!(Column::SigHash),vec!(&db_ser(sig_hash)?))?;
 
             // Only in deposit case add backup tx to UserSession
             if prepare_sign_msg.protocol == Protocol::Deposit {
                 // user_session.tx_backup = Some(prepare_sign_msg.tx.clone());
-                db_update(&conn, &user_id, db_ser(prepare_sign_msg.tx)?, Table::UserSession, Column::TxBackup)?;
+                db_update_row(&conn, &user_id, Table::UserSession,
+                    vec!(Column::TxBackup),vec!(&db_ser(prepare_sign_msg.tx)?))?;
             }
 
             info!("DEPOSIT: Backup tx ready for signing. Shared Key ID: {}.", user_id);

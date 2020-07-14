@@ -12,8 +12,8 @@ use shared_lib::{
     state_chain::*,
     Root,
     mocks::mock_electrum::MockElectrum};
-use crate::error::{SEError,DBErrorType::NoDataForID};
-use crate::storage::db_postgres::{Table, Column, db_insert, db_update, db_get, db_deser, db_ser};
+use crate::error::SEError;
+use crate::storage::db_postgres::{Table, Column, db_insert, db_deser, db_ser, db_update_row, db_get_2};
 use crate::DataBase;
 use bitcoin::Transaction;
 
@@ -49,8 +49,9 @@ pub fn deposit_init(
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
     db_insert(&conn, &user_id, Table::UserSession)?;
-    db_update(&conn, &user_id, deposit_msg1.auth.clone(), Table::UserSession, Column::Authentication)?;
-    db_update(&conn, &user_id, deposit_msg1.proof_key.to_owned(), Table::UserSession, Column::ProofKey)?;
+    db_update_row(&conn, &user_id, Table::UserSession,
+        vec!(Column::Authentication,Column::ProofKey),
+        vec!(&deposit_msg1.auth.clone(),&deposit_msg1.proof_key.to_owned()))?;
 
     // db::insert(
     //     &state.db,
@@ -134,16 +135,18 @@ pub fn deposit_confirm(
     // db::get(&state.db, &claim.sub, &shared_key_id, &StateEntityStruct::UserSession)?
     //     .ok_or(SEError::DBError(NoDataForID, shared_key_id.clone()))?;
 
-    let tx_backup: Transaction =
-        db_deser(db_get(&conn, &user_id, Table::UserSession, Column::TxBackup)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::TxBackup))?)?;
-
+    // let tx_backup: Transaction =
+    //     db_deser(db_get(&conn, &user_id, Table::UserSession, Column::TxBackup)?
+    //         .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::TxBackup))?)?;
+    let (tx_backup_str, proof_key) = db_get_2::<String,String>(&conn, &user_id, Table::UserSession,
+        vec!(Column::TxBackup, Column::ProofKey))?;
+    let tx_backup: Transaction = db_deser(tx_backup_str)?;
 
     // Ensure backup tx exists and is signed
     // let tx_backup = user_session.tx_backup.clone()
     //     .ok_or(SEError::DBError(NoDataForID, String::from("Signed Back up transaction not found.")))?;
     if tx_backup.input[0].witness.len() == 0 {
-        return Err(SEError::DBError(NoDataForID, String::from("Signed Back up transaction not found.")));
+        return Err(SEError::Generic(String::from("Signed Back up transaction not found.")));
     }
 
     // Wait for funding tx existence in blockchain and confs
@@ -151,9 +154,9 @@ pub fn deposit_confirm(
 
     // Create state chain DB object
     let state_chain_id = Uuid::new_v4();
-    let proof_key: String =
-        db_get(&conn, &user_id, Table::UserSession, Column::ProofKey)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::ProofKey))?;
+    // let proof_key: String =
+    //     db_get(&conn, &user_id, Table::UserSession, Column::ProofKey)?
+    //         .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::ProofKey))?;
 
     let amount = (tx_backup.output.last().unwrap().value  + FEE) as i64;
     let state_chain = StateChain::new(
@@ -168,14 +171,22 @@ pub fn deposit_confirm(
     //     &state_chain
     // )?;
     db_insert(&conn, &state_chain_id, Table::StateChain)?;
-    db_update(&conn, &state_chain_id, db_ser(state_chain)?, Table::StateChain, Column::Chain)?;
-    db_update(&conn, &state_chain_id, amount, Table::StateChain, Column::Amount)?;
-    db_update(&conn, &state_chain_id, get_time_now(), Table::StateChain, Column::LockedUntil)?;
-    db_update(&conn, &state_chain_id, user_id.to_owned(), Table::StateChain, Column::OwnerId)?;
+    db_update_row(&conn, &state_chain_id, Table::StateChain,
+        vec!(
+            Column::Chain,
+            Column::Amount,
+            Column::LockedUntil,
+            Column::OwnerId),
+        vec!(
+            &db_ser(state_chain)?,
+            &amount,
+            &get_time_now(),
+            &user_id.to_owned()))?;
 
     // Insert into BackupTx table
     db_insert(&conn, &state_chain_id, Table::BackupTxs)?;
-    db_update(&conn, &state_chain_id, db_ser(tx_backup.clone())?, Table::BackupTxs, Column::TxBackup)?;
+    db_update_row(&conn, &state_chain_id, Table::BackupTxs,vec!(Column::TxBackup),vec!(&db_ser(tx_backup.clone())?))?;
+
 
     info!("DEPOSIT: State Chain created. ID: {} For user ID: {}", state_chain_id, user_id);
 
@@ -194,7 +205,7 @@ pub fn deposit_confirm(
     debug!("DEPOSIT: State Chain ID: {}. New root: {:?}. Previous root: {:?}.", state_chain_id, new_root.unwrap(), root);
 
     // Update UserSession with StateChain's ID
-    db_update(&conn, &user_id, state_chain_id, Table::UserSession, Column::StateChainId)?;
+    db_update_row(&conn, &user_id, Table::UserSession,vec!(Column::StateChainId),vec!(&state_chain_id))?;
 
     // user_session.state_chain_id = Some(state_chain.id.to_owned());
     // db::insert(
