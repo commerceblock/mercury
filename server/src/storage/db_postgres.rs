@@ -1,16 +1,12 @@
 //! DB
 //!
 //! Postgres DB access and update tools.
-//! Use db_get, db_update for rust types convertable to postgres types (String, int, bool, Uuid, chrono::NaiveDateTime).
-//! Use db_get_serialized, db_update_serialized for custom types.
-
 
 use super::super::Result;
-
-use rocket_contrib::databases::postgres::Connection;
-use rocket_contrib::databases::postgres::types::ToSql;
-use rocket_contrib::databases::postgres::rows::Row;
 use crate::error::{DBErrorType::{UpdateFailed,NoDataForID}, SEError};
+use rocket_contrib::databases::postgres::{Connection,
+    types::ToSql,
+    rows::Row};
 use uuid::Uuid;
 
 
@@ -94,14 +90,11 @@ pub enum Column {
     PaillierKeyPair,
     Party1Private,
     Party2Public,
-
     PDLProver,
     PDLDecommit,
     Alpha,
     Party2PDLFirstMsg,
-
     Party1MasterKey,
-
     EphEcKeyPair,
     EphKeyGenFirstMsg,
     POS
@@ -142,44 +135,6 @@ pub fn db_insert(conn: &Connection, id: &Uuid, table: Table) -> Result<u64> {
     Ok(statement.execute(&[id])?)
 }
 
-// Update item in table with PostgreSql data types (String, int, bool, Uuid, chrono::NaiveDateTime)
-pub fn db_update<T>(conn: &Connection, id: &Uuid, data: T, table: Table, column: Column) -> Result<()>
-where
-    T: rocket_contrib::databases::postgres::types::ToSql
-{
-    let statement = conn.prepare(&format!("UPDATE {} SET {} = $1 WHERE id = $2",table.to_string(),column.to_string()))?;
-    if statement.execute(&[&data, &id])? == 0 {
-        return Err(SEError::DBError(UpdateFailed, *id));
-    }
-
-    Ok(())
-}
-
-// Get item from table with PostgreSql data types (String, int, Uuid, bool)
-// Err if ID not found. Return None if data item empty.
-pub fn db_get<T>(conn: &Connection, id: &Uuid, table: Table, column: Column) -> Result<Option<T>>
-where
-    T: rocket_contrib::databases::postgres::types::FromSql
-{
-    let statement = conn.prepare(&format!("SELECT {} FROM {} WHERE id = $1",column.to_string(),table.to_string()))?;
-    let rows = statement.query(&[&id])?;
-
-    if rows.is_empty() {
-        return Err(SEError::DBError(NoDataForID, *id))
-    };
-    let row = rows.get(0);
-
-    match row.get_opt::<usize, T>(0) {
-        None => return Err(SEError::DBError(NoDataForID, *id)),
-        Some(data) => {
-            match data {
-                Ok(v) => Ok(Some(v)),
-                Err(_) => Ok(None)
-            }
-        }
-    }
-}
-
 // Remove row in table
 pub fn db_remove(conn: &Connection, id: &Uuid, table: Table) -> Result<()> {
     let statement = conn.prepare(&format!("DELETE FROM {} WHERE id = $1;",table.to_string()))?;
@@ -190,8 +145,8 @@ pub fn db_remove(conn: &Connection, id: &Uuid, table: Table) -> Result<()> {
     Ok(())
 }
 
-
-pub fn db_update_row(conn: &Connection, id: &Uuid, table: Table, column: Vec<Column>, data: Vec<&dyn ToSql>) -> Result<()>
+/// Update items in table for some ID with PostgreSql data types (String, int, bool, Uuid, chrono::NaiveDateTime).
+pub fn db_update(conn: &Connection, id: &Uuid, table: Table, column: Vec<Column>, data: Vec<&dyn ToSql>) -> Result<()>
 {
     let num_items = column.len();
     let statement = conn.prepare(&format!(
@@ -210,8 +165,8 @@ pub fn db_update_row(conn: &Connection, id: &Uuid, table: Table, column: Vec<Col
 
     Ok(())
 }
-/// Returns str list of column names for SQL statement.
-pub fn update_columns_str(cols: Vec<Column>) -> String {
+/// Returns str list of column names for SQL UPDATE prepare statement.
+fn update_columns_str(cols: Vec<Column>) -> String {
     let cols_len = cols.len();
     let mut str = "".to_owned();
     for (i, col) in cols.iter().enumerate() {
@@ -224,8 +179,9 @@ pub fn update_columns_str(cols: Vec<Column>) -> String {
     str
 }
 
-
-fn db_get_row<T,U,V,W>(conn: &Connection, id: &Uuid, table: Table, column: Vec<Column>) -> Result<(Option<T>,Option<U>,Option<V>,Option<W>)>
+/// Get items from table for some ID with PostgreSql data types (String, int, Uuid, bool, Uuid, chrono::NaiveDateTime).
+/// Err if ID not found. Return None if data item empty.
+fn db_get<T,U,V,W>(conn: &Connection, id: &Uuid, table: Table, column: Vec<Column>) -> Result<(Option<T>,Option<U>,Option<V>,Option<W>)>
 where
     T: rocket_contrib::databases::postgres::types::FromSql,
     U: rocket_contrib::databases::postgres::types::FromSql,
@@ -267,7 +223,7 @@ where
 
     Ok((None,None,None,None))
 }
-/// Returns str list of column names for SQL statement.
+/// Returns str list of column names for SQL SELECT query statement.
 pub fn get_columns_str(cols: &Vec<Column>) -> String {
     let cols_len = cols.len();
     let mut str = "".to_owned();
@@ -295,25 +251,26 @@ fn get_item_from_row<T>(row: &Row, index: usize, id: &Uuid, column: Column) -> R
     }
 }
 
+/// Get 1 item from row in table. Err if ID not found. Return None if data item empty.
 pub fn db_get_1<T>(conn: &Connection, id: &Uuid, table: Table, column: Vec<Column>) -> Result<T>
 where
     T: rocket_contrib::databases::postgres::types::FromSql
 {
     let (res,_,_,_) =
-        db_get_row::<T,T,T,T>(conn, id, table, column)?;
-    Ok(res.unwrap()) // err returned from db_get_row if desired item is None
+        db_get::<T,T,T,T>(conn, id, table, column)?;
+    Ok(res.unwrap()) // err returned from db_get if desired item is None
 }
-
+/// Get 2 items from row in table. Err if ID not found. Return None if data item empty.
 pub fn db_get_2<T,U>(conn: &Connection, id: &Uuid, table: Table, column: Vec<Column>) -> Result<(T,U)>
 where
     T: rocket_contrib::databases::postgres::types::FromSql,
     U: rocket_contrib::databases::postgres::types::FromSql
 {
     let (res1,res2,_,_) =
-        db_get_row::<T,U,U,U>(conn, id, table, column)?;
+        db_get::<T,U,U,U>(conn, id, table, column)?;
     Ok((res1.unwrap(),res2.unwrap()))
 }
-
+/// Get 3 items from row in table. Err if ID not found. Return None if data item empty.
 pub fn db_get_3<T,U,V>(conn: &Connection, id: &Uuid, table: Table, column: Vec<Column>) -> Result<(T,U,V)>
 where
     T: rocket_contrib::databases::postgres::types::FromSql,
@@ -321,10 +278,10 @@ where
     V: rocket_contrib::databases::postgres::types::FromSql
 {
     let (res1,res2,res3,_) =
-        db_get_row::<T,U,V,V>(conn, id, table, column)?;
+        db_get::<T,U,V,V>(conn, id, table, column)?;
     Ok((res1.unwrap(),res2.unwrap(),res3.unwrap()))
 }
-
+/// Get 4 items from row in table. Err if ID not found. Return None if data item empty.
 pub fn db_get_4<T,U,V,W>(conn: &Connection, id: &Uuid, table: Table, column: Vec<Column>) -> Result<(T,U,V,W)>
 where
     T: rocket_contrib::databases::postgres::types::FromSql,
@@ -333,60 +290,6 @@ where
     W: rocket_contrib::databases::postgres::types::FromSql
 {
     let (res1,res2,res3,res4) =
-        db_get_row::<T,U,V,W>(conn, id, table, column)?;
+        db_get::<T,U,V,W>(conn, id, table, column)?;
     Ok((res1.unwrap(),res2.unwrap(),res3.unwrap(),res4.unwrap()))
-}
-
-
-
-
-#[cfg(test)]
-mod tests {
-
-    use super::*;
-    use std::{env, str::FromStr};
-
-    #[test]
-    fn test_db_postgres() {
-        use postgres::{Connection, TlsMode};
-
-        let rocket_url = env::var("ROCKET_DATABASES").unwrap();
-        let url = &rocket_url[16..68];
-
-        let conn = Connection::connect(url, TlsMode::None).unwrap();
-        let user_id = Uuid::from_str(&"3cf795d8-3a98-4ceb-9f68-4d5e2e306b87").unwrap();
-
-        let dbget1: Option<String> = db_get_1(&conn, &user_id, Table::StateChain,
-            vec!(
-                Column::Chain,
-            )).unwrap();
-        println!("dbget1: {:?}",dbget1);
-
-
-        let (dbget1, dbget2) = db_get_2::<Option<String>,Option<i64>>(&conn, &user_id, Table::StateChain,
-            vec!(
-                Column::Chain,
-                Column::Amount,
-            )).unwrap();
-        println!("dbget1: {:?}",dbget1);
-        println!("dbget2: {:?}",dbget2);
-
-        let (dbget1, dbget2, dbget3) = db_get_3::<Option<String>,Option<i64>,Option<Uuid>>(&conn, &user_id, Table::StateChain,
-            vec!(
-                Column::Chain,
-                Column::Amount,
-                Column::OwnerId,
-            )).unwrap();
-        println!("dbget1: {:?}",dbget1);
-        println!("dbget2: {:?}",dbget2);
-        println!("dbget3: {:?}",dbget3);
-
-        // let res =
-        //     db_get_row::<String,i64,Uuid>(&conn, &user_id, Table::StateChain,
-        //         vec!(
-        //             Column::Chain,
-        //             Column::Amount,
-        //             Column::OwnerId,
-        //         ));
-    }
 }

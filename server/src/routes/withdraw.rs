@@ -12,7 +12,7 @@ use crate::DataBase;
 use crate::routes::util::check_user_auth;
 use crate::error::SEError;
 use crate::storage::{
-    db_postgres::{Table, Column, db_deser, db_ser, db_update_row, db_get_1, db_get_3},
+    db_postgres::{Table, Column, db_deser, db_ser, db_update, db_get_1, db_get_3},
     db::{get_current_root, DB_SC_LOC, update_root}};
 
 use bitcoin::Transaction;
@@ -53,7 +53,7 @@ pub fn withdraw_init(
     withdraw_msg1.state_chain_sig.verify(&prev_proof_key)?;
 
     // Mark UserSession as authorised for withdrawal
-    db_update_row(&conn,&user_id,Table::UserSession,vec!(Column::WithdrawScSig),vec!(&db_ser(withdraw_msg1.state_chain_sig.clone())?))?;
+    db_update(&conn,&user_id,Table::UserSession,vec!(Column::WithdrawScSig),vec!(&db_ser(withdraw_msg1.state_chain_sig.clone())?))?;
 
     info!("WITHDRAW: Authorised. Shared Key ID: {}. State Chain: {}",user_id, state_chain_id);
 
@@ -86,7 +86,7 @@ pub fn withdraw_confirm(
 
     state_chain.add(withdraw_sc_sig.to_owned())?;
 
-    db_update_row(&conn, &state_chain_id, Table::StateChain,
+    db_update(&conn, &state_chain_id, Table::StateChain,
         vec!(Column::Chain, Column::Amount),
         vec!(
             &db_ser(state_chain.clone())?,
@@ -95,7 +95,7 @@ pub fn withdraw_confirm(
 
 
     // Remove state_chain_id from user session to signal end of session
-    db_update_row(&conn,&user_id,Table::UserSession,vec!(Column::StateChainId),vec!(&Uuid::nil()))?;
+    db_update(&conn,&user_id,Table::UserSession,vec!(Column::StateChainId),vec!(&Uuid::nil()))?;
 
     // Update sparse merkle tree
     let funding_txid = tx_withdraw.input.get(0).unwrap().previous_output.txid.to_string();

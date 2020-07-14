@@ -13,7 +13,7 @@ use shared_lib::{
 use crate::routes::util::*;
 use crate::error::SEError;
 use crate::storage::{
-    db_postgres::{Column, Table, db_insert, db_remove, db_ser, db_deser, db_update_row, db_get_1, db_get_2, db_get_3, db_get_4},
+    db_postgres::{Column, Table, db_insert, db_remove, db_ser, db_deser, db_update, db_get_1, db_get_2, db_get_3, db_get_4},
     db::get_current_root};
 
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
@@ -40,14 +40,9 @@ pub fn transfer_sender(
     transfer_msg1: Json<TransferMsg1>,
 ) -> Result<Json<TransferMsg2>> {
     let user_id = transfer_msg1.shared_key_id;
-
-    info!("TRANSFER: Sender Side. Shared Key ID: {}", user_id);
-
-    // Auth user
     check_user_auth(&conn, &user_id)?;
 
-    // Verification/PoW/authoriation failed
-    // Err(SEError::AuthError)
+    info!("TRANSFER: Sender Side. Shared Key ID: {}", user_id);
 
     // Get state_chain id
     let state_chain_id: Uuid = db_get_1(&conn, &user_id, Table::UserSession, vec!(Column::StateChainId))?;
@@ -74,7 +69,7 @@ pub fn transfer_sender(
 
     // Create Transfer table entry
     db_insert(&conn, &state_chain_id, Table::Transfer)?;
-    db_update_row(&conn, &state_chain_id, Table::Transfer,
+    db_update(&conn, &state_chain_id, Table::Transfer,
         vec!(
             Column::StateChainSig,
             Column::X1),
@@ -190,7 +185,7 @@ pub fn transfer_receiver(
         state_chains.insert(state_chain_id.clone(), true);
         finalized_data_vec.push(finalized_data.clone());
 
-        db_update_row(&conn, &batch_id, Table::TransferBatch,
+        db_update(&conn, &batch_id, Table::TransferBatch,
             vec!(
                 Column::StateChains,
                 Column::FinalizedData),
@@ -237,7 +232,7 @@ pub fn transfer_finalize(
 
     state_chain.add(finalized_data.state_chain_sig.to_owned())?;
 
-    db_update_row(&conn, &state_chain_id, Table::StateChain,
+    db_update(&conn, &state_chain_id, Table::StateChain,
         vec!(
             Column::Chain,
             Column::OwnerId),
@@ -248,7 +243,7 @@ pub fn transfer_finalize(
     // Create new UserSession to allow new owner to generate shared wallet
     let new_user_id = finalized_data.new_shared_key_id;
     db_insert(&conn, &new_user_id, Table::UserSession)?;
-    db_update_row(&conn, &new_user_id, Table::UserSession,
+    db_update(&conn, &new_user_id, Table::UserSession,
         vec!(
             Column::Authentication,
             Column::ProofKey,
@@ -263,7 +258,7 @@ pub fn transfer_finalize(
             &db_ser(finalized_data.s2)?))?;
 
     // Insert into BackupTx table
-    db_update_row(&conn, &state_chain_id, Table::BackupTxs,vec!(Column::TxBackup),vec!(&db_ser(finalized_data.new_tx_backup.clone())?))?;
+    db_update(&conn, &state_chain_id, Table::BackupTxs,vec!(Column::TxBackup),vec!(&db_ser(finalized_data.new_tx_backup.clone())?))?;
 
     info!("TRANSFER: Finalized. New shared key ID: {}. State Chain ID: {}", finalized_data.new_shared_key_id, state_chain_id);
 
@@ -340,7 +335,7 @@ pub fn transfer_batch_init(
 
     // Create new TransferBatchData and add to DB
     db_insert(&conn, &batch_id, Table::TransferBatch)?;
-    db_update_row(&conn, &batch_id, Table::TransferBatch,
+    db_update(&conn, &batch_id, Table::TransferBatch,
         vec!(
             Column::StartTime,
             Column::StateChains,
@@ -387,7 +382,7 @@ pub fn finalize_batch(
         )?;
     }
 
-    db_update_row(&conn, &batch_id, Table::TransferBatch,vec!(Column::Finalized),vec!(&true))?;
+    db_update(&conn, &batch_id, Table::TransferBatch,vec!(Column::Finalized),vec!(&true))?;
     Ok(())
 }
 
@@ -432,13 +427,13 @@ pub fn transfer_reveal_nonce(
 
     // If state chain completed + commitment revealed then punishment can be removed from state chain
     if *state_chains.get(&state_chain_id).unwrap() {
-        db_update_row(&conn, &state_chain_id, Table::StateChain,vec!(Column::LockedUntil),vec!(&get_time_now()))?;
+        db_update(&conn, &state_chain_id, Table::StateChain,vec!(Column::LockedUntil),vec!(&get_time_now()))?;
 
         info!("TRANSFER_REVEAL_NONCE: State Chain unlocked. ID: {}", state_chain_id);
 
         // remove from transfer batch punished list
         punished_state_chains.retain(|x| x != &state_chain_id);
-        db_update_row(&conn, &batch_id, Table::TransferBatch,vec!(Column::PunishedStateChains),vec!(&db_ser(punished_state_chains)?))?;
+        db_update(&conn, &batch_id, Table::TransferBatch,vec!(Column::PunishedStateChains),vec!(&db_ser(punished_state_chains)?))?;
     }
 
     Ok(Json(()))

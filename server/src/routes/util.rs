@@ -14,7 +14,7 @@ use shared_lib::{
 use crate::routes::transfer::finalize_batch;
 use crate::error::SEError;
 use crate::storage::{
-    db_postgres::{Table, Column, db_remove, db_deser, db_ser, db_update_row, db_get_1, db_get_3, db_get_2},
+    db_postgres::{Table, Column, db_remove, db_deser, db_ser, db_update, db_get_1, db_get_3, db_get_2},
     db::{get_root, get_current_root}};
 use crate::DataBase;
 
@@ -143,7 +143,7 @@ pub fn state_chain_punish(
         return Err(SEError::Generic(String::from("State chain is already locked. This should not be possible.")));
     }
 
-    db_update_row(&conn, &state_chain_id, Table::StateChain,
+    db_update(&conn, &state_chain_id, Table::StateChain,
         vec!(Column::LockedUntil),
         vec!(&get_locked_until(state.punishment_duration as i64)?))?;
 
@@ -258,7 +258,7 @@ pub fn get_transfer_batch_status(
                     info!("TRANSFER_BATCH: Transfer data deleted. State Chain ID: {}.", state_chain_id);
                 }
 
-                db_update_row(&conn, &batch_id, Table::TransferBatch,
+                db_update(&conn, &batch_id, Table::TransferBatch,
                     vec!(Column::PunishedStateChains),
                     vec!(&db_ser(punished_state_chains)?))?;
 
@@ -322,7 +322,7 @@ pub fn prepare_sign_tx(
                 &state.network
             );
 
-            db_update_row(&conn, &user_id, Table::UserSession,
+            db_update(&conn, &user_id, Table::UserSession,
                 vec!(Column::SigHash, Column::TxWithdraw),
                 vec!(&db_ser(sig_hash)?, &db_ser(prepare_sign_msg.tx)?))?;
 
@@ -340,12 +340,12 @@ pub fn prepare_sign_tx(
                 &state.network
             );
 
-            db_update_row(&conn, &user_id, Table::UserSession,
+            db_update(&conn, &user_id, Table::UserSession,
                 vec!(Column::SigHash),vec!(&db_ser(sig_hash)?))?;
 
             // Only in deposit case add backup tx to UserSession
             if prepare_sign_msg.protocol == Protocol::Deposit {
-                db_update_row(&conn, &user_id, Table::UserSession,
+                db_update(&conn, &user_id, Table::UserSession,
                     vec!(Column::TxBackup),vec!(&db_ser(prepare_sign_msg.tx)?))?;
             }
 

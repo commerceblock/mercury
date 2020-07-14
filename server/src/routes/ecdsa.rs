@@ -1,9 +1,9 @@
 use super::super::{Result,
     storage::db};
 
-use crate::error::{DBErrorType::NoDataForID, SEError};
+use crate::error::SEError;
 use crate::{storage::db_postgres::{
-     db_insert, Table, Column, db_get, db_deser, db_ser, db_update_row, db_get_1, db_get_2, db_get_4, db_get_3},
+     db_insert, Table, Column, db_deser, db_ser, db_update, db_get_1, db_get_2, db_get_4, db_get_3},
     routes::util::
         check_user_auth,
         DataBase};
@@ -88,8 +88,6 @@ pub fn first_message(
     protocol: String,
 ) -> Result<Json<(Uuid, party_one::KeyGenFirstMsg)>> {
     let user_id = Uuid::from_str(&id).unwrap();
-
-    // Check authorisation id is in DB (and check password?)
     check_user_auth(&conn, &user_id)?;
 
     // Create new entry in ecdsa table if key not already in table.
@@ -105,12 +103,11 @@ pub fn first_message(
     let (key_gen_first_msg, comm_witness, ec_key_pair) = if protocol == String::from("deposit") {
         MasterKey1::key_gen_first_message()
     } else {
-        let s2: FE = db_deser(db_get(&conn, &user_id, Table::UserSession, Column::S2)?
-            .ok_or(SEError::DBErrorWC(NoDataForID, user_id, Column::S2))?)?;
+        let s2: FE = db_deser(db_get_1(&conn, &user_id, Table::UserSession, vec!(Column::S2))?)?;
         MasterKey1::key_gen_first_message_predefined(s2)
     };
 
-    db_update_row(&conn, &user_id, Table::Ecdsa,
+    db_update(&conn, &user_id, Table::Ecdsa,
         vec!(
             Column::POS,
             Column::KeyGenFirstMsg,
@@ -143,7 +140,7 @@ pub fn second_message(
     let (kg_party_one_second_message, paillier_key_pair, party_one_private) =
         MasterKey1::key_gen_second_message(comm_witness, &ec_key_pair, &dlog_proof.0);
 
-    db_update_row(&conn, &user_id, Table::Ecdsa,
+    db_update(&conn, &user_id, Table::Ecdsa,
         vec!(Column::Party2Public, Column::PaillierKeyPair, Column::Party1Private,),
         vec!(&db_ser(party2_public)?, &db_ser(paillier_key_pair)?, &db_ser(party_one_private)?))?;
 
@@ -168,7 +165,7 @@ pub fn third_message(
     let (party_one_third_message, party_one_pdl_decommit, alpha) =
         MasterKey1::key_gen_third_message(&party_two_pdl_first_message.0, &party_one_private);
 
-    db_update_row(&conn, &user_id, Table::Ecdsa,
+    db_update(&conn, &user_id, Table::Ecdsa,
         vec!(
             Column::PDLDecommit,
             Column::Alpha,
@@ -243,7 +240,7 @@ pub fn master_key(conn: DataBase, id: String) -> Result<()> {
         paillier_key_pair,
     );
 
-    db_update_row(&conn, &user_id, Table::Ecdsa,
+    db_update(&conn, &user_id, Table::Ecdsa,
         vec!(Column::Party1MasterKey),
         vec!(&db_ser(master_key)?))
 }
@@ -259,12 +256,11 @@ pub fn sign_first(
     eph_key_gen_first_message_party_two: Json<party_two::EphKeyGenFirstMsg>,
 ) -> Result<Json<party_one::EphKeyGenFirstMsg>> {
     let user_id = Uuid::from_str(&id).unwrap();
-
     check_user_auth(&conn, &user_id)?;
 
     let (sign_party_one_first_message, eph_ec_key_pair_party1) = MasterKey1::sign_first_message();
 
-    db_update_row(&conn, &user_id, Table::Ecdsa,
+    db_update(&conn, &user_id, Table::Ecdsa,
         vec!(Column::EphKeyGenFirstMsg,Column::EphEcKeyPair),
         vec!(&db_ser(eph_key_gen_first_message_party_two.0)?, &db_ser(eph_ec_key_pair_party1)?))?;
 
@@ -278,7 +274,6 @@ pub fn sign_second(
     request: Json<SignSecondMsgRequest>,
 ) -> Result<Json<Vec<Vec<u8>>>> {
     let user_id = Uuid::from_str(&id).unwrap();
-    // Check authorisation id is in DB (and check password?)
     check_user_auth(&conn, &user_id)?;
 
     // Get validated sig hash for this user
@@ -371,7 +366,7 @@ pub fn sign_second(
     match request.protocol {
         Protocol::Withdraw => {
             // Store signed withdraw tx in UserSession DB object
-            db_update_row(&conn, &user_id, Table::UserSession,vec!(Column::TxWithdraw),vec!(&db_ser(tx)?))?;
+            db_update(&conn, &user_id, Table::UserSession,vec!(Column::TxWithdraw),vec!(&db_ser(tx)?))?;
 
             info!("WITHDRAW: Tx signed and stored. User ID: {}", user_id);
             // Do not return withdraw tx witness until /withdraw/confirm is complete
@@ -379,7 +374,7 @@ pub fn sign_second(
         }
         _ => {
             // Store signed backup tx in UserSession DB object
-            db_update_row(&conn, &user_id, Table::UserSession,vec!(Column::TxBackup),vec!(&db_ser(tx)?))?;
+            db_update(&conn, &user_id, Table::UserSession,vec!(Column::TxBackup),vec!(&db_ser(tx)?))?;
             info!("DEPOSIT/TRANSFER: Backup Tx signed and stored. User: {}", user_id);
         }
     };

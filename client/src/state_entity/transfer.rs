@@ -117,6 +117,13 @@ pub fn transfer_receiver(
     // Get statechain data (will Err if statechain not yet finalized)
     let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &transfer_msg3.state_chain_id)?;
 
+    let tx_backup = transfer_msg3.tx_backup_psm.tx.clone();
+    // Ensure backup tx funds are sent to address owned by this wallet
+    let back_up_rec_addr = Address::from_script(&tx_backup.output[0].script_pubkey, wallet.get_bitcoin_network())
+        .ok_or(CError::Generic(String::from("Failed to decode ScriptpubKey.")))?;
+    wallet.se_backup_keys.get_address_derivation(&back_up_rec_addr.to_string())
+        .ok_or(CError::Generic(String::from("Backup Tx receiving address not found in this wallet!")))?;
+    
     // Verify state chain represents this address as new owner
     let prev_owner_proof_key = state_chain_data.chain.last().unwrap().data.clone();
     transfer_msg3.state_chain_sig.verify(&prev_owner_proof_key)?;

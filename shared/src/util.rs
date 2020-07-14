@@ -10,7 +10,7 @@ use bitcoin::{{TxIn, TxOut, Transaction, Address, Network},
         hashes::sha256d::Hash,
         blockdata::script::Builder,
         {util::bip143::SighashComponents, blockdata::opcodes::OP_TRUE, OutPoint}};
-        
+
 use curv::PK;
 use std::str::FromStr;
 
@@ -65,7 +65,6 @@ pub fn tx_backup_verify(tx_psm: &PrepareSignTxMsg) -> Result<()> {
     // - locktime
     // - amounts
     // - Fee rate?
-
 
     Ok(())
 }

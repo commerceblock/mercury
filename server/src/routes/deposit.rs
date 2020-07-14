@@ -13,7 +13,7 @@ use shared_lib::{
     Root,
     mocks::mock_electrum::MockElectrum};
 use crate::error::SEError;
-use crate::storage::db_postgres::{Table, Column, db_insert, db_deser, db_ser, db_update_row, db_get_2};
+use crate::storage::db_postgres::{Table, Column, db_insert, db_deser, db_ser, db_update, db_get_2};
 use crate::DataBase;
 use bitcoin::Transaction;
 
@@ -49,7 +49,7 @@ pub fn deposit_init(
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
     db_insert(&conn, &user_id, Table::UserSession)?;
-    db_update_row(&conn, &user_id, Table::UserSession,
+    db_update(&conn, &user_id, Table::UserSession,
         vec!(Column::Authentication,Column::ProofKey),
         vec!(&deposit_msg1.auth.clone(),&deposit_msg1.proof_key.to_owned()))?;
 
@@ -133,7 +133,7 @@ pub fn deposit_confirm(
     );
 
     db_insert(&conn, &state_chain_id, Table::StateChain)?;
-    db_update_row(&conn, &state_chain_id, Table::StateChain,
+    db_update(&conn, &state_chain_id, Table::StateChain,
         vec!(
             Column::Chain,
             Column::Amount,
@@ -147,7 +147,7 @@ pub fn deposit_confirm(
 
     // Insert into BackupTx table
     db_insert(&conn, &state_chain_id, Table::BackupTxs)?;
-    db_update_row(&conn, &state_chain_id, Table::BackupTxs,vec!(Column::TxBackup),vec!(&db_ser(tx_backup.clone())?))?;
+    db_update(&conn, &state_chain_id, Table::BackupTxs,vec!(Column::TxBackup),vec!(&db_ser(tx_backup.clone())?))?;
 
     info!("DEPOSIT: State Chain created. ID: {} For user ID: {}", state_chain_id, user_id);
 
@@ -166,7 +166,7 @@ pub fn deposit_confirm(
     debug!("DEPOSIT: State Chain ID: {}. New root: {:?}. Previous root: {:?}.", state_chain_id, new_root.unwrap(), root);
 
     // Update UserSession with StateChain's ID
-    db_update_row(&conn, &user_id, Table::UserSession,vec!(Column::StateChainId),vec!(&state_chain_id))?;
+    db_update(&conn, &user_id, Table::UserSession,vec!(Column::StateChainId),vec!(&state_chain_id))?;
 
     Ok(Json(state_chain_id))
 }
