@@ -154,17 +154,19 @@ pub fn deposit_confirm(
 
 
     // Update sparse merkle tree with new StateChain entry
-    let root = get_current_root::<Root>(&state.db, &state.mainstay_config)?;
-    let new_root = update_statechain_smt(
+    let root = get_current_root::<Root>(&state.db)?.map(|r| r.hash());
+    
+    let new_root_hash = &update_statechain_smt(
         DB_SC_LOC,
-        &root.value,
+        &root,
         &tx_backup.input.get(0).unwrap().previous_output.txid.to_string(),
         &user_session.proof_key
     )?;
-    update_root(&state.db, &state.mainstay_config, new_root.unwrap())?;
+    let new_root = Root::from_hash(&new_root_hash.unwrap());
+    update_root(&state.db, &state.mainstay_config, &new_root)?;
 
     info!("DEPOSIT: Included in sparse merkle tree. State Chain ID: {}", state_chain.id);
-    debug!("DEPOSIT: State Chain ID: {}. New root: {:?}. Previous root: {:?}.", state_chain.id, new_root.unwrap(), root);
+    debug!("DEPOSIT: State Chain ID: {}. New root: {:?}. Previous root: {:?}.", state_chain.id, new_root, root);
 
     // Update UserSession with StateChain's ID
     user_session.state_chain_id = Some(state_chain.id.to_owned());

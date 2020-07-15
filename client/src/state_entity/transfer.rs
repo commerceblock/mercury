@@ -238,10 +238,10 @@ pub fn transfer_receiver_finalize(
     let rec_proof_key = finalize_data.proof_key.clone();
 
     // Verify proof key inclusion in SE sparse merkle tree
-    let root = get_smt_root(&wallet.client_shim)?;
+    let root = get_smt_root(&wallet.client_shim)?.unwrap();
     let proof = get_smt_proof(&wallet.client_shim, &root, &finalize_data.state_chain_data.utxo.txid.to_string())?;
     assert!(verify_statechain_smt(
-        &root.value,
+        &Some(root.hash()),
         &rec_proof_key,
         &proof
     ));

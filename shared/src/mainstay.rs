@@ -17,7 +17,7 @@ use merkletree::hash::{Algorithm};
 use std::hash::Hasher;
 
 
-type Result<T> = std::result::Result<T, Box<dyn error::Error> >;
+pub type Result<T> = std::result::Result<T, Box<dyn error::Error> >;
 
 pub type Hash = monotree::Hash;
 

@@ -192,28 +192,29 @@ pub fn get_smt_proof(
     smt_proof_msg: Json<SmtProofMsgAPI>,
 ) -> Result<Json<Option<Proof>>> {
     // ensure root exists
-    if get_root::<[u8;32]>(&state.db, &smt_proof_msg.root.id)?.is_none() {
-        return Err(SEError::DBError(NoDataForID, format!("Root id: {}",smt_proof_msg.root.id.to_string())));
+    if get_root::<Root>(&state.db, &smt_proof_msg.root.id().unwrap())?.is_none() {
+        return Err(SEError::DBError(NoDataForID, format!("Root id: {:?}",smt_proof_msg.root.id())));
     }
 
-    Ok(Json(gen_proof_smt(DB_SC_LOC, &smt_proof_msg.root.value, &smt_proof_msg.funding_txid)?))
+    Ok(Json(gen_proof_smt(DB_SC_LOC, &Some(smt_proof_msg.root.hash()), &smt_proof_msg.funding_txid)?))
 }
 
-/// API: Get root of sparse merkle tree. 
+/// API: Get root of sparse merkle tree. Will be via Mainstay in the future.
 #[post("/info/root", format = "json")]
 pub fn get_smt_root(
     state: State<Config>,
-) -> Result<Json<Root>> {
-    Ok(Json(get_current_root::<Root>(&state.db, &state.mainstay_config)?))
+) -> Result<Json<Option<Root>>> {
+    Ok(Json(get_current_root::<Root>(&state.db)?))
 }
 
-/// API: Get root of sparse merkle tree that has been mainstay-confirmed 
+/// API: Get root of sparse merkle tree. Will be via Mainstay in the future.
 #[post("/info/confirmed_root", format = "json")]
 pub fn get_confirmed_smt_root(
     state: State<Config>,
 ) -> Result<Json<Option<Root>>> {
-    Ok(Json(db::get_confirmed_root::<Option<Root>>(&state.db, &state.mainstay_config)?))
+    Ok(Json(db::get_confirmed_root::<Root>(&state.db, &state.mainstay_config)?))
 }
+
 
 /// API: Return a TransferBatchData status.
 /// Triggers check for all transfers complete - if so then finalize all.

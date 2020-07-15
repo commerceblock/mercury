@@ -266,12 +266,12 @@ pub fn transfer_finalize(
         .ok_or(SEError::Generic(String::from("StateChain empty")))?
         .data.clone();
 
-    let root = get_current_root::<Root>(&state.db, &state.mainstay_config)?;
-    let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &funding_txid, &proof_key)?;
-    update_root(&state.db, &state.mainstay_config, new_root.unwrap())?;
+    let root = get_current_root::<Root>(&state.db)?.map(|r| r.hash());
+    let mut new_root = Root::from_hash(&update_statechain_smt(DB_SC_LOC, &root, &funding_txid, &proof_key)?.unwrap());
+    update_root(&state.db, &state.mainstay_config, &mut new_root)?;
 
     info!("TRANSFER: Included in sparse merkle tree. State Chain ID: {}", state_chain_id);
-    debug!("TRANSFER: State Chain ID: {}. New root: {:?}. Previous root: {:?}.", state_chain_id, new_root.unwrap(), root);
+    debug!("TRANSFER: State Chain ID: {}. New root: {:?}. Previous root: {:?}.", state_chain_id, &new_root, &root);
 
     // Remove TransferData for this transfer
     db::remove(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::TransferData)?;

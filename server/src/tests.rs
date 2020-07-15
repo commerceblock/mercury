@@ -77,7 +77,7 @@ mod tests {
 
         // None root
         let smt_proof_msg = SmtProofMsgAPI {
-            root: Root {id:0, value: None, commitment_info: None},
+            root: Root::from(Some(0), None, &None).unwrap(),
             funding_txid: String::from("c1562f7f15d6b8a51ea2e7035b9cdb8c6c0c41fecb62d459a3a6bf738ff0db0e")
         };
         let body = serde_json::to_string(&smt_proof_msg).unwrap();
@@ -87,18 +87,30 @@ mod tests {
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();
-        assert_eq!(res, format!("DB Error: No data for such identifier. (value: Root id: {})",smt_proof_msg.root.id));
+        assert_eq!(res, format!("DB Error: No data for such identifier. (value: Root id: {:?})",smt_proof_msg.root.id()));
 
         // invalid root for tree
+        // first push a random root to tree
+
+        //update_root(db, mc);
+
+
         let mut response = client   // first grab current root id
         .post(format!("/info/root"))
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();
-        let current_root: Root = serde_json::from_str(&res).unwrap();
+        let current_root: Option<Root> = serde_json::from_str(&res).expect(&format!("Error from body string {}",&res));
+            
+        let id = match current_root{
+            Some(r) => r.id().unwrap(),
+            None => 0
+        };
+
+        let proof_msg_id = Some(id+1);
 
         let smt_proof_msg = SmtProofMsgAPI {
-            root: Root {id: current_root.id+1, value: Some([1;32]), commitment_info: None},    // alter ID to become invalid
+            root: Root::from(proof_msg_id, Some([1;32]), &None).unwrap(),// alter ID to become invalid
             funding_txid: String::from("c1562f7f15d6b8a51ea2e7035b9cdb8c6c0c41fecb62d459a3a6bf738ff0db0e")
         };
         let body = serde_json::to_string(&smt_proof_msg).unwrap();
@@ -108,7 +120,7 @@ mod tests {
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();
-        assert_eq!(res, format!("DB Error: No data for such identifier. (value: Root id: {})",smt_proof_msg.root.id));
+        assert_eq!(res, format!("DB Error: No data for such identifier. (value: Root id: {:?})",smt_proof_msg.root.id()));
 
         // Invalid data sent in body - should be of type SmtProofMsgAPI
         let body = String::from("Body String");

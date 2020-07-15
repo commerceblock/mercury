@@ -63,7 +63,7 @@ mod tests {
         let (_, funding_txid, proof_key, _, _) = wallet.get_shared_key_info(state_chains_info.0.last().unwrap()).unwrap();
 
         // Get SMT inclusion proof and verify
-        let root = state_entity::api::get_smt_root(&wallet.client_shim).unwrap();
+        let root = state_entity::api::get_smt_root(&wallet.client_shim).unwrap().unwrap();
         let proof = state_entity::api::get_smt_proof(&wallet.client_shim, &root, &funding_txid).unwrap();
 
         // ensure wallet's shared key is updated with proof info
@@ -78,15 +78,18 @@ mod tests {
 
     #[test]
     #[serial]
-        fn test_get_statechain() {
+    fn test_get_statechain() {
+        println!("spawn server");
         let _ = spawn_server();
+        println!("gen wallet");
         let mut wallet = gen_wallet();
 
+        println!("get statechain");
         let err = state_entity::api::get_statechain(&wallet.client_shim, &String::from("id"));
         assert!(err.is_err());
-
+        println!("run deposit");
         let deposit = run_deposit(&mut wallet, &10000);
-
+        println!("finished run deposit");
         let state_chain = state_entity::api::get_statechain(&wallet.client_shim, &String::from(deposit.1.clone())).unwrap();
         assert_eq!(state_chain.chain.last().unwrap().data, deposit.5.to_string());
     }
@@ -124,7 +127,7 @@ mod tests {
         assert_eq!(state_chain.chain.last().unwrap().data.to_string(), receiver_addr.proof_key.to_string());
 
         // Get SMT inclusion proof and verify
-        let root = state_entity::api::get_smt_root(&wallets[1].client_shim).unwrap();
+        let root = state_entity::api::get_smt_root(&wallets[1].client_shim).unwrap().unwrap();
         let proof = state_entity::api::get_smt_proof(&wallets[1].client_shim, &root, &funding_txid).unwrap();
         // Ensure wallet's shared key is updated with proof info
         let shared_key = wallets[1].get_shared_key(&new_shared_key_id).unwrap();
@@ -138,11 +141,13 @@ mod tests {
     fn test_double_transfer() {
         let _ = spawn_server();
         let mut wallets = vec!();
+        println!("gen wallet with deposit");
         wallets.push(gen_wallet_with_deposit(10000)); // sender
         wallets.push(gen_wallet()); // receiver1
         wallets.push(gen_wallet()); // receiver2
 
         // Get state chain owned by wallets[0]
+        println!("get state chains");
         let state_chains_info = wallets[0].get_state_chains_info();
         assert_eq!(state_chains_info.0.len(),1);
         let shared_key_id0 = state_chains_info.0.last().unwrap();
@@ -150,6 +155,7 @@ mod tests {
 
         // Transfer 1
         let receiver1_addr = wallets[1].get_new_state_entity_address(&funding_txid).unwrap();
+        println!("run transfer");
         let new_shared_key_id1 = run_transfer(&mut wallets, 0, 1, shared_key_id0);
 
         // Get state chain owned by wallets[1]
@@ -167,6 +173,7 @@ mod tests {
         // Transfer 2
         let receiver2_addr = wallets[2].get_new_state_entity_address(&funding_txid).unwrap();
 
+        println!("run transfer 2");
         let new_shared_key_id2 = run_transfer(&mut wallets, 1, 2, shared_key_id1);
 
         // check shared keys have the same master public key
@@ -191,7 +198,7 @@ mod tests {
         assert_eq!(state_chain.chain.last().unwrap().data.to_string(), receiver2_addr.proof_key.to_string());
 
         // Get SMT inclusion proof and verify
-        let root = state_entity::api::get_smt_root(&wallets[1].client_shim).unwrap();
+        let root = state_entity::api::get_smt_root(&wallets[1].client_shim).unwrap().unwrap();
         let proof = state_entity::api::get_smt_proof(&wallets[1].client_shim, &root, &funding_txid).unwrap();
         // Ensure wallet's shared key is updated with proof info
         let shared_key = wallets[2].get_shared_key(&new_shared_key_id2).unwrap();

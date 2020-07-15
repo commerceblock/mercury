@@ -245,7 +245,7 @@ mod tests {
         let funding_txid = String::from("c1562f7f15d6b8a51ea2e7035b9cdb8c6c0c41fecb62d459a3a6bf738ff0db0e");
         let proof_key = String::from("03b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3");
 
-        let root = None;
+        let root: Option<monotree::Hash> = None;
 
         let root = update_statechain_smt(DB_LOC, &root, &funding_txid, &proof_key).unwrap();
 
