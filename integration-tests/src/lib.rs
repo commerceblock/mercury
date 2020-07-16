@@ -16,6 +16,7 @@ use std::{thread, time};
 use std::time::Instant;
 use floating_duration::TimeFormat;
 
+#[cfg(test)]
 #[macro_use]
 extern crate serial_test;
 

@@ -35,6 +35,7 @@ extern crate serde_dynamodb;
 
 extern crate hex;
 
+#[cfg(test)]
 #[macro_use]
 extern crate serial_test;
 
