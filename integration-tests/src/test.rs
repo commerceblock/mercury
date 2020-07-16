@@ -55,7 +55,7 @@ mod tests {
 
     #[test]
     #[serial]
-        fn test_deposit() {
+    fn test_deposit() {
         let _ = spawn_server();
         let wallet = gen_wallet_with_deposit(10000);
 
@@ -74,6 +74,17 @@ mod tests {
 
         println!("Shared wallet id: {:?} ",funding_txid);
         println!("Funding txid: {:?} ",funding_txid);
+    }
+
+    #[test]
+    #[serial]
+    fn test_confirm_proofs() {
+        let _ = spawn_server();
+        let mut wallet = gen_wallet_with_deposit(10000);
+
+        let unconfirmed = run_confirm_proofs(&mut wallet);
+
+        assert!(unconfirmed.len() ==1, "expected 1 unconfirmed shared key");
     }
 
     #[test]

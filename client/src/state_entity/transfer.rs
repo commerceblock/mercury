@@ -239,7 +239,8 @@ pub fn transfer_receiver_finalize(
 
     // Verify proof key inclusion in SE sparse merkle tree
     let root = get_smt_root(&wallet.client_shim)?.unwrap();
-    let proof = get_smt_proof(&wallet.client_shim, &root, &finalize_data.state_chain_data.utxo.txid.to_string())?;
+    let funding_txid = &finalize_data.state_chain_data.utxo.txid.to_string();
+    let proof = get_smt_proof(&wallet.client_shim, &root, funding_txid)?;
     assert!(verify_statechain_smt(
         &Some(root.hash()),
         &rec_proof_key,
@@ -251,7 +252,7 @@ pub fn transfer_receiver_finalize(
         let shared_key = wallet.get_shared_key_mut(&finalize_data.new_shared_key_id)?;
         shared_key.state_chain_id = Some(finalize_data.state_chain_id.to_string());
         shared_key.tx_backup_psm = Some(finalize_data.tx_backup_psm.clone());
-        shared_key.add_proof_data(&rec_proof_key, &root, &proof);
+        shared_key.add_proof_data(&rec_proof_key, &root, &proof, funding_txid);
     }
 
     Ok(())

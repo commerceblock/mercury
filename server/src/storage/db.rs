@@ -3,9 +3,9 @@ use crate::error::SEError;
 use rocksdb::DB;
 use serde;
 use shared_lib::Root;
-use crate::mainstay::{Hash, CommitmentInfo};
+use crate::mainstay::CommitmentInfo;
 use crate::mainstay;
-use crate::shared_lib::mainstay::{Attestable, CommitmentIndexed, MainstayError};
+use crate::shared_lib::mainstay::Attestable;
 #[allow(unused_imports)]
 use std::str::FromStr;
 
@@ -61,11 +61,6 @@ pub fn remove(db: &DB, user_id: &str, id: &str, name: &dyn MPCStruct) -> Result<
 fn idify_root(id: &u32) -> String {
     format!("{}_{}", id, String::from("root"))
 }
-
-fn idify_commitment_info(id: &u32) -> String {
-    format!("{}_{}", id, String::from("commitment_info"))
-}
-
 
 fn insert_by_identifier<T>(db: &DB, identifier: &str, item: T) -> Result<()>
 where
@@ -133,7 +128,7 @@ pub fn get_confirmed_root(db: &DB, mc: &Option<mainstay::Config>) -> Result <Opt
 
     match mc {
         Some(conf)=>{
-            match &get_db_confirmed_root::<Root>(db, mc)?{
+            match &get_db_confirmed_root::<Root>(db)?{
                 Some(cr_db) => {
                     match &CommitmentInfo::from_latest(conf){
                         Ok(ci) => {
@@ -264,7 +259,7 @@ where
     Ok(get_root::<Root> (db, &id)?)
 }
 
-pub fn get_db_confirmed_root<T>(db: &DB, mc: &Option<mainstay::Config>) -> Result<Option<Root>>
+pub fn get_db_confirmed_root<T>(db: &DB) -> Result<Option<Root>>
 where
 
    T: serde::de::DeserializeOwned,
@@ -287,18 +282,6 @@ where
 
     Ok(None)
 }
-
- //Delete all the roots from the db
- fn delete_all_roots(db: &DB){
-     let _ = insert_by_identifier(&db, ROOTID, 0u32);
-    let current_id = get_current_root_id(db).unwrap();  
-    for x in 0..=current_id {
-        let id = current_id - x;
-        let _ = db.delete(&idify_root(&id));
-    }
-    let _ = insert_by_identifier(&db, ROOTID, 0u32);
-}
-
 
 #[cfg(test)]
 mod tests {
@@ -380,7 +363,7 @@ mod tests {
         //Update the local copy of root1
         let root1 = get_root_from_id::<Root>(&db, &root1_id).unwrap().unwrap();
 
-        //assert!(root1.is_confirmed(), format!("not confirmed: {}", root1));
+        assert!(root1.is_confirmed() ==false);
         assert!(root2.is_confirmed() == false);
 
         //delete_all_roots(&db);

@@ -140,6 +140,16 @@ pub fn run_deposit(wallet: &mut Wallet, amount: &u64) -> (String, String, String
     resp
 }
 
+/// Run confirm_proofs on a wallet
+/// Returns Vec<shared_key_id> of the shared keys that remain unconfirmed
+pub fn run_confirm_proofs(wallet: &mut Wallet) -> Vec<String>  {
+    let start = Instant::now();
+    let resp = state_entity::confirm_proofs::confirm_proofs(wallet).unwrap();
+    println!("(Confirm Proofs Took: {})", TimeFormat(start.elapsed()));
+
+    resp
+}
+
 /// Run withdraw of shared key ID given
 pub fn run_withdraw(wallet: &mut Wallet, shared_key_id: &String) -> (String, String, u64) {
     let start = Instant::now();

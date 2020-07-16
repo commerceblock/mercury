@@ -78,6 +78,10 @@ impl Wallet {
             require_mainstay: false
         }
     }
+        
+    //pub fn shared_keys_mutable<'a>(&'a mut self) -> &'a mut Vec<SharedKey> {
+    //&mut self.shared_keys
+    //}
 
     pub fn set_require_mainstay(&mut self, val: bool){
         self.require_mainstay=val;
@@ -486,7 +490,6 @@ pub fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -570,4 +573,6 @@ mod tests {
         let selection = wallet.coin_selection_greedy(&10000101);
         assert!(selection.is_err());
     }
+
+    
 }

@@ -28,7 +28,7 @@ pub struct Commitment(Hash);
 
 impl APIObject for Commitment {
     fn from_json(json_data: &serde_json::Value) -> Result<Self> {
-        println!("commitment from json");
+
         Self::check_for_error(json_data)?;
         let resp = Response::from_json(json_data);
         if resp.is_ok(){
@@ -42,12 +42,12 @@ impl APIObject for Commitment {
 impl Commitment {
     pub fn from_latest(conf: &Config) -> Result<Self>{
         let command = &format!("latestcommitment?position={}",conf.position);
-        println!("commitment from latest");
+        
         Self::from_command(command, conf)
     }
 
     fn from_response(response: &Response) -> Result<Self>{       
-        println!("commitment from response");
+        
         Ok(Self::from_str(get_str(&response.response, "commitment")?)?)
     }
 }
@@ -389,18 +389,18 @@ pub trait APIObject: Sized {
 
 impl APIObject for Response {
     fn from_json(json_data: &serde_json::Value) -> Result<Self>{       
-        debug!("parsing response: {:?}", json_data);
+       
         Self::check_for_error(json_data)?;
         match json_data.get("response"){
             Some(r) => {
-                debug!("got response object: {:?}", r);
+           
                 Ok(Self{response:r.clone()})
             },
             None => {
                 match json_data.get("error") {
                     Some(e) => Err(NotFoundError(format!("{}", e)).into()),
                     None => {   
-                        debug!("got response object 2: {:?}", json_data);
+                
                         Ok(Self{response:json_data.clone()})
                     }
                 }
@@ -534,16 +534,15 @@ impl Attestation {
 
     fn from_json_attestation(val: &serde_json::Value) -> Result<Self>{  
         Self::check_for_error(val)?;        
-        debug!("parsing attestation: {:?}", val);
-        debug!("parsing attestation: merkle_root");
+        
         let merkle_root = get_commitment(val,"merkle_root")?; 
-        debug!("parsing attestation: txid");
+        
         let txid = get_commitment(val,"txid")?;
-        debug!("parsing attestation: confirmed");
+        
         let confirmed = get_bool(val,"confirmed")?;
-        debug!("parsing attestation: inserted_at");
+        
         let inserted_at = String::from(get_str(val,"inserted_at")?);
-        debug!("inserted_at string: {}", inserted_at);
+        
         match inserted_at.contains(" UTC"){
             true => {
                 let inserted_at = inserted_at.replace(" UTC","");
@@ -620,14 +619,14 @@ pub mod merkle {
     impl APIObject for Proof {
         fn from_json(json_data: &serde_json::Value) -> Result<Self>{
             Self::check_for_error(json_data)?;
-            debug!("trying from response");
+           
             let resp = Response::from_json(json_data);
             if resp.is_ok(){
-                debug!("response is ok, parsing");
+            
                 return Ok(Self::from_response(&resp?)?);        
             } 
                  
-            debug!("trying from merkleproof json");
+           
             let json_data = match json_data.get("merkleproof"){
                 Some(val) => val,
                 None => json_data
@@ -677,15 +676,15 @@ pub mod merkle {
         }
 
         fn from_merkleproof_json(val: &serde_json::Value) -> Result<Self>{
-            println!("parsing merkleproof JSON object: {:?}", val);
+            
                         
-            debug!("parsing merkle_root");
+            
             let merkle_root = get_commitment(val,"merkle_root")?; 
 
-            debug!("parsing commitment");
+            
             let commitment = get_commitment(val, "commitment")?; 
 
-            debug!("parsing ops and append");
+            
             let mut ops = Vec::<Commitment>::new();
             let mut append = Vec::<bool>::new();
             let ops_arr = get_array(val, "ops")?;
@@ -696,7 +695,7 @@ pub mod merkle {
 
             let position = get_u64(val, "position")?;
                 
-            debug!("finished parsing merkleproof JSON object");
+            
             Ok(Proof::from(merkle_root, commitment, ops, append, position)?)
         }
 
@@ -734,9 +733,9 @@ pub mod merkle {
     impl FromStr for Proof {
         type Err = Box<dyn error::Error>;
         fn from_str(s: &str) -> Result<Self> {
-            debug!("parsing merkle::Proof from string: {}",s);
+           
             let json_data : serde_json::Value = serde_json::from_str(s)?;
-            debug!("JSON data from string: {:?}",&json_data);
+          
             Self::from_json(&json_data)
         }
     }
