@@ -153,8 +153,14 @@ impl StateChainSig {
 
 /// Insert new statechain entry into Sparse Merkle Tree and return proof
 pub fn update_statechain_smt(sc_db_loc: &str, root: &Option<monotree::Hash>, funding_txid: &String, entry: &String) -> Result<Option<monotree::Hash>> {
-    let key: &monotree::Hash = funding_txid[..32].as_bytes().try_into().unwrap();
-    let entry: &monotree::Hash = entry[..32].as_bytes().try_into().unwrap();
+    let key: &monotree::Hash = match funding_txid[..32].as_bytes().try_into(){
+        Ok(k) => k,
+        Err(e) => return Err(SharedLibError::FormatError(e.to_string()))
+    };
+    let entry: &monotree::Hash = match entry[..32].as_bytes().try_into(){
+        Ok(entry) => entry,
+        Err(e) => return Err(SharedLibError::FormatError(e.to_string()))
+    };
 
     // update smt
     let mut tree = Monotree::<RocksDB, Blake2b>::new(sc_db_loc);

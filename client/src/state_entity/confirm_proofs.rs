@@ -14,41 +14,67 @@ use crate::wallet::wallet::Wallet;
 use crate::wallet::shared_key::SharedKey;
 use crate::state_entity::util::{verify_statechain_smt};
 use super::api::{get_smt_proof, get_confirmed_smt_root};
+use crate::utilities::requests;
+use shared_lib::structs::{ConfirmProofsMsg};
+
+
+
+/// Message to server initiating state entity protocol.
+/// Shared wallet ID returned
+pub fn session_init(wallet: &mut Wallet, shared_key_id: String) -> Result<String> {
+    requests::postb(&wallet.client_shim,&format!("confirm_proofs/init"),
+        &ConfirmProofsMsg {
+            shared_key_id: shared_key_id,
+        }
+    )
+}
 
 /// Update wallet shared key proofs as required with mainstay-attested
 /// ("confirmed") proofs. Returns a vector of shared_key_id of the keys 
 /// that still have unconfirmed proofs.
 pub fn confirm_proofs(wallet: &mut Wallet) -> Result<Vec<String>>
 {   
-    // Verify proof key inclusion in SE sparse merkle tree
-    println!("getting confirmed smt root");
-    let root = get_confirmed_smt_root(&wallet.client_shim)?.unwrap();
-
-    let mut failed = Vec::<String>::new();
-
-    let mut keys_to_update = Vec::<&mut SharedKey>::new();
     
+    let mut failed = Vec::<String>::new();
+    let mut keys_to_update = Vec::<&mut SharedKey>::new();
     let shim = wallet.client_shim.clone();
 
-    //Get the funding txid and the corresponding funnding txid
-    //for key in wallet.shared_keys_mutable() {
-    for key in &mut wallet.shared_keys {
-        println!("getting smt proof");
+    
+    // Verify proof key inclusion in SE sparse merkle tree
+    println!("getting confirmed smt root");
+    let root = match get_confirmed_smt_root(&wallet.client_shim)?{
+        Some(root) => {
+            //Get the funding txid and the corresponding funnding txid
+            //for key in wallet.shared_keys_mutable() {
+            for key in &mut wallet.shared_keys {
         
-        match &mut key.smt_proof{
-            //Update proof if not confirmed in mainstay
-            Some(p)=> match p.root.is_confirmed(){
-                false => keys_to_update.push(key),
-                true => ()
+                match &mut key.smt_proof{
+                    //Update proof if not confirmed in mainstay
+                    Some(p)=> match p.root.is_confirmed(){
+                        false => keys_to_update.push(key),
+                        true => ()
+                    },
+                    //There should already be proofs for all shared keys
+                    None => failed.push(key.id.clone()),
+                };
             }
-            //There should already be proofs for all shared keys
-            None => failed.push(key.id.clone()),
-        };
-    }
+            root
+        },
+        None => {
+            for key in &mut wallet.shared_keys {
+                failed.push(key.id.clone());
+            }
+            println!("finished");
+            return Ok(failed);
+        }
+    };
 
+    
     for key in &mut keys_to_update {
+       println!("getting smt proof");
        match get_smt_proof(&shim, &root, &key.funding_txid){
             Ok(proof) => {
+                println!("got smt proof");
                 match &key.proof_key {
                     Some(proof_key)=> match verify_statechain_smt(
                                         &Some(root.hash()),
@@ -69,6 +95,7 @@ pub fn confirm_proofs(wallet: &mut Wallet) -> Result<Vec<String>>
             Err(_) => failed.push(key.id.clone())
         }
     }
+
     println!("finished");
     Ok(failed)
 }

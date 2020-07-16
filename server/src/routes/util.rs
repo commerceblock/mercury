@@ -192,10 +192,17 @@ pub fn get_smt_proof(
     smt_proof_msg: Json<SmtProofMsgAPI>,
 ) -> Result<Json<Option<Proof>>> {
     // ensure root exists
-    if get_root::<Root>(&state.db, &smt_proof_msg.root.id().unwrap())?.is_none() {
-        return Err(SEError::DBError(NoDataForID, format!("Root id: {:?}",smt_proof_msg.root.id())));
+    match &smt_proof_msg.root.id(){
+        Some(id) => {
+            if get_root::<Root>(&state.db, id)?.is_none() {
+                return Err(SEError::DBError(NoDataForID, format!("Root id: {:?}",id)));
+            }
+        },
+        None => {
+            return Err(SEError::DBError(NoDataForID, format!("Root does not have an id: {:?}",smt_proof_msg.root)));
+        }
     }
-
+    
     Ok(Json(gen_proof_smt(DB_SC_LOC, &Some(smt_proof_msg.root.hash()), &smt_proof_msg.funding_txid)?))
 }
 

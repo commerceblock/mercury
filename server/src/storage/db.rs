@@ -120,9 +120,13 @@ pub fn get_confirmed_root(db: &DB, mc: &Option<mainstay::Config>) -> Result <Opt
 
         let root = root;
 
-        match update_root_db(db, &root){
-            Ok(_) => Ok(Some(root)),
-            Err(e) => Err(e)
+        match root.id() {
+            Some(_) =>         
+            match update_root_db(db, &root){
+                Ok(_) => Ok(Some(root)),
+                Err(e) => Err(e)
+            },
+            None => Ok(None)
         }
     }
 

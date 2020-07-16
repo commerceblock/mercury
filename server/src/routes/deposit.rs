@@ -132,9 +132,11 @@ pub fn deposit_confirm(
         return Err(SEError::DBError(NoDataForID, String::from("Signed Back up transaction not found.")));
     }
 
+    
     // Wait for funding tx existence in blockchain and confs
     verify_tx_confirmed(&user_session.tx_backup.clone().unwrap().input[0].previous_output.txid.to_string(), &state)?;
 
+    
     // Create state chain DB object
     let state_chain = StateChain::new(
         user_session.proof_key.clone(),
@@ -142,7 +144,7 @@ pub fn deposit_confirm(
         tx_backup.output.last().unwrap().value+FEE,
         shared_key_id.to_owned()
     );
-
+    
     db::insert(
         &state.db,
         &claim.sub,
@@ -153,6 +155,7 @@ pub fn deposit_confirm(
     info!("DEPOSIT: State Chain created. ID: {} For user ID: {}", state_chain.id, user_session.id);
 
 
+    
     // Update sparse merkle tree with new StateChain entry
     let root = get_current_root::<Root>(&state.db)?.map(|r| r.hash());
     
@@ -162,7 +165,9 @@ pub fn deposit_confirm(
         &tx_backup.input.get(0).unwrap().previous_output.txid.to_string(),
         &user_session.proof_key
     )?;
+    
     let new_root = Root::from_hash(&new_root_hash.unwrap());
+    
     update_root(&state.db, &state.mainstay_config, &new_root)?;
 
     info!("DEPOSIT: Included in sparse merkle tree. State Chain ID: {}", state_chain.id);
@@ -178,5 +183,6 @@ pub fn deposit_confirm(
         &user_session
     )?;
 
+    
     Ok(Json(state_chain.id))
 }

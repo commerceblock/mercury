@@ -76,6 +76,7 @@ mod tests {
         println!("Funding txid: {:?} ",funding_txid);
     }
 
+    
     #[test]
     #[serial]
     fn test_confirm_proofs() {
@@ -86,6 +87,7 @@ mod tests {
 
         assert!(unconfirmed.len() ==1, "expected 1 unconfirmed shared key");
     }
+    
 
     #[test]
     #[serial]

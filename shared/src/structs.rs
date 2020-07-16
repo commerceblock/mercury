@@ -102,6 +102,12 @@ pub struct DepositMsg2 {
     pub shared_key_id: String,
 }
 
+/// Client -> SE
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ConfirmProofsMsg {
+    pub shared_key_id: String,
+}
+
 // Transfer algorithm structs
 
 

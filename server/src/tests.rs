@@ -87,7 +87,7 @@ mod tests {
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();
-        assert_eq!(res, format!("DB Error: No data for such identifier. (value: Root id: {:?})",smt_proof_msg.root.id()));
+        assert_eq!(res, format!("DB Error: No data for such identifier. (value: Root id: {:?})",smt_proof_msg.root.id().unwrap()));
 
         // invalid root for tree
         // first push a random root to tree
@@ -120,7 +120,7 @@ mod tests {
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();
-        assert_eq!(res, format!("DB Error: No data for such identifier. (value: Root id: {:?})",smt_proof_msg.root.id()));
+        assert_eq!(res, format!("DB Error: No data for such identifier. (value: Root id: {:?})",smt_proof_msg.root.id().unwrap()));
 
         // Invalid data sent in body - should be of type SmtProofMsgAPI
         let body = String::from("Body String");
