@@ -212,7 +212,7 @@ pub fn get_smt_root(
 pub fn get_confirmed_smt_root(
     state: State<Config>,
 ) -> Result<Json<Option<Root>>> {
-    Ok(Json(db::get_confirmed_root::<Root>(&state.db, &state.mainstay_config)?))
+    Ok(Json(db::get_confirmed_root(&state.db, &state.mainstay_config)?))
 }
 
 

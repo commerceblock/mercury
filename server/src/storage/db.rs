@@ -99,9 +99,9 @@ where
 }
 
 //Update the database with the latest available mainstay attestation info
-pub fn update_root_attestation(db: &DB, mc: &Option<mainstay::Config>) -> Result <()>{
+pub fn get_confirmed_root(db: &DB, mc: &Option<mainstay::Config>) -> Result <Option<Root>>{
 
-    fn update_db_from_ci(db: &DB, ci: &CommitmentInfo) -> Result<()>{
+    fn update_db_from_ci(db: &DB, ci: &CommitmentInfo) -> Result<Option<Root>>{
         let mut root = Root::from_commitment_info(ci);
         let current_id = get_current_root_id(db)?;
         let mut id;
@@ -126,22 +126,21 @@ pub fn update_root_attestation(db: &DB, mc: &Option<mainstay::Config>) -> Result
         let root = root;
 
         match update_root_db(db, &root){
-            Ok(_) => Ok(()),
+            Ok(_) => Ok(Some(root)),
             Err(e) => Err(e)
         }
     }
 
     match mc {
         Some(conf)=>{
-            match &get_confirmed_root::<Root>(db, mc)?{
+            match &get_db_confirmed_root::<Root>(db, mc)?{
                 Some(cr_db) => {
                     match &CommitmentInfo::from_latest(conf){
                         Ok(ci) => {
                             match cr_db.commitment_info(){
                                 Some(ci_db) => {
                                     if ci_db == ci {
-                                       
-                                        Ok(())
+                                        Ok(Some(cr_db.clone()))
                                     }  else {
                                         update_db_from_ci(db, ci)
                                     }
@@ -163,7 +162,7 @@ pub fn update_root_attestation(db: &DB, mc: &Option<mainstay::Config>) -> Result
                 
             }
         },
-        None => Ok(())
+        None => Ok(None)
     }
 }
 
@@ -265,7 +264,7 @@ where
     Ok(get_root::<Root> (db, &id)?)
 }
 
-pub fn get_confirmed_root<T>(db: &DB, mc: &Option<mainstay::Config>) -> Result<Option<Root>>
+pub fn get_db_confirmed_root<T>(db: &DB, mc: &Option<mainstay::Config>) -> Result<Option<Root>>
 where
 
    T: serde::de::DeserializeOwned,
@@ -378,9 +377,6 @@ mod tests {
         //assert!(update_root(&db, &mc, root1.clone()).is_ok());
         assert!(update_root(&db, &mc, &root2).is_ok());
 
-        //Update root attestations to get mainstay confirmation into DB
-        assert!(update_root_attestation(&db, &mc).is_ok()); 
-
         //Update the local copy of root1
         let root1 = get_root_from_id::<Root>(&db, &root1_id).unwrap().unwrap();
 
@@ -389,7 +385,7 @@ mod tests {
 
         //delete_all_roots(&db);
         //assert that there is a confirmed root
-        assert!(get_confirmed_root::<Root>(&db,&mc).unwrap().unwrap().is_confirmed());
+        assert!(get_confirmed_root(&db,&mc).unwrap().unwrap().is_confirmed());
 
         let _ = rocksdb::DB::destroy(&Options::default(), TEST_DB_LOC);
     }
