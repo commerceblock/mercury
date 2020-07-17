@@ -27,7 +27,6 @@ pub fn confirm_proofs(wallet: &mut Wallet) -> Result<Vec<String>>
 
     
     // Verify proof key inclusion in SE sparse merkle tree
-    println!("getting confirmed smt root");
     let root = match get_confirmed_smt_root(&wallet.client_shim)?{
         Some(root) => {
             //Get the funding txid and the corresponding funnding txid
@@ -50,17 +49,14 @@ pub fn confirm_proofs(wallet: &mut Wallet) -> Result<Vec<String>>
             for key in &mut wallet.shared_keys {
                 failed.push(key.id.clone());
             }
-            println!("finished");
             return Ok(failed);
         }
     };
 
     
     for key in &mut keys_to_update {
-       println!("getting smt proof");
        match get_smt_proof(&shim, &root, &key.funding_txid){
             Ok(proof) => {
-                println!("got smt proof");
                 match &key.proof_key {
                     Some(proof_key)=> match verify_statechain_smt(
                                         &Some(root.hash()),
@@ -70,7 +66,6 @@ pub fn confirm_proofs(wallet: &mut Wallet) -> Result<Vec<String>>
                                             false => failed.push(key.id.clone()),
                                             true =>  {
                                                 // Update proof in Shared key
-                                                println!("Add or update proof in Shared Key");
                                                 key.update_proof(&root, &proof);
                                             }
                                         },
@@ -82,6 +77,6 @@ pub fn confirm_proofs(wallet: &mut Wallet) -> Result<Vec<String>>
         }
     }
 
-    println!("finished");
+
     Ok(failed)
 }

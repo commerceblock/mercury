@@ -95,6 +95,7 @@ where
 
 //Update the database with the latest available mainstay attestation info
 pub fn get_confirmed_root(db: &DB, mc: &Option<mainstay::Config>) -> Result <Option<Root>>{
+    use crate::shared_lib::mainstay::{CommitmentIndexed, Commitment, MainstayAPIError};
 
     fn update_db_from_ci(db: &DB, ci: &CommitmentInfo) -> Result<Option<Root>>{
         let mut root = Root::from_commitment_info(ci);
@@ -134,7 +135,12 @@ pub fn get_confirmed_root(db: &DB, mc: &Option<mainstay::Config>) -> Result <Opt
         Some(conf)=>{
             match &get_db_confirmed_root::<Root>(db)?{
                 Some(cr_db) => {
-                    match &CommitmentInfo::from_latest(conf){
+                    //Search for update
+
+
+
+                    //First try to find the latest root in the latest commitment
+                    let result = match &CommitmentInfo::from_latest(conf){
                         Ok(ci) => {
                             match cr_db.commitment_info(){
                                 Some(ci_db) => {
@@ -150,6 +156,48 @@ pub fn get_confirmed_root(db: &DB, mc: &Option<mainstay::Config>) -> Result <Opt
                             }     
                         },
                         Err(e) => Err(SEError::SharedLibError(e.to_string()))
+                    };
+
+                    //Search for the roots in historical mainstay commitments if not found from latest
+                    match result? {
+                        Some(r) => Ok(Some(r)),
+                        None => {
+                            let current_id = get_current_root_id(db)?;
+                            for x in 0..=current_id {
+                                let id = current_id-x;
+                                let _ = match get_root_from_id::<Root>(db, &id)?{
+                                    Some(r) => {
+                                        match &CommitmentInfo::from_commitment(conf, &Commitment::from_hash(&r.hash())){
+                                            Ok(ci)=> {
+                                                let mut root = Root::from_commitment_info(ci);
+                                                root.set_id(&id);
+                                                //Latest confirmed commitment found. Updating db
+                                                return match update_root_db(db, &root){
+                                                    Ok(_) => Ok(Some(root)),
+                                                    Err(e) => Err(e)
+                                                };
+                                            },
+                                            
+                                            
+                                            //MainStay::NotFoundRrror is acceptable - continue the search. Otherwise return the error
+                                            Err(e) =>  match e.downcast_ref::<MainstayAPIError>() {
+                                                Some(e) => {
+                                                    match e {
+                                                        MainstayAPIError::NotFoundError(_) => (),
+                                                        _ => return Err(SEError::Generic(e.to_string()))                   
+                                                    }
+                                                },
+                                                None => return Err(SEError::Generic(e.to_string()))                                             
+                                            }
+                                            
+                                        };
+                                    },
+                                    None => ()
+                                };
+                            }
+                            Ok(None)
+
+                        },
                     }
                 },
                 None => {
@@ -263,6 +311,7 @@ where
     Ok(get_root::<Root> (db, &id)?)
 }
 
+//Find the latest confirmed root
 pub fn get_db_confirmed_root<T>(db: &DB) -> Result<Option<Root>>
 where
 

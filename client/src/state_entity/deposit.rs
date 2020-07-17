@@ -107,7 +107,6 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     debug!("Deposit: Funding tx broadcast. txid: {}", funding_txid);
 
     // Wait for server confirmation of funding tx and receive new StateChain's id
-    println!("waiting to confirm deposit");
     let state_chain_id: String = requests::postb(&wallet.client_shim,&format!("/deposit/confirm"),
         &DepositMsg2 {
             shared_key_id: shared_key_id.to_owned()
@@ -115,9 +114,7 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     )?;
 
     // Verify proof key inclusion in SE sparse merkle tree
-    println!("getting smt root");
     let root = get_smt_root(&wallet.client_shim)?.unwrap();
-    println!("getting smt proof");
     let proof = get_smt_proof(&wallet.client_shim, &root, &funding_txid)?;
     assert!(verify_statechain_smt(
         &Some(root.hash()),
@@ -126,7 +123,6 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     ));
 
     // Add proof and state chain id to Shared key
-    println!("add proof and state chain id to shared key");
     {
         let shared_key = wallet.get_shared_key_mut(&shared_key_id)?;
         shared_key.state_chain_id = Some(state_chain_id.to_string());
@@ -134,6 +130,5 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
         shared_key.add_proof_data(&proof_key.to_string(), &root, &proof, &funding_txid);
     }
 
-    println!("finished");
     Ok((shared_key_id, state_chain_id, funding_txid, tx_backup_signed, tx_backup_psm, proof_key))
 }

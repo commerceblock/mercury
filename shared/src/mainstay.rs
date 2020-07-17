@@ -61,8 +61,6 @@ pub enum MainstayError {
     /// Item not found error
     NotFoundError(String),
     ConfigurationError(String),
-    /// Error from the mainstay API
-    APIError(String)
 }
 
 impl PartialEq for MainstayError {
@@ -73,7 +71,6 @@ impl PartialEq for MainstayError {
             (FormatError(ref a), FormatError (ref b)) => a == b,
             (NotFoundError(ref a), NotFoundError(ref b)) => a == b,
             (ConfigurationError(ref a), ConfigurationError(ref b)) => a == b,
-            (APIError(ref a), APIError(ref b)) => a == b,
             _ => false
         }
     }
@@ -98,7 +95,6 @@ impl fmt::Display for MainstayError {
             MainstayError::FormatError(ref e) => write!(f,"MainstayError::FormatError: {}",e),
             MainstayError::NotFoundError(ref e) => write!(f,"MainstayError::NotFoundError: {}",e),
             MainstayError::ConfigurationError(ref e) => write!(f,"MainstayError::ConfigurationError: {}",e),
-            MainstayError::APIError(ref e) => write!(f,"MainstayError::APIError: {}",e),
         }
     }
 }
@@ -120,8 +116,66 @@ impl Responder<'static> for MainstayError {
     }
 }
 
+#[derive(Debug, Deserialize)]
+// Type wrappers for the error strings returned by the mainstay API
+pub enum MainstayAPIError {
+    /// Generic error from string error message
+    Generic(String),
+    /// Item not found error
+    NotFoundError(String),
+}
+
+impl PartialEq for MainstayAPIError {
+    fn eq(&self, other: &Self) -> bool {
+        use MainstayAPIError::*;
+        match (self, other) {
+            (Generic(ref a), Generic(ref b)) => a == b,
+            (NotFoundError(ref a), NotFoundError(ref b)) => a == b,
+            _ => false
+        }
+    }
+}
+
+impl From<String> for MainstayAPIError {
+    fn from(e: String) -> Self {
+        Self::Generic(e)
+    }
+}
+
+impl From<&str> for MainstayAPIError {
+    fn from(e: &str) -> Self {
+        Self::Generic(String::from(e))
+    }
+}
+
+impl fmt::Display for MainstayAPIError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            MainstayAPIError::Generic(ref e) => write!(f, "MainstayAPIError: {}", e),
+            MainstayAPIError::NotFoundError(ref e) => write!(f,"MainstayAPIError::NotFoundError: {}",e),
+        }
+    }
+}
+
+impl error::Error for MainstayAPIError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match *self {
+            _ => None,
+        }
+    }
+}
+
+impl Responder<'static> for MainstayAPIError {
+    fn respond_to(self, _: &rocket::Request) -> ::std::result::Result<rocket::Response<'static>, Status> {
+        rocket::Response::build()
+            .header(ContentType::JSON)
+            .sized_body(Cursor::new(format!("{}", self)))
+            .ok()
+    }
+}
+
+
 use MainstayError::NotFoundError;
-use MainstayError::APIError;
 use MainstayError::ConfigurationError;
 use MainstayError::FormatError;
 
@@ -371,7 +425,12 @@ pub trait APIObject: Sized {
 
     fn check_for_error(json_data: &serde_json::Value) -> Result<()> {
         match get_str(json_data, "error"){
-            Ok(e) => Err(APIError(e.to_string()).into()),
+            Ok(e) => {
+                if e == "Not found"{
+                    return Err(MainstayAPIError::NotFoundError(e.to_string()).into())
+                }
+                Err(MainstayAPIError::Generic(e.to_string()).into())
+            },
             Err(e) => {
                 match e.downcast_ref::<MainstayError>() {
                     Some(e_ms) => {
@@ -898,13 +957,13 @@ mod tests {
     #[test]
     fn test_get_proof_from_unconfirmed() {
         let exp_err_string = "Not found".to_string();
-        let exp_err_type = APIError; 
+        let exp_err_type = MainstayAPIError::NotFoundError; 
         let exp_err = &exp_err_type(exp_err_string); 
 
         match test_get_proof_from_commitment(
             &Commitment::from_hash(&monotree::utils::random_hash())){
                 Ok(_) => assert!(false, format!("expected {}", exp_err)),
-                Err(e) => match e.downcast_ref::<MainstayError>()  {
+                Err(e) => match e.downcast_ref::<MainstayAPIError>()  {
                     Some(e_ms) => assert!(e_ms == exp_err, format!("expected {}", exp_err)),
                     None => assert!(false, format!("expected {}", exp_err)),
                 }
