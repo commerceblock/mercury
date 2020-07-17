@@ -24,15 +24,22 @@ impl Config {
         if let Err(e) = bitcoin::Address::from_str(&fee_address) {
             panic!("Invalid fee address: {}",e)
         };
-        //mainstay_config is optional
-        //let mainstay_config = match settings.get("mainstay_config"){
-        //    Some(o) => {
-        //        Some(o.parse::<mainstay::Config>().unwrap())
-        //    },
-        //    None => None
-        //};
 
-        let mainstay_config = mainstay::Config::from_test();
+        let testing_mode=bool::from_str(settings.get("testing_mode").unwrap()).unwrap();
+
+        //mainstay_config is optional
+        let mainstay_config = match testing_mode {
+            true => mainstay::Config::from_test(),
+            false => {
+                match settings.get("mainstay_config"){
+                    Some(o) => {
+                        Some(o.parse::<mainstay::Config>().unwrap())
+                    },
+                    None => None
+                }
+            }
+        };
+        
         if mainstay_config.is_none()  {
             panic!("expected mainstay config");
         }
@@ -42,14 +49,14 @@ impl Config {
                 db,
                 electrum_server: settings.get("electrum_server").unwrap().to_string(),
                 network: settings.get("network").unwrap().to_string(),
-                testing_mode: bool::from_str(settings.get("testing_mode").unwrap()).unwrap(),
+                testing_mode,
                 fee_address,
                 fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
                 fee_withdraw: settings.get("fee_withdraw").unwrap().parse::<u64>().unwrap(),
                 block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
                 batch_lifetime: settings.get("batch_lifetime").unwrap().parse::<u64>().unwrap(),
                 punishment_duration: settings.get("punishment_duration").unwrap().parse::<u64>().unwrap(),
-                mainstay_config: mainstay_config,
+                mainstay_config
             }
         )
     }
