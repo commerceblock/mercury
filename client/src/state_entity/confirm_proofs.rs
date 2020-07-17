@@ -14,20 +14,6 @@ use crate::wallet::wallet::Wallet;
 use crate::wallet::shared_key::SharedKey;
 use crate::state_entity::util::{verify_statechain_smt};
 use super::api::{get_smt_proof, get_confirmed_smt_root};
-use crate::utilities::requests;
-use shared_lib::structs::{ConfirmProofsMsg};
-
-
-
-/// Message to server initiating state entity protocol.
-/// Shared wallet ID returned
-pub fn session_init(wallet: &mut Wallet, shared_key_id: String) -> Result<String> {
-    requests::postb(&wallet.client_shim,&format!("confirm_proofs/init"),
-        &ConfirmProofsMsg {
-            shared_key_id: shared_key_id,
-        }
-    )
-}
 
 /// Update wallet shared key proofs as required with mainstay-attested
 /// ("confirmed") proofs. Returns a vector of shared_key_id of the keys 
