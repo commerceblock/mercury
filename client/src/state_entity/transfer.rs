@@ -21,7 +21,7 @@ use super::super::Result;
 use shared_lib::{
     state_chain::StateChainSig,
     structs::*};
-use crate::error::{CError, WalletErrorType::KeyMissingData};
+use crate::error::{WalletErrorType, CError};
 use crate::wallet::{
     wallet::Wallet,
     key_paths::funding_txid_to_int};
@@ -39,18 +39,17 @@ use std::str::FromStr;
 /// Transfer coins to new Owner from this wallet
 pub fn transfer_sender(
     wallet: &mut Wallet,
-    shared_key_id: &String,
+    state_chain_id: &String,
     receiver_addr: StateEntityAddress
 ) -> Result<TransferMsg3> {
     // Get required shared key data
-    let state_chain_id;
+    let shared_key_id;
     let mut prepare_sign_msg;
     {
-        let shared_key = wallet.get_shared_key(shared_key_id)?;
-        state_chain_id = shared_key.state_chain_id.clone()
-            .ok_or(CError::WalletError(KeyMissingData))?;
+        let shared_key = wallet.get_shared_key_by_state_chain_id(state_chain_id)?;
+        shared_key_id = shared_key.id.clone();
         prepare_sign_msg = shared_key.tx_backup_psm.clone()
-            .ok_or(CError::WalletError(KeyMissingData))?;
+            .ok_or(CError::WalletError(WalletErrorType::KeyMissingData))?;
     }
 
     // First sign state chain
@@ -59,7 +58,8 @@ pub fn transfer_sender(
     // Get proof key for signing
     let proof_key_derivation = wallet.se_proof_keys.get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap());
     let state_chain_sig = StateChainSig::new(
-        &proof_key_derivation.unwrap().private_key.key,
+        &proof_key_derivation.ok_or(CError::WalletError(WalletErrorType::KeyNotFound))?
+            .private_key.key,
         &String::from("TRANSFER"),
         &receiver_addr.proof_key.clone().to_string()
     )?;
@@ -100,7 +100,7 @@ pub fn transfer_sender(
 
     // Mark funds as spent in wallet
     {
-        let mut shared_key = wallet.get_shared_key_mut(shared_key_id)?;
+        let mut shared_key = wallet.get_shared_key_mut(&shared_key_id)?;
         shared_key.unspent = false;
     }
 
@@ -120,6 +120,11 @@ pub fn transfer_receiver(
     let prev_owner_proof_key = state_chain_data.chain.last().unwrap().data.clone();
     transfer_msg3.state_chain_sig.verify(&prev_owner_proof_key)?;
     debug!("State chain signature is valid.");
+
+    // Check signature is for proof key owned by this wallet
+    let new_owner_proof_key = transfer_msg3.state_chain_sig.data.clone();
+    wallet.se_proof_keys.get_key_derivation(&PublicKey::from_str(&new_owner_proof_key).unwrap())
+        .ok_or(CError::Generic(String::from("Transfer Error: StateChain is signed over to proof key not owned by this wallet!")))?;
 
     // Check try_o2() comments and docs for justification of below code
     let mut done = false;

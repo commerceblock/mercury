@@ -328,6 +328,18 @@ impl Wallet {
         Err(CError::WalletError(WalletErrorType::SharedKeyNotFound))
     }
 
+    /// Get unspent shared key by state chain id. Return Err if no shared key with given state chain id.
+    pub fn get_shared_key_by_state_chain_id(&self, state_chain_id: &String) -> Result<&SharedKey> {
+        for shared in &self.shared_keys {
+            if shared.state_chain_id == Some(state_chain_id.to_owned()) {
+                if shared.unspent == true {
+                    return Ok(shared);
+                }
+            }
+        }
+        Err(CError::WalletError(WalletErrorType::SharedKeyNotFound))
+    }
+
     /// Return Shared key info: StateChain ID, Funding Txid, proof key, value, unspent
     pub fn get_shared_key_info(&self, id: &String) -> Result<(String, String, String, u64, bool)> {
         let shared_key = self.get_shared_key(id)?;

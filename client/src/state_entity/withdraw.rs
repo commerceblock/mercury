@@ -26,17 +26,16 @@ use curv::elliptic::curves::traits::ECPoint;
 use std::str::FromStr;
 
 /// Withdraw coins from state entity. Returns signed withdraw transaction, state_chain_id and withdrawn amount.
-pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
+pub fn withdraw(wallet: &mut Wallet, state_chain_id: &String)
     -> Result<(String, String, u64)>
 {
     // first get required shared key data
-    let state_chain_id;
+    let shared_key_id;
     let pk;
     {
-        let shared_key = wallet.get_shared_key(shared_key_id)?;
+        let shared_key = wallet.get_shared_key_by_state_chain_id(state_chain_id)?;
         pk = shared_key.share.public.q.get_element();
-        state_chain_id = shared_key.state_chain_id.clone()
-            .ok_or(CError::WalletError(WalletErrorType::KeyMissingData))?;
+        shared_key_id = shared_key.id.clone();
     }
 
      // Generate receiving address of withdrawn funds
@@ -101,7 +100,7 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
 
     // Mark funds as withdrawn in wallet
     {
-        let mut shared_key = wallet.get_shared_key_mut(shared_key_id)?;
+        let mut shared_key = wallet.get_shared_key_mut(&shared_key_id)?;
         shared_key.unspent = false;
     }
 
@@ -109,5 +108,5 @@ pub fn withdraw(wallet: &mut Wallet, shared_key_id: &String)
     let withdraw_txid = wallet.electrumx_client.broadcast_transaction(hex::encode(consensus::serialize(&tx_withdraw_signed)))?;
     debug!("Deposit: Funding tx broadcast. txid: {}", withdraw_txid);
 
-    Ok((withdraw_txid, state_chain_id, state_chain_data.amount-se_fee_info.withdraw))
+    Ok((withdraw_txid, state_chain_id.clone(), state_chain_data.amount-se_fee_info.withdraw))
 }
