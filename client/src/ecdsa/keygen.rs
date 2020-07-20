@@ -1,25 +1,36 @@
-use curv::{FE,BigInt};
+use curv::{BigInt, FE};
 use kms::ecdsa::two_party::*;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
 
-use crate::wallet::shared_key::SharedKey;
 use super::super::utilities::requests;
 use super::super::ClientShim;
 use super::super::Result;
+use crate::wallet::shared_key::SharedKey;
 use uuid::Uuid;
-
 
 const KG_PATH_PRE: &str = "ecdsa/keygen";
 
-pub fn get_master_key(id: &Uuid, client_shim: &ClientShim, secret_key: &FE, value: &u64, is_transfer: bool) -> Result<SharedKey> {
-    let (id, kg_party_one_first_message): (Uuid, party_one::KeyGenFirstMsg)
-        = if is_transfer {
-            requests::post(client_shim, &format!("{}/{}/first/transfer", KG_PATH_PRE, id))?
-        } else {
-            requests::post(client_shim, &format!("{}/{}/first/deposit", KG_PATH_PRE, id))?
-        };
+pub fn get_master_key(
+    id: &Uuid,
+    client_shim: &ClientShim,
+    secret_key: &FE,
+    value: &u64,
+    is_transfer: bool,
+) -> Result<SharedKey> {
+    let (id, kg_party_one_first_message): (Uuid, party_one::KeyGenFirstMsg) = if is_transfer {
+        requests::post(
+            client_shim,
+            &format!("{}/{}/first/transfer", KG_PATH_PRE, id),
+        )?
+    } else {
+        requests::post(
+            client_shim,
+            &format!("{}/{}/first/deposit", KG_PATH_PRE, id),
+        )?
+    };
 
-    let (kg_party_two_first_message, kg_ec_key_pair_party2) = MasterKey2::key_gen_first_message_predefined(secret_key);
+    let (kg_party_two_first_message, kg_ec_key_pair_party2) =
+        MasterKey2::key_gen_first_message_predefined(secret_key);
 
     let body = &kg_party_two_first_message.d_log_proof;
 
@@ -74,6 +85,6 @@ pub fn get_master_key(id: &Uuid, client_shim: &ClientShim, secret_key: &FE, valu
         proof_key: None,
         smt_proof: None,
         unspent: true,
-        funding_txid: String::default()
+        funding_txid: String::default(),
     })
 }

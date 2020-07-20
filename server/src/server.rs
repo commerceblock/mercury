@@ -1,6 +1,6 @@
 use super::routes::*;
 use super::storage::db;
-use super::{Config, AuthConfig};
+use super::{AuthConfig, Config};
 
 use config;
 use rocket;
@@ -10,11 +10,11 @@ use shared_lib::mainstay;
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
-use log4rs::encode::pattern::PatternEncoder;
 use log4rs::config::{Appender, Config as LogConfig, Root};
+use log4rs::encode::pattern::PatternEncoder;
 
-use std::{collections::HashMap, str::FromStr};
 use crate::DataBase;
+use std::{collections::HashMap, str::FromStr};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -23,43 +23,49 @@ impl Config {
         let db = get_db(settings.clone())?;
         let fee_address = settings.get("fee_address").unwrap().to_string();
         if let Err(e) = bitcoin::Address::from_str(&fee_address) {
-            panic!("Invalid fee address: {}",e)
+            panic!("Invalid fee address: {}", e)
         };
 
-        let testing_mode=bool::from_str(settings.get("testing_mode").unwrap()).unwrap();
+        let testing_mode = bool::from_str(settings.get("testing_mode").unwrap()).unwrap();
 
         //mainstay_config is optional
         let mainstay_config = match testing_mode {
             true => mainstay::Config::from_test(),
-            false => {
-                match settings.get("mainstay_config"){
-                    Some(o) => {
-                        Some(o.parse::<mainstay::Config>().unwrap())
-                    },
-                    None => None
-                }
-            }
+            false => match settings.get("mainstay_config") {
+                Some(o) => Some(o.parse::<mainstay::Config>().unwrap()),
+                None => None,
+            },
         };
 
-        if mainstay_config.is_none()  {
+        if mainstay_config.is_none() {
             panic!("expected mainstay config");
         }
 
-        Ok(
-            Config {
-                db,
-                electrum_server: settings.get("electrum_server").unwrap().to_string(),
-                network: settings.get("network").unwrap().to_string(),
-                testing_mode,
-                fee_address,
-                fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
-                fee_withdraw: settings.get("fee_withdraw").unwrap().parse::<u64>().unwrap(),
-                block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
-                batch_lifetime: settings.get("batch_lifetime").unwrap().parse::<u64>().unwrap(),
-                punishment_duration: settings.get("punishment_duration").unwrap().parse::<u64>().unwrap(),
-                mainstay_config
-            }
-        )
+        Ok(Config {
+            db,
+            electrum_server: settings.get("electrum_server").unwrap().to_string(),
+            network: settings.get("network").unwrap().to_string(),
+            testing_mode,
+            fee_address,
+            fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
+            fee_withdraw: settings
+                .get("fee_withdraw")
+                .unwrap()
+                .parse::<u64>()
+                .unwrap(),
+            block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
+            batch_lifetime: settings
+                .get("batch_lifetime")
+                .unwrap()
+                .parse::<u64>()
+                .unwrap(),
+            punishment_duration: settings
+                .get("punishment_duration")
+                .unwrap()
+                .parse::<u64>()
+                .unwrap(),
+            mainstay_config,
+        })
     }
 }
 
@@ -67,12 +73,15 @@ impl AuthConfig {
     pub fn load(settings: HashMap<String, String>) -> AuthConfig {
         AuthConfig {
             issuer: settings.get("issuer").unwrap_or(&"".to_string()).to_owned(),
-            audience: settings.get("audience")
-                .unwrap_or(&"".to_string()).to_owned(),
-            region: settings.get("region")
-                .unwrap_or(&"".to_string()).to_owned(),
-            pool_id: settings.get("pool_id")
-                .unwrap_or(&"".to_string()).to_owned(),
+            audience: settings
+                .get("audience")
+                .unwrap_or(&"".to_string())
+                .to_owned(),
+            region: settings.get("region").unwrap_or(&"".to_string()).to_owned(),
+            pool_id: settings
+                .get("pool_id")
+                .unwrap_or(&"".to_string())
+                .to_owned(),
         }
     }
 }
@@ -167,12 +176,12 @@ fn set_logging_config(log_file: Option<&String>) {
         // Write log to file
         let logfile = FileAppender::builder()
             .encoder(Box::new(PatternEncoder::new("{l} - {m}\n")))
-            .build(log_file.unwrap()).unwrap();
+            .build(log_file.unwrap())
+            .unwrap();
         let log_config = LogConfig::builder()
             .appender(Appender::builder().build("logfile", Box::new(logfile)))
-            .build(Root::builder()
-                       .appender("logfile")
-                       .build(LevelFilter::Info)).unwrap();
+            .build(Root::builder().appender("logfile").build(LevelFilter::Info))
+            .unwrap();
 
         let _ = log4rs::init_config(log_config);
     }

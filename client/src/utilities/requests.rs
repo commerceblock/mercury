@@ -2,16 +2,17 @@
 //!
 //! Send requests and decode responses
 
+use floating_duration::TimeFormat;
 use serde;
 use std::time::Instant;
-use floating_duration::TimeFormat;
 
-use crate::error::CError;
 use super::super::ClientShim;
 use super::super::Result;
+use crate::error::CError;
 
 pub fn post<V>(client_shim: &ClientShim, path: &str) -> Result<V>
-    where V: serde::de::DeserializeOwned
+where
+    V: serde::de::DeserializeOwned,
 {
     _postb(client_shim, path, "{}")
 }
@@ -19,15 +20,15 @@ pub fn post<V>(client_shim: &ClientShim, path: &str) -> Result<V>
 pub fn postb<T, V>(client_shim: &ClientShim, path: &str, body: T) -> Result<V>
 where
     T: serde::ser::Serialize,
-    V: serde::de::DeserializeOwned
+    V: serde::de::DeserializeOwned,
 {
     _postb(client_shim, path, body)
 }
 
 fn _postb<T, V>(client_shim: &ClientShim, path: &str, body: T) -> Result<V>
-    where
-        T: serde::ser::Serialize,
-        V: serde::de::DeserializeOwned
+where
+    T: serde::ser::Serialize,
+    V: serde::de::DeserializeOwned,
 {
     let start = Instant::now();
 
@@ -42,7 +43,7 @@ fn _postb<T, V>(client_shim: &ClientShim, path: &str, body: T) -> Result<V>
     // catch reqwest errors
     let value = match b.json(&body).send() {
         Ok(mut v) => v.text().unwrap(),
-        Err(e) => return Err(CError::from(e))
+        Err(e) => return Err(CError::from(e)),
     };
 
     info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));

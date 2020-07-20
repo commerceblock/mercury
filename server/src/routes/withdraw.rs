@@ -2,50 +2,57 @@
 //!
 //! StateEntity Withdraw protocol.
 
-use super::super::{Result,Config};
+use super::super::{Config, Result};
 extern crate shared_lib;
-use shared_lib::{structs::*,
-    state_chain::*,
-    Root};
+use shared_lib::{state_chain::*, structs::*, Root};
 
-use crate::DataBase;
-use crate::routes::util::check_user_auth;
 use crate::error::SEError;
+use crate::routes::util::check_user_auth;
 use crate::storage::{
-    db_postgres::{Table, Column, db_deser, db_ser, db_update, db_get_1, db_get_3},
-    db::{get_current_root, DB_SC_LOC, update_root}};
+    db::{get_current_root, update_root, DB_SC_LOC},
+    db_postgres::{db_deser, db_get_1, db_get_3, db_ser, db_update, Column, Table},
+};
+use crate::DataBase;
 
 use bitcoin::Transaction;
 use chrono::NaiveDateTime;
-use rocket_contrib::json::Json;
 use rocket::State;
+use rocket_contrib::json::Json;
 use uuid::Uuid;
 
 /// User request withdraw:
 ///     - Check StateChainSig validity
 ///     - Mark user as authorised to withdraw
 #[post("/withdraw/init", format = "json", data = "<withdraw_msg1>")]
-pub fn withdraw_init(
-    conn: DataBase,
-    withdraw_msg1: Json<WithdrawMsg1>,
-) -> Result<Json<()>> {
+pub fn withdraw_init(conn: DataBase, withdraw_msg1: Json<WithdrawMsg1>) -> Result<Json<()>> {
     let user_id = withdraw_msg1.shared_key_id;
     check_user_auth(&conn, &user_id)?;
 
     info!("WITHDRAW: Init. Shared Key ID: {}", user_id);
 
-    let (state_chain_id) = db_get_1::<Uuid>(&conn, &user_id, Table::UserSession,vec!(Column::StateChainId))?;
+    let (state_chain_id) = db_get_1::<Uuid>(
+        &conn,
+        &user_id,
+        Table::UserSession,
+        vec![Column::StateChainId],
+    )?;
 
     // Get statechain
-    let (sc_locked_until, sc_owner_id, state_chain_str) =
-            db_get_3::<NaiveDateTime,Uuid,String>(&conn, &state_chain_id, Table::StateChain,
-                vec!(Column::LockedUntil, Column::OwnerId, Column::Chain))?;
+    let (sc_locked_until, sc_owner_id, state_chain_str) = db_get_3::<NaiveDateTime, Uuid, String>(
+        &conn,
+        &state_chain_id,
+        Table::StateChain,
+        vec![Column::LockedUntil, Column::OwnerId, Column::Chain],
+    )?;
     let state_chain: StateChain = db_deser(state_chain_str)?;
     // Check if locked
     is_locked(sc_locked_until)?;
     // check if owned by caller
     if sc_owner_id != user_id {
-        return Err(SEError::Generic(format!("State Chain not owned by User ID: {}.",state_chain_id)));
+        return Err(SEError::Generic(format!(
+            "State Chain not owned by User ID: {}.",
+            state_chain_id
+        )));
     }
 
     // Verify new StateChainSig
@@ -53,9 +60,18 @@ pub fn withdraw_init(
     withdraw_msg1.state_chain_sig.verify(&prev_proof_key)?;
 
     // Mark UserSession as authorised for withdrawal
-    db_update(&conn,&user_id,Table::UserSession,vec!(Column::WithdrawScSig),vec!(&db_ser(withdraw_msg1.state_chain_sig.clone())?))?;
+    db_update(
+        &conn,
+        &user_id,
+        Table::UserSession,
+        vec![Column::WithdrawScSig],
+        vec![&db_ser(withdraw_msg1.state_chain_sig.clone())?],
+    )?;
 
-    info!("WITHDRAW: Authorised. Shared Key ID: {}. State Chain: {}",user_id, state_chain_id);
+    info!(
+        "WITHDRAW: Authorised. Shared Key ID: {}. State Chain: {}",
+        user_id, state_chain_id
+    );
 
     Ok(Json(()))
 }
@@ -74,37 +90,66 @@ pub fn withdraw_confirm(
     info!("WITHDRAW: Confirm. Shared Key ID: {}", user_id.to_string());
 
     // Get UserSession data - Checking that withdraw tx and statechain signature exists
-    let (tx_withdraw_str, withdraw_sc_sig_str, state_chain_id) =
-            db_get_3::<String,String,Uuid>(&conn, &user_id, Table::UserSession,
-                vec!(Column::TxWithdraw, Column::WithdrawScSig, Column::StateChainId))?;
+    let (tx_withdraw_str, withdraw_sc_sig_str, state_chain_id) = db_get_3::<String, String, Uuid>(
+        &conn,
+        &user_id,
+        Table::UserSession,
+        vec![
+            Column::TxWithdraw,
+            Column::WithdrawScSig,
+            Column::StateChainId,
+        ],
+    )?;
     let tx_withdraw: Transaction = db_deser(tx_withdraw_str)?;
     let withdraw_sc_sig: StateChainSig = db_deser(withdraw_sc_sig_str)?;
 
     // Get statechain and update with final StateChainSig
-    let mut state_chain: StateChain =
-        db_deser(db_get_1(&conn, &state_chain_id, Table::StateChain, vec!(Column::Chain))?)?;
+    let mut state_chain: StateChain = db_deser(db_get_1(
+        &conn,
+        &state_chain_id,
+        Table::StateChain,
+        vec![Column::Chain],
+    )?)?;
 
     state_chain.add(withdraw_sc_sig.to_owned())?;
 
-    db_update(&conn, &state_chain_id, Table::StateChain,
-        vec!(Column::Chain, Column::Amount),
-        vec!(
-            &db_ser(state_chain.clone())?,
-            &(0 as i64))    // signals withdrawn funds
-        )?;
-
+    db_update(
+        &conn,
+        &state_chain_id,
+        Table::StateChain,
+        vec![Column::Chain, Column::Amount],
+        vec![&db_ser(state_chain.clone())?, &(0 as i64)], // signals withdrawn funds
+    )?;
 
     // Remove state_chain_id from user session to signal end of session
-    db_update(&conn,&user_id,Table::UserSession,vec!(Column::StateChainId),vec!(&Uuid::nil()))?;
+    db_update(
+        &conn,
+        &user_id,
+        Table::UserSession,
+        vec![Column::StateChainId],
+        vec![&Uuid::nil()],
+    )?;
 
     // Update sparse merkle tree
-    let funding_txid = tx_withdraw.input.get(0).unwrap().previous_output.txid.to_string();
+    let funding_txid = tx_withdraw
+        .input
+        .get(0)
+        .unwrap()
+        .previous_output
+        .txid
+        .to_string();
 
     let root = get_current_root::<Root>(&state.db)?.map(|r| r.hash());
-    let mut new_root = Root::from_hash(&update_statechain_smt(DB_SC_LOC, &root, &funding_txid, &withdraw_msg2.address)?.unwrap());
+    let mut new_root = Root::from_hash(
+        &update_statechain_smt(DB_SC_LOC, &root, &funding_txid, &withdraw_msg2.address)?.unwrap(),
+    );
     update_root(&state.db, &state.mainstay_config, &mut new_root)?;
 
-    info!("WITHDRAW: Complete. Shared Key ID: {}. State Chain: {}",user_id.to_string(), state_chain_id);
+    info!(
+        "WITHDRAW: Complete. Shared Key ID: {}. State Chain: {}",
+        user_id.to_string(),
+        state_chain_id
+    );
 
     Ok(Json(tx_withdraw.input[0].clone().witness))
 }

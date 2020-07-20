@@ -1,11 +1,11 @@
 use super::super::Result;
 use crate::error::SEError;
+use crate::mainstay;
+use crate::mainstay::CommitmentInfo;
+use crate::shared_lib::mainstay::Attestable;
 use rocksdb::DB;
 use serde;
 use shared_lib::Root;
-use crate::mainstay::CommitmentInfo;
-use crate::mainstay;
-use crate::shared_lib::mainstay::Attestable;
 #[allow(unused_imports)]
 use std::str::FromStr;
 
@@ -54,7 +54,7 @@ pub fn remove(db: &DB, user_id: &str, id: &str, name: &dyn MPCStruct) -> Result<
 
     match db.delete(identifier) {
         Err(e) => return Err(SEError::Generic(e.to_string())),
-        Ok(_) => Ok(())
+        Ok(_) => Ok(()),
     }
 }
 
@@ -69,7 +69,7 @@ where
     let item_string = serde_json::to_string(&item).unwrap();
     match db.put(&identifier, &item_string) {
         Err(e) => Err(SEError::Generic(e.to_string())),
-        Ok(_) => Ok(())
+        Ok(_) => Ok(()),
     }
 }
 
@@ -79,83 +79,72 @@ where
 {
     match db.get(identifier) {
         Err(e) => return Err(SEError::Generic(e.to_string())),
-        Ok(res) => {
-            match res {
-                Some(vec) => {
-                    match serde_json::from_slice(&vec){
-                        Ok(obj) => Ok(Some(obj)),
-                        Err(e) => Err(SEError::Generic(e.to_string()))
-                    }
-                },
-                None => return Ok(None)
-            }
-        }
+        Ok(res) => match res {
+            Some(vec) => match serde_json::from_slice(&vec) {
+                Ok(obj) => Ok(Some(obj)),
+                Err(e) => Err(SEError::Generic(e.to_string())),
+            },
+            None => return Ok(None),
+        },
     }
 }
 
 //Update the database with the latest available mainstay attestation info
-pub fn get_confirmed_root(db: &DB, mc: &Option<mainstay::Config>) -> Result <Option<Root>>{
-    use crate::shared_lib::mainstay::{CommitmentIndexed, Commitment, MainstayAPIError};
+pub fn get_confirmed_root(db: &DB, mc: &Option<mainstay::Config>) -> Result<Option<Root>> {
+    use crate::shared_lib::mainstay::{Commitment, CommitmentIndexed, MainstayAPIError};
 
-    fn update_db_from_ci(db: &DB, ci: &CommitmentInfo) -> Result<Option<Root>>{
+    fn update_db_from_ci(db: &DB, ci: &CommitmentInfo) -> Result<Option<Root>> {
         let mut root = Root::from_commitment_info(ci);
         let current_id = get_current_root_id(db)?;
         let mut id;
         for x in 0..=current_id {
-            id = current_id-x;
-            match get_root_from_id::<Root>(db, &id)?{
+            id = current_id - x;
+            match get_root_from_id::<Root>(db, &id)? {
                 Some(r) => {
                     if r.hash() == ci.commitment().to_hash() {
-                        match r.id(){
+                        match r.id() {
                             Some(r_id) => {
                                 root.set_id(&r_id);
                                 break;
-                            },
-                            None => ()
+                            }
+                            None => (),
                         }
                     }
-                },
-                None => ()
-            };  
+                }
+                None => (),
+            };
         }
 
         let root = root;
 
         match root.id() {
-            Some(_) =>         
-            match update_root_db(db, &root){
+            Some(_) => match update_root_db(db, &root) {
                 Ok(_) => Ok(Some(root)),
-                Err(e) => Err(e)
+                Err(e) => Err(e),
             },
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
     match mc {
-        Some(conf)=>{
-            match &get_db_confirmed_root::<Root>(db)?{
+        Some(conf) => {
+            match &get_db_confirmed_root::<Root>(db)? {
                 Some(cr_db) => {
                     //Search for update
 
-
-
                     //First try to find the latest root in the latest commitment
-                    let result = match &CommitmentInfo::from_latest(conf){
-                        Ok(ci) => {
-                            match cr_db.commitment_info(){
-                                Some(ci_db) => {
-                                    if ci_db == ci {
-                                        Ok(Some(cr_db.clone()))
-                                    }  else {
-                                        update_db_from_ci(db, ci)
-                                    }
-                                },
-                                None => {
+                    let result = match &CommitmentInfo::from_latest(conf) {
+                        Ok(ci) => match cr_db.commitment_info() {
+                            Some(ci_db) => {
+                                if ci_db == ci {
+                                    Ok(Some(cr_db.clone()))
+                                } else {
                                     update_db_from_ci(db, ci)
                                 }
-                            }     
+                            }
+                            None => update_db_from_ci(db, ci),
                         },
-                        Err(e) => Err(SEError::SharedLibError(e.to_string()))
+                        Err(e) => Err(SEError::SharedLibError(e.to_string())),
                     };
 
                     //Search for the roots in historical mainstay commitments if not found from latest
@@ -164,104 +153,107 @@ pub fn get_confirmed_root(db: &DB, mc: &Option<mainstay::Config>) -> Result <Opt
                         None => {
                             let current_id = get_current_root_id(db)?;
                             for x in 0..=current_id {
-                                let id = current_id-x;
-                                let _ = match get_root_from_id::<Root>(db, &id)?{
+                                let id = current_id - x;
+                                let _ = match get_root_from_id::<Root>(db, &id)? {
                                     Some(r) => {
-                                        match &CommitmentInfo::from_commitment(conf, &Commitment::from_hash(&r.hash())){
-                                            Ok(ci)=> {
+                                        match &CommitmentInfo::from_commitment(
+                                            conf,
+                                            &Commitment::from_hash(&r.hash()),
+                                        ) {
+                                            Ok(ci) => {
                                                 let mut root = Root::from_commitment_info(ci);
                                                 root.set_id(&id);
                                                 //Latest confirmed commitment found. Updating db
-                                                return match update_root_db(db, &root){
+                                                return match update_root_db(db, &root) {
                                                     Ok(_) => Ok(Some(root)),
-                                                    Err(e) => Err(e)
+                                                    Err(e) => Err(e),
                                                 };
-                                            },
-                                            
-                                            
+                                            }
+
                                             //MainStay::NotFoundRrror is acceptable - continue the search. Otherwise return the error
-                                            Err(e) =>  match e.downcast_ref::<MainstayAPIError>() {
-                                                Some(e) => {
-                                                    match e {
-                                                        MainstayAPIError::NotFoundError(_) => (),
-                                                        _ => return Err(SEError::Generic(e.to_string()))                   
+                                            Err(e) => match e.downcast_ref::<MainstayAPIError>() {
+                                                Some(e) => match e {
+                                                    MainstayAPIError::NotFoundError(_) => (),
+                                                    _ => {
+                                                        return Err(SEError::Generic(e.to_string()))
                                                     }
                                                 },
-                                                None => return Err(SEError::Generic(e.to_string()))                                             
-                                            }
-                                            
+                                                None => {
+                                                    return Err(SEError::Generic(e.to_string()))
+                                                }
+                                            },
                                         };
-                                    },
-                                    None => ()
+                                    }
+                                    None => (),
                                 };
                             }
                             Ok(None)
-
-                        },
+                        }
                     }
-                },
-                None => {
-                    match &CommitmentInfo::from_latest(conf){
-                        Ok(ci) => update_db_from_ci(db, ci),
-                        Err(e) => Err(SEError::SharedLibError(e.to_string()))
-                    }                    
                 }
-                
+                None => match &CommitmentInfo::from_latest(conf) {
+                    Ok(ci) => update_db_from_ci(db, ci),
+                    Err(e) => Err(SEError::SharedLibError(e.to_string())),
+                },
             }
-        },
-        None => Ok(None)
+        }
+        None => Ok(None),
     }
 }
 
 //Update the database and the mainstay slot with the SMT root, if applicable
-pub fn update_root(db: &DB, mc: &Option<mainstay::Config>, root: &Root) -> Result<u32>{
+pub fn update_root(db: &DB, mc: &Option<mainstay::Config>, root: &Root) -> Result<u32> {
     let id = update_root_db(db, root)?;
     update_root_mainstay(mc, root)?;
-    Ok(id)  
+    Ok(id)
 }
 
-fn update_root_mainstay(config: &Option<mainstay::Config>, root: &Root) -> Result<()>{
+fn update_root_mainstay(config: &Option<mainstay::Config>, root: &Root) -> Result<()> {
     match config {
-        Some(c) => match root.attest(&c){
-            Ok(_)=> Ok(()),
-            Err(e) => Err(SEError::SharedLibError(e.to_string()))
+        Some(c) => match root.attest(&c) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(SEError::SharedLibError(e.to_string())),
         },
-        None => Ok(())
+        None => Ok(()),
     }
 }
-
 
 /// Update state chain root value
 fn update_root_db(db: &DB, rt: &Root) -> Result<u32> {
     let mut root = rt.clone();
-        // Get previous ID, or use the one specified in root to update an existing root with mainstay proof
-        let id = match root.id(){
-            //This will update an existing root in the db
-            Some(id) => {
-                let existing_root = get_root_from_id::<Root>(db, &id)?;
-                match existing_root {
-                    None => return Err(SEError::Generic(format!("error updating existing root - root not found with id {}", id))),
-                    Some(r) => {
-                        if r.hash() != root.hash() {
-                            return Err(SEError::Generic(format!("error updating existing root - hashes do not match: existing: {} update: {}", r, root)));
-                        }
+    // Get previous ID, or use the one specified in root to update an existing root with mainstay proof
+    let id = match root.id() {
+        //This will update an existing root in the db
+        Some(id) => {
+            let existing_root = get_root_from_id::<Root>(db, &id)?;
+            match existing_root {
+                None => {
+                    return Err(SEError::Generic(format!(
+                        "error updating existing root - root not found with id {}",
                         id
-                    }
+                    )))
                 }
-            },
-            // new root, update id
-            None => get_current_root_id(db)? + 1,
-        };
-        
-        let identifier = idify_root(&id);
-        root.set_id(&id);
-        insert_by_identifier(&db, &identifier, root.clone())?;
+                Some(r) => {
+                    if r.hash() != root.hash() {
+                        return Err(SEError::Generic(format!("error updating existing root - hashes do not match: existing: {} update: {}", r, root)));
+                    }
+                    id
+                }
+            }
+        }
+        // new root, update id
+        None => get_current_root_id(db)? + 1,
+    };
 
-        //update root id
-        insert_by_identifier(&db, ROOTID, id)?;
+    let identifier = idify_root(&id);
+    root.set_id(&id);
+    insert_by_identifier(&db, &identifier, root.clone())?;
 
-        debug!("Updated root at id {} with value: {}", id, root);
-        Ok(id)
+    //update root id
+    insert_by_identifier(&db, ROOTID, id)?;
+
+    debug!("Updated root at id {} with value: {}", id, root);
+    Ok(id)
 }
 
 /// get root with id
@@ -269,67 +261,59 @@ pub fn get_root<T>(db: &DB, id: &u32) -> Result<Option<T>>
 where
     T: serde::de::DeserializeOwned,
 {
-    
     get_by_identifier(db, &idify_root(&id))
 }
 
 pub fn get_current_root_id(db: &DB) -> Result<u32> {
     // Get previous ID
     match get_by_identifier::<u32>(db, ROOTID)? {
-        None =>  Ok(0),
-        Some(id_option) => Ok(id_option)
+        None => Ok(0),
+        Some(id_option) => Ok(id_option),
     }
 }
 
 pub fn get_current_attested_root_id(db: &DB) -> Result<u32> {
     // Get previous ID
     match get_by_identifier::<u32>(db, ROOTID)? {
-        None =>  Ok(0),
-        Some(id_option) => Ok(id_option)
+        None => Ok(0),
+        Some(id_option) => Ok(id_option),
     }
 }
 
-
-
-/// get current statechain Root. 
+/// get current statechain Root.
 pub fn get_current_root<T>(db: &DB) -> Result<Option<Root>>
 where
-
-   T: serde::de::DeserializeOwned,
-{   
-    
+    T: serde::de::DeserializeOwned,
+{
     let id = &get_current_root_id(db)?;
     get_root_from_id::<Root>(db, id)
 }
 
-fn get_root_from_id<T>(db: &DB, id: &u32) -> Result<Option<Root>> 
+fn get_root_from_id<T>(db: &DB, id: &u32) -> Result<Option<Root>>
 where
-
-   T: serde::de::DeserializeOwned,
+    T: serde::de::DeserializeOwned,
 {
-    
-    Ok(get_root::<Root> (db, &id)?)
+    Ok(get_root::<Root>(db, &id)?)
 }
 
 //Find the latest confirmed root
 pub fn get_db_confirmed_root<T>(db: &DB) -> Result<Option<Root>>
 where
-
-   T: serde::de::DeserializeOwned,
+    T: serde::de::DeserializeOwned,
 {
     let current_id = get_current_root_id(db)?;
 
     for i in 0..=current_id {
         let id = current_id - i;
         let root = get_root_from_id::<Root>(db, &id)?;
-        match root{
+        match root {
             Some(r) => {
                 if r.is_confirmed() {
                     return Ok(Some(r));
                 }
                 ()
-            },
-            None => ()
+            }
+            None => (),
         };
     }
 
@@ -343,7 +327,6 @@ mod tests {
     use rocksdb::Options;
     const TEST_DB_LOC: &str = "/tmp/db-statechain";
 
-            
     #[test]
     #[serial]
     fn test_db_get_insert() {
@@ -374,9 +357,21 @@ mod tests {
         let _ = update_root_db(&db, &root2);
 
         let root2_id: u32 = get_by_identifier(&db, ROOTID).unwrap().unwrap();
-        assert_eq!(root2.hash(), get_by_identifier::<Root>(&db, &idify_root(&root2_id)).unwrap().unwrap().hash());
+        assert_eq!(
+            root2.hash(),
+            get_by_identifier::<Root>(&db, &idify_root(&root2_id))
+                .unwrap()
+                .unwrap()
+                .hash()
+        );
         let root1_id = root2_id - 1;
-        assert_eq!(root1.hash(), get_by_identifier::<Root>(&db, &idify_root(&root1_id)).unwrap().unwrap().hash());
+        assert_eq!(
+            root1.hash(),
+            get_by_identifier::<Root>(&db, &idify_root(&root1_id))
+                .unwrap()
+                .unwrap()
+                .hash()
+        );
 
         let new_root = get_current_root::<Root>(&db).unwrap().unwrap();
         assert_eq!(root2.hash(), new_root.hash());
@@ -398,11 +393,14 @@ mod tests {
         //delete_all_roots(&db);
 
         //root1 has already been attested to mainstay
-        let com1 = mainstay::Commitment::from_str("ade8d33571d52014537a76b2c0c0062442b70d73f469094cb45dc69615f5e218").unwrap();
+        let com1 = mainstay::Commitment::from_str(
+            "ade8d33571d52014537a76b2c0c0062442b70d73f469094cb45dc69615f5e218",
+        )
+        .unwrap();
         let root1 = Root::from_hash(&com1.to_hash());
         let root2: Root = Root::from_random();
 
-        let root1_id = match update_root(&db, &mc, &root1){
+        let root1_id = match update_root(&db, &mc, &root1) {
             Ok(id) => id,
             Err(e) => {
                 assert!(false, e.to_string());
@@ -416,12 +414,15 @@ mod tests {
         //Update the local copy of root1
         let root1 = get_root_from_id::<Root>(&db, &root1_id).unwrap().unwrap();
 
-        assert!(root1.is_confirmed() ==false);
+        assert!(root1.is_confirmed() == false);
         assert!(root2.is_confirmed() == false);
 
         //delete_all_roots(&db);
         //assert that there is a confirmed root
-        assert!(get_confirmed_root(&db,&mc).unwrap().unwrap().is_confirmed());
+        assert!(get_confirmed_root(&db, &mc)
+            .unwrap()
+            .unwrap()
+            .is_confirmed());
 
         let _ = rocksdb::DB::destroy(&Options::default(), TEST_DB_LOC);
     }

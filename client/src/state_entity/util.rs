@@ -4,28 +4,35 @@
 
 extern crate shared_lib;
 
-use super::super::Result;
 use super::super::utilities::requests;
-use crate::wallet::wallet::Wallet;
+use super::super::Result;
 use crate::ecdsa;
+use crate::wallet::wallet::Wallet;
 
-use shared_lib::util::get_sighash;
 use shared_lib::structs::PrepareSignTxMsg;
+use shared_lib::util::get_sighash;
 
-use curv::BigInt;
 use curv::arithmetic::traits::Converter;
-use monotree::{{Proof,Hash},
+use curv::BigInt;
+use monotree::{
+    hasher::{Blake2b, Hasher},
     tree::verify_proof,
-    hasher::{Hasher,Blake2b}};
+    {Hash, Proof},
+};
 
 use std::convert::TryInto;
 
 /// Sign a transaction input with state entity shared wallet. Return signature witness.
-pub fn cosign_tx_input(wallet: &mut Wallet, prepare_sign_msg: &PrepareSignTxMsg)
-    -> Result<Vec<Vec<u8>>> {
-
+pub fn cosign_tx_input(
+    wallet: &mut Wallet,
+    prepare_sign_msg: &PrepareSignTxMsg,
+) -> Result<Vec<Vec<u8>>> {
     // message 1 - send tx data for validation.
-    requests::postb(&wallet.client_shim, &format!("prepare-sign/"), prepare_sign_msg)?;
+    requests::postb(
+        &wallet.client_shim,
+        &format!("prepare-sign/"),
+        prepare_sign_msg,
+    )?;
 
     // get sighash as message to be signed
     let sig_hash = get_sighash(
@@ -33,7 +40,7 @@ pub fn cosign_tx_input(wallet: &mut Wallet, prepare_sign_msg: &PrepareSignTxMsg)
         &0,
         &prepare_sign_msg.input_addrs[0],
         &prepare_sign_msg.input_amounts[0],
-        &wallet.network
+        &wallet.network,
     );
 
     let shared_key = wallet.get_shared_key(&prepare_sign_msg.shared_key_id)?;
@@ -51,7 +58,11 @@ pub fn cosign_tx_input(wallet: &mut Wallet, prepare_sign_msg: &PrepareSignTxMsg)
     Ok(witness)
 }
 
-pub fn verify_statechain_smt(root: &Option<Hash>, proof_key: &String, proof: &Option<Proof>) -> bool {
+pub fn verify_statechain_smt(
+    root: &Option<Hash>,
+    proof_key: &String,
+    proof: &Option<Proof>,
+) -> bool {
     let entry: &[u8; 32] = proof_key[..32].as_bytes().try_into().unwrap();
     let hasher = Blake2b::new();
     verify_proof(&hasher, root.as_ref(), &entry, proof.as_ref())

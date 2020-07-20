@@ -1,13 +1,12 @@
-use shared_lib::structs::{Protocol,SignSecondMsgRequest};
 use super::super::utilities::requests;
-use super::super::Result;
 use super::super::ClientShim;
+use super::super::Result;
+use shared_lib::structs::{Protocol, SignSecondMsgRequest};
 
+use curv::BigInt;
 use kms::ecdsa::two_party::MasterKey2;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
-use curv::BigInt;
 use uuid::Uuid;
-
 
 /// Co-sign message with shared key
 pub fn sign(
@@ -37,11 +36,14 @@ pub fn sign(
         party_two_sign_message,
     };
 
-    let signature = requests::postb::<&SignSecondMsgRequest,Vec<Vec<u8>>>(client_shim, &format!("ecdsa/sign/{}/second", id), &request)?;
+    let signature = requests::postb::<&SignSecondMsgRequest, Vec<Vec<u8>>>(
+        client_shim,
+        &format!("ecdsa/sign/{}/second", id),
+        &request,
+    )?;
 
     Ok(signature)
 }
-
 
 // use super::super::utilities::error_to_c_string;
 // // iOS bindings

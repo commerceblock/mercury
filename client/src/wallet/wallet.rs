@@ -3,31 +3,31 @@
 //! Basic Bitcoin wallet functionality. Full key owned by this wallet.
 
 use super::super::Result;
-use shared_lib::{
-    util::get_sighash,
-    structs::StateEntityAddress};
+use shared_lib::{structs::StateEntityAddress, util::get_sighash};
 
-use super::key_paths::{funding_txid_to_int, KeyPathWithAddresses, KeyPath};
+use super::key_paths::{funding_txid_to_int, KeyPath, KeyPathWithAddresses};
 use crate::error::{CError, WalletErrorType};
 use crate::wallet::shared_key::SharedKey;
 use crate::ClientShim;
 
-use bitcoin::{{Network, PublicKey, Address, TxIn, OutPoint},
+use bitcoin::{
     hashes::sha256d,
-    util::bip32::{ExtendedPrivKey, ChildNumber},
-    secp256k1::{All, Secp256k1, Message, key::SecretKey}};
+    secp256k1::{key::SecretKey, All, Message, Secp256k1},
+    util::bip32::{ChildNumber, ExtendedPrivKey},
+    {Address, Network, OutPoint, PublicKey, TxIn},
+};
 
 use electrumx_client::{
+    interface::Electrumx,
     response::{GetBalanceResponse, GetListUnspentResponse},
-    interface::Electrumx};
+};
 
-use uuid::Uuid;
-use std::str::FromStr;
 use serde_json::json;
 use std::fs;
+use std::str::FromStr;
+use uuid::Uuid;
 
 const WALLET_FILENAME: &str = "wallet/wallet.data";
-
 
 /// Standard Bitcoin Wallet
 pub struct Wallet {
@@ -38,29 +38,43 @@ pub struct Wallet {
     pub client_shim: ClientShim,
 
     pub master_priv_key: ExtendedPrivKey,
-    pub keys: KeyPathWithAddresses, // Keys for general usage
+    pub keys: KeyPathWithAddresses,           // Keys for general usage
     pub se_backup_keys: KeyPathWithAddresses, // keys for use in State Entity back up transactions
-    pub se_proof_keys: KeyPath, // for use as State Entity proof keys
+    pub se_proof_keys: KeyPath,               // for use as State Entity proof keys
     pub se_key_shares: KeyPath, // for derivation of private key shares used in shared_keys
 
     pub shared_keys: Vec<SharedKey>, // vector of keys co-owned with state entities
-    pub require_mainstay: bool
+    pub require_mainstay: bool,
 }
 impl Wallet {
-    pub fn new(seed: &[u8], network: &String, client_shim: ClientShim, electrumx_client: Box<dyn Electrumx>) -> Wallet {
+    pub fn new(
+        seed: &[u8],
+        network: &String,
+        client_shim: ClientShim,
+        electrumx_client: Box<dyn Electrumx>,
+    ) -> Wallet {
         let secp = Secp256k1::new();
-        let master_priv_key = ExtendedPrivKey::new_master(network.parse::<Network>().unwrap(), seed).unwrap();
+        let master_priv_key =
+            ExtendedPrivKey::new_master(network.parse::<Network>().unwrap(), seed).unwrap();
 
-        let keys_master_ext_key = master_priv_key.ckd_priv(&secp, ChildNumber::from_hardened_idx(0).unwrap()).unwrap();
+        let keys_master_ext_key = master_priv_key
+            .ckd_priv(&secp, ChildNumber::from_hardened_idx(0).unwrap())
+            .unwrap();
         let keys = KeyPathWithAddresses::new(keys_master_ext_key);
 
-        let se_backup_keys_master_ext_key = master_priv_key.ckd_priv(&secp, ChildNumber::from_hardened_idx(1).unwrap()).unwrap();
+        let se_backup_keys_master_ext_key = master_priv_key
+            .ckd_priv(&secp, ChildNumber::from_hardened_idx(1).unwrap())
+            .unwrap();
         let se_backup_keys = KeyPathWithAddresses::new(se_backup_keys_master_ext_key);
 
-        let se_proof_keys_master_ext_key = master_priv_key.ckd_priv(&secp, ChildNumber::from_hardened_idx(2).unwrap()).unwrap();
+        let se_proof_keys_master_ext_key = master_priv_key
+            .ckd_priv(&secp, ChildNumber::from_hardened_idx(2).unwrap())
+            .unwrap();
         let se_proof_keys = KeyPath::new(se_proof_keys_master_ext_key);
 
-        let se_key_shares_master_ext_key = master_priv_key.ckd_priv(&secp, ChildNumber::from_hardened_idx(3).unwrap()).unwrap();
+        let se_key_shares_master_ext_key = master_priv_key
+            .ckd_priv(&secp, ChildNumber::from_hardened_idx(3).unwrap())
+            .unwrap();
         let se_key_shares = KeyPath::new(se_key_shares_master_ext_key);
 
         Wallet {
@@ -74,8 +88,8 @@ impl Wallet {
             se_backup_keys,
             se_proof_keys,
             se_key_shares,
-            shared_keys: vec!(),
-            require_mainstay: false
+            shared_keys: vec![],
+            require_mainstay: false,
         }
     }
 
@@ -83,11 +97,11 @@ impl Wallet {
     //&mut self.shared_keys
     //}
 
-    pub fn set_require_mainstay(&mut self, val: bool){
-        self.require_mainstay=val;
+    pub fn set_require_mainstay(&mut self, val: bool) {
+        self.require_mainstay = val;
     }
 
-    pub fn require_mainstay(&self) -> bool{
+    pub fn require_mainstay(&self) -> bool {
         self.require_mainstay
     }
 
@@ -129,31 +143,44 @@ impl Wallet {
     }
 
     /// load wallet from json
-    pub fn from_json(json: serde_json::Value, client_shim: ClientShim, electrumx_client: Box<dyn Electrumx>) -> Result<Self> {
+    pub fn from_json(
+        json: serde_json::Value,
+        client_shim: ClientShim,
+        electrumx_client: Box<dyn Electrumx>,
+    ) -> Result<Self> {
         let secp = Secp256k1::new();
         let network = json["network"].as_str().unwrap().to_string();
 
         // master extended keys
-        let mut master_priv_key = ExtendedPrivKey::from_str(json["master_priv_key"].as_str().unwrap()).unwrap();
+        let mut master_priv_key =
+            ExtendedPrivKey::from_str(json["master_priv_key"].as_str().unwrap()).unwrap();
         master_priv_key.network = network.parse::<Network>().unwrap();
 
         // keys
-        let mut keys_master_ext_key = master_priv_key.ckd_priv(&secp, ChildNumber::from_hardened_idx(0).unwrap()).unwrap();
+        let mut keys_master_ext_key = master_priv_key
+            .ckd_priv(&secp, ChildNumber::from_hardened_idx(0).unwrap())
+            .unwrap();
         keys_master_ext_key.network = network.parse::<Network>().unwrap();
         let keys = KeyPathWithAddresses::new(keys_master_ext_key);
 
         // se_backup_keys
-        let mut se_backup_keys_master_ext_key = master_priv_key.ckd_priv(&secp, ChildNumber::from_hardened_idx(1).unwrap()).unwrap();
+        let mut se_backup_keys_master_ext_key = master_priv_key
+            .ckd_priv(&secp, ChildNumber::from_hardened_idx(1).unwrap())
+            .unwrap();
         se_backup_keys_master_ext_key.network = network.parse::<Network>().unwrap();
         let se_backup_keys = KeyPathWithAddresses::new(se_backup_keys_master_ext_key);
 
         // se_proof_keys
-        let mut se_proof_keys_master_ext_key = master_priv_key.ckd_priv(&secp, ChildNumber::from_hardened_idx(2).unwrap()).unwrap();
+        let mut se_proof_keys_master_ext_key = master_priv_key
+            .ckd_priv(&secp, ChildNumber::from_hardened_idx(2).unwrap())
+            .unwrap();
         se_proof_keys_master_ext_key.network = network.parse::<Network>().unwrap();
         let se_proof_keys = KeyPath::new(se_proof_keys_master_ext_key);
 
         // se_key_shares
-        let mut se_key_shares_master_ext_key = master_priv_key.ckd_priv(&secp, ChildNumber::from_hardened_idx(3).unwrap()).unwrap();
+        let mut se_key_shares_master_ext_key = master_priv_key
+            .ckd_priv(&secp, ChildNumber::from_hardened_idx(3).unwrap())
+            .unwrap();
         se_key_shares_master_ext_key.network = network.parse::<Network>().unwrap();
         let se_key_shares = KeyPath::new(se_key_shares_master_ext_key);
 
@@ -168,8 +195,8 @@ impl Wallet {
             se_backup_keys,
             se_proof_keys,
             se_key_shares,
-            shared_keys: vec!(),
-            require_mainstay: json.get("require_mainstay").unwrap().as_bool().unwrap()
+            shared_keys: vec![],
+            require_mainstay: json.get("require_mainstay").unwrap().as_bool().unwrap(),
         };
 
         // re-derive keys which have been previously derived
@@ -187,32 +214,37 @@ impl Wallet {
         }
 
         let se_backup_keys_pos_str = json["se_backup_keys_pos_encoded"].as_str().unwrap();
-        if se_backup_keys_pos_str.len() != 2 { // is not empty
-            let se_backup_keys_pos:Vec<u32> = serde_json::from_str(se_backup_keys_pos_str).unwrap();
+        if se_backup_keys_pos_str.len() != 2 {
+            // is not empty
+            let se_backup_keys_pos: Vec<u32> =
+                serde_json::from_str(se_backup_keys_pos_str).unwrap();
             for pos in se_backup_keys_pos {
                 wallet.se_backup_keys.get_new_address_encoded_id(pos)?;
             }
         }
 
         let se_proof_keys_pos_str = json["se_proof_keys_pos_encoded"].as_str().unwrap();
-        if se_proof_keys_pos_str.len() != 2 { // is not empty
-            let se_proof_keys_pos:Vec<u32> = serde_json::from_str(se_proof_keys_pos_str).unwrap();
+        if se_proof_keys_pos_str.len() != 2 {
+            // is not empty
+            let se_proof_keys_pos: Vec<u32> = serde_json::from_str(se_proof_keys_pos_str).unwrap();
             for pos in se_proof_keys_pos {
                 wallet.se_proof_keys.get_new_key_encoded_id(pos)?;
             }
         }
 
         let se_key_shares_pos_str = json["se_key_shares_pos_encoded"].as_str().unwrap();
-        if se_key_shares_pos_str.len() != 2 { // is not empty
-            let se_key_shares_pos:Vec<u32> = serde_json::from_str(se_key_shares_pos_str).unwrap();
+        if se_key_shares_pos_str.len() != 2 {
+            // is not empty
+            let se_key_shares_pos: Vec<u32> = serde_json::from_str(se_key_shares_pos_str).unwrap();
             for pos in se_key_shares_pos {
                 wallet.se_key_shares.get_new_key_encoded_id(pos)?;
             }
         }
 
         let shared_keys_str = &json["shared_keys"].as_str().unwrap();
-        if shared_keys_str.len() != 2 { // is not empty
-            let shared_keys:Vec<SharedKey> = serde_json::from_str(shared_keys_str).unwrap();
+        if shared_keys_str.len() != 2 {
+            // is not empty
+            let shared_keys: Vec<SharedKey> = serde_json::from_str(shared_keys_str).unwrap();
             wallet.shared_keys = shared_keys;
         }
 
@@ -231,7 +263,11 @@ impl Wallet {
     }
 
     /// load wallet from disk
-    pub fn load_from(filepath: &str, client_shim: ClientShim, electrumx_client: Box<dyn Electrumx>) -> Result<Wallet> {
+    pub fn load_from(
+        filepath: &str,
+        client_shim: ClientShim,
+        electrumx_client: Box<dyn Electrumx>,
+    ) -> Result<Wallet> {
         let data = fs::read_to_string(filepath).expect("Unable to load wallet!");
         let serde_json_data = serde_json::from_str(&data).unwrap();
         let wallet: Wallet = Wallet::from_json(serde_json_data, client_shim, electrumx_client)?;
@@ -239,19 +275,29 @@ impl Wallet {
         Ok(wallet)
     }
     pub fn load(client_shim: ClientShim, electrumx_client: Box<dyn Electrumx>) -> Result<Wallet> {
-        Ok(Wallet::load_from(WALLET_FILENAME, client_shim, electrumx_client)?)
+        Ok(Wallet::load_from(
+            WALLET_FILENAME,
+            client_shim,
+            electrumx_client,
+        )?)
     }
 
     /// Select unspent coins greedily. Return TxIns along with corresponding spending addresses and amounts
-    pub fn coin_selection_greedy(&mut self, amount: &u64) -> Result<(Vec<TxIn>, Vec<Address>, Vec<u64>)> {
+    pub fn coin_selection_greedy(
+        &mut self,
+        amount: &u64,
+    ) -> Result<(Vec<TxIn>, Vec<Address>, Vec<u64>)> {
         // Greedy coin selection.
         let (unspent_addrs, unspent_utxos) = self.list_unspent();
-        let mut inputs: Vec<TxIn> = vec!();
-        let mut addrs: Vec<Address> = vec!(); // corresponding addresses for inputs
-        let mut amounts: Vec<u64> = vec!(); // corresponding amounts for inputs
+        let mut inputs: Vec<TxIn> = vec![];
+        let mut addrs: Vec<Address> = vec![]; // corresponding addresses for inputs
+        let mut amounts: Vec<u64> = vec![]; // corresponding amounts for inputs
         for (i, addr) in unspent_addrs.into_iter().enumerate() {
             for unspent_utxo in unspent_utxos.get(i).unwrap() {
-                inputs.push(basic_input(&unspent_utxo.tx_hash, &(unspent_utxo.tx_pos as u32)));
+                inputs.push(basic_input(
+                    &unspent_utxo.tx_hash,
+                    &(unspent_utxo.tx_pos as u32),
+                ));
                 addrs.push(addr.clone());
                 amounts.push(unspent_utxo.value as u64);
                 if *amount <= amounts.iter().sum::<u64>() {
@@ -259,19 +305,22 @@ impl Wallet {
                 }
             }
         }
-        return Err(CError::WalletError(WalletErrorType::NotEnoughFunds))
+        return Err(CError::WalletError(WalletErrorType::NotEnoughFunds));
     }
 
-    pub fn get_new_state_entity_address(&mut self, funding_txid: &String) -> Result<StateEntityAddress> {
-        let backup_addr = self.se_backup_keys.get_new_address_encoded_id(
-            funding_txid_to_int(funding_txid)?
-        )?;
-        let proof_key = self.se_proof_keys.get_new_key_encoded_id(
-            funding_txid_to_int(funding_txid)?
-        )?;
-        Ok(StateEntityAddress{
+    pub fn get_new_state_entity_address(
+        &mut self,
+        funding_txid: &String,
+    ) -> Result<StateEntityAddress> {
+        let backup_addr = self
+            .se_backup_keys
+            .get_new_address_encoded_id(funding_txid_to_int(funding_txid)?)?;
+        let proof_key = self
+            .se_proof_keys
+            .get_new_key_encoded_id(funding_txid_to_int(funding_txid)?)?;
+        Ok(StateEntityAddress {
             tx_backup_addr: backup_addr.to_string(),
-            proof_key: proof_key.to_string()
+            proof_key: proof_key.to_string(),
         })
     }
 
@@ -282,15 +331,14 @@ impl Wallet {
         transaction: &bitcoin::Transaction,
         input_indices: &Vec<usize>,
         addresses: &Vec<bitcoin::Address>,
-        amounts: &Vec<u64>
+        amounts: &Vec<u64>,
     ) -> bitcoin::Transaction {
-
         let mut signed_transaction = transaction.clone();
         for (iter, input_index) in input_indices.iter().enumerate() {
-
             // get key corresponding to address
             let address = addresses.get(iter).unwrap();
-            let key_derivation = self.keys
+            let key_derivation = self
+                .keys
                 .get_address_derivation(&address.to_string())
                 .ok_or(CError::WalletError(WalletErrorType::KeyNotFound))
                 .unwrap();
@@ -302,7 +350,7 @@ impl Wallet {
                 &input_index,
                 &pk,
                 &amounts[iter],
-                &self.network
+                &self.network,
             );
 
             let msg = Message::from_slice(&sig_hash).unwrap();
@@ -311,16 +359,25 @@ impl Wallet {
             let mut with_hashtype = signature.to_vec();
             with_hashtype.push(1);
             signed_transaction.input[*input_index].witness.clear();
-            signed_transaction.input[*input_index].witness.push(with_hashtype);
-            signed_transaction.input[*input_index].witness.push(pk.serialize().to_vec());
+            signed_transaction.input[*input_index]
+                .witness
+                .push(with_hashtype);
+            signed_transaction.input[*input_index]
+                .witness
+                .push(pk.serialize().to_vec());
         }
-        return signed_transaction
+        return signed_transaction;
     }
 
     /// create new 2P-ECDSA key with state entity
     pub fn gen_shared_key(&mut self, id: &Uuid, value: &u64) -> Result<&SharedKey> {
         let key_share_pub = self.se_key_shares.get_new_key()?;
-        let key_share_priv = self.se_key_shares.get_key_derivation(&key_share_pub).unwrap().private_key.key;
+        let key_share_priv = self
+            .se_key_shares
+            .get_key_derivation(&key_share_pub)
+            .unwrap()
+            .private_key
+            .key;
 
         let shared_key = SharedKey::new(id, &self.client_shim, &key_share_priv, value, false)?;
         self.shared_keys.push(shared_key);
@@ -328,9 +385,19 @@ impl Wallet {
     }
 
     /// create new 2P-ECDSA key with pre-definfed private key
-    pub fn gen_shared_key_fixed_secret_key(&mut self, id: &Uuid, secret_key: &SecretKey, value: &u64) -> Result<()> {
-        self.shared_keys.push(
-            SharedKey::new(id, &self.client_shim, secret_key, value, true)?);
+    pub fn gen_shared_key_fixed_secret_key(
+        &mut self,
+        id: &Uuid,
+        secret_key: &SecretKey,
+        value: &u64,
+    ) -> Result<()> {
+        self.shared_keys.push(SharedKey::new(
+            id,
+            &self.client_shim,
+            secret_key,
+            value,
+            true,
+        )?);
         Ok(())
     }
 
@@ -361,7 +428,17 @@ impl Wallet {
         let shared_key = self.get_shared_key(id)?;
         Ok((
             shared_key.state_chain_id.clone().unwrap(),
-            shared_key.tx_backup_psm.clone().unwrap().tx.input.get(0).unwrap().previous_output.txid.to_string(),
+            shared_key
+                .tx_backup_psm
+                .clone()
+                .unwrap()
+                .tx
+                .input
+                .get(0)
+                .unwrap()
+                .previous_output
+                .txid
+                .to_string(),
             shared_key.proof_key.clone().unwrap(),
             shared_key.value.clone(),
             shared_key.unspent,
@@ -380,7 +457,9 @@ impl Wallet {
 
     /// return balance of address
     fn get_address_balance(&mut self, address: &bitcoin::Address) -> GetBalanceResponse {
-        self.electrumx_client.get_balance(&address.to_string()).unwrap()
+        self.electrumx_client
+            .get_balance(&address.to_string())
+            .unwrap()
     }
 
     fn zero_balance(&self, addr: &GetBalanceResponse) -> bool {
@@ -399,7 +478,9 @@ impl Wallet {
         addresses
     }
 
-    pub fn get_all_addresses_balance(&mut self) -> (Vec<bitcoin::Address>, Vec<GetBalanceResponse>) {
+    pub fn get_all_addresses_balance(
+        &mut self,
+    ) -> (Vec<bitcoin::Address>, Vec<GetBalanceResponse>) {
         let all_addrs = self.get_all_wallet_addresses();
         let all_bals: Vec<GetBalanceResponse> = all_addrs
             .clone()
@@ -408,15 +489,15 @@ impl Wallet {
             .collect();
 
         // return non-0 balances
-        let mut addrs: Vec<bitcoin::Address> = vec!();
-        let mut bals: Vec<GetBalanceResponse> = vec!();
+        let mut addrs: Vec<bitcoin::Address> = vec![];
+        let mut bals: Vec<GetBalanceResponse> = vec![];
         for (i, balance) in all_bals.into_iter().enumerate() {
             if !self.zero_balance(&balance) {
                 addrs.push(all_addrs.get(i).unwrap().clone());
                 bals.push(balance);
             }
         }
-        (addrs,bals)
+        (addrs, bals)
     }
 
     /// Return total balance of addresses in wallet.
@@ -434,16 +515,15 @@ impl Wallet {
 
     /// Return balances of unspent shared keys
     pub fn get_state_chains_info(&self) -> (Vec<Uuid>, Vec<Uuid>, Vec<GetBalanceResponse>) {
-        let mut state_chain_key_ids: Vec<Uuid> = vec!();
-        let mut state_chain_ids: Vec<Uuid> = vec!();
-        let mut state_chain_balances: Vec<GetBalanceResponse> = vec!();
+        let mut state_chain_key_ids: Vec<Uuid> = vec![];
+        let mut state_chain_ids: Vec<Uuid> = vec![];
+        let mut state_chain_balances: Vec<GetBalanceResponse> = vec![];
         for shared_key in &self.shared_keys {
             if shared_key.unspent {
-                state_chain_balances.push(
-                    GetBalanceResponse {
-                        confirmed: shared_key.value,
-                        unconfirmed: 0,
-                    });
+                state_chain_balances.push(GetBalanceResponse {
+                    confirmed: shared_key.value,
+                    unconfirmed: 0,
+                });
                 state_chain_key_ids.push(shared_key.id.to_owned());
                 if shared_key.state_chain_id.is_some() {
                     state_chain_ids.push(shared_key.state_chain_id.clone().unwrap());
@@ -453,11 +533,10 @@ impl Wallet {
         (state_chain_key_ids, state_chain_ids, state_chain_balances)
     }
 
-
     /// List unspent outputs for addresses derived by this wallet.
     pub fn list_unspent(&mut self) -> (Vec<bitcoin::Address>, Vec<Vec<GetListUnspentResponse>>) {
         let addresses = self.get_all_wallet_addresses();
-        let mut unspent_list: Vec<Vec<GetListUnspentResponse>> = vec!();
+        let mut unspent_list: Vec<Vec<GetListUnspentResponse>> = vec![];
         for addr in &addresses {
             let addr_unspent_list = self.list_unspent_for_address(addr.to_string());
             unspent_list.push(addr_unspent_list);
@@ -473,7 +552,7 @@ impl Wallet {
     pub fn to_p2wpkh_address(&self, pub_key: &PublicKey) -> bitcoin::Address {
         bitcoin::Address::p2wpkh(
             &to_bitcoin_public_key(pub_key.key),
-            self.get_bitcoin_network()
+            self.get_bitcoin_network(),
         )
     }
 
@@ -484,9 +563,9 @@ impl Wallet {
 
 fn basic_input(txid: &String, vout: &u32) -> TxIn {
     TxIn {
-        previous_output: OutPoint{
+        previous_output: OutPoint {
             txid: sha256d::Hash::from_str(txid).unwrap(),
-            vout: *vout
+            vout: *vout,
         },
         sequence: 0xFFFFFFFF,
         witness: Vec::new(),
@@ -498,7 +577,7 @@ fn basic_input(txid: &String, vout: &u32) -> TxIn {
 pub fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
     bitcoin::util::key::PublicKey {
         compressed: true,
-        key: pk
+        key: pk,
     }
 }
 
@@ -508,14 +587,13 @@ mod tests {
     extern crate shared_lib;
     use shared_lib::mocks::mock_electrum::MockElectrum;
 
-
     fn gen_wallet() -> Wallet {
         // let electrum = ElectrumxClient::new("dummy").unwrap();
         let mut wallet = Wallet::new(
             &[0xcd; 32],
             &"regtest".to_string(),
             ClientShim::new("http://localhost:8000".to_string(), None),
-            Box::new(MockElectrum::new())
+            Box::new(MockElectrum::new()),
         );
         let _ = wallet.keys.get_new_address();
         let _ = wallet.keys.get_new_address();
@@ -532,41 +610,143 @@ mod tests {
         let backup_addr2 = wallet.se_backup_keys.get_new_address().unwrap();
         let proof_key1 = wallet.se_proof_keys.get_new_key().unwrap();
         let proof_key2 = wallet.se_proof_keys.get_new_key().unwrap();
-        let key_shares1 = wallet.se_key_shares.get_new_key_encoded_id(9999999).unwrap();
+        let key_shares1 = wallet
+            .se_key_shares
+            .get_new_key_encoded_id(9999999)
+            .unwrap();
         let key_shares2 = wallet.se_key_shares.get_new_key().unwrap();
 
         let wallet_json = wallet.to_json();
 
-        let wallet_rebuilt = super::Wallet::from_json(wallet_json,ClientShim::new("http://localhost:8000".to_string(), None), Box::new(MockElectrum::new())).unwrap();
+        let wallet_rebuilt = super::Wallet::from_json(
+            wallet_json,
+            ClientShim::new("http://localhost:8000".to_string(), None),
+            Box::new(MockElectrum::new()),
+        )
+        .unwrap();
 
-        assert_eq!(wallet.id,wallet_rebuilt.id);
-        assert_eq!(wallet.network,wallet_rebuilt.network);
-        assert_eq!(wallet.master_priv_key.chain_code,wallet_rebuilt.master_priv_key.chain_code);
-        assert_eq!(wallet.master_priv_key.private_key.to_bytes(),wallet_rebuilt.master_priv_key.private_key.to_bytes());
+        assert_eq!(wallet.id, wallet_rebuilt.id);
+        assert_eq!(wallet.network, wallet_rebuilt.network);
+        assert_eq!(
+            wallet.master_priv_key.chain_code,
+            wallet_rebuilt.master_priv_key.chain_code
+        );
+        assert_eq!(
+            wallet.master_priv_key.private_key.to_bytes(),
+            wallet_rebuilt.master_priv_key.private_key.to_bytes()
+        );
 
-        assert_eq!(wallet.keys.ext_priv_key.private_key.to_bytes(),wallet_rebuilt.keys.ext_priv_key.private_key.to_bytes());
-        assert_eq!(wallet.keys.last_derived_pos,wallet_rebuilt.keys.last_derived_pos);
-        assert!(wallet_rebuilt.keys.addresses_derivation_map.contains_key(&addr1.to_string()));
-        assert!(wallet_rebuilt.keys.addresses_derivation_map.contains_key(&addr2.to_string()));
+        assert_eq!(
+            wallet.keys.ext_priv_key.private_key.to_bytes(),
+            wallet_rebuilt.keys.ext_priv_key.private_key.to_bytes()
+        );
+        assert_eq!(
+            wallet.keys.last_derived_pos,
+            wallet_rebuilt.keys.last_derived_pos
+        );
+        assert!(wallet_rebuilt
+            .keys
+            .addresses_derivation_map
+            .contains_key(&addr1.to_string()));
+        assert!(wallet_rebuilt
+            .keys
+            .addresses_derivation_map
+            .contains_key(&addr2.to_string()));
 
-        assert_eq!(wallet.se_backup_keys.ext_priv_key.private_key.to_bytes(),wallet_rebuilt.se_backup_keys.ext_priv_key.private_key.to_bytes());
-        assert_eq!(wallet.se_backup_keys.last_derived_pos,wallet_rebuilt.se_backup_keys.last_derived_pos);
-        assert!(wallet_rebuilt.se_backup_keys.addresses_derivation_map.contains_key(&backup_addr1.to_string()));
-        assert!(wallet_rebuilt.se_backup_keys.addresses_derivation_map.contains_key(&backup_addr2.to_string()));
+        assert_eq!(
+            wallet.se_backup_keys.ext_priv_key.private_key.to_bytes(),
+            wallet_rebuilt
+                .se_backup_keys
+                .ext_priv_key
+                .private_key
+                .to_bytes()
+        );
+        assert_eq!(
+            wallet.se_backup_keys.last_derived_pos,
+            wallet_rebuilt.se_backup_keys.last_derived_pos
+        );
+        assert!(wallet_rebuilt
+            .se_backup_keys
+            .addresses_derivation_map
+            .contains_key(&backup_addr1.to_string()));
+        assert!(wallet_rebuilt
+            .se_backup_keys
+            .addresses_derivation_map
+            .contains_key(&backup_addr2.to_string()));
 
-        assert_eq!(wallet.se_proof_keys.ext_priv_key.private_key.to_bytes(),wallet_rebuilt.se_proof_keys.ext_priv_key.private_key.to_bytes());
-        assert_eq!(wallet.se_proof_keys.last_derived_pos,wallet_rebuilt.se_proof_keys.last_derived_pos);
-        assert!(wallet_rebuilt.se_proof_keys.key_derivation_map.contains_key(&proof_key1));
-        assert!(wallet_rebuilt.se_proof_keys.key_derivation_map.contains_key(&proof_key2));
-        assert_eq!(wallet_rebuilt.se_proof_keys.get_key_derivation(&proof_key1).unwrap().pos, 1);
-        assert_eq!(wallet_rebuilt.se_proof_keys.get_key_derivation(&proof_key2).unwrap().pos, 2);
+        assert_eq!(
+            wallet.se_proof_keys.ext_priv_key.private_key.to_bytes(),
+            wallet_rebuilt
+                .se_proof_keys
+                .ext_priv_key
+                .private_key
+                .to_bytes()
+        );
+        assert_eq!(
+            wallet.se_proof_keys.last_derived_pos,
+            wallet_rebuilt.se_proof_keys.last_derived_pos
+        );
+        assert!(wallet_rebuilt
+            .se_proof_keys
+            .key_derivation_map
+            .contains_key(&proof_key1));
+        assert!(wallet_rebuilt
+            .se_proof_keys
+            .key_derivation_map
+            .contains_key(&proof_key2));
+        assert_eq!(
+            wallet_rebuilt
+                .se_proof_keys
+                .get_key_derivation(&proof_key1)
+                .unwrap()
+                .pos,
+            1
+        );
+        assert_eq!(
+            wallet_rebuilt
+                .se_proof_keys
+                .get_key_derivation(&proof_key2)
+                .unwrap()
+                .pos,
+            2
+        );
 
-        assert_eq!(wallet.se_key_shares.ext_priv_key.private_key.to_bytes(),wallet_rebuilt.se_key_shares.ext_priv_key.private_key.to_bytes());
-        assert_eq!(wallet.se_key_shares.last_derived_pos,wallet_rebuilt.se_key_shares.last_derived_pos);
-        assert!(wallet_rebuilt.se_key_shares.key_derivation_map.contains_key(&key_shares1));
-        assert!(wallet_rebuilt.se_key_shares.key_derivation_map.contains_key(&key_shares2));
-        assert_eq!(wallet_rebuilt.se_key_shares.get_key_derivation(&key_shares1).unwrap().pos, 9999999);
-        assert_eq!(wallet_rebuilt.se_key_shares.get_key_derivation(&key_shares2).unwrap().pos, 1);
+        assert_eq!(
+            wallet.se_key_shares.ext_priv_key.private_key.to_bytes(),
+            wallet_rebuilt
+                .se_key_shares
+                .ext_priv_key
+                .private_key
+                .to_bytes()
+        );
+        assert_eq!(
+            wallet.se_key_shares.last_derived_pos,
+            wallet_rebuilt.se_key_shares.last_derived_pos
+        );
+        assert!(wallet_rebuilt
+            .se_key_shares
+            .key_derivation_map
+            .contains_key(&key_shares1));
+        assert!(wallet_rebuilt
+            .se_key_shares
+            .key_derivation_map
+            .contains_key(&key_shares2));
+        assert_eq!(
+            wallet_rebuilt
+                .se_key_shares
+                .get_key_derivation(&key_shares1)
+                .unwrap()
+                .pos,
+            9999999
+        );
+        assert_eq!(
+            wallet_rebuilt
+                .se_key_shares
+                .get_key_derivation(&key_shares2)
+                .unwrap()
+                .pos,
+            1
+        );
     }
 
     #[test]
@@ -585,6 +765,4 @@ mod tests {
         let selection = wallet.coin_selection_greedy(&10000101);
         assert!(selection.is_err());
     }
-
-
 }

@@ -4,17 +4,17 @@
 
 use shared_lib::error::SharedLibError;
 
-use rocket::http::{ Status, ContentType };
-use rocket::{Response,Request};
-use rocket::response::Responder;
 use crate::storage::db_postgres::Column;
+use bitcoin::secp256k1::Error as SecpError;
+use monotree::Errors as MonotreeErrors;
+use postgres::Error as PostgresError;
+use rocket::http::{ContentType, Status};
+use rocket::response::Responder;
+use rocket::{Request, Response};
 use std::error;
 use std::fmt;
 use std::io::Cursor;
 use std::time::SystemTimeError;
-use monotree::Errors as MonotreeErrors;
-use bitcoin::secp256k1::Error as SecpError;
-use postgres::Error as PostgresError;
 
 /// State Entity library specific errors
 #[derive(Debug, Deserialize)]
@@ -32,7 +32,7 @@ pub enum SEError {
     /// Inherit errors from Util
     SharedLibError(String),
     /// Inherit errors from Monotree
-    SMTError(String)
+    SMTError(String),
 }
 
 impl From<String> for SEError {
@@ -66,7 +66,6 @@ impl From<PostgresError> for SEError {
     }
 }
 
-
 /// DB error types
 #[derive(Debug, Deserialize)]
 pub enum DBErrorType {
@@ -84,17 +83,22 @@ impl DBErrorType {
     }
 }
 
-
 impl fmt::Display for SEError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             SEError::Generic(ref e) => write!(f, "Error: {}", e),
-            SEError::AuthError => write!(f,"Authentication Error: User authorisation failed"),
+            SEError::AuthError => write!(f, "Authentication Error: User authorisation failed"),
             SEError::DBError(ref e, ref id) => write!(f, "DB Error: {} (id: {})", e.as_str(), id),
-            SEError::DBErrorWC(ref e, ref id, ref col) => write!(f, "DB Error: {} (id: {} col: {})", e.as_str(), id, col.to_string()),
-            SEError::SigningError(ref e) => write!(f,"Signing Error: {}",e),
-            SEError::SharedLibError(ref e) => write!(f,"SharedLibError Error: {}",e),
-            SEError::SMTError(ref e) => write!(f,"SMT Error: {}",e),
+            SEError::DBErrorWC(ref e, ref id, ref col) => write!(
+                f,
+                "DB Error: {} (id: {} col: {})",
+                e.as_str(),
+                id,
+                col.to_string()
+            ),
+            SEError::SigningError(ref e) => write!(f, "Signing Error: {}", e),
+            SEError::SharedLibError(ref e) => write!(f, "SharedLibError Error: {}", e),
+            SEError::SMTError(ref e) => write!(f, "SMT Error: {}", e),
         }
     }
 }

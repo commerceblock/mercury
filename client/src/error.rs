@@ -4,13 +4,11 @@
 
 use shared_lib::error::SharedLibError;
 
+use bitcoin::util::{address::Error as AddressError, bip32::Error as Bip32Error};
+use reqwest::Error as ReqwestError;
 use std::error;
 use std::fmt;
-use bitcoin::util::{bip32::Error as Bip32Error,
-    address::Error as AddressError};
-use reqwest::Error as ReqwestError;
 use std::num::ParseIntError;
-
 
 /// Client specific errors
 #[derive(Debug, Deserialize)]
@@ -24,7 +22,7 @@ pub enum CError {
     /// Schnorr error
     SchnorrError(String),
     /// Inherit errors from SharedLibError
-    SharedLibError(String)
+    SharedLibError(String),
 }
 
 impl From<String> for CError {
@@ -76,7 +74,7 @@ pub enum WalletErrorType {
     KeyNotFound,
     SharedKeyNotFound,
     KeyMissingData,
-    StateChainNotFound
+    StateChainNotFound,
 }
 
 impl WalletErrorType {
@@ -86,7 +84,7 @@ impl WalletErrorType {
             WalletErrorType::KeyNotFound => "Key not found in wallet derivation path",
             WalletErrorType::SharedKeyNotFound => "Shared key not found in wallet derivation path",
             WalletErrorType::KeyMissingData => "Key is missing data",
-            WalletErrorType::StateChainNotFound=> "StateChain not found in wallet derivation path"
+            WalletErrorType::StateChainNotFound => "StateChain not found in wallet derivation path",
         }
     }
 }
@@ -98,7 +96,7 @@ impl fmt::Display for CError {
             CError::WalletError(ref e) => write!(f, "Wallet Error: {} ", e.as_str()),
             CError::StateEntityError(ref e) => write!(f, "State Entity Error: {}", e),
             CError::SchnorrError(ref e) => write!(f, "Schnorr Error: {}", e),
-            CError::SharedLibError(ref e) => write!(f,"SharedLib Error: {}",e),
+            CError::SharedLibError(ref e) => write!(f, "SharedLib Error: {}", e),
         }
     }
 }
