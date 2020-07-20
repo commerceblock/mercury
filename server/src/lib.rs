@@ -34,6 +34,8 @@ extern crate rusoto_dynamodb;
 extern crate serde_dynamodb;
 
 extern crate hex;
+extern crate shared_lib;
+use shared_lib::mainstay;
 
 #[cfg(test)]
 #[macro_use]
@@ -58,7 +60,9 @@ pub struct Config {
     pub fee_withdraw: u64, // satoshis
     pub block_time: u64,
     pub batch_lifetime: u64,
-    pub punishment_duration: u64
+    pub punishment_duration: u64,
+    pub mainstay_config: Option<mainstay::Config>
+    
 }
 
 #[derive(Deserialize)]

@@ -22,8 +22,13 @@ pub fn get_statechain(client_shim: &ClientShim, state_chain_id: &String) -> Resu
 }
 
 /// Get state entity's sparse merkle tree root
-pub fn get_smt_root(client_shim: &ClientShim) -> Result<Root> {
+pub fn get_smt_root(client_shim: &ClientShim) -> Result<Option<Root>> {
     requests::post(&client_shim,&format!("info/root"))
+}
+
+/// Get state entity's sparse merkle tree root that has been confirmed by mainstay
+pub fn get_confirmed_smt_root(client_shim: &ClientShim) -> Result<Option<Root>> {
+    requests::post(&client_shim,&format!("info/confirmed_root"))
 }
 
 /// Get state chain inclusion proof

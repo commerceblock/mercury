@@ -15,20 +15,84 @@ use bitcoin::{Transaction, PublicKey};
 use std::{thread, time};
 use std::time::Instant;
 use floating_duration::TimeFormat;
+use std::sync::mpsc;
+use std::sync::mpsc::{RecvTimeoutError};
+use rocket;
+use rocket::error::LaunchError;
+use std::fmt;
+use std::error;
 
 #[cfg(test)]
 #[macro_use]
 extern crate serial_test;
 
-/// Spawn a fresh StateChain entity server
-pub fn spawn_server() {
+extern crate stoppable_thread;
+
+#[derive(Debug)]
+pub enum SpawnError {
+    GetServer,
+    Launch(LaunchError),
+    Timeout(RecvTimeoutError)
+}
+
+impl fmt::Display for SpawnError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            SpawnError::GetServer =>
+                write!(f, "failed to initialize a new server"),
+            SpawnError::Launch(ref e) => e.fmt(f),
+            SpawnError::Timeout(ref e) => e.fmt(f)
+        }
+    }
+}
+
+impl error::Error for SpawnError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match *self {
+            SpawnError::GetServer => None,
+            SpawnError::Launch(ref e) => Some(e),
+            SpawnError::Timeout(ref e) => Some(e),
+        }
+    }
+}
+
+impl From<LaunchError> for SpawnError {
+    fn from(err: LaunchError) -> SpawnError {
+        SpawnError::Launch(err)
+    }
+}
+
+impl From<RecvTimeoutError> for SpawnError {
+    fn from(err: RecvTimeoutError) -> SpawnError {
+        SpawnError::Timeout(err)
+    }
+}
+
+/// Spawn a StateChain entity server if there isn't one running already. Returns Ok(()) if a new server was spawned, otherwise returns an error.
+pub fn spawn_server() -> Result<(), SpawnError> {
+    let (tx, rx)  = mpsc::channel::<SpawnError>();
+    
     // Rocket server is blocking, so we spawn a new thread.
     thread::spawn(move || {
-        server::get_server().launch();
+        tx.send(
+            match server::get_server(){
+                Ok(s) => (s.launch().into()),
+                Err(_) => SpawnError::GetServer
+            }
+        )
+        
     });
 
-    let five_seconds = time::Duration::from_millis(2000);
-    thread::sleep(five_seconds);
+    //If we haven't received an error within 1 sec then assume server running and return Ok(())
+    match rx.recv_timeout(time::Duration::from_millis(1000)){
+        Ok(e) => Err(e),
+        Err(e) => {
+            match e {
+                RecvTimeoutError::Timeout => Ok(()),
+                RecvTimeoutError::Disconnected => Err(e.into()),
+            }
+        }
+    }
 }
 
 /// Create a wallet and generate some addresses
@@ -72,6 +136,16 @@ pub fn run_deposit(wallet: &mut Wallet, amount: &u64) -> (String, String, String
         amount
     ).unwrap();
     println!("(Deposit Took: {})", TimeFormat(start.elapsed()));
+
+    resp
+}
+
+/// Run confirm_proofs on a wallet
+/// Returns Vec<shared_key_id> of the shared keys that remain unconfirmed
+pub fn run_confirm_proofs(wallet: &mut Wallet) -> Vec<String>  {
+    let start = Instant::now();
+    let resp = state_entity::confirm_proofs::confirm_proofs(wallet).unwrap();
+    println!("(Confirm Proofs Took: {})", TimeFormat(start.elapsed()));
 
     resp
 }

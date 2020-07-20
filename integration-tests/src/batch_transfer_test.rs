@@ -21,11 +21,12 @@ mod tests {
     #[test]
     #[serial]
     fn test_batch_sigs() {
-        spawn_server();
+        let _ = spawn_server();
         let mut wallet = gen_wallet();
         let num_state_chains = 3;
         // make deposits
         let mut state_chain_ids = vec!();
+        println!("running deposits");
         for _ in 0..num_state_chains {
             state_chain_ids.push(run_deposit(&mut wallet,&10000).1);
         }
@@ -33,6 +34,7 @@ mod tests {
         // Create new batch transfer ID
         let mut batch_id = random::<u64>().to_string();
 
+        println!("getting transfer sigs");
         // Gen valid transfer-batch signatures for each state chain
         let mut transfer_sigs = vec!();
         for i in 0..num_state_chains {
@@ -44,6 +46,7 @@ mod tests {
                 ).unwrap()
             );
         }
+        println!("transferring");
         let transfer_batch_init = state_entity::transfer::transfer_batch_init(
             &wallet.client_shim,
             &transfer_sigs,
@@ -105,7 +108,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_batch_transfer() {
-        spawn_server();
+        let _ = spawn_server();
 
         let num_state_chains = 3; // must be > 1
         let mut amounts = vec!();
@@ -128,7 +131,7 @@ mod tests {
         for i in 0..num_state_chains {
             let (_, _, bals) = wallets[i].get_state_chains_info();
             assert_eq!(bals.len(),1);
-            assert_eq!(bals.last().unwrap().confirmed,amounts[i]);
+            assert_eq!(bals.last().expect("expected state chain info").confirmed,amounts[i]);
         }
 
         // Perform transfers atomically
@@ -161,7 +164,7 @@ mod tests {
         }
 
         // Attempt to transfer same UTXO a second time
-        let receiver_addr = wallets[1].get_new_state_entity_address(&funding_txids[0]).unwrap();
+        let receiver_addr = wallets[1].get_new_state_entity_address(&funding_txids[0]).expect("expected state chain entity address");
         match state_entity::transfer::transfer_sender(
             &mut wallets[0],
             &shared_key_ids[0],    // shared wallet id
@@ -172,7 +175,7 @@ mod tests {
 
         // Check all transfers marked true (= complete)
         let status_api = state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id);
-        let mut state_chains_copy = status_api.unwrap().state_chains;
+        let mut state_chains_copy = status_api.expect("expected status").state_chains;
         state_chains_copy.retain(|_, &mut v| v == false);
         assert_eq!(state_chains_copy.len(), 0);
 
@@ -207,7 +210,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_failure_batch_transfer() {
-        spawn_server();
+        let _ = spawn_server();
 
         let num_state_chains = 3; // must be > 2
         let mut amounts = vec!();

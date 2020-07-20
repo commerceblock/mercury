@@ -25,7 +25,8 @@ pub struct SharedKey {
     pub tx_backup_psm: Option<PrepareSignTxMsg>, // back up transaction data
     pub proof_key: Option<String>,
     pub smt_proof: Option<InclusionProofSMT>,
-    pub unspent: bool
+    pub unspent: bool,
+    pub funding_txid: String
 }
 
 impl SharedKey {
@@ -35,8 +36,15 @@ impl SharedKey {
         ecdsa::get_master_key(id, client_shim, &key_share_priv, value, is_transfer)
     }
 
-    pub fn add_proof_data(&mut self, proof_key: &String, root: &Root, proof: &Option<Proof>) {
+    pub fn add_proof_data(&mut self, proof_key: &String, root: &Root, proof: &Option<Proof>, funding_txid: &String) {
         self.proof_key = Some(proof_key.to_owned());
+        self.smt_proof = Some(InclusionProofSMT {
+            root: root.clone(), proof: proof.clone()
+        });
+        self.funding_txid = funding_txid.clone();
+    }
+
+    pub fn update_proof(&mut self, root: &Root, proof: &Option<Proof>) {
         self.smt_proof = Some(InclusionProofSMT {
             root: root.clone(), proof: proof.clone()
         });

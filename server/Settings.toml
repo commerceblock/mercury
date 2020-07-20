@@ -14,3 +14,6 @@ fee_withdraw = 300
 
 punishment_duration = "3600" # 1 hour
 batch_lifetime = "3" # 
+
+#Mainstay config
+mainstay_config = ""
