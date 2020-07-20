@@ -217,7 +217,7 @@ mod tests {
     /// Set up batch transfer and perform 2 full transfers (wallet[0] -> wallet[1] and wallet[1] -> wallet[2]).
     /// This should result in a single state chain (wallet[0]->wallet[1]) being unpunished after revealing.
     /// (since both sender and receiver get punished in transfer failure)
-    /// Allow batch_lifetime time to pass, test punishments are set and test removal of punishment to completed transfer.
+    /// Allowing batch_lifetime time to pass, test punishments are set and test removal of punishment to completed transfer.
     // #[test]
     #[allow(dead_code)]
     fn test_failure_batch_transfer() {
@@ -285,17 +285,19 @@ mod tests {
         let (transfer_finalized_data1, commitment1, nonce1) = run_transfer_with_commitment(
             &mut wallets,
             0,
+            &deposits[0].1, // state chain id
             1,
+            &deposits[1].1, // state chain id
             &deposits[0].2, // funding txid
-            &deposits[1].1, // state chian id
             &batch_id,
         );
         let (_, commitment2, nonce2) = run_transfer_with_commitment(
             &mut wallets,
             1,
+            &deposits[1].1, // state chain id
             2,
+            &deposits[2].1, // state chain id
             &deposits[1].2, // funding txid
-            &deposits[2].1, // state chian id
             &batch_id,
         );
 
@@ -336,7 +338,9 @@ mod tests {
                 &deposits[i].1, // state chain id
                 receiver_addr.clone(),
             ) {
-                Err(e) => assert!(e.to_string().contains("State Chain locked for")),
+                Err(e) => {
+                    assert!(e.to_string().contains("State Chain locked for"));
+                }
                 _ => assert!(false),
             };
             match state_entity::withdraw::withdraw(

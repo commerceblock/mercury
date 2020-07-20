@@ -203,9 +203,10 @@ pub fn run_transfer(
 pub fn run_transfer_with_commitment(
     wallets: &mut Vec<Wallet>,
     sender_index: usize,
+    sender_state_chain_id: &Uuid,
     receiver_index: usize,
+    receiver_state_chain_id: &Uuid,
     funding_txid: &String,
-    state_chain_id: &Uuid,
     batch_id: &Uuid,
 ) -> (TransferFinalizeData, String, [u8; 32]) {
     let start = Instant::now();
@@ -216,12 +217,12 @@ pub fn run_transfer_with_commitment(
 
     let tranfer_sender_resp = state_entity::transfer::transfer_sender(
         &mut wallets[sender_index],
-        state_chain_id,
+        sender_state_chain_id,
         receiver_addr.clone(),
     )
     .unwrap();
 
-    let (commitment, nonce) = make_commitment(&state_chain_id.to_string());
+    let (commitment, nonce) = make_commitment(&receiver_state_chain_id.to_string());
 
     let transfer_finalized_data = state_entity::transfer::transfer_receiver(
         &mut wallets[receiver_index],
@@ -283,12 +284,14 @@ pub fn run_batch_transfer(
     let mut commitments = vec![];
     let mut nonces = vec![];
     for i in 0..num_state_chains {
+        let receiver_index = i + 1 % num_state_chains - 1;
         let (transfer_finalized_data, commitment, nonce) = run_transfer_with_commitment(
             wallets,
             i,
-            i + 1 % num_state_chains - 1,
-            &funding_txids[i],   // funding txid
             &state_chain_ids[i], // state chian id
+            receiver_index,
+            &state_chain_ids[receiver_index], // state chian id
+            &funding_txids[i],                // funding txid
             &batch_id,
         );
         transfer_finalized_datas.push(transfer_finalized_data);

@@ -420,6 +420,16 @@ impl Wallet {
                 }
             }
         }
+        // If not found return shared key marked as spent.
+        // This is temporary until we get smarter shared_key.unspent implemented with arrival
+        // of watcher to check transfer status of StateChains.
+        // At the moment wallet marks shared_keys as spent when transfer_sender() completes so we
+        // cannot test for 'StateChain locked/spent' error messages without below code
+        for shared in &self.shared_keys {
+            if shared.state_chain_id == Some(state_chain_id.to_owned()) {
+                return Ok(shared);
+            }
+        }
         Err(CError::WalletError(WalletErrorType::StateChainNotFound))
     }
 
