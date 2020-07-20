@@ -51,20 +51,20 @@ subcommands:
             about: Withdraw from State Entity
             version: "1.0"
             args:
-              - key:
-                  short: k
+              - id:
+                  short: i
                   required: true
-                  value_name: Shared key ID
-                  help: ID of Shared Key holding funds on State Entity
+                  value_name: StateChain ID
+                  help: ID of StateChain holding funds on State Entity
         - transfer-sender:
-            about: Transfer State Chain - Send
+            about: Transfer StateChain - Send
             version: "1.0"
             args:
-              - key:
-                  short: k
+              - id:
+                  short: i
                   required: true
-                  value_name: Shared key ID
-                  help: ID of Shared Key holding funds on State Entity
+                  value_name: StateChain ID
+                  help: ID of StateChain with funds on State Entity
               - addr:
                   short: a
                   required: true
@@ -97,10 +97,10 @@ subcommands:
       about: API calls to State Entity
       version: "1.0"
       args:
-        - fee-info:
-            short: f
-            help: State Entity Fees information
       subcommands:
+        - fee-info:
+          short: Get State Entity's Fee information
+          help: State Entity Fees information
         - get-statechain:
             about: Get a State Chain's information
             version: "1.0"

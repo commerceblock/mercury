@@ -33,8 +33,6 @@ use std::{thread,
 ///     - Can do auth or other DoS mitigation here
 #[post("/deposit/init", format = "json", data = "<deposit_msg1>")]
 pub fn deposit_init(
-    _state: State<Config>,
-    _claim: Claims,
     conn: DataBase,
     deposit_msg1: Json<DepositMsg1>,
 ) -> Result<Json<Uuid>> {
@@ -112,7 +110,7 @@ pub fn deposit_confirm(
     // let shared_key_id = deposit_msg2.shared_key_id.clone();
     let user_id = deposit_msg2.shared_key_id;
 
-    // Get UserSession data
+    // Get back up tx and proof key
     let (tx_backup_str, proof_key) = db_get_2::<String,String>(&conn, &user_id, Table::UserSession,
         vec!(Column::TxBackup, Column::ProofKey))?;
     let tx_backup: Transaction = db_deser(tx_backup_str)?;
@@ -132,6 +130,7 @@ pub fn deposit_confirm(
         proof_key.clone(),
     );
 
+    // Insert into StateChain table
     db_insert(&conn, &state_chain_id, Table::StateChain)?;
     db_update(&conn, &state_chain_id, Table::StateChain,
         vec!(
@@ -153,17 +152,21 @@ pub fn deposit_confirm(
 
 
     // Update sparse merkle tree with new StateChain entry
-    let root = get_current_root::<Root>(&state.db)?;
-    let new_root = update_statechain_smt(
+    let root = get_current_root::<Root>(&state.db)?.map(|r| r.hash());
+
+    let new_root_hash = &update_statechain_smt(
         DB_SC_LOC,
-        &root.value,
+        &root,
         &tx_backup.input.get(0).unwrap().previous_output.txid.to_string(),
         &proof_key
     )?;
-    update_root(&state.db, new_root.unwrap())?;
+
+    let new_root = Root::from_hash(&new_root_hash.unwrap());
+
+    update_root(&state.db, &state.mainstay_config, &new_root)?;
 
     info!("DEPOSIT: Included in sparse merkle tree. State Chain ID: {}", state_chain_id);
-    debug!("DEPOSIT: State Chain ID: {}. New root: {:?}. Previous root: {:?}.", state_chain_id, new_root.unwrap(), root);
+    debug!("DEPOSIT: State Chain ID: {}. New root: {:?}. Previous root: {:?}.", state_chain_id, new_root, root);
 
     // Update UserSession with StateChain's ID
     db_update(&conn, &user_id, Table::UserSession,vec!(Column::StateChainId),vec!(&state_chain_id))?;

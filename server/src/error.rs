@@ -15,7 +15,6 @@ use std::time::SystemTimeError;
 use monotree::Errors as MonotreeErrors;
 use bitcoin::secp256k1::Error as SecpError;
 use postgres::Error as PostgresError;
-use uuid::Uuid;
 
 /// State Entity library specific errors
 #[derive(Debug, Deserialize)]
@@ -27,9 +26,9 @@ pub enum SEError {
     /// Error in co-signing
     SigningError(String),
     /// DB error no ID found
-    DBError(DBErrorType, Uuid),
+    DBError(DBErrorType, String),
     /// DB error no data in column for ID
-    DBErrorWC(DBErrorType, Uuid, Column),
+    DBErrorWC(DBErrorType, String, Column),
     /// Inherit errors from Util
     SharedLibError(String),
     /// Inherit errors from Monotree

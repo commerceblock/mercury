@@ -60,7 +60,6 @@ pub struct SmtProofMsgAPI {
 }
 
 
-
 // PrepareSignTx structs
 
 
@@ -103,6 +102,7 @@ pub struct DepositMsg1 {
 pub struct DepositMsg2 {
     pub shared_key_id: Uuid,
 }
+
 
 // Transfer algorithm structs
 

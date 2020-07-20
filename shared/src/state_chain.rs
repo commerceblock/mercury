@@ -144,8 +144,14 @@ impl StateChainSig {
 
 /// Insert new statechain entry into Sparse Merkle Tree and return proof
 pub fn update_statechain_smt(sc_db_loc: &str, root: &Option<monotree::Hash>, funding_txid: &String, entry: &String) -> Result<Option<monotree::Hash>> {
-    let key: &monotree::Hash = funding_txid[..32].as_bytes().try_into().unwrap();
-    let entry: &monotree::Hash = entry[..32].as_bytes().try_into().unwrap();
+    let key: &monotree::Hash = match funding_txid[..32].as_bytes().try_into(){
+        Ok(k) => k,
+        Err(e) => return Err(SharedLibError::FormatError(e.to_string()))
+    };
+    let entry: &monotree::Hash = match entry[..32].as_bytes().try_into(){
+        Ok(entry) => entry,
+        Err(e) => return Err(SharedLibError::FormatError(e.to_string()))
+    };
 
     // update smt
     let mut tree = Monotree::<RocksDB, Blake2b>::new(sc_db_loc);
@@ -219,7 +225,7 @@ mod tests {
         let funding_txid = String::from("c1562f7f15d6b8a51ea2e7035b9cdb8c6c0c41fecb62d459a3a6bf738ff0db0e");
         let proof_key = String::from("03b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3");
 
-        let root = None;
+        let root: Option<monotree::Hash> = None;
 
         let root = update_statechain_smt(DB_LOC, &root, &funding_txid, &proof_key).unwrap();
 

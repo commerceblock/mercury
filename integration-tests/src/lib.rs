@@ -14,17 +14,85 @@ use bitcoin::{Transaction, PublicKey};
 use std::{thread, time};
 use std::time::Instant;
 use floating_duration::TimeFormat;
+use std::sync::mpsc;
+use std::sync::mpsc::RecvTimeoutError;
+use rocket;
+use rocket::error::LaunchError;
+use std::fmt;
+use std::error;
 use uuid::Uuid;
 
-/// Spawn a fresh StateChain entity server
-pub fn spawn_server() {
+#[cfg(test)]
+#[macro_use]
+extern crate serial_test;
+
+extern crate stoppable_thread;
+
+#[derive(Debug)]
+pub enum SpawnError {
+    GetServer,
+    Launch(LaunchError),
+    Timeout(RecvTimeoutError)
+}
+
+impl fmt::Display for SpawnError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            SpawnError::GetServer =>
+                write!(f, "failed to initialize a new server"),
+            SpawnError::Launch(ref e) => e.fmt(f),
+            SpawnError::Timeout(ref e) => e.fmt(f)
+        }
+    }
+}
+
+impl error::Error for SpawnError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match *self {
+            SpawnError::GetServer => None,
+            SpawnError::Launch(ref e) => Some(e),
+            SpawnError::Timeout(ref e) => Some(e),
+        }
+    }
+}
+
+impl From<LaunchError> for SpawnError {
+    fn from(err: LaunchError) -> SpawnError {
+        SpawnError::Launch(err)
+    }
+}
+
+impl From<RecvTimeoutError> for SpawnError {
+    fn from(err: RecvTimeoutError) -> SpawnError {
+        SpawnError::Timeout(err)
+    }
+}
+
+/// Spawn a StateChain entity server if there isn't one running already. Returns Ok(()) if a new server was spawned, otherwise returns an error.
+pub fn spawn_server() -> Result<(), SpawnError> {
+    let (tx, rx)  = mpsc::channel::<SpawnError>();
+
     // Rocket server is blocking, so we spawn a new thread.
     thread::spawn(move || {
-        server::get_server().launch();
+        tx.send(
+            match server::get_server(){
+                Ok(s) => (s.launch().into()),
+                Err(_) => SpawnError::GetServer
+            }
+        )
+
     });
 
-    let five_seconds = time::Duration::from_millis(2000);
-    thread::sleep(five_seconds);
+    //If we haven't received an error within 1 sec then assume server running and return Ok(())
+    match rx.recv_timeout(time::Duration::from_millis(1000)){
+        Ok(e) => Err(e),
+        Err(e) => {
+            match e {
+                RecvTimeoutError::Timeout => Ok(()),
+                RecvTimeoutError::Disconnected => Err(e.into()),
+            }
+        }
+    }
 }
 
 /// Create a wallet and generate some addresses
@@ -72,10 +140,20 @@ pub fn run_deposit(wallet: &mut Wallet, amount: &u64) -> (Uuid, Uuid, String, Tr
     resp
 }
 
-/// Run withdraw of shared key ID given
-pub fn run_withdraw(wallet: &mut Wallet, shared_key_id: &Uuid) -> (String, Uuid, u64) {
+/// Run confirm_proofs on a wallet
+/// Returns Vec<shared_key_id> of the shared keys that remain unconfirmed
+pub fn run_confirm_proofs(wallet: &mut Wallet) -> Vec<String>  {
     let start = Instant::now();
-    let resp = state_entity::withdraw::withdraw(wallet, &shared_key_id).unwrap();
+    let resp = state_entity::confirm_proofs::confirm_proofs(wallet).unwrap();
+    println!("(Confirm Proofs Took: {})", TimeFormat(start.elapsed()));
+
+    resp
+}
+
+/// Run withdraw of shared key ID given
+pub fn run_withdraw(wallet: &mut Wallet, state_chain_id: &Uuid) -> (String, Uuid, u64) {
+    let start = Instant::now();
+    let resp = state_entity::withdraw::withdraw(wallet, &state_chain_id).unwrap();
     println!("(Withdraw Took: {})", TimeFormat(start.elapsed()));
 
     resp
@@ -83,16 +161,20 @@ pub fn run_withdraw(wallet: &mut Wallet, shared_key_id: &Uuid) -> (String, Uuid,
 
 /// Run a transfer between two wallets. Input vector of wallets with sender and receiver indexes in vector.
 /// Return new shared key id.
-pub fn run_transfer(wallets: &mut Vec<Wallet>, sender_index: usize, receiver_index: usize, shared_key_id: &Uuid) -> Uuid {
+pub fn run_transfer(wallets: &mut Vec<Wallet>, sender_index: usize, receiver_index: usize, state_chain_id: &Uuid) -> Uuid {
 
-    let (_, funding_txid, _, _, _) = wallets[sender_index].get_shared_key_info(shared_key_id).unwrap();
+    let funding_txid: String;
+    {
+        funding_txid = wallets[sender_index].get_shared_key_by_state_chain_id(state_chain_id).unwrap().funding_txid.to_owned();
+    }
+
     let receiver_addr = wallets[receiver_index].get_new_state_entity_address(&funding_txid).unwrap();
 
     let start = Instant::now();
     let tranfer_sender_resp =
         state_entity::transfer::transfer_sender(
             &mut wallets[sender_index],
-            shared_key_id,
+            state_chain_id,
             receiver_addr.clone(),
     ).unwrap();
 
@@ -115,7 +197,6 @@ pub fn run_transfer_with_commitment(
     sender_index: usize,
     receiver_index: usize,
     funding_txid: &String,
-    shared_key_id: &Uuid,
     state_chain_id: &Uuid,
     batch_id: &Uuid
 ) -> (TransferFinalizeData, String, [u8;32]) {
@@ -126,7 +207,7 @@ pub fn run_transfer_with_commitment(
     let tranfer_sender_resp =
         state_entity::transfer::transfer_sender(
             &mut wallets[sender_index],
-            shared_key_id,
+            state_chain_id,
             receiver_addr.clone(),
     ).unwrap();
 
@@ -154,7 +235,6 @@ pub fn run_batch_transfer(
     wallets: &mut Vec<Wallet>,      // vec of all wallets
     swap_map: &Vec<(usize,usize)>,   // mapping of sender -> receiver
     funding_txids: &Vec<String>,
-    shared_key_ids: &Vec<Uuid>,
     state_chain_ids: &Vec<Uuid>,
 ) -> (Uuid, Vec<TransferFinalizeData>, Vec<String>, Vec<[u8;32]>, Vec<StateChainSig>) {
     let num_state_chains = swap_map.len();
@@ -192,7 +272,6 @@ pub fn run_batch_transfer(
             i,
             i+1%num_state_chains-1,
             &funding_txids[i], // funding txid
-            &shared_key_ids[i], // shared key id
             &state_chain_ids[i],  // state chian id
             &batch_id
         );

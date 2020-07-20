@@ -7,7 +7,9 @@
 // 1. Generate shared wallet
 // 2. Co-op sign back-up tx
 // 3. Broadcast funding tx and wait for SE verification
-// 4. Verify funding txid and proof key in SMT
+// 4. Verify funding txid and proof key in SM
+
+
 
 use super::super::Result;
 extern crate shared_lib;
@@ -113,10 +115,10 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
     )?;
 
     // Verify proof key inclusion in SE sparse merkle tree
-    let root = get_smt_root(&wallet.client_shim)?;
+    let root = get_smt_root(&wallet.client_shim)?.unwrap();
     let proof = get_smt_proof(&wallet.client_shim, &root, &funding_txid)?;
     assert!(verify_statechain_smt(
-        &root.value,
+        &Some(root.hash()),
         &proof_key.to_string(),
         &proof
     ));
@@ -126,7 +128,7 @@ pub fn deposit(wallet: &mut Wallet, amount: &u64)
         let shared_key = wallet.get_shared_key_mut(&shared_key_id)?;
         shared_key.state_chain_id = Some(state_chain_id);
         shared_key.tx_backup_psm = Some(tx_backup_psm.to_owned());
-        shared_key.add_proof_data(&proof_key.to_string(), &root, &proof);
+        shared_key.add_proof_data(&proof_key.to_string(), &root, &proof, &funding_txid);
     }
 
     Ok((shared_key_id, state_chain_id, funding_txid, tx_backup_signed, tx_backup_psm, proof_key))

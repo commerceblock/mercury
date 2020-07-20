@@ -129,18 +129,17 @@ e0a97cb38e7e73617ef75a57eaf2841eb06833407c0eae08029bd04ea7e6115a
 Network: [regtest]
 
 Deposited 1000 satoshi's.
-Shared Key ID: 9f197560-cc8a-4abd-8377-247e6208544e
 State Chain ID: c7c57bc7-db45-474f-86f6-109205eb6b99
 ```
 
 ### Withdraw from State entity
 ```bash
-../target/release/cli wallet withdraw -k [SHARED_KEY_ID]
+../target/release/cli wallet withdraw -i [STATE_CHAIN_ID]
 ```
 
 * Example:
 ```bash
-../target/release/cli wallet withdraw -k b7b56103-0d25-48c4-8ca7-66c235e30124
+../target/release/cli wallet withdraw -i b7b56103-0d25-48c4-8ca7-66c235e30124
 ```
 
 * Output:
@@ -178,12 +177,12 @@ New State Entity address:
 
 * Example:
 ```bash
-../target/release/cli wallet transfer-sender -a "{\"backup_tx_addr\":\"bcrt1qjh4cs26aur7uct8fjavmrzqgxxdkpgjusanarx\",\"proof_key\":\"02851ad2219901fc72ea97b4d21e803c625a339f07da8c7069ea33ddd0125da84f\"}" -k 665d2d2c-6c3b-4384-a410-15e8a48b7dc5
+../target/release/cli wallet transfer-sender -a "{\"backup_tx_addr\":\"bcrt1qjh4cs26aur7uct8fjavmrzqgxxdkpgjusanarx\",\"proof_key\":\"02851ad2219901fc72ea97b4d21e803c625a339f07da8c7069ea33ddd0125da84f\"}" -i 03dadad7-91b9-45b5-9f17-5cd945565121
 ```
 
 * Output:
 ```text
-Transfer initiated for Shared Key ID: 665d2d2c-6c3b-4384-a410-15e8a48b7dc5.
+Transfer initiated for StateChain ID: 03dadad7-91b9-45b5-9f17-5cd945565121.
 
 Transfer message: "{\"shared_key_id\":\"665d2d2c-6c3b-4384-a410-15e8a48b7dc5\",\"t1\":\"221d6675ddcff3b623027d9a70771629a3e10fda1bed594fa022e61a35d1edb4\",\"state_chain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"02851ad2219901fc72ea97b4d21e803c625a339f07da8c7069ea33ddd0125da84f\",\"sig\":\"3045022100c0823ccc9d8954ac5e6947a523bef1c110bc01a1a0f725ed7ddc94bfcf7c27ac02206ff8121c57a6646f3fe5e9f2eb737c2907f63666cee0d5986ad044d010bcd699\"},\"state_chain_id\":\"03dadad7-91b9-45b5-9f17-5cd945565121\",\"backup_tx_psm\":{\"BackUpTx\":{\"protocol\":\"Deposit\",\"spending_addr\":\"bcrt1qyxaad6plw90z94njaclvfat38qzfc6e3acut7j\",\"input\":\"de812f33c8fa5cc2455f8cafcbbf62b7d32114cad57418886d5421c75f01d350:0\",\"address\":\"bcrt1qx9cs0t7u7gr4w0fh8rrsfm4l367hjuurdpw2pg\",\"amount\":10000,\"proof_key\":\"039afb8b85ba5c1b6664df7e68d4d79ea194e7022c76f0f9f3dadc3f94d8c79211\"}},\"rec_addr\":{\"backup_tx_addr\":\"bcrt1qjh4cs26aur7uct8fjavmrzqgxxdkpgjusanarx\",\"proof_key\":\"02851ad2219901fc72ea97b4d21e803c625a339f07da8c7069ea33ddd0125da84f\"}}"
 ```
@@ -202,7 +201,7 @@ Transfer message: "{\"shared_key_id\":\"665d2d2c-6c3b-4384-a410-15e8a48b7dc5\",\
 ```text
 Network: [regtest],
 
-Transfer complete for Shared Key ID: 5e288b67-9867-46e0-bbe4-49b9a4cf06a2.
+Transfer complete for StateChain ID: 03dadad7-91b9-45b5-9f17-5cd945565121.
 ```
 
 
@@ -212,19 +211,20 @@ Transfer complete for Shared Key ID: 5e288b67-9867-46e0-bbe4-49b9a4cf06a2.
 Call State Entity's API
 
 USAGE:
-    cli state-entity [FLAGS] [SUBCOMMAND] 
+    cli state-entity [FLAGS] [SUBCOMMAND]
 
 
 FLAGS:
     -f                  Returns State Entity's Fee information
-    
+
 SUBCOMMANDS:
-    get-statechain      Returns a State Chain's information
+    fee-info            Return State Entity's fee information
+    get-statechain      Returns a StateChain's information
 ```
 
 ### fee-info
 ```bash
-../target/release/cli state-entity -f
+../target/release/cli state-entity fee-info
 ```
 
 * Output:
@@ -249,7 +249,7 @@ Withdrawal fee: 100
 
 * Output:
 ```text
-State Chain with Id a8880da3-9c53-4b11-ba3a-a3cf7c999d39 info: 
+State Chain with Id a8880da3-9c53-4b11-ba3a-a3cf7c999d39 info:
 
 utxo:
     txid: 0158f2978e5c2cf407970d7213f2b4289993b2fe3ef6aca531316cdcf347cc41,

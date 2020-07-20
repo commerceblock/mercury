@@ -100,9 +100,9 @@ pub fn withdraw_confirm(
     // Update sparse merkle tree
     let funding_txid = tx_withdraw.input.get(0).unwrap().previous_output.txid.to_string();
 
-    let root = get_current_root::<Root>(&state.db)?;
-    let new_root = update_statechain_smt(DB_SC_LOC, &root.value, &funding_txid, &withdraw_msg2.address)?;
-    update_root(&state.db, new_root.unwrap())?;
+    let root = get_current_root::<Root>(&state.db)?.map(|r| r.hash());
+    let mut new_root = Root::from_hash(&update_statechain_smt(DB_SC_LOC, &root, &funding_txid, &withdraw_msg2.address)?.unwrap());
+    update_root(&state.db, &state.mainstay_config, &mut new_root)?;
 
     info!("WITHDRAW: Complete. Shared Key ID: {}. State Chain: {}",user_id.to_string(), state_chain_id);
 

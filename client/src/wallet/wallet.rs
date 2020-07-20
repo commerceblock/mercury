@@ -43,7 +43,8 @@ pub struct Wallet {
     pub se_proof_keys: KeyPath, // for use as State Entity proof keys
     pub se_key_shares: KeyPath, // for derivation of private key shares used in shared_keys
 
-    pub shared_keys: Vec<SharedKey> // vector of keys co-owned with state entities
+    pub shared_keys: Vec<SharedKey>, // vector of keys co-owned with state entities
+    pub require_mainstay: bool
 }
 impl Wallet {
     pub fn new(seed: &[u8], network: &String, client_shim: ClientShim, electrumx_client: Box<dyn Electrumx>) -> Wallet {
@@ -73,8 +74,21 @@ impl Wallet {
             se_backup_keys,
             se_proof_keys,
             se_key_shares,
-            shared_keys: vec!()
+            shared_keys: vec!(),
+            require_mainstay: false
         }
+    }
+
+    //pub fn shared_keys_mutable<'a>(&'a mut self) -> &'a mut Vec<SharedKey> {
+    //&mut self.shared_keys
+    //}
+
+    pub fn set_require_mainstay(&mut self, val: bool){
+        self.require_mainstay=val;
+    }
+
+    pub fn require_mainstay(&self) -> bool{
+        self.require_mainstay
     }
 
     /// serialize wallet to json
@@ -109,11 +123,12 @@ impl Wallet {
             "se_proof_keys_pos_encoded": serde_json::to_string(&se_proof_keys_pos_encoded).unwrap(),
             "se_key_shares_last_derivation_pos": self.se_key_shares.last_derived_pos,
             "se_key_shares_pos_encoded": serde_json::to_string(&se_key_shares_pos_encoded).unwrap(),
-            "shared_keys": serde_json::to_string(&self.shared_keys).unwrap()
+            "shared_keys": serde_json::to_string(&self.shared_keys).unwrap(),
+            "require_mainstay": self.require_mainstay
         })
     }
 
-    /// load wallet from jon
+    /// load wallet from json
     pub fn from_json(json: serde_json::Value, client_shim: ClientShim, electrumx_client: Box<dyn Electrumx>) -> Result<Self> {
         let secp = Secp256k1::new();
         let network = json["network"].as_str().unwrap().to_string();
@@ -153,7 +168,8 @@ impl Wallet {
             se_backup_keys,
             se_proof_keys,
             se_key_shares,
-            shared_keys: vec!()
+            shared_keys: vec!(),
+            require_mainstay: json.get("require_mainstay").unwrap().as_bool().unwrap()
         };
 
         // re-derive keys which have been previously derived
@@ -328,6 +344,18 @@ impl Wallet {
         Err(CError::WalletError(WalletErrorType::SharedKeyNotFound))
     }
 
+    /// Get unspent shared key by state chain id. Return Err if no shared key with given state chain id.
+    pub fn get_shared_key_by_state_chain_id(&self, state_chain_id: &Uuid) -> Result<&SharedKey> {
+        for shared in &self.shared_keys {
+            if shared.state_chain_id == Some(state_chain_id.to_owned()) {
+                if shared.unspent == true {
+                    return Ok(shared);
+                }
+            }
+        }
+        Err(CError::WalletError(WalletErrorType::StateChainNotFound))
+    }
+
     /// Return Shared key info: StateChain ID, Funding Txid, proof key, value, unspent
     pub fn get_shared_key_info(&self, id: &Uuid) -> Result<(Uuid, String, String, u64, bool)> {
         let shared_key = self.get_shared_key(id)?;
@@ -474,7 +502,6 @@ pub fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -558,4 +585,6 @@ mod tests {
         let selection = wallet.coin_selection_greedy(&10000101);
         assert!(selection.is_err());
     }
+
+
 }

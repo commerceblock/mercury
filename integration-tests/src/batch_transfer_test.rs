@@ -18,8 +18,9 @@ mod tests {
 
     /// Test batch transfer signature generation
     #[test]
+    #[serial]
     fn test_batch_sigs() {
-        spawn_server();
+        let _ = spawn_server();
         let mut wallet = gen_wallet();
         let num_state_chains = 3;
         // make deposits
@@ -42,6 +43,7 @@ mod tests {
                 ).unwrap()
             );
         }
+
         let transfer_batch_init = state_entity::transfer::transfer_batch_init(
             &wallet.client_shim,
             &transfer_sigs,
@@ -101,8 +103,9 @@ mod tests {
 
     /// Perform batch transfer with tests and checks throughout
     #[test]
+    #[serial]
     fn test_batch_transfer() {
-        spawn_server();
+        let _ = spawn_server();
 
         let num_state_chains = 3; // must be > 1
         let mut amounts = vec!();
@@ -125,7 +128,7 @@ mod tests {
         for i in 0..num_state_chains {
             let (_, _, bals) = wallets[i].get_state_chains_info();
             assert_eq!(bals.len(),1);
-            assert_eq!(bals.last().unwrap().confirmed,amounts[i]);
+            assert_eq!(bals.last().expect("expected state chain info").confirmed,amounts[i]);
         }
 
         // Perform transfers atomically
@@ -143,7 +146,6 @@ mod tests {
                 &mut wallets,
                 &swap_map,
                 &funding_txids,
-                &shared_key_ids,
                 &state_chain_ids
             );
 
@@ -158,18 +160,20 @@ mod tests {
         }
 
         // Attempt to transfer same UTXO a second time
-        let receiver_addr = wallets[1].get_new_state_entity_address(&funding_txids[0]).unwrap();
+        let receiver_addr = wallets[1].get_new_state_entity_address(&funding_txids[0]).expect("expected state chain entity address");
         match state_entity::transfer::transfer_sender(
             &mut wallets[0],
-            &shared_key_ids[0],    // shared wallet id
+            &state_chain_ids[0],
             receiver_addr.clone()) {
-                Err(e) => assert!(e.to_string().contains("State Chain not owned by User ID:")),
+                Err(e) => {
+                    assert!(e.to_string().contains("StateChain not found in wallet derivation path"));
+                },
                 _ => assert!(false)
         }
 
         // Check all transfers marked true (= complete)
         let status_api = state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id);
-        let mut state_chains_copy = status_api.unwrap().state_chains;
+        let mut state_chains_copy = status_api.expect("expected status").state_chains;
         state_chains_copy.retain(|_, &mut v| v == false);
         assert_eq!(state_chains_copy.len(), 0);
 
@@ -204,7 +208,7 @@ mod tests {
     // #[test]
     #[allow(dead_code)]
     fn test_failure_batch_transfer() {
-        spawn_server();
+        let _ = spawn_server();
 
         let num_state_chains = 3; // must be > 2
         let mut amounts = vec!();
@@ -266,7 +270,6 @@ mod tests {
             0,
             1,
             &deposits[0].2, // funding txid
-            &deposits[0].0, // shared key id
             &deposits[1].1,  // state chian id
             &batch_id
         );
@@ -275,7 +278,6 @@ mod tests {
             1,
             2,
             &deposits[1].2, // funding txid
-            &deposits[1].0, // shared key id
             &deposits[2].1,  // state chian id
             &batch_id
         );
@@ -312,7 +314,7 @@ mod tests {
             let receiver_addr = wallets[i+1%num_state_chains-1].get_new_state_entity_address(&deposits[i].2).unwrap();
             match state_entity::transfer::transfer_sender(
                 &mut wallets[i],
-                &deposits[i].0,    // shared wallet id
+                &deposits[i].1,    // state chain id
                 receiver_addr.clone(),
             ) {
                 Err(e) => assert!(e.to_string().contains("State Chain locked for")),
@@ -320,7 +322,7 @@ mod tests {
             };
             match state_entity::withdraw::withdraw(
                 &mut wallets[i],
-                &deposits[i].0,    // shared wallet id
+                &deposits[i].1,    // state chain id
             ) {
                 Err(e) => assert!(e.to_string().contains("State Chain locked for")),
                 _ => assert!(false)
@@ -357,7 +359,7 @@ mod tests {
         // Wallet[1] should be accessible.
         match state_entity::withdraw::withdraw(
             &mut wallets[0],
-            &deposits[0].0,    // shared wallet id
+            &deposits[0].1,    // state chain id
         ) {
             Err(e) => assert!(e.to_string().contains("State Chain locked for")),
             _ => assert!(false)
@@ -365,12 +367,12 @@ mod tests {
 
         assert!(state_entity::withdraw::withdraw(
             &mut wallets[1],
-            &deposits[1].0,    // shared wallet id
+            &deposits[1].1,    // state chain id
         ).is_ok());
 
         match state_entity::withdraw::withdraw(
             &mut wallets[2],
-            &deposits[2].0,    // shared wallet id
+            &deposits[2].1,    // state chain id
         ) {
             Err(e) => assert!(e.to_string().contains("State Chain locked for")),
             _ => assert!(false)

@@ -24,7 +24,7 @@ pub enum CError {
     /// Schnorr error
     SchnorrError(String),
     /// Inherit errors from SharedLibError
-    SharedLibError(String),
+    SharedLibError(String)
 }
 
 impl From<String> for CError {
@@ -76,6 +76,7 @@ pub enum WalletErrorType {
     KeyNotFound,
     SharedKeyNotFound,
     KeyMissingData,
+    StateChainNotFound
 }
 
 impl WalletErrorType {
@@ -84,7 +85,8 @@ impl WalletErrorType {
             WalletErrorType::NotEnoughFunds => "Not enough funds",
             WalletErrorType::KeyNotFound => "Key not found in wallet derivation path",
             WalletErrorType::SharedKeyNotFound => "Shared key not found in wallet derivation path",
-            WalletErrorType::KeyMissingData => "Key is missing data"
+            WalletErrorType::KeyMissingData => "Key is missing data",
+            WalletErrorType::StateChainNotFound=> "StateChain not found in wallet derivation path"
         }
     }
 }

@@ -205,23 +205,14 @@ pub fn tx_withdraw_build(funding_txid: &Hash, rec_address: &Address, amount: &u6
     Ok(tx_0)
 }
 
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json;
-    use rand::rngs::OsRng;
-
-    use bitcoin::{Amount,OutPoint, Script, Network};
-    use bitcoin::util;
-    use bitcoin::secp256k1::{Secp256k1, Message, key::SecretKey};
-    use bitcoin::hashes::sha256d;
-
-    const NETWORK: bitcoin::network::constants::Network = Network::Regtest;
-
+pub mod keygen {
+    pub use rand::rngs::OsRng;
+    pub use bitcoin::util;
+    pub use bitcoin::{Amount,OutPoint, Script, Network};
+    pub use bitcoin::secp256k1::{Secp256k1, Message, key::SecretKey};
+    pub const NETWORK: bitcoin::network::constants::Network = Network::Regtest;
     /// generate bitcoin::util::key key pair
-    fn generate_keypair() -> (util::key::PrivateKey, util::key::PublicKey) {
+    pub fn generate_keypair() -> (util::key::PrivateKey, util::key::PublicKey) {
         let secp = Secp256k1::new();
         let mut rng = OsRng::new().expect("OsRng");
         let secret_key = SecretKey::new(&mut rng);
@@ -233,6 +224,16 @@ mod tests {
         let pub_key = util::key::PublicKey::from_private_key(&secp, &priv_key);
         return (priv_key, pub_key)
     }
+
+}
+
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use super::keygen::*;
+    use serde_json;
+    use bitcoin::hashes::sha256d;
 
     #[test]
     fn transaction() {

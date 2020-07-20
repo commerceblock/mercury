@@ -74,5 +74,6 @@ pub fn get_master_key(id: &Uuid, client_shim: &ClientShim, secret_key: &FE, valu
         proof_key: None,
         smt_proof: None,
         unspent: true,
+        funding_txid: String::default()
     })
 }

@@ -16,8 +16,8 @@ name = "server_exec"
 path = "src/main.rs"
 
 [dependencies]
-rocket = { version = "0.4.2", default-features = false }
-rocket_contrib = { version = "0.4.2", default-features = false, features = ["json","postgres_pool"] }
+rocket = { version = "0.4.5", features = ["tls"] }
+rocket_contrib = { version = "0.4.5", default-features = false,features = ["json","postgres_pool"] }
 rocksdb = "0.13.0"
 serde = "1.0"
 serde_json = "1.0"
@@ -30,7 +30,7 @@ config = "0.9.2"
 uuid = { version = "0.5", features = ["v4", "serde"] }
 error-chain = "0.12.0"
 failure = "0.1.5"
-jsonwebtoken = "6.0.1"
+jsonwebtoken = "5.0.1"
 rust-crypto = "0.2"
 hex = "0.3.2"
 floating-duration = "0.1.2"
@@ -42,6 +42,7 @@ env_logger = "0.7.1"
 log4rs = "0.12.0"
 postgres = { version = "0.15", features = ["with-uuid","with-chrono"] }
 chrono = "0.4"
+serial_test = "0.4.0"
 
 [dependencies.zk-paillier]
 git = "https://github.com/KZen-networks/zk-paillier"

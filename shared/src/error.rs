@@ -2,6 +2,9 @@ use std::error;
 use bitcoin::secp256k1::Error as SecpError;
 use bitcoin::util::address::Error as AddressError;
 use monotree::Errors as MonotreeErrors;
+use reqwest::UrlError as UrlError;
+use serde_json::Error as SerdeJSONError;
+use reqwest::Error as ReqwestError;
 
 use rocket::http::{ Status, ContentType };
 use rocket::Response;
@@ -40,6 +43,24 @@ impl From<SecpError> for SharedLibError {
 
 impl From<MonotreeErrors> for SharedLibError {
     fn from(e: MonotreeErrors) -> SharedLibError {
+        SharedLibError::Generic(e.to_string())
+    }
+}
+
+impl From<UrlError> for SharedLibError {
+    fn from(e: UrlError) -> SharedLibError {
+        SharedLibError::Generic(e.to_string())
+    }
+}
+
+impl From<SerdeJSONError> for SharedLibError {
+    fn from(e: SerdeJSONError) -> SharedLibError {
+        SharedLibError::Generic(e.to_string())
+    }
+}
+
+impl From<ReqwestError> for SharedLibError {
+    fn from(e: ReqwestError) -> SharedLibError {
         SharedLibError::Generic(e.to_string())
     }
 }

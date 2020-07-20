@@ -139,7 +139,7 @@ pub fn db_insert(conn: &Connection, id: &Uuid, table: Table) -> Result<u64> {
 pub fn db_remove(conn: &Connection, id: &Uuid, table: Table) -> Result<()> {
     let statement = conn.prepare(&format!("DELETE FROM {} WHERE id = $1;",table.to_string()))?;
     if statement.execute(&[&id])? == 0 {
-        return Err(SEError::DBError(UpdateFailed, *id));
+        return Err(SEError::DBError(UpdateFailed, id.to_string()));
     }
 
     Ok(())
@@ -160,7 +160,7 @@ pub fn db_update(conn: &Connection, id: &Uuid, table: Table, column: Vec<Column>
     owned_data.push(id);
 
     if statement.execute(&owned_data)? == 0 {
-        return Err(SEError::DBError(UpdateFailed, *id));
+        return Err(SEError::DBError(UpdateFailed, id.to_string()));
     }
 
     Ok(())
@@ -197,7 +197,7 @@ where
 
     let rows = statement.query(&[id])?;
     if rows.is_empty() {
-        return Err(SEError::DBError(NoDataForID, id.clone()))
+        return Err(SEError::DBError(NoDataForID, id.to_string()))
     };
     let row = rows.get(0);
 
@@ -241,11 +241,11 @@ fn get_item_from_row<T>(row: &Row, index: usize, id: &Uuid, column: Column) -> R
         T: rocket_contrib::databases::postgres::types::FromSql
 {
     match row.get_opt::<usize, T>(index) {
-        None => return Err(SEError::DBError(NoDataForID, *id)),
+        None => return Err(SEError::DBError(NoDataForID, id.to_string())),
         Some(data) => {
             match data {
                 Ok(v) => Ok(v),
-                Err(_) => return Err(SEError::DBErrorWC(NoDataForID, *id, column))
+                Err(_) => return Err(SEError::DBErrorWC(NoDataForID, id.to_string(), column))
             }
         }
     }

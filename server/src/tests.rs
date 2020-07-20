@@ -15,8 +15,9 @@ mod tests {
 
     // test ecdsa::sign can be performed only by authorised user
     #[test]
+    #[serial]
     fn test_auth_token() {
-        let client = Client::new(server::get_server()).expect("valid rocket instance");
+        let client = Client::new(server::get_server().unwrap()).expect("valid rocket instance");
         // get ID
         let deposit_msg1 = DepositMsg1{
             auth: String::from("auth"),
@@ -51,8 +52,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_err_get_statechain() {
-        let client = Client::new(server::get_server()).expect("valid rocket instance");
+        let client = Client::new(server::get_server().unwrap()).expect("valid rocket instance");
 
         // get_statechain invalid id
         let invalid_id = Uuid::new_v4();
@@ -73,12 +75,13 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_err_get_smt_proof() {
-        let client = Client::new(server::get_server()).expect("valid rocket instance");
+        let client = Client::new(server::get_server().unwrap()).expect("valid rocket instance");
 
         // None root
         let smt_proof_msg = SmtProofMsgAPI {
-            root: Root {id:0, value: None},
+            root: Root::from(Some(0), None, &None).unwrap(),
             funding_txid: String::from("c1562f7f15d6b8a51ea2e7035b9cdb8c6c0c41fecb62d459a3a6bf738ff0db0e")
         };
         let body = serde_json::to_string(&smt_proof_msg).unwrap();
@@ -88,18 +91,30 @@ mod tests {
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();
-        assert_eq!(res, format!("DB Error: No data for identifier. (id: Root id: {})",smt_proof_msg.root.id));
+        assert_eq!(res, format!("DB Error: No data for identifier. (id: Root id: {})",smt_proof_msg.root.id().unwrap()));
 
         // invalid root for tree
+        // first push a random root to tree
+
+        //update_root(db, mc);
+
+
         let mut response = client   // first grab current root id
         .post(format!("/info/root"))
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();
-        let current_root: Root = serde_json::from_str(&res).unwrap();
+        let current_root: Option<Root> = serde_json::from_str(&res).expect(&format!("Error from body string {}",&res));
+
+        let id = match current_root{
+            Some(r) => r.id().unwrap(),
+            None => 0
+        };
+
+        let proof_msg_id = Some(id+1);
 
         let smt_proof_msg = SmtProofMsgAPI {
-            root: Root {id: current_root.id+1, value: Some([1;32])},    // alter ID to become invalid
+            root: Root::from(proof_msg_id, Some([1;32]), &None).unwrap(),// alter ID to become invalid
             funding_txid: String::from("c1562f7f15d6b8a51ea2e7035b9cdb8c6c0c41fecb62d459a3a6bf738ff0db0e")
         };
         let body = serde_json::to_string(&smt_proof_msg).unwrap();
@@ -109,7 +124,8 @@ mod tests {
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();
-        assert_eq!(res, format!("DB Error: No data for identifier. (id: Root id: {})",smt_proof_msg.root.id));
+
+        assert_eq!(res, format!("DB Error: No data for identifier. (id: Root id: {})",smt_proof_msg.root.id().unwrap()));
 
         // Invalid data sent in body - should be of type SmtProofMsgAPI
         let body = String::from("Body String");
@@ -123,8 +139,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_err_get_transfer_batch_status() {
-        let client = Client::new(server::get_server()).expect("valid rocket instance");
+        let client = Client::new(server::get_server().unwrap()).expect("valid rocket instance");
 
         // get_transfer_batch_status invalid id
         let invalid_id = Uuid::new_v4();
@@ -145,8 +162,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_get_state_entity_fees() {
-        let client = Client::new(server::get_server()).expect("valid rocket instance");
+        let client = Client::new(server::get_server().unwrap()).expect("valid rocket instance");
 
         let mut response = client
             .post("/info/fee")

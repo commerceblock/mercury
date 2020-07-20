@@ -76,11 +76,11 @@ fn main() {
                 }
                 println!();
             }
-            let (ids, _, bals) = wallet.get_state_chains_info();
-            if ids.len() > 0 {
-                println!("\n\nState Entity balance: \n\nShared Key ID:\t\t\t\t\tConfirmed:\tUnconfirmed:");
+            let (_, state_chain_ids, bals) = wallet.get_state_chains_info();
+            if state_chain_ids.len() > 0 {
+                println!("\n\nState Entity balance: \n\nStateChain ID:\t\t\t\t\tConfirmed:\tUnconfirmed:");
                 for (i,bal) in bals.into_iter().enumerate() {
-                    println!("{}\t\t{}\t\t{}", ids[i], bal.confirmed, bal.unconfirmed);
+                    println!("{}\t\t{}\t\t{}", state_chain_ids[i], bal.confirmed, bal.unconfirmed);
                 }
                 println!();
             }
@@ -113,14 +113,14 @@ fn main() {
         } else if matches.is_present("deposit") {
             if let Some(matches) = matches.subcommand_matches("deposit") {
                 let amount: &str = matches.value_of("amount").unwrap();
-                let (shared_key_id, state_chain_id, funding_txid, tx_b, _, _) = state_entity::deposit::deposit(
+                let (_, state_chain_id, funding_txid, tx_b, _, _) = state_entity::deposit::deposit(
                     &mut wallet,
                     &amount.to_string().parse::<u64>().unwrap(),
                 ).unwrap();
                 wallet.save();
                 println!(
-                    "\nNetwork: [{}], \n\nDeposited {} satoshi's. \nShared Key ID: {} \nState Chain ID: {}",
-                    network, amount, shared_key_id, state_chain_id
+                    "\nNetwork: [{}], \n\nDeposited {} satoshi's. \nState Chain ID: {}",
+                    network, amount, state_chain_id
                 );
                 println!("\nFunding Txid: {}",funding_txid);
                 println!("\nBackup Transaction hex: {}",hex::encode(consensus::serialize(&tx_b)));
@@ -128,14 +128,14 @@ fn main() {
 
         } else if matches.is_present("withdraw") {
             if let Some(matches) = matches.subcommand_matches("withdraw") {
-                let shared_key_id: &str = matches.value_of("key").unwrap();
+                let shared_key_id: &str = matches.value_of("id").unwrap();
                 let (txid, state_chain_id, amount) = state_entity::withdraw::withdraw(
                     &mut wallet,
                     &Uuid::from_str(&shared_key_id).unwrap()
                 ).unwrap();
                 wallet.save();
                 println!(
-                    "\nNetwork: [{}], \nWithdrawn {} satoshi's. \nFrom State Chain ID: {}",
+                    "\nNetwork: [{}], \nWithdrawn {} satoshi's. \nFrom StateChain ID: {}",
                     network, amount, state_chain_id
                 );
 
@@ -144,7 +144,7 @@ fn main() {
 
         } else if matches.is_present("transfer-sender") {
             if let Some(matches) = matches.subcommand_matches("transfer-sender") {
-                let shared_key_id: &str = matches.value_of("key").unwrap();
+                let shared_key_id: &str = matches.value_of("id").unwrap();
                 let receiver_addr: StateEntityAddress = serde_json::from_str(matches.value_of("addr").unwrap()).unwrap();
                 let transfer_msg = state_entity::transfer::transfer_sender(
                     &mut wallet,
@@ -153,7 +153,7 @@ fn main() {
                 ).unwrap();
                 wallet.save();
                 println!(
-                    "\nNetwork: [{}], \n\nTransfer initiated for Shared Key ID: {}.",
+                    "\nNetwork: [{}], \n\nTransfer initiated for StateChain ID: {}.",
                     network, shared_key_id
                 );
                 println!("\nTransfer message: {:?}",serde_json::to_string(&transfer_msg).unwrap());
@@ -169,8 +169,8 @@ fn main() {
                 ).unwrap();
                 wallet.save();
                 println!(
-                    "\nNetwork: [{}], \n\nTransfer complete for Shared Key ID: {}.",
-                    network, finalized_data.new_shared_key_id
+                    "\nNetwork: [{}], \n\nTransfer complete for StateChain ID: {}.",
+                    network, finalized_data.state_chain_id
                 );
             }
 
@@ -240,13 +240,13 @@ fn main() {
                     &Uuid::from_str(&id).unwrap()
                 ).unwrap();
                 println!(
-                    "\nState Chain with Id {} info: \n",
+                    "\nStateChain with Id {} info: \n",
                     id
                 );
 
-                println!("utxo:\n\ttxid: {},\n\tvout: {}\namount: {}",
-                    state_chain_info.utxo.txid, state_chain_info.utxo.vout, state_chain_info.amount);
-                println!("State Chain: ");
+                println!("amount: {}\nutxo:\n\ttxid: {},\n\tvout: {}",
+                    state_chain_info.amount, state_chain_info.utxo.txid, state_chain_info.utxo.vout);
+                println!("StateChain: ");
                 for state in state_chain_info.chain.clone() {
                     println!("\t{:?}",state);
                 }
