@@ -414,7 +414,7 @@ pub fn get_confirmed_root(
                                         ) {
                                             Ok(ci) => {
                                                 let mut root = Root::from_commitment_info(ci);
-                                                root.set_id(&(id as u32));
+                                                root.set_id(&id);
                                                 //Latest confirmed commitment found. Updating db
                                                 return match db_root_update(conn, &root) {
                                                     Ok(_) => Ok(Some(root)),
@@ -456,7 +456,7 @@ pub fn get_confirmed_root(
 }
 
 // Update the database and the mainstay slot with the SMT root, if applicable
-pub fn root_update(conn: &Connection, _mc: &Option<mainstay::Config>, root: &Root) -> Result<u32> {
+pub fn root_update(conn: &Connection, _mc: &Option<mainstay::Config>, root: &Root) -> Result<i64> {
     // db_root_update_mainstay(mc, root)?;
     let id = db_root_update(conn, root)?;
     Ok(id)
@@ -474,7 +474,7 @@ fn db_root_update_mainstay(config: &Option<mainstay::Config>, root: &Root) -> Re
 }
 
 /// Update root value in DB. Update root with ID or insert new DB item.
-fn db_root_update(conn: &Connection, rt: &Root) -> Result<u32> {
+fn db_root_update(conn: &Connection, rt: &Root) -> Result<i64> {
     let mut root = rt.clone();
     // Get previous ID, or use the one specified in root to update an existing root with mainstay proof
     let id = match root.id() {
@@ -499,7 +499,7 @@ fn db_root_update(conn: &Connection, rt: &Root) -> Result<u32> {
         // new root, update id
         None => {
             match db_root_get_current_id(conn) {
-                Ok(id) => (id + 1) as u32,
+                Ok(id) => id + 1,
                 Err(_) => 1, // No roots in DB
             }
         }
@@ -556,7 +556,7 @@ pub fn db_root_get(conn: &Connection, id: &i64) -> Result<Option<Root>> {
     let row = rows.get(0);
 
     let id = match get_item_from_row::<i64>(&row, 0, &id.to_string(), Column::Id) {
-        Ok(v) => v as u32,
+        Ok(v) => v,
         Err(_) => {
             // No root in table yet. Return None
             return Ok(None);

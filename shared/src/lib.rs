@@ -37,14 +37,14 @@ use crate::mainstay::{Attestable, Commitment, CommitmentInfo};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Root {
-    id: Option<u32>,
+    id: Option<i64>,
     value: Option<Hash>,
     commitment_info: Option<CommitmentInfo>,
 }
 
 impl Root {
     pub fn from(
-        id: Option<u32>,
+        id: Option<i64>,
         value: Option<Hash>,
         commitment_info: &Option<CommitmentInfo>,
     ) -> Result<Self> {
@@ -82,11 +82,11 @@ impl Root {
         }
     }
 
-    pub fn set_id(&mut self, id: &u32) {
+    pub fn set_id(&mut self, id: &i64) {
         self.id = Some(*id);
     }
 
-    pub fn id(&self) -> Option<u32> {
+    pub fn id(&self) -> Option<i64> {
         self.id
     }
 

@@ -33,7 +33,7 @@
   write_dbid_to_manifest=false
   atomic_flush=false
   max_subcompactions=1
-  wal_dir=../server/db-smt
+  wal_dir=./db-test
   max_total_wal_size=0
   db_write_buffer_size=0
   avoid_flush_during_shutdown=false
