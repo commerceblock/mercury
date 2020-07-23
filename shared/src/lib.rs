@@ -6,7 +6,6 @@ extern crate hex;
 extern crate kms;
 extern crate rocket;
 extern crate rocket_contrib;
-extern crate rocksdb;
 extern crate uuid;
 
 #[macro_use]

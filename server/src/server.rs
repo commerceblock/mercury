@@ -1,11 +1,9 @@
 use super::routes::*;
-use super::storage::db;
 use super::{AuthConfig, Config};
 
 use config;
 use rocket;
 use rocket::{Request, Rocket};
-use rocksdb;
 use shared_lib::mainstay;
 
 use log::LevelFilter;
@@ -20,7 +18,6 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 impl Config {
     pub fn load(settings: HashMap<String, String>) -> Result<Config> {
-        let db = get_db(settings.clone())?;
         let fee_address = settings.get("fee_address").unwrap().to_string();
         if let Err(e) = bitcoin::Address::from_str(&fee_address) {
             panic!("Invalid fee address: {}", e)
@@ -42,7 +39,6 @@ impl Config {
         }
 
         Ok(Config {
-            db,
             electrum_server: settings.get("electrum_server").unwrap().to_string(),
             network: settings.get("network").unwrap().to_string(),
             testing_mode,
@@ -158,15 +154,6 @@ fn get_settings_as_map() -> HashMap<String, String> {
         .unwrap();
 
     settings.try_into::<HashMap<String, String>>().unwrap()
-}
-
-fn get_db(_settings: HashMap<String, String>) -> Result<rocksdb::DB> {
-    // let env = settings
-    //     .get("env")
-    //     .unwrap_or(&"dev".to_string())
-    //     .to_string();
-
-    Ok(rocksdb::DB::open_default(db::DB_LOC)?)
 }
 
 fn set_logging_config(log_file: Option<&String>) {

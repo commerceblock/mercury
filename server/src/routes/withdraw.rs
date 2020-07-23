@@ -2,16 +2,16 @@
 //!
 //! StateEntity Withdraw protocol.
 
-use super::super::{Config, Result};
+use super::{
+    super::{Config, Result},
+    util::update_smt_db,
+};
 extern crate shared_lib;
-use shared_lib::{state_chain::*, structs::*, Root};
+use shared_lib::{state_chain::*, structs::*};
 
 use crate::error::SEError;
 use crate::routes::util::check_user_auth;
-use crate::storage::{
-    db::{get_current_root, update_root, DB_SC_LOC},
-    db_postgres::{db_deser, db_get_1, db_get_3, db_ser, db_update, Column, Table},
-};
+use crate::storage::db_postgres::{db_deser, db_get_1, db_get_3, db_ser, db_update, Column, Table};
 use crate::DataBase;
 
 use bitcoin::Transaction;
@@ -131,19 +131,27 @@ pub fn withdraw_confirm(
     )?;
 
     // Update sparse merkle tree
-    let funding_txid = tx_withdraw
-        .input
-        .get(0)
-        .unwrap()
-        .previous_output
-        .txid
-        .to_string();
+    let (new_root, prev_root) = update_smt_db(
+        &conn,
+        &state.mainstay_config,
+        &tx_withdraw
+            .input
+            .get(0)
+            .unwrap()
+            .previous_output
+            .txid
+            .to_string(),
+        &withdraw_msg2.address,
+    )?;
 
-    let root = get_current_root::<Root>(&state.db)?.map(|r| r.hash());
-    let mut new_root = Root::from_hash(
-        &update_statechain_smt(DB_SC_LOC, &root, &funding_txid, &withdraw_msg2.address)?.unwrap(),
+    info!(
+        "WITHDRAW: Address included in sparse merkle tree. State Chain ID: {}",
+        state_chain_id
     );
-    update_root(&state.db, &state.mainstay_config, &mut new_root)?;
+    debug!(
+        "WITHDRAW: State Chain ID: {}. New root: {:?}. Previous root: {:?}.",
+        state_chain_id, &new_root, &prev_root
+    );
 
     info!(
         "WITHDRAW: Complete. Shared Key ID: {}. State Chain: {}",

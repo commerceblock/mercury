@@ -26,7 +26,7 @@ use monotree::{
 };
 
 use chrono::{Duration, NaiveDateTime, Utc};
-use std::{convert::TryInto, str::FromStr};
+use std::{convert::TryInto, panic::AssertUnwindSafe, str::FromStr};
 
 /// A list of States in which each State signs for the next State.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -170,7 +170,17 @@ pub fn update_statechain_smt(
 
     // update smt
     let mut tree = Monotree::<RocksDB, Blake2b>::new(sc_db_loc);
-    let new_root = tree.insert(root.as_ref(), key, entry)?;
+
+    use std::panic;
+
+    let mut new_root: Option<[u8; 32]> = None;
+    let result = panic::catch_unwind(AssertUnwindSafe(|| {
+        new_root = tree.insert(root.as_ref(), key, entry).unwrap();
+    }));
+
+    if let Err(_) = result {
+        return Err(SharedLibError::Generic(String::from("SMT insert failure. Probably caused by Root provided not being correct.")))
+    }
 
     Ok(new_root)
 }

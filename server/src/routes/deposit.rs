@@ -2,10 +2,9 @@
 //!
 //! StateEntity Deposit protocol.
 
-use super::super::{
-    auth::jwt::Claims,
-    storage::db,
-    {Config, Result},
+use super::{
+    super::{Config, Result},
+    util::update_smt_db,
 };
 extern crate shared_lib;
 use crate::error::SEError;
@@ -14,11 +13,10 @@ use crate::storage::db_postgres::{
 };
 use crate::DataBase;
 use bitcoin::Transaction;
-use shared_lib::{mocks::mock_electrum::MockElectrum, state_chain::*, structs::*, util::FEE, Root};
+use shared_lib::{mocks::mock_electrum::MockElectrum, state_chain::*, structs::*, util::FEE};
 
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
 
-use db::{get_current_root, update_root, DB_SC_LOC};
 use rocket::State;
 use rocket_contrib::json::Json;
 use std::{thread, time::Duration};
@@ -120,7 +118,6 @@ pub fn verify_tx_confirmed(txid: &String, state: &State<Config>) -> Result<()> {
 #[post("/deposit/confirm", format = "json", data = "<deposit_msg2>")]
 pub fn deposit_confirm(
     state: State<Config>,
-    _claim: Claims,
     conn: DataBase,
     deposit_msg2: Json<DepositMsg2>,
 ) -> Result<Json<Uuid>> {
@@ -187,11 +184,9 @@ pub fn deposit_confirm(
     );
 
     // Update sparse merkle tree with new StateChain entry
-    let root = get_current_root::<Root>(&state.db)?.map(|r| r.hash());
-
-    let new_root_hash = &update_statechain_smt(
-        DB_SC_LOC,
-        &root,
+    let (new_root, current_root) = update_smt_db(
+        &conn,
+        &state.mainstay_config,
         &tx_backup
             .input
             .get(0)
@@ -202,17 +197,13 @@ pub fn deposit_confirm(
         &proof_key,
     )?;
 
-    let new_root = Root::from_hash(&new_root_hash.unwrap());
-
-    update_root(&state.db, &state.mainstay_config, &new_root)?;
-
     info!(
         "DEPOSIT: Included in sparse merkle tree. State Chain ID: {}",
         state_chain_id
     );
     debug!(
         "DEPOSIT: State Chain ID: {}. New root: {:?}. Previous root: {:?}.",
-        state_chain_id, new_root, root
+        state_chain_id, new_root, current_root
     );
 
     // Update UserSession with StateChain's ID

@@ -28,7 +28,6 @@ extern crate shared_lib;
 
 pub mod ecdsa;
 pub mod error;
-pub mod schnorr;
 pub mod state_entity;
 pub mod wallet;
 

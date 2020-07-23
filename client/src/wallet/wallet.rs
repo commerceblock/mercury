@@ -523,9 +523,9 @@ impl Wallet {
         aggregated_balance
     }
 
-    /// Return balances of unspent shared keys
+    /// Return balances of unspent state chains
     pub fn get_state_chains_info(&self) -> (Vec<Uuid>, Vec<Uuid>, Vec<GetBalanceResponse>) {
-        let mut state_chain_key_ids: Vec<Uuid> = vec![];
+        let mut shared_key_ids: Vec<Uuid> = vec![];
         let mut state_chain_ids: Vec<Uuid> = vec![];
         let mut state_chain_balances: Vec<GetBalanceResponse> = vec![];
         for shared_key in &self.shared_keys {
@@ -534,13 +534,13 @@ impl Wallet {
                     confirmed: shared_key.value,
                     unconfirmed: 0,
                 });
-                state_chain_key_ids.push(shared_key.id.to_owned());
+                shared_key_ids.push(shared_key.id.to_owned());
                 if shared_key.state_chain_id.is_some() {
                     state_chain_ids.push(shared_key.state_chain_id.clone().unwrap());
                 }
             }
         }
-        (state_chain_key_ids, state_chain_ids, state_chain_balances)
+        (shared_key_ids, state_chain_ids, state_chain_balances)
     }
 
     /// List unspent outputs for addresses derived by this wallet.

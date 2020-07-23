@@ -175,9 +175,7 @@ mod tests {
             receiver_addr.clone(),
         ) {
             Err(e) => {
-                assert!(e
-                    .to_string()
-                    .contains("StateChain not found in wallet derivation path"));
+                assert!(e.to_string().contains("State Chain not owned by User ID:"));
             }
             _ => assert!(false),
         }

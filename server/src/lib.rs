@@ -10,7 +10,6 @@ extern crate config;
 extern crate curv;
 extern crate kms;
 extern crate multi_party_ecdsa;
-extern crate rocksdb;
 extern crate uuid;
 extern crate zk_paillier;
 #[macro_use]
@@ -42,7 +41,6 @@ use shared_lib::mainstay;
 #[macro_use]
 extern crate serial_test;
 
-pub mod auth;
 pub mod error;
 pub mod routes;
 pub mod server;
@@ -56,7 +54,6 @@ use rocket_contrib::databases::postgres;
 pub struct DataBase(postgres::Connection);
 
 pub struct Config {
-    pub db: rocksdb::DB,
     pub electrum_server: String,
     pub network: String,
     pub testing_mode: bool,  // set for testing mode

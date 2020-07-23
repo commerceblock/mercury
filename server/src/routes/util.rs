@@ -2,12 +2,10 @@
 //!
 //! StateEntity protocol utilities. DB structs, info api calls and other miscellaneous functions
 
-use super::super::{
-    storage::db,
-    {Config, Result},
-};
+use super::super::{Config, Result};
 extern crate shared_lib;
 use shared_lib::{
+    mainstay,
     state_chain::*,
     structs::*,
     util::{get_sighash, tx_backup_verify, tx_withdraw_verify},
@@ -16,11 +14,9 @@ use shared_lib::{
 
 use crate::error::{DBErrorType, SEError};
 use crate::routes::transfer::finalize_batch;
-use crate::storage::{
-    db::{get_current_root, get_root},
-    db_postgres::{
-        db_deser, db_get_1, db_get_2, db_get_3, db_remove, db_ser, db_update, Column, Table,
-    },
+use crate::storage::db_postgres::{
+    self, db_deser, db_get_1, db_get_2, db_get_3, db_remove, db_root_get, db_root_get_current_id,
+    db_ser, db_update, Column, Table, DB_SC_LOC,
 };
 use crate::DataBase;
 
@@ -28,8 +24,9 @@ use bitcoin::{hashes::sha256d, Transaction};
 
 use chrono::{NaiveDateTime, Utc};
 use curv::FE;
-use db::DB_SC_LOC;
+use db_postgres::root_update;
 use monotree::Proof;
+use postgres::Connection;
 use rocket::State;
 use rocket_contrib::json::Json;
 use std::{collections::HashMap, str::FromStr, time::SystemTime};
@@ -43,11 +40,11 @@ pub enum StateEntityStruct {
     TransferData,
     TransferBatchData,
 }
-impl db::MPCStruct for StateEntityStruct {
-    fn to_string(&self) -> String {
-        format!("StateChain{:?}", self)
-    }
-}
+// impl db::MPCStruct for StateEntityStruct {
+//     fn to_string(&self) -> String {
+//         format!("StateChain{:?}", self)
+//     }
+// }
 
 /// UserSession represents a User in a particular state chain session.
 /// The same client co-owning 2 distinct UTXOs wth the state entity would have 2 unrelated UserSession's.
@@ -163,6 +160,23 @@ pub fn state_chain_punish(
     Ok(())
 }
 
+/// Update SMT with new (key: value) pair and update current root value
+pub fn update_smt_db(
+    conn: &Connection,
+    mc: &Option<mainstay::Config>,
+    funding_txid: &String,
+    proof_key: &String,
+) -> Result<(Option<Root>, Root)> {
+    let current_root = db_root_get(&conn, &db_root_get_current_id(&conn)?)?;
+    let new_root_hash =
+        update_statechain_smt(DB_SC_LOC, &current_root.clone().map(|r| r.hash()), funding_txid, proof_key)?;
+
+    let new_root = Root::from_hash(&new_root_hash.unwrap());
+    root_update(&conn, mc, &new_root)?; // Update current root
+
+    Ok((current_root, new_root))
+}
+
 /// API: Return StateEntity fee information.
 #[post("/info/fee", format = "json")]
 pub fn get_state_entity_fees(state: State<Config>) -> Result<Json<StateEntityFeeInfoAPI>> {
@@ -206,13 +220,13 @@ pub fn get_statechain(conn: DataBase, state_chain_id: String) -> Result<Json<Sta
 /// API: Generates sparse merkle tree inclusion proof for some key in a tree with some root.
 #[post("/info/proof", format = "json", data = "<smt_proof_msg>")]
 pub fn get_smt_proof(
-    state: State<Config>,
+    conn: DataBase,
     smt_proof_msg: Json<SmtProofMsgAPI>,
 ) -> Result<Json<Option<Proof>>> {
     // ensure root exists
     match &smt_proof_msg.root.id() {
         Some(id) => {
-            if get_root::<Root>(&state.db, id)?.is_none() {
+            if db_root_get(&conn, &(id.clone() as i64))?.is_none() {
                 return Err(SEError::DBError(
                     DBErrorType::NoDataForID,
                     format!("Root id: {:?}", id),
@@ -236,15 +250,16 @@ pub fn get_smt_proof(
 
 /// API: Get root of sparse merkle tree. Will be via Mainstay in the future.
 #[post("/info/root", format = "json")]
-pub fn get_smt_root(state: State<Config>) -> Result<Json<Option<Root>>> {
-    Ok(Json(get_current_root::<Root>(&state.db)?))
+pub fn get_smt_root(conn: DataBase) -> Result<Json<Option<Root>>> {
+    Ok(Json(db_root_get(&conn, &db_root_get_current_id(&conn)?)?))
 }
 
 /// API: Get root of sparse merkle tree. Will be via Mainstay in the future.
 #[post("/info/confirmed_root", format = "json")]
-pub fn get_confirmed_smt_root(state: State<Config>) -> Result<Json<Option<Root>>> {
-    Ok(Json(db::get_confirmed_root(
-        &state.db,
+// pub fn get_confirmed_smt_root(state: State<Config>) -> Result<Json<Option<Root>>> {
+pub fn get_confirmed_smt_root(conn: DataBase, state: State<Config>) -> Result<Json<Option<Root>>> {
+    Ok(Json(db_postgres::get_confirmed_root(
+        &conn,
         &state.mainstay_config,
     )?))
 }

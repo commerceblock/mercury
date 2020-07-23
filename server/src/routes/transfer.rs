@@ -2,22 +2,16 @@
 //!
 //! StateEntity Transfer and batch-transfer protocols.
 
-use super::super::{
-    storage::db,
-    {Config, DataBase, Result},
-};
+use super::super::{Config, DataBase, Result};
 
 extern crate shared_lib;
 use crate::error::SEError;
 use crate::routes::util::*;
-use crate::storage::{
-    db::get_current_root,
-    db_postgres::{
-        db_deser, db_get_1, db_get_2, db_get_3, db_get_4, db_insert, db_remove, db_ser, db_update,
-        Column, Table,
-    },
+use crate::storage::db_postgres::{
+    db_deser, db_get_1, db_get_2, db_get_3, db_get_4, db_insert, db_remove, db_ser, db_update,
+    Column, Table,
 };
-use shared_lib::{commitment::verify_commitment, state_chain::*, structs::*, Root};
+use shared_lib::{commitment::verify_commitment, state_chain::*, structs::*};
 
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 
@@ -26,7 +20,6 @@ use curv::{
     elliptic::curves::traits::{ECPoint, ECScalar},
     {BigInt, FE, GE},
 };
-use db::{update_root, DB_SC_LOC};
 use rocket::State;
 use rocket_contrib::json::Json;
 use std::{collections::HashMap, str::FromStr};
@@ -324,26 +317,24 @@ pub fn transfer_finalize(
     );
 
     // Update sparse merkle tree with new StateChain entry
-    let funding_txid = finalized_data
-        .new_tx_backup
-        .input
-        .get(0)
-        .unwrap()
-        .previous_output
-        .txid
-        .to_string();
-    let proof_key = state_chain
-        .chain
-        .last()
-        .ok_or(SEError::Generic(String::from("StateChain empty")))?
-        .data
-        .clone();
-
-    let root = get_current_root::<Root>(&state.db)?.map(|r| r.hash());
-    let mut new_root = Root::from_hash(
-        &update_statechain_smt(DB_SC_LOC, &root, &funding_txid, &proof_key)?.unwrap(),
-    );
-    update_root(&state.db, &state.mainstay_config, &mut new_root)?;
+    let (new_root, prev_root) = update_smt_db(
+        &conn,
+        &state.mainstay_config,
+        &finalized_data
+            .new_tx_backup
+            .input
+            .get(0)
+            .unwrap()
+            .previous_output
+            .txid
+            .to_string(),
+        &state_chain
+            .chain
+            .last()
+            .ok_or(SEError::Generic(String::from("StateChain empty")))?
+            .data
+            .clone(),
+    )?;
 
     info!(
         "TRANSFER: Included in sparse merkle tree. State Chain ID: {}",
@@ -351,7 +342,7 @@ pub fn transfer_finalize(
     );
     debug!(
         "TRANSFER: State Chain ID: {}. New root: {:?}. Previous root: {:?}.",
-        state_chain_id, &new_root, &root
+        state_chain_id, &new_root, &prev_root
     );
 
     // Remove TransferData for this transfer

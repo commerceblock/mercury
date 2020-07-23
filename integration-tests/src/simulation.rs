@@ -68,7 +68,7 @@ pub fn random_transfer(wallets: &mut Vec<Wallet>) {
     }
     // Pick random state chain to transfer
     let state_chain_index = rand::thread_rng().gen_range(0, state_chains_info.0.len());
-    let shared_key_id = state_chains_info.0.get(state_chain_index).unwrap();
+    let state_chain_id = state_chains_info.1.get(state_chain_index).unwrap();
 
     println!(
         "\nTransfer {} between {} and {}.",
@@ -81,18 +81,18 @@ pub fn random_transfer(wallets: &mut Vec<Wallet>) {
         receiver_index
     );
 
-    let new_shared_key_id = run_transfer(wallets, sender_index, receiver_index, &shared_key_id);
+    let _ = run_transfer(wallets, sender_index, receiver_index, &state_chain_id);
 
     // Check shared key is marked spent in sender and unspent in sender
     assert!(
         !wallets[sender_index]
-            .get_shared_key(shared_key_id)
+            .get_shared_key_by_state_chain_id(state_chain_id)
             .unwrap()
             .unspent
     );
     assert!(
         wallets[receiver_index]
-            .get_shared_key(&new_shared_key_id)
+            .get_shared_key_by_state_chain_id(state_chain_id)
             .unwrap()
             .unspent
     );
@@ -108,7 +108,10 @@ pub fn random_withdraw(wallets: &mut Vec<Wallet>) {
         return;
     }
     let state_chain_index = rand::thread_rng().gen_range(0, state_chains_info.0.len());
-    let shared_key_id = state_chains_info.0.get(state_chain_index).unwrap();
+    let state_chain_id = state_chains_info
+        .1
+        .get(rand::thread_rng().gen_range(0, state_chains_info.0.len()))
+        .unwrap();
 
     println!(
         "\nWithdraw {} from wallet {}.",
@@ -120,12 +123,12 @@ pub fn random_withdraw(wallets: &mut Vec<Wallet>) {
         wallet_index
     );
 
-    run_withdraw(&mut wallets[wallet_index], &shared_key_id);
+    run_withdraw(&mut wallets[wallet_index], &state_chain_id);
 
     // Check marked spent in wallet
     assert!(
         !wallets[wallet_index]
-            .get_shared_key(&shared_key_id)
+            .get_shared_key_by_state_chain_id(&state_chain_id)
             .unwrap()
             .unspent
     );

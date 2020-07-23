@@ -76,9 +76,15 @@ pub fn spawn_server() -> Result<(), SpawnError> {
 
     // Rocket server is blocking, so we spawn a new thread.
     thread::spawn(move || {
-        tx.send(match server::get_server() {
-            Ok(s) => (s.launch().into()),
-            Err(_) => SpawnError::GetServer,
+        tx.send({
+            match server::get_server() {
+                Ok(s) => {
+                    let try_launch = s.launch();
+                    let _ = try_launch.kind(); // LaunchError needs to be accessed here for this to work. Be carfeul modifying this code.
+                    try_launch.into()
+                }
+                Err(_) => SpawnError::GetServer,
+            }
         })
     });
 
