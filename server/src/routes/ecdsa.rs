@@ -1,9 +1,9 @@
-use super::super::{storage::db, Result};
+use super::super::Result;
 
 use crate::error::SEError;
 use crate::{
     routes::util::check_user_auth,
-    storage::db_postgres::{
+    storage::db::{
         db_deser, db_get_1, db_get_2, db_get_3, db_get_4, db_insert, db_ser, db_update, Column,
         Table,
     },
@@ -76,11 +76,11 @@ pub enum EcdsaStruct {
     POS,
 }
 
-impl db::MPCStruct for EcdsaStruct {
-    fn to_string(&self) -> String {
-        format!("{:?}", self)
-    }
-}
+// impl db::MPCStruct for EcdsaStruct {
+//     fn to_string(&self) -> String {
+//         format!("{:?}", self)
+//     }
+// }
 
 #[post("/ecdsa/keygen/<id>/first/<protocol>", format = "json")]
 pub fn first_message(

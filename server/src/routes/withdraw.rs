@@ -11,7 +11,7 @@ use shared_lib::{state_chain::*, structs::*};
 
 use crate::error::SEError;
 use crate::routes::util::check_user_auth;
-use crate::storage::db_postgres::{db_deser, db_get_1, db_get_3, db_ser, db_update, Column, Table};
+use crate::storage::db::{db_deser, db_get_1, db_get_3, db_ser, db_update, Column, Table};
 use crate::DataBase;
 
 use bitcoin::Transaction;

@@ -1,105 +1,356 @@
+//! DB
+//!
+//! Postgres DB access and update tools.
+
 use super::super::Result;
-use crate::error::SEError;
-use crate::mainstay;
-use crate::mainstay::CommitmentInfo;
-use crate::shared_lib::mainstay::Attestable;
-use rocksdb::DB;
-use serde;
+use crate::error::{
+    DBErrorType::{NoDataForID, UpdateFailed},
+    SEError,
+};
+use mainstay::{Attestable, CommitmentInfo};
+use rocket_contrib::databases::postgres::{rows::Row, types::ToSql, Connection};
+use shared_lib::mainstay;
 use shared_lib::Root;
-#[allow(unused_imports)]
-use std::str::FromStr;
+use uuid::Uuid;
 
-static ROOTID: &str = "rootid";
-pub static DB_LOC: &str = "./db";
-pub static DB_SC_LOC: &str = "./db-statechain";
+pub static DB_SC_LOC: &str = "../server/db-smt";
 
-pub trait MPCStruct {
-    fn to_string(&self) -> String;
-    fn to_table_name(&self, env: &str) -> String {
-        format!("{}_{}", env, self.to_string())
-    }
-
-    fn require_customer_id(&self) -> bool {
-        true
+#[derive(Debug)]
+pub enum Schema {
+    StateChainEntity,
+    Watcher,
+}
+impl Schema {
+    pub fn to_string(&self) -> String {
+        format!("{:?}", self)
     }
 }
 
-fn idify(user_id: &str, id: &str, name: &dyn MPCStruct) -> String {
-    format!("{}_{}_{}", user_id, id, name.to_string())
+#[derive(Debug)]
+pub enum Table {
+    Testing,
+    Ecdsa,
+    UserSession,
+    StateChain,
+    BackupTxs,
+    Transfer,
+    TransferBatch,
+    Root,
+    CurrentRoot,
+}
+impl Table {
+    fn to_string(&self) -> String {
+        match self {
+            Table::BackupTxs => format!(
+                "{:?}.{:?}",
+                Schema::Watcher.to_string().to_lowercase(),
+                self
+            ),
+            _ => format!(
+                "{:?}.{:?}",
+                Schema::StateChainEntity.to_string().to_lowercase(),
+                self
+            ),
+        }
+    }
 }
 
-pub fn insert<T>(db: &DB, user_id: &str, id: &str, name: &dyn MPCStruct, v: T) -> Result<()>
+#[derive(Debug, Deserialize, Clone, Copy)]
+pub enum Column {
+    Data,
+    Complete,
+
+    // UserSession
+    Id,
+    Authentication,
+    ProofKey,
+    StateChainId,
+    TxBackup,
+    TxWithdraw,
+    SigHash,
+    S2,
+    WithdrawScSig,
+
+    // StateChain
+    // Id,
+    Chain,
+    Amount,
+    LockedUntil,
+    OwnerId,
+
+    // BackupTxs
+    //Id,
+    // TxBackup,
+
+    // Transfer
+    // Id,
+    StateChainSig,
+    X1,
+
+    // TransferBatch
+    // Id,
+    StartTime,
+    StateChains,
+    FinalizedData,
+    PunishedStateChains,
+    Finalized,
+
+    // Ecdsa
+    // Id,
+    KeyGenFirstMsg,
+    CommWitness,
+    EcKeyPair,
+    PaillierKeyPair,
+    Party1Private,
+    Party2Public,
+    PDLProver,
+    PDLDecommit,
+    Alpha,
+    Party2PDLFirstMsg,
+    Party1MasterKey,
+    EphEcKeyPair,
+    EphKeyGenFirstMsg,
+    POS,
+
+    // Root
+    // Id,
+    Value,
+    CommitmentInfo,
+}
+impl Column {
+    pub fn to_string(&self) -> String {
+        format!("{:?}", self)
+    }
+}
+
+/// Serialize data into string. To add custom types to Postgres they must be serialized to String.
+pub fn db_ser<T>(data: T) -> Result<String>
 where
     T: serde::ser::Serialize,
 {
-    let identifier = idify(user_id, id, name);
-    debug!("Inserting in db ({})", identifier);
-
-    insert_by_identifier(db, &identifier, v)
-}
-
-pub fn get<T>(db: &DB, user_id: &str, id: &str, name: &dyn MPCStruct) -> Result<Option<T>>
-where
-    T: serde::de::DeserializeOwned,
-{
-    let identifier = idify(user_id, id, name);
-    debug!("Getting from db ({})", identifier);
-
-    get_by_identifier(db, &identifier)
-}
-
-pub fn remove(db: &DB, user_id: &str, id: &str, name: &dyn MPCStruct) -> Result<()> {
-    let identifier = idify(user_id, id, name);
-    debug!("Getting from db ({})", identifier);
-
-    match db.delete(identifier) {
-        Err(e) => return Err(SEError::Generic(e.to_string())),
-        Ok(_) => Ok(()),
+    match serde_json::to_string(&data) {
+        Ok(v) => Ok(v),
+        Err(_) => Err(SEError::Generic(String::from("Failed to serialize data."))),
     }
 }
 
-fn idify_root(id: &u32) -> String {
-    format!("{}_{}", id, String::from("root"))
-}
-
-fn insert_by_identifier<T>(db: &DB, identifier: &str, item: T) -> Result<()>
-where
-    T: serde::ser::Serialize,
-{
-    let item_string = serde_json::to_string(&item).unwrap();
-    match db.put(&identifier, &item_string) {
-        Err(e) => Err(SEError::Generic(e.to_string())),
-        Ok(_) => Ok(()),
-    }
-}
-
-fn get_by_identifier<T>(db: &DB, identifier: &str) -> Result<Option<T>>
+/// Deserialize custom type data from string. Reverse of db_ser().
+pub fn db_deser<T>(data: String) -> Result<T>
 where
     T: serde::de::DeserializeOwned,
 {
-    match db.get(identifier) {
-        Err(e) => return Err(SEError::Generic(e.to_string())),
-        Ok(res) => match res {
-            Some(vec) => match serde_json::from_slice(&vec) {
-                Ok(obj) => Ok(Some(obj)),
-                Err(e) => Err(SEError::Generic(e.to_string())),
-            },
-            None => return Ok(None),
+    match serde_json::from_str(&data) {
+        Ok(v) => Ok(v),
+        Err(_) => Err(SEError::Generic(String::from(
+            "Failed to deserialize string.",
+        ))),
+    }
+}
+
+// Create new item in table
+pub fn db_insert(conn: &Connection, id: &Uuid, table: Table) -> Result<u64> {
+    let statement = conn.prepare(&format!(
+        "INSERT INTO {} (id) VALUES ($1)",
+        table.to_string()
+    ))?;
+
+    Ok(statement.execute(&[id])?)
+}
+
+// Remove row in table
+pub fn db_remove(conn: &Connection, id: &Uuid, table: Table) -> Result<()> {
+    let statement = conn.prepare(&format!("DELETE FROM {} WHERE id = $1;", table.to_string()))?;
+    if statement.execute(&[&id])? == 0 {
+        return Err(SEError::DBError(UpdateFailed, id.to_string()));
+    }
+
+    Ok(())
+}
+
+/// Update items in table for some ID with PostgreSql data types (String, int, bool, Uuid, chrono::NaiveDateTime).
+pub fn db_update(
+    conn: &Connection,
+    id: &Uuid,
+    table: Table,
+    column: Vec<Column>,
+    data: Vec<&dyn ToSql>,
+) -> Result<()> {
+    let num_items = column.len();
+    let statement = conn.prepare(&format!(
+        "UPDATE {} SET {} WHERE id = ${}",
+        table.to_string(),
+        update_columns_str(column),
+        num_items + 1
+    ))?;
+
+    let mut owned_data = data.clone();
+    owned_data.push(id);
+
+    if statement.execute(&owned_data)? == 0 {
+        return Err(SEError::DBError(UpdateFailed, id.to_string()));
+    }
+
+    Ok(())
+}
+/// Returns str list of column names for SQL UPDATE prepare statement.
+fn update_columns_str(cols: Vec<Column>) -> String {
+    let cols_len = cols.len();
+    let mut str = "".to_owned();
+    for (i, col) in cols.iter().enumerate() {
+        str.push_str(&col.to_string());
+        str.push_str(&format!("=${}", i + 1));
+        if i != cols_len - 1 {
+            str.push_str(",");
+        }
+    }
+    str
+}
+
+/// Get items from table for some ID with PostgreSql data types (String, int, Uuid, bool, Uuid, chrono::NaiveDateTime).
+/// Err if ID not found. Return None if data item empty.
+fn db_get<T, U, V, W>(
+    conn: &Connection,
+    id: &Uuid,
+    table: Table,
+    column: Vec<Column>,
+) -> Result<(Option<T>, Option<U>, Option<V>, Option<W>)>
+where
+    T: rocket_contrib::databases::postgres::types::FromSql,
+    U: rocket_contrib::databases::postgres::types::FromSql,
+    V: rocket_contrib::databases::postgres::types::FromSql,
+    W: rocket_contrib::databases::postgres::types::FromSql,
+{
+    let num_items = column.len();
+    let statement = conn.prepare(&format!(
+        "SELECT {} FROM {} WHERE id = $1",
+        get_columns_str(&column),
+        table.to_string(),
+    ))?;
+
+    let rows = statement.query(&[id])?;
+    if rows.is_empty() {
+        return Err(SEError::DBError(NoDataForID, id.to_string()));
+    };
+    let row = rows.get(0);
+
+    let col1 = get_item_from_row::<T>(&row, 0, &id.to_string(), column[0])?;
+    if num_items == 1 {
+        return Ok((Some(col1), None, None, None));
+    }
+
+    let col2 = get_item_from_row::<U>(&row, 1, &id.to_string(), column[1])?;
+    if num_items == 2 {
+        return Ok((Some(col1), Some(col2), None, None));
+    }
+
+    let col3 = get_item_from_row::<V>(&row, 2, &id.to_string(), column[2])?;
+    if num_items == 3 {
+        return Ok((Some(col1), Some(col2), Some(col3), None));
+    }
+
+    let col4 = get_item_from_row::<W>(&row, 3, &id.to_string(), column[3])?;
+    if num_items == 4 {
+        return Ok((Some(col1), Some(col2), Some(col3), Some(col4)));
+    }
+
+    Ok((None, None, None, None))
+}
+/// Returns str list of column names for SQL SELECT query statement.
+pub fn get_columns_str(cols: &Vec<Column>) -> String {
+    let cols_len = cols.len();
+    let mut str = "".to_owned();
+    for (i, col) in cols.iter().enumerate() {
+        str.push_str(&col.to_string());
+        if i != cols_len - 1 {
+            str.push_str(",");
+        }
+    }
+    str
+}
+
+fn get_item_from_row<T>(row: &Row, index: usize, id: &String, column: Column) -> Result<T>
+where
+    T: rocket_contrib::databases::postgres::types::FromSql,
+{
+    match row.get_opt::<usize, T>(index) {
+        None => return Err(SEError::DBError(NoDataForID, id.to_string())),
+        Some(data) => match data {
+            Ok(v) => Ok(v),
+            Err(_) => return Err(SEError::DBErrorWC(NoDataForID, id.to_string(), column)),
         },
     }
 }
 
-//Update the database with the latest available mainstay attestation info
-pub fn get_confirmed_root(db: &DB, mc: &Option<mainstay::Config>) -> Result<Option<Root>> {
+/// Get 1 item from row in table. Err if ID not found. Return None if data item empty.
+pub fn db_get_1<T>(conn: &Connection, id: &Uuid, table: Table, column: Vec<Column>) -> Result<T>
+where
+    T: rocket_contrib::databases::postgres::types::FromSql,
+{
+    let (res, _, _, _) = db_get::<T, T, T, T>(conn, id, table, column)?;
+    Ok(res.unwrap()) // err returned from db_get if desired item is None
+}
+/// Get 2 items from row in table. Err if ID not found. Return None if data item empty.
+pub fn db_get_2<T, U>(
+    conn: &Connection,
+    id: &Uuid,
+    table: Table,
+    column: Vec<Column>,
+) -> Result<(T, U)>
+where
+    T: rocket_contrib::databases::postgres::types::FromSql,
+    U: rocket_contrib::databases::postgres::types::FromSql,
+{
+    let (res1, res2, _, _) = db_get::<T, U, U, U>(conn, id, table, column)?;
+    Ok((res1.unwrap(), res2.unwrap()))
+}
+/// Get 3 items from row in table. Err if ID not found. Return None if data item empty.
+pub fn db_get_3<T, U, V>(
+    conn: &Connection,
+    id: &Uuid,
+    table: Table,
+    column: Vec<Column>,
+) -> Result<(T, U, V)>
+where
+    T: rocket_contrib::databases::postgres::types::FromSql,
+    U: rocket_contrib::databases::postgres::types::FromSql,
+    V: rocket_contrib::databases::postgres::types::FromSql,
+{
+    let (res1, res2, res3, _) = db_get::<T, U, V, V>(conn, id, table, column)?;
+    Ok((res1.unwrap(), res2.unwrap(), res3.unwrap()))
+}
+/// Get 4 items from row in table. Err if ID not found. Return None if data item empty.
+pub fn db_get_4<T, U, V, W>(
+    conn: &Connection,
+    id: &Uuid,
+    table: Table,
+    column: Vec<Column>,
+) -> Result<(T, U, V, W)>
+where
+    T: rocket_contrib::databases::postgres::types::FromSql,
+    U: rocket_contrib::databases::postgres::types::FromSql,
+    V: rocket_contrib::databases::postgres::types::FromSql,
+    W: rocket_contrib::databases::postgres::types::FromSql,
+{
+    let (res1, res2, res3, res4) = db_get::<T, U, V, W>(conn, id, table, column)?;
+    Ok((res1.unwrap(), res2.unwrap(), res3.unwrap(), res4.unwrap()))
+}
+
+// Update the database with the latest available mainstay attestation info
+pub fn get_confirmed_root(
+    conn: &Connection,
+    mc: &Option<mainstay::Config>,
+) -> Result<Option<Root>> {
     use crate::shared_lib::mainstay::{Commitment, CommitmentIndexed, MainstayAPIError};
 
-    fn update_db_from_ci(db: &DB, ci: &CommitmentInfo) -> Result<Option<Root>> {
+    fn update_db_from_ci(conn: &Connection, ci: &CommitmentInfo) -> Result<Option<Root>> {
         let mut root = Root::from_commitment_info(ci);
-        let current_id = get_current_root_id(db)?;
+        let current_id = db_root_get_current_id(conn)?;
+
         let mut id;
-        for x in 0..=current_id {
+        for x in 0..=current_id - 1 {
             id = current_id - x;
-            match get_root_from_id::<Root>(db, &id)? {
+            let root_get = db_root_get(conn, &id)?;
+            match root_get {
                 Some(r) => {
                     if r.hash() == ci.commitment().to_hash() {
                         match r.id() {
@@ -118,7 +369,7 @@ pub fn get_confirmed_root(db: &DB, mc: &Option<mainstay::Config>) -> Result<Opti
         let root = root;
 
         match root.id() {
-            Some(_) => match update_root_db(db, &root) {
+            Some(_) => match db_root_update(conn, &root) {
                 Ok(_) => Ok(Some(root)),
                 Err(e) => Err(e),
             },
@@ -128,8 +379,9 @@ pub fn get_confirmed_root(db: &DB, mc: &Option<mainstay::Config>) -> Result<Opti
 
     match mc {
         Some(conf) => {
-            match &get_db_confirmed_root::<Root>(db)? {
+            match &db_get_confirmed_root(conn)? {
                 Some(cr_db) => {
+
                     //Search for update
 
                     //First try to find the latest root in the latest commitment
@@ -139,10 +391,10 @@ pub fn get_confirmed_root(db: &DB, mc: &Option<mainstay::Config>) -> Result<Opti
                                 if ci_db == ci {
                                     Ok(Some(cr_db.clone()))
                                 } else {
-                                    update_db_from_ci(db, ci)
+                                    update_db_from_ci(conn, ci)
                                 }
                             }
-                            None => update_db_from_ci(db, ci),
+                            None => update_db_from_ci(conn, ci),
                         },
                         Err(e) => Err(SEError::SharedLibError(e.to_string())),
                     };
@@ -151,10 +403,10 @@ pub fn get_confirmed_root(db: &DB, mc: &Option<mainstay::Config>) -> Result<Opti
                     match result? {
                         Some(r) => Ok(Some(r)),
                         None => {
-                            let current_id = get_current_root_id(db)?;
-                            for x in 0..=current_id {
+                            let current_id = db_root_get_current_id(conn)?;
+                            for x in 0..=current_id - 1 {
                                 let id = current_id - x;
-                                let _ = match get_root_from_id::<Root>(db, &id)? {
+                                let _ = match db_root_get(conn, &id)? {
                                     Some(r) => {
                                         match &CommitmentInfo::from_commitment(
                                             conf,
@@ -162,9 +414,9 @@ pub fn get_confirmed_root(db: &DB, mc: &Option<mainstay::Config>) -> Result<Opti
                                         ) {
                                             Ok(ci) => {
                                                 let mut root = Root::from_commitment_info(ci);
-                                                root.set_id(&id);
+                                                root.set_id(&(id as u32));
                                                 //Latest confirmed commitment found. Updating db
-                                                return match update_root_db(db, &root) {
+                                                return match db_root_update(conn, &root) {
                                                     Ok(_) => Ok(Some(root)),
                                                     Err(e) => Err(e),
                                                 };
@@ -191,24 +443,27 @@ pub fn get_confirmed_root(db: &DB, mc: &Option<mainstay::Config>) -> Result<Opti
                         }
                     }
                 }
-                None => match &CommitmentInfo::from_latest(conf) {
-                    Ok(ci) => update_db_from_ci(db, ci),
-                    Err(e) => Err(SEError::SharedLibError(e.to_string())),
-                },
+                None => {
+                    match &CommitmentInfo::from_latest(conf) {
+                        Ok(ci) => update_db_from_ci(conn, ci),
+                        Err(e) => Err(SEError::SharedLibError(e.to_string())),
+                    }
+                }
             }
         }
         None => Ok(None),
     }
 }
 
-//Update the database and the mainstay slot with the SMT root, if applicable
-pub fn update_root(db: &DB, mc: &Option<mainstay::Config>, root: &Root) -> Result<u32> {
-    let id = update_root_db(db, root)?;
-    update_root_mainstay(mc, root)?;
+// Update the database and the mainstay slot with the SMT root, if applicable
+pub fn root_update(conn: &Connection, _mc: &Option<mainstay::Config>, root: &Root) -> Result<u32> {
+    // db_root_update_mainstay(mc, root)?;
+    let id = db_root_update(conn, root)?;
     Ok(id)
 }
 
-fn update_root_mainstay(config: &Option<mainstay::Config>, root: &Root) -> Result<()> {
+#[allow(dead_code)]
+fn db_root_update_mainstay(config: &Option<mainstay::Config>, root: &Root) -> Result<()> {
     match config {
         Some(c) => match root.attest(&c) {
             Ok(_) => Ok(()),
@@ -218,14 +473,14 @@ fn update_root_mainstay(config: &Option<mainstay::Config>, root: &Root) -> Resul
     }
 }
 
-/// Update state chain root value
-fn update_root_db(db: &DB, rt: &Root) -> Result<u32> {
+/// Update root value in DB. Update root with ID or insert new DB item.
+fn db_root_update(conn: &Connection, rt: &Root) -> Result<u32> {
     let mut root = rt.clone();
     // Get previous ID, or use the one specified in root to update an existing root with mainstay proof
     let id = match root.id() {
         //This will update an existing root in the db
         Some(id) => {
-            let existing_root = get_root_from_id::<Root>(db, &id)?;
+            let existing_root = db_root_get(conn, &(id as i64))?;
             match existing_root {
                 None => {
                     return Err(SEError::Generic(format!(
@@ -242,70 +497,95 @@ fn update_root_db(db: &DB, rt: &Root) -> Result<u32> {
             }
         }
         // new root, update id
-        None => get_current_root_id(db)? + 1,
+        None => {
+            match db_root_get_current_id(conn) {
+                Ok(id) => (id + 1) as u32,
+                Err(_) => 1, // No roots in DB
+            }
+        }
     };
 
-    let identifier = idify_root(&id);
+    // Insert new root
     root.set_id(&id);
-    insert_by_identifier(&db, &identifier, root.clone())?;
+    db_root_insert(conn, &root)?;
 
-    //update root id
-    insert_by_identifier(&db, ROOTID, id)?;
-
-    debug!("Updated root at id {} with value: {}", id, root);
+    debug!("Updated root at id {} with value: {:?}", id, root);
     Ok(id)
 }
 
-/// get root with id
-pub fn get_root<T>(db: &DB, id: &u32) -> Result<Option<T>>
-where
-    T: serde::de::DeserializeOwned,
-{
-    get_by_identifier(db, &idify_root(&id))
+/// Insert a Root into root table
+pub fn db_root_insert(conn: &Connection, root: &Root) -> Result<u64> {
+    let statement = conn.prepare(&format!(
+        "INSERT INTO {} (value, commitmentinfo) VALUES ($1,$2)",
+        Table::Root.to_string()
+    ))?;
+
+    Ok(statement.execute(&[&db_ser(root.hash())?, &db_ser(root.commitment_info())?])?)
 }
 
-pub fn get_current_root_id(db: &DB) -> Result<u32> {
-    // Get previous ID
-    match get_by_identifier::<u32>(db, ROOTID)? {
-        None => Ok(0),
-        Some(id_option) => Ok(id_option),
+/// Get Id of current Root
+pub fn db_root_get_current_id(conn: &Connection) -> Result<i64> {
+    let statement = conn.prepare(&format!("SELECT MAX(id) FROM {}", Table::Root.to_string(),))?;
+    let rows = statement.query(&[])?;
+    if rows.is_empty() {
+        return Err(SEError::DBError(NoDataForID, String::from("Current Root")));
+    };
+    let row = rows.get(0);
+    match row.get_opt::<usize, i64>(0) {
+        None => return Ok(0),
+        Some(data) => match data {
+            Ok(v) => return Ok(v),
+            Err(_) => return Ok(0),
+        },
     }
 }
 
-pub fn get_current_attested_root_id(db: &DB) -> Result<u32> {
-    // Get previous ID
-    match get_by_identifier::<u32>(db, ROOTID)? {
-        None => Ok(0),
-        Some(id_option) => Ok(id_option),
+/// Get root with given ID
+pub fn db_root_get(conn: &Connection, id: &i64) -> Result<Option<Root>> {
+    if id == &0 {
+        return Ok(None);
     }
-}
+    let statement = conn.prepare(&format!(
+        "SELECT * FROM {} WHERE id = $1",
+        Table::Root.to_string(),
+    ))?;
+    let rows = statement.query(&[id])?;
+    if rows.is_empty() {
+        return Err(SEError::DBError(NoDataForID, format!("Root id: {}", id)));
+    };
+    let row = rows.get(0);
 
-/// get current statechain Root.
-pub fn get_current_root<T>(db: &DB) -> Result<Option<Root>>
-where
-    T: serde::de::DeserializeOwned,
-{
-    let id = &get_current_root_id(db)?;
-    get_root_from_id::<Root>(db, id)
-}
-
-fn get_root_from_id<T>(db: &DB, id: &u32) -> Result<Option<Root>>
-where
-    T: serde::de::DeserializeOwned,
-{
-    Ok(get_root::<Root>(db, &id)?)
+    let id = match get_item_from_row::<i64>(&row, 0, &id.to_string(), Column::Id) {
+        Ok(v) => v as u32,
+        Err(_) => {
+            // No root in table yet. Return None
+            return Ok(None);
+        }
+    };
+    let root = Root::from(
+        Some(id),
+        db_deser(get_item_from_row::<String>(
+            &row,
+            1,
+            &id.to_string(),
+            Column::Value,
+        )?)?,
+        &db_deser::<Option<CommitmentInfo>>(get_item_from_row::<String>(
+            &row,
+            2,
+            &id.to_string(),
+            Column::CommitmentInfo,
+        )?)?,
+    )?;
+    Ok(Some(root))
 }
 
 //Find the latest confirmed root
-pub fn get_db_confirmed_root<T>(db: &DB) -> Result<Option<Root>>
-where
-    T: serde::de::DeserializeOwned,
-{
-    let current_id = get_current_root_id(db)?;
-
-    for i in 0..=current_id {
+pub fn db_get_confirmed_root(conn: &Connection) -> Result<Option<Root>> {
+    let current_id = db_root_get_current_id(&conn)?;
+    for i in 0..=current_id - 1 {
         let id = current_id - i;
-        let root = get_root_from_id::<Root>(db, &id)?;
+        let root = db_root_get(conn, &id)?;
         match root {
             Some(r) => {
                 if r.is_confirmed() {
@@ -316,7 +596,6 @@ where
             None => (),
         };
     }
-
     Ok(None)
 }
 
@@ -324,106 +603,82 @@ where
 mod tests {
 
     use super::*;
-    use rocksdb::Options;
-    const TEST_DB_LOC: &str = "/tmp/db-statechain";
+    use postgres::{Connection, TlsMode};
+    use std::env;
+    // use shared_lib::{state_chain::update_statechain_smt, mainstay::Commitment};
+    use crate::routes::util::update_smt_db;
 
-    #[test]
-    #[serial]
-    fn test_db_get_insert() {
-        let db = rocksdb::DB::open_default(TEST_DB_LOC).unwrap();
-
-        let root = String::from("12345");
-        let id = String::from("0");
-        let insert_res = insert_by_identifier(&db, &id, root.clone());
-        assert!(insert_res.is_ok());
-
-        let get_res: Option<String> = get_by_identifier(&db, &id).unwrap();
-        assert_eq!(get_res, Some(root));
-
-        let get_res2: Option<String> = get_by_identifier(&db, &String::from("1")).unwrap();
-        assert!(get_res2.is_none());
-
-        let _ = rocksdb::DB::destroy(&Options::default(), TEST_DB_LOC);
+    fn postgres_conn() -> Connection {
+        let rocket_url = env::var("ROCKET_DATABASES").unwrap();
+        Connection::connect(&rocket_url[16..68], TlsMode::None).unwrap()
     }
 
+    // #[test]
+    // fn test_db() {
+    //     let conn = postgres_conn();
+    //     let user_id = Uuid::from_str(&"9eb05678-5275-451b-910c-a7179057d91d").unwrap();
+    //
+    //     let root = Root::from_random();
+    //
+    //     // let res =
+    //     //     db_root_insert(&conn, root);
+    //     // println!("res: {:?}",res);
+    // }
+
+    // #[test]
+    // #[serial]
+    // fn test_db_commitment_info_update() {
+    //     let mc = mainstay::Config::from_test();
+    //     assert!(mc.is_some(),"To configure mainstay tests set the following environment variables: MERC_MS_TEST_SLOT=<slot> MERC_MS_TEST_TOKEN=<token>");
+    //
+    //     let conn = postgres_conn();
+    //
+    //     //root1 has already been attested to mainstay
+    //     let com1 = mainstay::Commitment::from_str(
+    //         "ade8d33571d52014537a76b2c0c0062442b70d73f469094cb45dc69615f5e218",
+    //     )
+    //     .unwrap();
+    //     let root1 = Root::from_hash(&com1.to_hash());
+    //     let root2: Root = Root::from_random();
+    //
+    //     let root1_id = match root_update(&conn, &mc, &root1) {
+    //         Ok(id) => id,
+    //         Err(e) => {
+    //             assert!(false, e.to_string());
+    //             0
+    //         }
+    //     };
+    //     assert!(root_update(&conn, &mc, &root2).is_ok());
+    //
+    //     //Update the local copy of root1
+    //     let root1 = db_root_get(&conn, &(root1_id as i64)).unwrap().unwrap();
+    //
+    //     assert!(root1.is_confirmed() == false);
+    //     assert!(root2.is_confirmed() == false);
+    //
+    //     //assert that there is a confirmed root
+    //     // let res = get_confirmed_root(&conn, &mc);
+    //     // println!("res: {:?}", res);
+    //     // assert!(get_confirmed_root(&conn, &mc)
+    //     //     .unwrap()
+    //     //     .unwrap()
+    //     //     .is_confirmed());
+    // }
+
     #[test]
     #[serial]
-    fn test_db_root_update() {
-        let db = rocksdb::DB::open_default(TEST_DB_LOC).unwrap();
-        let root1: Root = Root::from_random();
-        let root2: Root = Root::from_random();
-
-        let _ = update_root_db(&db, &root1);
-        let _ = update_root_db(&db, &root2);
-
-        let root2_id: u32 = get_by_identifier(&db, ROOTID).unwrap().unwrap();
-        assert_eq!(
-            root2.hash(),
-            get_by_identifier::<Root>(&db, &idify_root(&root2_id))
-                .unwrap()
-                .unwrap()
-                .hash()
-        );
-        let root1_id = root2_id - 1;
-        assert_eq!(
-            root1.hash(),
-            get_by_identifier::<Root>(&db, &idify_root(&root1_id))
-                .unwrap()
-                .unwrap()
-                .hash()
-        );
-
-        let new_root = get_current_root::<Root>(&db).unwrap().unwrap();
-        assert_eq!(root2.hash(), new_root.hash());
-
-        // remove them after incase of messing up other tests
-        let _ = db.delete(&idify_root(&root2_id));
-        let _ = db.delete(&idify_root(&root1_id));
-
-        let _ = rocksdb::DB::destroy(&Options::default(), TEST_DB_LOC);
-    }
-
-    #[test]
-    #[serial]
-    fn test_db_commitment_info_update() {
+    fn test_update_root_smt() {
+        let conn = postgres_conn();
         let mc = mainstay::Config::from_test();
-        assert!(mc.is_some(),"To configure mainstay tests set the following environment variables: MERC_MS_TEST_SLOT=<slot> MERC_MS_TEST_TOKEN=<token>");
 
-        let db = rocksdb::DB::open_default(TEST_DB_LOC).unwrap();
-        //delete_all_roots(&db);
+        let (_,new_root) = update_smt_db(
+            &conn,
+            &mc,
+            &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
+            &"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
+        ).unwrap();
 
-        //root1 has already been attested to mainstay
-        let com1 = mainstay::Commitment::from_str(
-            "ade8d33571d52014537a76b2c0c0062442b70d73f469094cb45dc69615f5e218",
-        )
-        .unwrap();
-        let root1 = Root::from_hash(&com1.to_hash());
-        let root2: Root = Root::from_random();
-
-        let root1_id = match update_root(&db, &mc, &root1) {
-            Ok(id) => id,
-            Err(e) => {
-                assert!(false, e.to_string());
-                0
-            }
-        };
-
-        //assert!(update_root(&db, &mc, root1.clone()).is_ok());
-        assert!(update_root(&db, &mc, &root2).is_ok());
-
-        //Update the local copy of root1
-        let root1 = get_root_from_id::<Root>(&db, &root1_id).unwrap().unwrap();
-
-        assert!(root1.is_confirmed() == false);
-        assert!(root2.is_confirmed() == false);
-
-        //delete_all_roots(&db);
-        //assert that there is a confirmed root
-        assert!(get_confirmed_root(&db, &mc)
-            .unwrap()
-            .unwrap()
-            .is_confirmed());
-
-        let _ = rocksdb::DB::destroy(&Options::default(), TEST_DB_LOC);
+        let current_root = db_root_get(&conn, &db_root_get_current_id(&conn).unwrap()).unwrap().unwrap();
+        assert_eq!(new_root.hash(), current_root.hash());
     }
 }

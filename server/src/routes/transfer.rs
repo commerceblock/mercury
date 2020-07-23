@@ -7,14 +7,14 @@ use super::super::{Config, DataBase, Result};
 extern crate shared_lib;
 use crate::error::SEError;
 use crate::routes::util::*;
-use crate::storage::db_postgres::{
+use crate::storage::db::{
     db_deser, db_get_1, db_get_2, db_get_3, db_get_4, db_insert, db_remove, db_ser, db_update,
     Column, Table,
 };
 use shared_lib::{commitment::verify_commitment, state_chain::*, structs::*};
 
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
-
+use bitcoin::Transaction;
 use chrono::NaiveDateTime;
 use curv::{
     elliptic::curves::traits::{ECPoint, ECScalar},
@@ -24,6 +24,19 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use std::{collections::HashMap, str::FromStr};
 use uuid::Uuid;
+
+
+/// Struct holds data when transfer is complete but not yet finalized
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TransferFinalizeData {
+    pub new_shared_key_id: Uuid,
+    pub state_chain_id: Uuid,
+    pub state_chain_sig: StateChainSig,
+    pub s2: FE,
+    pub new_tx_backup: Transaction,
+    pub batch_data: Option<BatchData>,
+}
+
 
 /// Initiliase transfer protocol:
 ///     - Authorisation of Owner and DoS protection

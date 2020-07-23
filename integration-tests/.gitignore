@@ -1,4 +1,4 @@
 db/
-db-statechain/
+db-smt/
 target/
 log/

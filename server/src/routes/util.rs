@@ -14,87 +14,21 @@ use shared_lib::{
 
 use crate::error::{DBErrorType, SEError};
 use crate::routes::transfer::finalize_batch;
-use crate::storage::db_postgres::{
+use crate::storage::db::{
     self, db_deser, db_get_1, db_get_2, db_get_3, db_remove, db_root_get, db_root_get_current_id,
     db_ser, db_update, Column, Table, DB_SC_LOC,
 };
 use crate::DataBase;
 
-use bitcoin::{hashes::sha256d, Transaction};
-
+use bitcoin::Transaction;
 use chrono::{NaiveDateTime, Utc};
-use curv::FE;
-use db_postgres::root_update;
+use db::root_update;
 use monotree::Proof;
 use postgres::Connection;
 use rocket::State;
 use rocket_contrib::json::Json;
-use std::{collections::HashMap, str::FromStr, time::SystemTime};
+use std::{collections::HashMap, str::FromStr};
 use uuid::Uuid;
-
-/// Structs for DB storage.
-#[derive(Debug)]
-pub enum StateEntityStruct {
-    UserSession,
-    StateChain, // struct def in shared_lib
-    TransferData,
-    TransferBatchData,
-}
-// impl db::MPCStruct for StateEntityStruct {
-//     fn to_string(&self) -> String {
-//         format!("StateChain{:?}", self)
-//     }
-// }
-
-/// UserSession represents a User in a particular state chain session.
-/// The same client co-owning 2 distinct UTXOs wth the state entity would have 2 unrelated UserSession's.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct UserSession {
-    /// User's identification
-    pub id: String,
-    /// User's password
-    // pub pass: String
-    /// User's authorisation
-    pub auth: String,
-    /// users proof key
-    pub proof_key: String,
-    /// back up tx for this user session
-    pub tx_backup: Option<Transaction>,
-    /// withdraw tx for end of user session and end of state chain
-    pub tx_withdraw: Option<Transaction>,
-    /// ID of state chain that data is for
-    pub state_chain_id: Option<String>,
-    /// If UserSession created for transfer() then SE must know s2 value to create shared wallet
-    pub s2: Option<FE>,
-    /// sig hash of tx to be signed. This value is checked in co-signing to ensure that message being
-    /// signed is the sig hash of a tx that SE has verified.
-    /// Used when signing both backup and withdraw tx.
-    pub sig_hash: Option<sha256d::Hash>,
-    /// StateChain Signature for withdrawal. Presence of this data signals user has passed Authorisation
-    /// for withdrawl.
-    pub withdraw_sc_sig: Option<StateChainSig>,
-}
-
-/// TransferData provides new Owner's data for their new UserSession struct created in transfer_receiver.
-/// Key: state_chain_id
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct TransferData {
-    pub state_chain_id: Uuid,
-    pub state_chain_sig: StateChainSig,
-    pub x1: FE,
-}
-
-/// TransferBatch stores list of StateChains involved in a batch transfer and their status in the potocol.
-/// When all transfers in the batch are complete these transfers are finalized atomically.
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TransferBatchData {
-    pub id: Uuid,
-    pub start_time: SystemTime, // time batch transfer began
-    pub state_chains: HashMap<Uuid, bool>,
-    pub finalized_data: Vec<TransferFinalizeData>,
-    pub punished_state_chains: Vec<Uuid>, // If transfer batch fails these state chain Id's were punished.
-    pub finalized: bool,
-}
 
 /// Check if Transfer Batch is out of time
 pub fn transfer_batch_is_ended(start_time: NaiveDateTime, batch_lifetime: i64) -> bool {
@@ -106,16 +40,6 @@ pub fn transfer_batch_is_ended(start_time: NaiveDateTime, batch_lifetime: i64) -
     false
 }
 
-/// Struct holds data when transfer is complete but not yet finalized
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct TransferFinalizeData {
-    pub new_shared_key_id: Uuid,
-    pub state_chain_id: Uuid,
-    pub state_chain_sig: StateChainSig,
-    pub s2: FE,
-    pub new_tx_backup: Transaction,
-    pub batch_data: Option<BatchData>,
-}
 
 /// Check if user has passed authentication.
 pub fn check_user_auth(conn: &DataBase, user_id: &Uuid) -> Result<()> {
@@ -258,7 +182,7 @@ pub fn get_smt_root(conn: DataBase) -> Result<Json<Option<Root>>> {
 #[post("/info/confirmed_root", format = "json")]
 // pub fn get_confirmed_smt_root(state: State<Config>) -> Result<Json<Option<Root>>> {
 pub fn get_confirmed_smt_root(conn: DataBase, state: State<Config>) -> Result<Json<Option<Root>>> {
-    Ok(Json(db_postgres::get_confirmed_root(
+    Ok(Json(db::get_confirmed_root(
         &conn,
         &state.mainstay_config,
     )?))

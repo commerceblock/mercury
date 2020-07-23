@@ -8,7 +8,7 @@ use super::{
 };
 extern crate shared_lib;
 use crate::error::SEError;
-use crate::storage::db_postgres::{
+use crate::storage::db::{
     db_deser, db_get_2, db_insert, db_ser, db_update, Column, Table,
 };
 use crate::DataBase;

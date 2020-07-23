@@ -214,7 +214,7 @@ mod tests {
 
     use super::*;
     use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
-    pub static DB_LOC: &str = "./db";
+    pub static DB_LOC: &str = "./db-test";
 
     #[test]
     fn test_add_to_state_chain() {

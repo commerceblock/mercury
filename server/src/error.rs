@@ -4,7 +4,7 @@
 
 use shared_lib::error::SharedLibError;
 
-use crate::storage::db_postgres::Column;
+use crate::storage::db::Column;
 use bitcoin::secp256k1::Error as SecpError;
 use monotree::Errors as MonotreeErrors;
 use postgres::Error as PostgresError;
