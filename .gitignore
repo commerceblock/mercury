@@ -11,3 +11,4 @@ Cargo.lock
 .idea
 
 doc/.DS_Store
+server/db-smt/

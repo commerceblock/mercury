@@ -28,18 +28,16 @@ impl Schema {
 
 #[derive(Debug)]
 pub enum Table {
-    Testing,
-    Ecdsa,
     UserSession,
+    Ecdsa,
     StateChain,
-    BackupTxs,
     Transfer,
     TransferBatch,
     Root,
-    CurrentRoot,
+    BackupTxs,
 }
 impl Table {
-    fn to_string(&self) -> String {
+    pub fn to_string(&self) -> String {
         match self {
             Table::BackupTxs => format!(
                 "{:?}.{:?}",

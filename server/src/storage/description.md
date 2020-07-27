@@ -95,6 +95,19 @@ Storage of active Backup Txs.
 
 # SQL
 
+CREATE TABLE "statechainentity"."usersession" (
+    "id" uuid NOT NULL,
+    "statechainid" uuid,
+    "authentication" varchar,
+    "s2" varchar,
+    "sighash" varchar,
+    "withdrawscsig" varchar,
+    "txwithdraw" varchar,
+    "proofkey" varchar,
+    "txbackup" varchar,
+    PRIMARY KEY ("id")
+);
+
 CREATE TABLE "statechainentity"."ecdsa" (
     "id" uuid NOT NULL,
     "keygenfirstmsg" varchar,
@@ -111,19 +124,6 @@ CREATE TABLE "statechainentity"."ecdsa" (
     "epheckeypair" varchar,
     "ephkeygenfirstmsg" varchar,
     "complete" bool NOT NULL DEFAULT false,
-    PRIMARY KEY ("id")
-);
-
-CREATE TABLE "statechainentity"."usersession" (
-    "id" uuid NOT NULL,
-    "statechainid" uuid,
-    "authentication" varchar,
-    "s2" varchar,
-    "sighash" varchar,
-    "withdrawscsig" varchar,
-    "txwithdraw" varchar,
-    "proofkey" varchar,
-    "txbackup" varchar,
     PRIMARY KEY ("id")
 );
 
@@ -151,6 +151,13 @@ CREATE TABLE "statechainentity"."transferbatch" (
     "finalizeddata" varchar,
     "punishedstatechains" varchar,
     "finalized" bool,
+    PRIMARY KEY ("id")
+);
+
+CREATE TABLE "statechainentity"."root" (
+    "id" BIGSERIAL,
+    "value" varchar,
+    "commitmentinfo" varchar,
     PRIMARY KEY ("id")
 );
 

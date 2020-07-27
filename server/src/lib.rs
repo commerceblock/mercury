@@ -65,11 +65,3 @@ pub struct Config {
     pub punishment_duration: u64,
     pub mainstay_config: Option<mainstay::Config>,
 }
-
-#[derive(Deserialize)]
-pub struct AuthConfig {
-    pub issuer: String,
-    pub audience: String,
-    pub region: String,
-    pub pool_id: String,
-}

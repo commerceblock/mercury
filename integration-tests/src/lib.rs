@@ -70,14 +70,15 @@ impl From<RecvTimeoutError> for SpawnError {
     }
 }
 
-/// Spawn a StateChain entity server if there isn't one running already. Returns Ok(()) if a new server was spawned, otherwise returns an error.
+/// Spawn a StateChain entity server in testing mode if there isn't one running already.
+/// Returns Ok(()) if a new server was spawned, otherwise returns an error.
 pub fn spawn_server() -> Result<(), SpawnError> {
     let (tx, rx) = mpsc::channel::<SpawnError>();
 
     // Rocket server is blocking, so we spawn a new thread.
     thread::spawn(move || {
         tx.send({
-            match server::get_server() {
+            match server::get_server(true) {
                 Ok(s) => {
                     let try_launch = s.launch();
                     let _ = try_launch.kind(); // LaunchError needs to be accessed here for this to work. Be carfeul modifying this code.
