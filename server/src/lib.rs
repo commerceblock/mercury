@@ -50,8 +50,10 @@ pub mod tests;
 type Result<T> = std::result::Result<T, error::SEError>;
 
 use rocket_contrib::databases::postgres;
-#[database("postgres")]
-pub struct DataBase(postgres::Connection);
+#[database("postgres_w")]
+pub struct DatabaseW(postgres::Connection);
+#[database("postgres_r")]
+pub struct DatabaseR(postgres::Connection);
 
 pub struct Config {
     pub electrum_server: String,

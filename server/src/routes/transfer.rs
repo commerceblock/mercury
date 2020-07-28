@@ -2,29 +2,31 @@
 //!
 //! StateEntity Transfer and batch-transfer protocols.
 
-use super::super::{Config, DataBase, Result};
+use super::super::{Config, Result};
 
 extern crate shared_lib;
 use crate::error::SEError;
 use crate::routes::util::*;
-use crate::storage::db::{
-    db_deser, db_get_1, db_get_2, db_get_3, db_get_4, db_insert, db_remove, db_ser, db_update,
-    Column, Table,
+use crate::{
+    storage::db::{
+        db_deser, db_get_1, db_get_2, db_get_3, db_get_4, db_insert, db_remove, db_ser, db_update,
+        Column, Table,
+    },
+    DatabaseR, DatabaseW,
 };
 use shared_lib::{commitment::verify_commitment, state_chain::*, structs::*};
 
-use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 use bitcoin::Transaction;
 use chrono::NaiveDateTime;
 use curv::{
     elliptic::curves::traits::{ECPoint, ECScalar},
     {BigInt, FE, GE},
 };
+use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 use rocket::State;
 use rocket_contrib::json::Json;
 use std::{collections::HashMap, str::FromStr};
 use uuid::Uuid;
-
 
 /// Struct holds data when transfer is complete but not yet finalized
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -37,31 +39,31 @@ pub struct TransferFinalizeData {
     pub batch_data: Option<BatchData>,
 }
 
-
 /// Initiliase transfer protocol:
 ///     - Authorisation of Owner and DoS protection
 ///     - Validate transfer parameters
 ///     - Store transfer parameters
 #[post("/transfer/sender", format = "json", data = "<transfer_msg1>")]
 pub fn transfer_sender(
-    conn: DataBase,
+    db_read: DatabaseR,
+    db_write: DatabaseW,
     transfer_msg1: Json<TransferMsg1>,
 ) -> Result<Json<TransferMsg2>> {
     let user_id = transfer_msg1.shared_key_id;
-    check_user_auth(&conn, &user_id)?;
+    check_user_auth(&db_read, &user_id)?;
 
     info!("TRANSFER: Sender Side. Shared Key ID: {}", user_id);
 
     // Get state_chain id
     let state_chain_id: Uuid = db_get_1(
-        &conn,
+        &db_read,
         &user_id,
         Table::UserSession,
         vec![Column::StateChainId],
     )?;
 
     // Check if transfer has already been completed (but not finalized)
-    if db_get_1::<Uuid>(&conn, &state_chain_id, Table::Transfer, vec![Column::Id]).is_ok() {
+    if db_get_1::<Uuid>(&db_read, &state_chain_id, Table::Transfer, vec![Column::Id]).is_ok() {
         return Err(SEError::Generic(String::from(
             "Transfer already completed. Waiting for finalize.",
         )));
@@ -69,7 +71,7 @@ pub fn transfer_sender(
 
     // Check if state chain is owned by user and not locked
     let (sc_locked_until, sc_owner_id) = db_get_2::<NaiveDateTime, Uuid>(
-        &conn,
+        &db_read,
         &state_chain_id,
         Table::StateChain,
         vec![Column::LockedUntil, Column::OwnerId],
@@ -87,9 +89,9 @@ pub fn transfer_sender(
     let x1: FE = ECScalar::new_random();
 
     // Create Transfer table entry
-    db_insert(&conn, &state_chain_id, Table::Transfer)?;
+    db_insert(&db_write, &state_chain_id, Table::Transfer)?;
     db_update(
-        &conn,
+        &db_write,
         &state_chain_id,
         Table::Transfer,
         vec![Column::StateChainSig, Column::X1],
@@ -118,7 +120,8 @@ pub fn transfer_sender(
 #[post("/transfer/receiver", format = "json", data = "<transfer_msg4>")]
 pub fn transfer_receiver(
     state: State<Config>,
-    conn: DataBase,
+    db_read: DatabaseR,
+    db_write: DatabaseW,
     transfer_msg4: Json<TransferMsg4>,
 ) -> Result<Json<TransferMsg5>> {
     let user_id = transfer_msg4.shared_key_id;
@@ -128,7 +131,7 @@ pub fn transfer_receiver(
 
     // Get Transfer Data for state_chain_id
     let (state_chain_id, state_chain_sig_str, x1_str) = db_get_3::<Uuid, String, String>(
-        &conn,
+        &db_read,
         &state_chain_id,
         Table::Transfer,
         vec![Column::Id, Column::StateChainSig, Column::X1],
@@ -146,7 +149,7 @@ pub fn transfer_receiver(
     }
 
     let (party_1_private_str, party_2_public_str) = db_get_2::<String, String>(
-        &conn,
+        &db_read,
         &user_id,
         Table::Ecdsa,
         vec![Column::Party1Private, Column::Party2Public],
@@ -210,7 +213,7 @@ pub fn transfer_receiver(
         // Get TransferBatch data
         let (state_chains_str, finalized_data_vec_str, start_time) =
             db_get_3::<String, String, NaiveDateTime>(
-                &conn,
+                &db_read,
                 &batch_id,
                 Table::TransferBatch,
                 vec![
@@ -234,7 +237,7 @@ pub fn transfer_receiver(
         finalized_data_vec.push(finalized_data.clone());
 
         db_update(
-            &conn,
+            &db_write,
             &batch_id,
             Table::TransferBatch,
             vec![Column::StateChains, Column::FinalizedData],
@@ -244,7 +247,7 @@ pub fn transfer_receiver(
     // If not batch then finalize transfer now
     } else {
         // Update DB and SMT with new transfer data
-        transfer_finalize(&state, &conn, &finalized_data)?;
+        transfer_finalize(&state, &db_read, &db_write, &finalized_data)?;
     }
 
     info!(
@@ -264,7 +267,8 @@ pub fn transfer_receiver(
 /// transfers completion in the batch transfer case.
 pub fn transfer_finalize(
     state: &State<Config>,
-    conn: &DataBase,
+    db_read: &DatabaseR,
+    db_write: &DatabaseW,
     finalized_data: &TransferFinalizeData,
 ) -> Result<()> {
     let state_chain_id = finalized_data.state_chain_id;
@@ -273,7 +277,7 @@ pub fn transfer_finalize(
 
     // Update state chain
     let mut state_chain: StateChain = db_deser(db_get_1(
-        &conn,
+        &db_read,
         &state_chain_id,
         Table::StateChain,
         vec![Column::Chain],
@@ -282,7 +286,7 @@ pub fn transfer_finalize(
     state_chain.add(finalized_data.state_chain_sig.to_owned())?;
 
     db_update(
-        &conn,
+        db_write,
         &state_chain_id,
         Table::StateChain,
         vec![Column::Chain, Column::OwnerId],
@@ -294,9 +298,9 @@ pub fn transfer_finalize(
 
     // Create new UserSession to allow new owner to generate shared wallet
     let new_user_id = finalized_data.new_shared_key_id;
-    db_insert(&conn, &new_user_id, Table::UserSession)?;
+    db_insert(db_write, &new_user_id, Table::UserSession)?;
     db_update(
-        &conn,
+        db_write,
         &new_user_id,
         Table::UserSession,
         vec![
@@ -317,7 +321,7 @@ pub fn transfer_finalize(
 
     // Insert into BackupTx table
     db_update(
-        &conn,
+        db_write,
         &state_chain_id,
         Table::BackupTxs,
         vec![Column::TxBackup],
@@ -331,7 +335,8 @@ pub fn transfer_finalize(
 
     // Update sparse merkle tree with new StateChain entry
     let (new_root, prev_root) = update_smt_db(
-        &conn,
+        db_read,
+        db_write,
         &state.mainstay_config,
         &finalized_data
             .new_tx_backup
@@ -359,7 +364,7 @@ pub fn transfer_finalize(
     );
 
     // Remove TransferData for this transfer
-    db_remove(&conn, &state_chain_id, Table::Transfer)?;
+    db_remove(db_write, &state_chain_id, Table::Transfer)?;
 
     Ok(())
 }
@@ -373,13 +378,14 @@ pub fn transfer_finalize(
     data = "<transfer_batch_init_msg>"
 )]
 pub fn transfer_batch_init(
-    conn: DataBase,
+    db_read: DatabaseR,
+    db_write: DatabaseW,
     transfer_batch_init_msg: Json<TransferBatchInitMsg>,
 ) -> Result<Json<()>> {
     let batch_id = transfer_batch_init_msg.id.clone();
     info!("TRANSFER_BATCH_INIT: ID: {}", batch_id);
 
-    if db_get_1::<Uuid>(&conn, &batch_id, Table::TransferBatch, vec![Column::Id]).is_ok() {
+    if db_get_1::<Uuid>(&db_read, &batch_id, Table::TransferBatch, vec![Column::Id]).is_ok() {
         return Err(SEError::Generic(format!(
             "Batch transfer with ID {} already exists.",
             batch_id.to_string()
@@ -407,7 +413,7 @@ pub fn transfer_batch_init(
         let state_chain_id = Uuid::from_str(&sig.data).unwrap();
 
         let (state_chain_str, sc_locked_until) = db_get_2::<String, NaiveDateTime>(
-            &conn,
+            &db_read,
             &state_chain_id,
             Table::StateChain,
             vec![Column::Chain, Column::LockedUntil],
@@ -426,9 +432,9 @@ pub fn transfer_batch_init(
     }
 
     // Create new TransferBatchData and add to DB
-    db_insert(&conn, &batch_id, Table::TransferBatch)?;
+    db_insert(&db_write, &batch_id, Table::TransferBatch)?;
     db_update(
-        &conn,
+        &db_write,
         &batch_id,
         Table::TransferBatch,
         vec![
@@ -457,11 +463,16 @@ pub fn transfer_batch_init(
 }
 
 /// Finalize all transfers in a batch.
-pub fn finalize_batch(state: &State<Config>, conn: &DataBase, batch_id: Uuid) -> Result<()> {
+pub fn finalize_batch(
+    state: &State<Config>,
+    db_read: &DatabaseR,
+    db_write: &DatabaseW,
+    batch_id: Uuid,
+) -> Result<()> {
     info!("TRANSFER_FINALIZE_BATCH: ID: {}", batch_id);
     // Get transfer batch data
     let (state_chains_str, finalized_data_vec_str) = db_get_2::<String, String>(
-        &conn,
+        db_read,
         &batch_id,
         Table::TransferBatch,
         vec![Column::StateChains, Column::FinalizedData],
@@ -476,11 +487,11 @@ pub fn finalize_batch(state: &State<Config>, conn: &DataBase, batch_id: Uuid) ->
     }
 
     for finalized_data in finalized_data_vec.clone() {
-        transfer_finalize(&state, &conn, &finalized_data)?;
+        transfer_finalize(&state, db_read, db_write, &finalized_data)?;
     }
 
     db_update(
-        &conn,
+        &db_write,
         &batch_id,
         Table::TransferBatch,
         vec![Column::Finalized],
@@ -497,7 +508,8 @@ pub fn finalize_batch(state: &State<Config>, conn: &DataBase, batch_id: Uuid) ->
 )]
 pub fn transfer_reveal_nonce(
     state: State<Config>,
-    conn: DataBase,
+    db_read: DatabaseR,
+    db_write: DatabaseW,
     transfer_reveal_nonce: Json<TransferRevealNonce>,
 ) -> Result<Json<()>> {
     let batch_id = transfer_reveal_nonce.batch_id;
@@ -509,7 +521,7 @@ pub fn transfer_reveal_nonce(
 
     let (finalized, start_time, state_chains_str, punished_state_chains_str) =
         db_get_4::<bool, NaiveDateTime, String, String>(
-            &conn,
+            &db_read,
             &batch_id,
             Table::TransferBatch,
             vec![
@@ -547,7 +559,7 @@ pub fn transfer_reveal_nonce(
     // If state chain completed + commitment revealed then punishment can be removed from state chain
     if *state_chains.get(&state_chain_id).unwrap() {
         db_update(
-            &conn,
+            &db_write,
             &state_chain_id,
             Table::StateChain,
             vec![Column::LockedUntil],
@@ -562,7 +574,7 @@ pub fn transfer_reveal_nonce(
         // remove from transfer batch punished list
         punished_state_chains.retain(|x| x != &state_chain_id);
         db_update(
-            &conn,
+            &db_write,
             &batch_id,
             Table::TransferBatch,
             vec![Column::PunishedStateChains],

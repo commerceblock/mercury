@@ -179,7 +179,9 @@ pub fn update_statechain_smt(
     }));
 
     if let Err(_) = result {
-        return Err(SharedLibError::Generic(String::from("SMT insert failure. Probably caused by Root provided not being correct.")))
+        return Err(SharedLibError::Generic(String::from(
+            "SMT insert failure. Probably caused by Root provided not being correct.",
+        )));
     }
 
     Ok(new_root)

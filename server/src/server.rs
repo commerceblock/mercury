@@ -1,8 +1,12 @@
 use super::routes::*;
-use super::{AuthConfig, Config};
+use super::Config;
+
+use crate::DatabaseR;
+use crate::DatabaseW;
 
 use config;
 use rocket;
+use rocket::config::{Config as RocketConfig, Environment, Value};
 use rocket::{Request, Rocket};
 use shared_lib::mainstay;
 
@@ -10,8 +14,6 @@ use log::LevelFilter;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config as LogConfig, Root};
 use log4rs::encode::pattern::PatternEncoder;
-
-use crate::DataBase;
 use std::{collections::HashMap, str::FromStr};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -33,7 +35,6 @@ impl Config {
                 None => None,
             },
         };
-
         if mainstay_config.is_none() {
             panic!("expected mainstay config");
         }
@@ -65,23 +66,6 @@ impl Config {
     }
 }
 
-impl AuthConfig {
-    pub fn load(settings: HashMap<String, String>) -> AuthConfig {
-        AuthConfig {
-            issuer: settings.get("issuer").unwrap_or(&"".to_string()).to_owned(),
-            audience: settings
-                .get("audience")
-                .unwrap_or(&"".to_string())
-                .to_owned(),
-            region: settings.get("region").unwrap_or(&"".to_string()).to_owned(),
-            pool_id: settings
-                .get("pool_id")
-                .unwrap_or(&"".to_string())
-                .to_owned(),
-        }
-    }
-}
-
 #[catch(500)]
 fn internal_error() -> &'static str {
     "Internal server error"
@@ -97,15 +81,20 @@ fn not_found(req: &Request) -> String {
     format!("Unknown route '{}'.", req.uri())
 }
 
-pub fn get_server() -> Result<Rocket> {
+/// Start Rocket Server. testing_mode parameter overrides Settings.toml.
+pub fn get_server(testing_mode: bool) -> Result<Rocket> {
     let settings = get_settings_as_map();
 
-    let config = Config::load(settings.clone())?;
-    let auth_config = AuthConfig::load(settings.clone());
+    let mut config = Config::load(settings.clone())?;
+    if testing_mode {
+        config.testing_mode = true;
+    }
 
     set_logging_config(settings.get("log_file"));
 
-    let rock = rocket::ignite()
+    let rocket_config = get_rocket_config(&config.testing_mode);
+
+    let rock = rocket::custom(rocket_config)
         .register(catchers![internal_error, not_found, bad_request])
         .mount(
             "/",
@@ -135,8 +124,8 @@ pub fn get_server() -> Result<Rocket> {
             ],
         )
         .manage(config)
-        .manage(auth_config)
-        .attach(DataBase::fairing());
+        .attach(DatabaseR::fairing()) // read
+        .attach(DatabaseW::fairing()); // write
 
     Ok(rock)
 }
@@ -169,7 +158,50 @@ fn set_logging_config(log_file: Option<&String>) {
             .appender(Appender::builder().build("logfile", Box::new(logfile)))
             .build(Root::builder().appender("logfile").build(LevelFilter::Info))
             .unwrap();
-
         let _ = log4rs::init_config(log_config);
     }
+}
+
+fn get_rocket_config(testing_mode: &bool) -> RocketConfig {
+    let mut database_config = HashMap::new();
+    let mut databases = HashMap::new();
+
+    // Make postgres URL. If testing use Test DB for reads and writes.
+    match testing_mode {
+        true => {
+            database_config.insert("url", Value::from(get_postgres_url("TEST".to_string())));
+            databases.insert("postgres_w", Value::from(database_config.clone()));
+            databases.insert("postgres_r", Value::from(database_config));
+        }
+        false => {
+            database_config.insert("url", Value::from(get_postgres_url("W".to_string())));
+            databases.insert("postgres_w", Value::from(database_config));
+            let mut database_config = HashMap::new();
+            database_config.insert("url", Value::from(get_postgres_url("R".to_string())));
+            databases.insert("postgres_r", Value::from(database_config));
+        }
+    };
+
+    RocketConfig::build(Environment::Development)
+        .extra("databases", databases)
+        .finalize()
+        .unwrap()
+}
+
+/// Get postgres URL from env vars. Suffix can be "TEST", "W", or "R"
+pub fn get_postgres_url(var_suffix: String) -> String {
+    let mut db_vars = vec![];
+    for db_var_name in vec!["DB_USER", "DB_PASS", "DB_HOST", "DB_PORT", "DB_DATABASE"] {
+        match std::env::var(format!("{}_{}", db_var_name, var_suffix)) {
+            Ok(v) => db_vars.push(v),
+            Err(_) => panic!(
+                "Missing environment variable {}",
+                format!("{}_{}", db_var_name, var_suffix)
+            ),
+        }
+    }
+    format!(
+        "postgresql://{}:{}@{}:{}/{}",
+        db_vars[0], db_vars[1], db_vars[2], db_vars[3], db_vars[4]
+    )
 }

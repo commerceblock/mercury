@@ -8,10 +8,8 @@ use super::{
 };
 extern crate shared_lib;
 use crate::error::SEError;
-use crate::storage::db::{
-    db_deser, db_get_2, db_insert, db_ser, db_update, Column, Table,
-};
-use crate::DataBase;
+use crate::storage::db::{db_deser, db_get_2, db_insert, db_ser, db_update, Column, Table};
+use crate::{DatabaseR, DatabaseW};
 use bitcoin::Transaction;
 use shared_lib::{mocks::mock_electrum::MockElectrum, state_chain::*, structs::*, util::FEE};
 
@@ -26,7 +24,7 @@ use uuid::Uuid;
 ///     - Generate and return shared wallet ID
 ///     - Can do auth or other DoS mitigation here
 #[post("/deposit/init", format = "json", data = "<deposit_msg1>")]
-pub fn deposit_init(conn: DataBase, deposit_msg1: Json<DepositMsg1>) -> Result<Json<Uuid>> {
+pub fn deposit_init(conn: DatabaseW, deposit_msg1: Json<DepositMsg1>) -> Result<Json<Uuid>> {
     // Generate shared wallet ID (user ID)
     let user_id = Uuid::new_v4();
 
@@ -118,7 +116,8 @@ pub fn verify_tx_confirmed(txid: &String, state: &State<Config>) -> Result<()> {
 #[post("/deposit/confirm", format = "json", data = "<deposit_msg2>")]
 pub fn deposit_confirm(
     state: State<Config>,
-    conn: DataBase,
+    db_read: DatabaseR,
+    db_write: DatabaseW,
     deposit_msg2: Json<DepositMsg2>,
 ) -> Result<Json<Uuid>> {
     // let shared_key_id = deposit_msg2.shared_key_id.clone();
@@ -126,7 +125,7 @@ pub fn deposit_confirm(
 
     // Get back up tx and proof key
     let (tx_backup_str, proof_key) = db_get_2::<String, String>(
-        &conn,
+        &db_read,
         &user_id,
         Table::UserSession,
         vec![Column::TxBackup, Column::ProofKey],
@@ -149,9 +148,9 @@ pub fn deposit_confirm(
     let state_chain = StateChain::new(proof_key.clone());
 
     // Insert into StateChain table
-    db_insert(&conn, &state_chain_id, Table::StateChain)?;
+    db_insert(&db_write, &state_chain_id, Table::StateChain)?;
     db_update(
-        &conn,
+        &db_write,
         &state_chain_id,
         Table::StateChain,
         vec![
@@ -169,9 +168,9 @@ pub fn deposit_confirm(
     )?;
 
     // Insert into BackupTx table
-    db_insert(&conn, &state_chain_id, Table::BackupTxs)?;
+    db_insert(&db_write, &state_chain_id, Table::BackupTxs)?;
     db_update(
-        &conn,
+        &db_write,
         &state_chain_id,
         Table::BackupTxs,
         vec![Column::TxBackup],
@@ -185,7 +184,8 @@ pub fn deposit_confirm(
 
     // Update sparse merkle tree with new StateChain entry
     let (new_root, current_root) = update_smt_db(
-        &conn,
+        &db_read,
+        &db_write,
         &state.mainstay_config,
         &tx_backup
             .input
@@ -208,7 +208,7 @@ pub fn deposit_confirm(
 
     // Update UserSession with StateChain's ID
     db_update(
-        &conn,
+        &db_write,
         &user_id,
         Table::UserSession,
         vec![Column::StateChainId],

@@ -12,7 +12,7 @@ use shared_lib::{state_chain::*, structs::*};
 use crate::error::SEError;
 use crate::routes::util::check_user_auth;
 use crate::storage::db::{db_deser, db_get_1, db_get_3, db_ser, db_update, Column, Table};
-use crate::DataBase;
+use crate::{DatabaseR, DatabaseW};
 
 use bitcoin::Transaction;
 use chrono::NaiveDateTime;
@@ -24,14 +24,18 @@ use uuid::Uuid;
 ///     - Check StateChainSig validity
 ///     - Mark user as authorised to withdraw
 #[post("/withdraw/init", format = "json", data = "<withdraw_msg1>")]
-pub fn withdraw_init(conn: DataBase, withdraw_msg1: Json<WithdrawMsg1>) -> Result<Json<()>> {
+pub fn withdraw_init(
+    db_read: DatabaseR,
+    db_write: DatabaseW,
+    withdraw_msg1: Json<WithdrawMsg1>,
+) -> Result<Json<()>> {
     let user_id = withdraw_msg1.shared_key_id;
-    check_user_auth(&conn, &user_id)?;
+    check_user_auth(&db_read, &user_id)?;
 
     info!("WITHDRAW: Init. Shared Key ID: {}", user_id);
 
     let (state_chain_id) = db_get_1::<Uuid>(
-        &conn,
+        &db_read,
         &user_id,
         Table::UserSession,
         vec![Column::StateChainId],
@@ -39,7 +43,7 @@ pub fn withdraw_init(conn: DataBase, withdraw_msg1: Json<WithdrawMsg1>) -> Resul
 
     // Get statechain
     let (sc_locked_until, sc_owner_id, state_chain_str) = db_get_3::<NaiveDateTime, Uuid, String>(
-        &conn,
+        &db_read,
         &state_chain_id,
         Table::StateChain,
         vec![Column::LockedUntil, Column::OwnerId, Column::Chain],
@@ -61,7 +65,7 @@ pub fn withdraw_init(conn: DataBase, withdraw_msg1: Json<WithdrawMsg1>) -> Resul
 
     // Mark UserSession as authorised for withdrawal
     db_update(
-        &conn,
+        &db_write,
         &user_id,
         Table::UserSession,
         vec![Column::WithdrawScSig],
@@ -83,7 +87,8 @@ pub fn withdraw_init(conn: DataBase, withdraw_msg1: Json<WithdrawMsg1>) -> Resul
 #[post("/withdraw/confirm", format = "json", data = "<withdraw_msg2>")]
 pub fn withdraw_confirm(
     state: State<Config>,
-    conn: DataBase,
+    db_read: DatabaseR,
+    db_write: DatabaseW,
     withdraw_msg2: Json<WithdrawMsg2>,
 ) -> Result<Json<Vec<Vec<u8>>>> {
     let user_id = withdraw_msg2.shared_key_id;
@@ -91,7 +96,7 @@ pub fn withdraw_confirm(
 
     // Get UserSession data - Checking that withdraw tx and statechain signature exists
     let (tx_withdraw_str, withdraw_sc_sig_str, state_chain_id) = db_get_3::<String, String, Uuid>(
-        &conn,
+        &db_read,
         &user_id,
         Table::UserSession,
         vec![
@@ -105,7 +110,7 @@ pub fn withdraw_confirm(
 
     // Get statechain and update with final StateChainSig
     let mut state_chain: StateChain = db_deser(db_get_1(
-        &conn,
+        &db_read,
         &state_chain_id,
         Table::StateChain,
         vec![Column::Chain],
@@ -114,7 +119,7 @@ pub fn withdraw_confirm(
     state_chain.add(withdraw_sc_sig.to_owned())?;
 
     db_update(
-        &conn,
+        &db_write,
         &state_chain_id,
         Table::StateChain,
         vec![Column::Chain, Column::Amount],
@@ -123,7 +128,7 @@ pub fn withdraw_confirm(
 
     // Remove state_chain_id from user session to signal end of session
     db_update(
-        &conn,
+        &db_write,
         &user_id,
         Table::UserSession,
         vec![Column::StateChainId],
@@ -132,7 +137,8 @@ pub fn withdraw_confirm(
 
     // Update sparse merkle tree
     let (new_root, prev_root) = update_smt_db(
-        &conn,
+        &db_read,
+        &db_write,
         &state.mainstay_config,
         &tx_withdraw
             .input

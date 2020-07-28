@@ -7,7 +7,7 @@ use crate::{
         db_deser, db_get_1, db_get_2, db_get_3, db_get_4, db_insert, db_ser, db_update, Column,
         Table,
     },
-    DataBase,
+    DatabaseR, DatabaseW,
 };
 use shared_lib::{
     structs::{Protocol, SignSecondMsgRequest},
@@ -84,15 +84,21 @@ pub enum EcdsaStruct {
 
 #[post("/ecdsa/keygen/<id>/first/<protocol>", format = "json")]
 pub fn first_message(
-    conn: DataBase,
+    db_read: DatabaseR,
+    db_write: DatabaseW,
     id: String,
     protocol: String,
 ) -> Result<Json<(Uuid, party_one::KeyGenFirstMsg)>> {
     let user_id = Uuid::from_str(&id).unwrap();
-    check_user_auth(&conn, &user_id)?;
+    check_user_auth(&db_read, &user_id)?;
 
     // Create new entry in ecdsa table if key not already in table.
-    match db_get_1::<Option<String>>(&conn, &user_id, Table::Ecdsa, vec![Column::Party1MasterKey]) {
+    match db_get_1::<Option<String>>(
+        &db_read,
+        &user_id,
+        Table::Ecdsa,
+        vec![Column::Party1MasterKey],
+    ) {
         Ok(data) => match data {
             Some(_) => {
                 return Err(SEError::Generic(format!(
@@ -103,7 +109,7 @@ pub fn first_message(
             None => {} // Key exists but key gen not complete. Carry on without writing user_id.
         },
         Err(_) => {
-            let _ = db_insert(&conn, &user_id, Table::Ecdsa)?;
+            let _ = db_insert(&db_write, &user_id, Table::Ecdsa)?;
         }
     };
 
@@ -112,7 +118,7 @@ pub fn first_message(
         MasterKey1::key_gen_first_message()
     } else {
         let s2: FE = db_deser(db_get_1(
-            &conn,
+            &db_read,
             &user_id,
             Table::UserSession,
             vec![Column::S2],
@@ -121,7 +127,7 @@ pub fn first_message(
     };
 
     db_update(
-        &conn,
+        &db_write,
         &user_id,
         Table::Ecdsa,
         vec![
@@ -143,7 +149,8 @@ pub fn first_message(
 
 #[post("/ecdsa/keygen/<id>/second", format = "json", data = "<dlog_proof>")]
 pub fn second_message(
-    conn: DataBase,
+    db_read: DatabaseR,
+    db_write: DatabaseW,
     id: String,
     dlog_proof: Json<DLogProof>,
 ) -> Result<Json<party1::KeyGenParty1Message2>> {
@@ -152,7 +159,7 @@ pub fn second_message(
     let party2_public: GE = dlog_proof.0.pk.clone();
 
     let (comm_witness_str, ec_key_pair_str) = db_get_2::<String, String>(
-        &conn,
+        &db_read,
         &user_id,
         Table::Ecdsa,
         vec![Column::CommWitness, Column::EcKeyPair],
@@ -164,7 +171,7 @@ pub fn second_message(
         MasterKey1::key_gen_second_message(comm_witness, &ec_key_pair, &dlog_proof.0);
 
     db_update(
-        &conn,
+        &db_write,
         &user_id,
         Table::Ecdsa,
         vec![
@@ -188,14 +195,15 @@ pub fn second_message(
     data = "<party_two_pdl_first_message>"
 )]
 pub fn third_message(
-    conn: DataBase,
+    db_read: DatabaseR,
+    db_write: DatabaseW,
     id: String,
     party_two_pdl_first_message: Json<party_two::PDLFirstMessage>,
 ) -> Result<Json<party_one::PDLFirstMessage>> {
     let user_id = Uuid::from_str(&id).unwrap();
 
     let party_one_private: party_one::Party1Private = db_deser(db_get_1(
-        &conn,
+        &db_read,
         &user_id,
         Table::Ecdsa,
         vec![Column::Party1Private],
@@ -205,7 +213,7 @@ pub fn third_message(
         MasterKey1::key_gen_third_message(&party_two_pdl_first_message.0, &party_one_private);
 
     db_update(
-        &conn,
+        &db_write,
         &user_id,
         Table::Ecdsa,
         vec![
@@ -229,7 +237,8 @@ pub fn third_message(
     data = "<party_two_pdl_second_message>"
 )]
 pub fn fourth_message(
-    conn: DataBase,
+    db_read: DatabaseR,
+    db_write: DatabaseW,
     id: String,
     party_two_pdl_second_message: Json<party_two::PDLSecondMessage>,
 ) -> Result<Json<party_one::PDLSecondMessage>> {
@@ -241,7 +250,7 @@ pub fn fourth_message(
         party_two_pdl_first_message_str,
         alpha_str,
     ) = db_get_4::<String, String, String, String>(
-        &conn,
+        &db_read,
         &user_id,
         Table::Ecdsa,
         vec![
@@ -268,17 +277,17 @@ pub fn fourth_message(
 
     assert!(res.is_ok());
 
-    master_key(conn, id)?;
+    master_key(db_read, db_write, id)?;
 
     Ok(Json(res.unwrap()))
 }
 
-pub fn master_key(conn: DataBase, id: String) -> Result<()> {
+pub fn master_key(db_read: DatabaseR, db_write: DatabaseW, id: String) -> Result<()> {
     let user_id = Uuid::from_str(&id).unwrap();
 
     let (party2_public_str, paillier_key_pair_str, party_one_private_str, comm_witness_str) =
         db_get_4::<String, String, String, String>(
-            &conn,
+            &db_read,
             &user_id,
             Table::Ecdsa,
             vec![
@@ -303,7 +312,7 @@ pub fn master_key(conn: DataBase, id: String) -> Result<()> {
     );
 
     db_update(
-        &conn,
+        &db_write,
         &user_id,
         Table::Ecdsa,
         vec![Column::Party1MasterKey],
@@ -317,17 +326,18 @@ pub fn master_key(conn: DataBase, id: String) -> Result<()> {
     data = "<eph_key_gen_first_message_party_two>"
 )]
 pub fn sign_first(
-    conn: DataBase,
+    db_read: DatabaseR,
+    db_write: DatabaseW,
     id: String,
     eph_key_gen_first_message_party_two: Json<party_two::EphKeyGenFirstMsg>,
 ) -> Result<Json<party_one::EphKeyGenFirstMsg>> {
     let user_id = Uuid::from_str(&id).unwrap();
-    check_user_auth(&conn, &user_id)?;
+    check_user_auth(&db_read, &user_id)?;
 
     let (sign_party_one_first_message, eph_ec_key_pair_party1) = MasterKey1::sign_first_message();
 
     db_update(
-        &conn,
+        &db_write,
         &user_id,
         Table::Ecdsa,
         vec![Column::EphKeyGenFirstMsg, Column::EphEcKeyPair],
@@ -342,16 +352,17 @@ pub fn sign_first(
 
 #[post("/ecdsa/sign/<id>/second", format = "json", data = "<request>")]
 pub fn sign_second(
-    conn: DataBase,
+    db_read: DatabaseR,
+    db_write: DatabaseW,
     id: String,
     request: Json<SignSecondMsgRequest>,
 ) -> Result<Json<Vec<Vec<u8>>>> {
     let user_id = Uuid::from_str(&id).unwrap();
-    check_user_auth(&conn, &user_id)?;
+    check_user_auth(&db_read, &user_id)?;
 
     // Get validated sig hash for this user
     let sig_hash: sha256d::Hash = db_deser(db_get_1(
-        &conn,
+        &db_read,
         &user_id,
         Table::UserSession,
         vec![Column::SigHash],
@@ -380,7 +391,7 @@ pub fn sign_second(
     // Get 2P-Ecdsa data
     let (shared_key_str, eph_ec_key_pair_party1_str, eph_key_gen_first_message_party_two_str) =
         db_get_3::<String, String, String>(
-            &conn,
+            &db_read,
             &user_id,
             Table::Ecdsa,
             vec![
@@ -413,7 +424,7 @@ pub fn sign_second(
     // Get transaction which is being signed.
     let mut tx: Transaction = match request.protocol {
         Protocol::Withdraw => db_deser(db_get_1(
-            &conn,
+            &db_read,
             &user_id,
             Table::UserSession,
             vec![Column::TxWithdraw],
@@ -421,7 +432,7 @@ pub fn sign_second(
         _ => {
             // despoit() and transfer() both sign tx_backup
             db_deser(db_get_1(
-                &conn,
+                &db_read,
                 &user_id,
                 Table::UserSession,
                 vec![Column::TxBackup],
@@ -458,7 +469,7 @@ pub fn sign_second(
         Protocol::Withdraw => {
             // Store signed withdraw tx in UserSession DB object
             db_update(
-                &conn,
+                &db_write,
                 &user_id,
                 Table::UserSession,
                 vec![Column::TxWithdraw],
@@ -472,7 +483,7 @@ pub fn sign_second(
         _ => {
             // Store signed backup tx in UserSession DB object
             db_update(
-                &conn,
+                &db_write,
                 &user_id,
                 Table::UserSession,
                 vec![Column::TxBackup],
