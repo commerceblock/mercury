@@ -194,7 +194,7 @@ fn main() {
         //
         // println!("Backup key saved in escrow (Took: {})", TimeFormat(start.elapsed()));
         } else if matches.is_present("verify") {
-            println!("Backup not currently implemented.")
+            println!("Backup verification not currently implemented.")
 
         // let escrow = escrow::Escrow::load();
         //
@@ -205,7 +205,7 @@ fn main() {
         //
         // println!(" (Took: {})", TimeFormat(start.elapsed()));
         } else if matches.is_present("restore") {
-            println!("Backup not currently implemented.")
+            println!("Restoring not currently implemented.")
 
         // let escrow = escrow::Escrow::load();
         //

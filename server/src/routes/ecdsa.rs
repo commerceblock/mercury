@@ -1,6 +1,6 @@
 use super::super::Result;
 
-use crate::error::SEError;
+use crate::error::{DBErrorType, SEError};
 use crate::{
     routes::util::check_user_auth,
     storage::db::{
@@ -40,48 +40,6 @@ struct Alpha {
     value: BigInt,
 }
 
-#[derive(Debug)]
-pub enum EcdsaStruct {
-    KeyGenFirstMsg,
-    CommWitness,
-    EcKeyPair,
-    PaillierKeyPair,
-    Party1Private,
-    Party2Public,
-
-    PDLProver,
-    PDLDecommit,
-    Alpha,
-    Party2PDLFirstMsg,
-
-    CCKeyGenFirstMsg,
-    CCCommWitness,
-    CCEcKeyPair,
-    CC,
-
-    Party1MasterKey,
-
-    EphEcKeyPair,
-    EphKeyGenFirstMsg,
-
-    RotateCommitMessage1M,
-    RotateCommitMessage1R,
-    RotateRandom1,
-    RotateFirstMsg,
-    RotatePrivateNew,
-    RotatePdlDecom,
-    RotateParty2First,
-    RotateParty1Second,
-
-    POS,
-}
-
-// impl db::MPCStruct for EcdsaStruct {
-//     fn to_string(&self) -> String {
-//         format!("{:?}", self)
-//     }
-// }
-
 #[post("/ecdsa/keygen/<id>/first/<protocol>", format = "json")]
 pub fn first_message(
     db_read: DatabaseR,
@@ -108,9 +66,14 @@ pub fn first_message(
             }
             None => {} // Key exists but key gen not complete. Carry on without writing user_id.
         },
-        Err(_) => {
-            let _ = db_insert(&db_write, &user_id, Table::Ecdsa)?;
-        }
+        Err(e) => match e {
+            SEError::DBError(DBErrorType::NoDataForID, _) =>
+            // If no item has ID, create new item
+            {
+                let _ = db_insert(&db_write, &user_id, Table::Ecdsa)?;
+            }
+            _ => return Err(e),
+        },
     };
 
     // Generate shared key
