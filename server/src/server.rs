@@ -2,7 +2,7 @@ use super::routes::*;
 use super::Config;
 
 use crate::DatabaseR;
-use crate::DatabaseW;
+use crate::{storage::db_reset_test_dbs, DatabaseW};
 
 use config;
 use rocket;
@@ -126,6 +126,10 @@ pub fn get_server(testing_mode: bool) -> Result<Rocket> {
         .manage(config)
         .attach(DatabaseR::fairing()) // read
         .attach(DatabaseW::fairing()); // write
+
+    if testing_mode {
+        db_reset_test_dbs()?;
+    }
 
     Ok(rock)
 }

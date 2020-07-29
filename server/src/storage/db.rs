@@ -16,8 +16,6 @@ use shared_lib::mainstay;
 use shared_lib::Root;
 use uuid::Uuid;
 
-pub static DB_SC_LOC: &str = "../server/db-smt";
-
 #[derive(Debug)]
 pub enum Schema {
     StateChainEntity,
@@ -615,25 +613,9 @@ pub fn db_get_confirmed_root(db_read: &DatabaseR) -> Result<Option<Root>> {
 mod tests {
 
     use super::*;
-    use crate::{routes::util::update_smt_db, server::get_postgres_url};
-    use crate::{DatabaseR, DatabaseW};
-    use rocket_contrib::databases::r2d2;
-    use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
+    use crate::{routes::util::update_smt_db, storage::get_test_postgres_connection};
+
     // use shared_lib::{state_chain::update_statechain_smt, mainstay::Commitment};
-
-    fn get_postgres_read() -> DatabaseR {
-        let rocket_url = get_postgres_url("TEST".to_string());
-        let manager = PostgresConnectionManager::new(rocket_url, TlsMode::None).unwrap();
-        let pool = r2d2::Pool::new(manager).unwrap();
-        DatabaseR(pool.get().unwrap())
-    }
-
-    fn get_postgres_write() -> DatabaseW {
-        let rocket_url = get_postgres_url("TEST".to_string());
-        let manager = PostgresConnectionManager::new(rocket_url, TlsMode::None).unwrap();
-        let pool = r2d2::Pool::new(manager).unwrap();
-        DatabaseW(pool.get().unwrap())
-    }
 
     // #[test]
     // #[serial]
@@ -679,8 +661,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_update_root_smt() {
-        let db_read = get_postgres_read();
-        let db_write = get_postgres_write();
+        let db_read = DatabaseR(get_test_postgres_connection());
+        let db_write = DatabaseW(get_test_postgres_connection());
         let mc = mainstay::Config::from_test();
 
         let (_, new_root) = update_smt_db(

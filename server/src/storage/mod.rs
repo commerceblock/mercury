@@ -1,8 +1,14 @@
 pub mod db;
 
 use super::Result;
+use crate::server::get_postgres_url;
 use db::Table;
 use postgres::Connection;
+use rocket_contrib::databases::r2d2;
+use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
+use rocksdb::{Options, DB};
+
+pub static DB_SC_LOC: &str = "../server/db-smt";
 
 /// Build DB tables and Schemas
 pub fn db_make_tables(conn: &Connection) -> Result<()> {
@@ -185,30 +191,18 @@ pub fn db_truncate_tables(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
+pub fn db_reset_test_dbs() -> Result<()> {
+    // truncate all postgres tables
+    let conn = get_test_postgres_connection();
+    let _ = db_truncate_tables(&conn);
 
-    use super::*;
+    // Destroy Sparse Merkle Tree RocksDB instance
+    let _ = DB::destroy(&Options::default(), DB_SC_LOC); // ignore error
+    Ok(())
+}
 
-    use crate::server::get_postgres_url;
-    use crate::DatabaseR;
-    use rocket_contrib::databases::r2d2;
-    use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
-
-    fn get_postgres_test() -> DatabaseR {
-        let rocket_url = get_postgres_url("TEST".to_string());
-        let manager = PostgresConnectionManager::new(rocket_url, TlsMode::None).unwrap();
-        let pool = r2d2::Pool::new(manager).unwrap();
-        DatabaseR(pool.get().unwrap())
-    }
-
-    // Use this test to create, reset or truncate test dbs
-    #[allow(dead_code)]
-    // #[test]
-    fn test_restart_test_dbs() {
-        let conn = get_postgres_test();
-        // let _ = db_make_tables(&conn);
-        // let _ = db_drop_tables(&conn);
-        let _ = db_truncate_tables(&conn);
-    }
+fn get_test_postgres_connection() -> r2d2::PooledConnection<PostgresConnectionManager> {
+    let rocket_url = get_postgres_url("TEST".to_string());
+    let manager = PostgresConnectionManager::new(rocket_url, TlsMode::None).unwrap();
+    r2d2::Pool::new(manager).unwrap().get().unwrap()
 }

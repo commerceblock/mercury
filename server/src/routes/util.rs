@@ -14,9 +14,12 @@ use shared_lib::{
 
 use crate::error::{DBErrorType, SEError};
 use crate::routes::transfer::finalize_batch;
-use crate::storage::db::{
-    self, db_deser, db_get_1, db_get_2, db_get_3, db_remove, db_root_get, db_root_get_current_id,
-    db_ser, db_update, Column, Table, DB_SC_LOC,
+use crate::storage::{
+    db::{
+        self, db_deser, db_get_1, db_get_2, db_get_3, db_remove, db_root_get,
+        db_root_get_current_id, db_ser, db_update, Column, Table,
+    },
+    DB_SC_LOC,
 };
 use crate::{DatabaseR, DatabaseW};
 
