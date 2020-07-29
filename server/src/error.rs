@@ -4,17 +4,17 @@
 
 use shared_lib::error::SharedLibError;
 
-use rocket::http::{ Status, ContentType };
-use rocket::Response;
-use rocket::Request;
+use crate::storage::db::Column;
+use bitcoin::secp256k1::Error as SecpError;
+use monotree::Errors as MonotreeErrors;
+use postgres::Error as PostgresError;
+use rocket::http::{ContentType, Status};
 use rocket::response::Responder;
+use rocket::{Request, Response};
 use std::error;
 use std::fmt;
 use std::io::Cursor;
 use std::time::SystemTimeError;
-use monotree::Errors as MonotreeErrors;
-use bitcoin::secp256k1::Error as SecpError;
-
 
 /// State Entity library specific errors
 #[derive(Debug, Deserialize)]
@@ -25,12 +25,14 @@ pub enum SEError {
     AuthError,
     /// Error in co-signing
     SigningError(String),
-    /// Storage error
+    /// DB error no ID found
     DBError(DBErrorType, String),
+    /// DB error no data in column for ID
+    DBErrorWC(DBErrorType, String, Column),
     /// Inherit errors from Util
     SharedLibError(String),
     /// Inherit errors from Monotree
-    SMTError(String)
+    SMTError(String),
 }
 
 impl From<String> for SEError {
@@ -38,43 +40,45 @@ impl From<String> for SEError {
         SEError::Generic(e)
     }
 }
-
 impl From<SharedLibError> for SEError {
     fn from(e: SharedLibError) -> SEError {
         SEError::SharedLibError(e.to_string())
     }
 }
-
 impl From<MonotreeErrors> for SEError {
     fn from(e: MonotreeErrors) -> SEError {
         SEError::SMTError(e.to_string())
     }
 }
-
 impl From<SecpError> for SEError {
     fn from(e: SecpError) -> SEError {
         SEError::SigningError(e.to_string())
     }
 }
-
 impl From<SystemTimeError> for SEError {
     fn from(e: SystemTimeError) -> SEError {
         SEError::Generic(e.to_string())
     }
 }
-
+impl From<PostgresError> for SEError {
+    fn from(e: PostgresError) -> SEError {
+        SEError::Generic(e.to_string())
+    }
+}
 
 /// DB error types
 #[derive(Debug, Deserialize)]
 pub enum DBErrorType {
-    /// No data found for identifier
-    NoDataForID
+    /// No identifier
+    NoDataForID,
+    /// No update made
+    UpdateFailed,
 }
-
 impl DBErrorType {
     fn as_str(&self) -> &'static str {
         match *self {
-            DBErrorType::NoDataForID => "No data for such identifier.",
+            DBErrorType::NoDataForID => "No data for identifier.",
+            DBErrorType::UpdateFailed => "No update made.",
         }
     }
 }
@@ -83,11 +87,18 @@ impl fmt::Display for SEError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             SEError::Generic(ref e) => write!(f, "Error: {}", e),
-            SEError::AuthError => write!(f,"Authentication Error: User authorisation failed"),
-            SEError::DBError(ref e, ref value) => write!(f, "DB Error: {} (value: {})", e.as_str(), value),
-            SEError::SigningError(ref e) => write!(f,"Signing Error: {}",e),
-            SEError::SharedLibError(ref e) => write!(f,"SharedLibError Error: {}",e),
-            SEError::SMTError(ref e) => write!(f,"SMT Error: {}",e),
+            SEError::AuthError => write!(f, "Authentication Error: User authorisation failed"),
+            SEError::DBError(ref e, ref id) => write!(f, "DB Error: {} (id: {})", e.as_str(), id),
+            SEError::DBErrorWC(ref e, ref id, ref col) => write!(
+                f,
+                "DB Error: {} (id: {} col: {})",
+                e.as_str(),
+                id,
+                col.to_string()
+            ),
+            SEError::SigningError(ref e) => write!(f, "Signing Error: {}", e),
+            SEError::SharedLibError(ref e) => write!(f, "SharedLibError Error: {}", e),
+            SEError::SMTError(ref e) => write!(f, "SMT Error: {}", e),
         }
     }
 }

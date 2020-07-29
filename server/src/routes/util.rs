@@ -2,163 +2,115 @@
 //!
 //! StateEntity protocol utilities. DB structs, info api calls and other miscellaneous functions
 
-use super::super::{{Result,Config},
-    auth::jwt::Claims,
-    storage::db};
+use super::super::{Config, Result};
 extern crate shared_lib;
 use shared_lib::{
-    util::{tx_backup_verify, get_sighash, tx_withdraw_verify},
-    structs::*,
+    mainstay,
     state_chain::*,
-    Root};
+    structs::*,
+    util::{get_sighash, tx_backup_verify, tx_withdraw_verify},
+    Root,
+};
 
+use crate::error::{DBErrorType, SEError};
 use crate::routes::transfer::finalize_batch;
-use crate::error::{SEError,DBErrorType::NoDataForID};
-use crate::storage::db::{get_root, get_current_root};
+use crate::storage::{
+    db::{
+        self, db_deser, db_get_1, db_get_2, db_get_3, db_remove, db_root_get,
+        db_root_get_current_id, db_ser, db_update, Column, Table,
+    },
+    DB_SC_LOC,
+};
+use crate::{DatabaseR, DatabaseW};
 
-use bitcoin::{Transaction,
-    hashes::sha256d};
-
-use curv::FE;
+use bitcoin::Transaction;
+use chrono::{NaiveDateTime, Utc};
+use db::root_update;
 use monotree::Proof;
-use rocket_contrib::json::Json;
 use rocket::State;
-use db::DB_SC_LOC;
-use std::{collections::HashMap, time::{Duration, SystemTime}};
+use rocket_contrib::json::Json;
+use std::{collections::HashMap, str::FromStr};
+use uuid::Uuid;
 
+/// Check if Transfer Batch is out of time
+pub fn transfer_batch_is_ended(start_time: NaiveDateTime, batch_lifetime: i64) -> bool {
+    let current_time = Utc::now().naive_utc().timestamp();
 
-/// Structs for DB storage.
-#[derive(Debug)]
-pub enum StateEntityStruct {
-    UserSession,
-    StateChain, // struct def in shared_lib
-    TransferData,
-    TransferBatchData
-}
-impl db::MPCStruct for StateEntityStruct {
-    fn to_string(&self) -> String {
-        format!("StateChain{:?}", self)
+    if current_time - start_time.timestamp() > batch_lifetime {
+        return true;
     }
-}
-
-/// UserSession represents a User in a particular state chain session.
-/// The same client co-owning 2 distinct UTXOs wth the state entity would have 2 unrelated UserSession's.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct UserSession {
-    /// User's identification
-    pub id: String,
-    /// User's password
-    // pub pass: String
-    /// User's authorisation
-    pub auth: String,
-    /// users proof key
-    pub proof_key: String,
-    /// back up tx for this user session
-    pub tx_backup: Option<Transaction>,
-    /// withdraw tx for end of user session and end of state chain
-    pub tx_withdraw: Option<Transaction>,
-    /// ID of state chain that data is for
-    pub state_chain_id: Option<String>,
-    /// If UserSession created for transfer() then SE must know s2 value to create shared wallet
-    pub s2: Option<FE>,
-    /// sig hash of tx to be signed. This value is checked in co-signing to ensure that message being
-    /// signed is the sig hash of a tx that SE has verified.
-    /// Used when signing both backup and withdraw tx.
-    pub sig_hash: Option<sha256d::Hash>,
-    /// StateChain Signature for withdrawal. Presence of this data signals user has passed Authorisation
-    /// for withdrawl.
-    pub withdraw_sc_sig: Option<StateChainSig>
-}
-
-/// TransferData provides new Owner's data for their new UserSession struct created in transfer_receiver.
-/// Key: state_chain_id
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct TransferData {
-    pub state_chain_id: String,
-    pub state_chain_sig: StateChainSig,
-    pub x1: FE,
-}
-
-
-/// TransferBatch stores list of StateChains involved in a batch transfer and their status in the potocol.
-/// When all transfers in the batch are complete these transfers are finalized atomically.
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TransferBatchData {
-    pub id: String,
-    pub start_time: SystemTime, // time batch transfer began
-    pub state_chains: HashMap<String, bool>,
-    pub finalized_data: Vec<TransferFinalizeData>,
-    pub punished_state_chains: Vec<String>, // If transfer batch fails these state chain Id's were punished.
-    pub finalized: bool
-}
-
-impl TransferBatchData {
-    pub fn is_ended(&self, batch_lifetime: u64) -> bool {
-        if SystemTime::now().duration_since(self.start_time).unwrap().as_secs() > batch_lifetime {
-            return true
-        }
-        false
-    }
-}
-
-/// Struct holds data when transfer is complete but not yet finalized
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct TransferFinalizeData {
-    pub new_shared_key_id: String,
-    pub state_chain_id: String,
-    pub state_chain_sig: StateChainSig,
-    pub s2: FE,
-    pub batch_data: Option<BatchData>,
+    false
 }
 
 /// Check if user has passed authentication.
-pub fn check_user_auth(
-    state: &State<Config>,
-    claim: &Claims,
-    id: &String
-) -> Result<UserSession> {
+pub fn check_user_auth(db_read: &DatabaseR, user_id: &Uuid) -> Result<()> {
     // check authorisation id is in DB (and check password?)
-    db::get(
-        &state.db,
-        &claim.sub,
-        &id,
-        &StateEntityStruct::UserSession).unwrap()
-    .ok_or(SEError::AuthError)
+    if let Err(_) = db_get_1::<Uuid>(&db_read, &user_id, Table::UserSession, vec![Column::Id]) {
+        return Err(SEError::AuthError);
+    }
+    Ok(())
 }
 
 // Set state chain time-out
-pub fn punish_state_chain(
+pub fn state_chain_punish(
     state: &State<Config>,
-    claim: &Claims,
-    state_chain_id: String
+    db_read: &DatabaseR,
+    db_write: &DatabaseW,
+    state_chain_id: Uuid,
 ) -> Result<()> {
-    let mut state_chain: StateChain =
-        db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
-            .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
-
-    if state_chain.is_locked().is_err() {
-        return Err(SEError::Generic(String::from("State chain is already locked. This should not be possible.")));
-    }
-
-    // set punishment
-    state_chain.locked_until = SystemTime::now() + Duration::from_secs(state.punishment_duration);
-    db::insert(
-        &state.db,
-        &claim.sub,
+    let (sc_locked_until) = db_get_1::<NaiveDateTime>(
+        &db_read,
         &state_chain_id,
-        &StateEntityStruct::StateChain,
-        &state_chain
+        Table::StateChain,
+        vec![Column::LockedUntil],
     )?;
 
-    info!("PUNISHMENT: State Chain ID: {} locked for {}s.", state_chain_id, state.punishment_duration);
+    if is_locked(sc_locked_until).is_err() {
+        return Err(SEError::Generic(String::from(
+            "State chain is already locked. This should not be possible.",
+        )));
+    }
+
+    db_update(
+        &db_write,
+        &state_chain_id,
+        Table::StateChain,
+        vec![Column::LockedUntil],
+        vec![&get_locked_until(state.punishment_duration as i64)?],
+    )?;
+
+    info!(
+        "PUNISHMENT: State Chain ID: {} locked for {}s.",
+        state_chain_id, state.punishment_duration
+    );
     Ok(())
+}
+
+/// Update SMT with new (key: value) pair and update current root value
+pub fn update_smt_db(
+    db_read: &DatabaseR,
+    db_write: &DatabaseW,
+    mc: &Option<mainstay::Config>,
+    funding_txid: &String,
+    proof_key: &String,
+) -> Result<(Option<Root>, Root)> {
+    let current_root = db_root_get(&db_read, &db_root_get_current_id(&db_read)?)?;
+    let new_root_hash = update_statechain_smt(
+        DB_SC_LOC,
+        &current_root.clone().map(|r| r.hash()),
+        funding_txid,
+        proof_key,
+    )?;
+
+    let new_root = Root::from_hash(&new_root_hash.unwrap());
+    root_update(db_read, db_write, mc, &new_root)?; // Update current root
+
+    Ok((current_root, new_root))
 }
 
 /// API: Return StateEntity fee information.
 #[post("/info/fee", format = "json")]
-pub fn get_state_entity_fees(
-    state: State<Config>,
-) -> Result<Json<StateEntityFeeInfoAPI>> {
+pub fn get_state_entity_fees(state: State<Config>) -> Result<Json<StateEntityFeeInfoAPI>> {
     Ok(Json(StateEntityFeeInfoAPI {
         address: state.fee_address.clone(),
         deposit: state.fee_deposit,
@@ -169,18 +121,32 @@ pub fn get_state_entity_fees(
 /// API: Return StateChain info: funding txid and state chain list of proof keys and signatures.
 #[post("/info/statechain/<state_chain_id>", format = "json")]
 pub fn get_statechain(
-    state: State<Config>,
-    claim: Claims,
+    db_read: DatabaseR,
     state_chain_id: String,
 ) -> Result<Json<StateChainDataAPI>> {
-    let state_chain: StateChain =
-        db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
-            .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
+    let state_chain_id = Uuid::from_str(&state_chain_id).unwrap();
+
+    let (amount, state_chain_str) = db_get_2::<i64, String>(
+        &db_read,
+        &state_chain_id,
+        Table::StateChain,
+        vec![Column::Amount, Column::Chain],
+    )?;
+    let state_chain: StateChain = db_deser(state_chain_str)?;
+
+    let (tx_backup_str) = db_get_1::<String>(
+        &db_read,
+        &state_chain_id,
+        Table::BackupTxs,
+        vec![Column::TxBackup],
+    )?;
+    let tx_backup: Transaction = db_deser(tx_backup_str)?;
+
     Ok(Json({
         StateChainDataAPI {
-            amount: state_chain.amount,
-            utxo: state_chain.tx_backup.input.get(0).unwrap().previous_output,
-            chain: state_chain.chain
+            amount: amount as u64,
+            utxo: tx_backup.input.get(0).unwrap().previous_output,
+            chain: state_chain.chain,
         }
     }))
 }
@@ -188,40 +154,57 @@ pub fn get_statechain(
 /// API: Generates sparse merkle tree inclusion proof for some key in a tree with some root.
 #[post("/info/proof", format = "json", data = "<smt_proof_msg>")]
 pub fn get_smt_proof(
-    state: State<Config>,
+    db_read: DatabaseR,
     smt_proof_msg: Json<SmtProofMsgAPI>,
 ) -> Result<Json<Option<Proof>>> {
     // ensure root exists
-    match &smt_proof_msg.root.id(){
+    match &smt_proof_msg.root.id() {
         Some(id) => {
-            if get_root::<Root>(&state.db, id)?.is_none() {
-                return Err(SEError::DBError(NoDataForID, format!("Root id: {:?}",id)));
+            if db_root_get(&db_read, &(id.clone() as i64))?.is_none() {
+                return Err(SEError::DBError(
+                    DBErrorType::NoDataForID,
+                    format!("Root id: {:?}", id),
+                ));
             }
-        },
+        }
         None => {
-            return Err(SEError::DBError(NoDataForID, format!("Root does not have an id: {:?}",smt_proof_msg.root)));
+            return Err(SEError::DBError(
+                DBErrorType::NoDataForID,
+                format!("Root does not have an id: {:?}", smt_proof_msg.root),
+            ));
         }
     }
-    
-    Ok(Json(gen_proof_smt(DB_SC_LOC, &Some(smt_proof_msg.root.hash()), &smt_proof_msg.funding_txid)?))
+
+    Ok(Json(gen_proof_smt(
+        DB_SC_LOC,
+        &Some(smt_proof_msg.root.hash()),
+        &smt_proof_msg.funding_txid,
+    )?))
 }
 
 /// API: Get root of sparse merkle tree. Will be via Mainstay in the future.
 #[post("/info/root", format = "json")]
-pub fn get_smt_root(
-    state: State<Config>,
-) -> Result<Json<Option<Root>>> {
-    Ok(Json(get_current_root::<Root>(&state.db)?))
+pub fn get_smt_root(db_read: DatabaseR) -> Result<Json<Option<Root>>> {
+    Ok(Json(db_root_get(
+        &db_read,
+        &db_root_get_current_id(&db_read)?,
+    )?))
 }
 
 /// API: Get root of sparse merkle tree. Will be via Mainstay in the future.
 #[post("/info/confirmed_root", format = "json")]
+// pub fn get_confirmed_smt_root(state: State<Config>) -> Result<Json<Option<Root>>> {
 pub fn get_confirmed_smt_root(
+    db_read: DatabaseR,
+    db_write: DatabaseW,
     state: State<Config>,
 ) -> Result<Json<Option<Root>>> {
-    Ok(Json(db::get_confirmed_root(&state.db, &state.mainstay_config)?))
+    Ok(Json(db::get_confirmed_root(
+        &db_read,
+        &db_write,
+        &state.mainstay_config,
+    )?))
 }
-
 
 /// API: Return a TransferBatchData status.
 /// Triggers check for all transfers complete - if so then finalize all.
@@ -229,52 +212,80 @@ pub fn get_confirmed_smt_root(
 #[post("/info/transfer-batch/<batch_id>", format = "json")]
 pub fn get_transfer_batch_status(
     state: State<Config>,
-    claim: Claims,
+    db_read: DatabaseR,
+    db_write: DatabaseW,
     batch_id: String,
 ) -> Result<Json<TransferBatchDataAPI>> {
-    let mut transfer_batch_data: TransferBatchData =
-        db::get(&state.db, &claim.sub, &batch_id, &StateEntityStruct::TransferBatchData)?
-            .ok_or(SEError::DBError(NoDataForID, batch_id.clone()))?;
+    let batch_id = Uuid::from_str(&batch_id).unwrap();
 
-    // Check batch is still within lifetime
-    if transfer_batch_data.is_ended(state.batch_lifetime) {
-        if transfer_batch_data.punished_state_chains.len() == 0 { // Punishments not yet set
-            info!("TRANSFER_BATCH: Lifetime reached. ID: {}.", batch_id);
-            // Set punishments for all statechains involved in batch
-            for (state_chain_id, _) in transfer_batch_data.state_chains {
-                punish_state_chain(&state, &claim, state_chain_id.clone())?;
-                transfer_batch_data.punished_state_chains.push(state_chain_id.clone());
-
-                // Remove TransferData involved
-                db::remove(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::TransferData)?;
-                info!("TRANSFER_BATCH: Transfer data marked as archived. State Chain ID: {}.", state_chain_id);
-            }
-            info!("TRANSFER_BATCH: Punished all state chains in failed batch. ID: {}.",batch_id);
-        }
-        return Err(SEError::Generic(String::from("Transfer Batch ended.")))
-    }
+    let (state_chains_str, start_time, finalized) = db_get_3::<String, NaiveDateTime, bool>(
+        &db_read,
+        &batch_id,
+        Table::TransferBatch,
+        vec![Column::StateChains, Column::StartTime, Column::Finalized],
+    )?;
+    let state_chains: HashMap<Uuid, bool> = db_deser(state_chains_str)?;
 
     // Check if all transfers are complete. If so then all transfers in batch can be finalized.
-    if !transfer_batch_data.finalized {
-        let mut state_chains_copy = transfer_batch_data.state_chains.clone();
+    if !finalized {
+        let mut state_chains_copy = state_chains.clone();
         state_chains_copy.retain(|_, &mut v| v == false);
         if state_chains_copy.len() == 0 {
-            finalize_batch(
-                &state,
-                &claim,
-                &batch_id
-            )?;
-            info!("TRANSFER_BATCH: All transfers complete in batch. Finalized. ID: {}.", batch_id);
+            finalize_batch(&state, &db_read, &db_write, batch_id)?;
+            info!(
+                "TRANSFER_BATCH: All transfers complete in batch. Finalized. ID: {}.",
+                batch_id
+            );
+        }
+        // Check batch is still within lifetime
+        if transfer_batch_is_ended(start_time, state.batch_lifetime as i64) {
+            let mut punished_state_chains: Vec<Uuid> = db_deser(db_get_1(
+                &db_read,
+                &batch_id,
+                Table::TransferBatch,
+                vec![Column::PunishedStateChains],
+            )?)?;
+
+            if punished_state_chains.len() == 0 {
+                // Punishments not yet set
+                info!("TRANSFER_BATCH: Lifetime reached. ID: {}.", batch_id);
+                // Set punishments for all statechains involved in batch
+                for (state_chain_id, _) in state_chains {
+                    state_chain_punish(&state, &db_read, &db_write, state_chain_id.clone())?;
+                    punished_state_chains.push(state_chain_id.clone());
+
+                    // Remove TransferData involved. Ignore failed update err since Transfer data may not exist.
+                    let _ = db_remove(&db_write, &state_chain_id, Table::Transfer);
+
+                    info!(
+                        "TRANSFER_BATCH: Transfer data deleted. State Chain ID: {}.",
+                        state_chain_id
+                    );
+                }
+
+                db_update(
+                    &db_write,
+                    &batch_id,
+                    Table::TransferBatch,
+                    vec![Column::PunishedStateChains],
+                    vec![&db_ser(punished_state_chains)?],
+                )?;
+
+                info!(
+                    "TRANSFER_BATCH: Punished all state chains in failed batch. ID: {}.",
+                    batch_id
+                );
+            }
+            return Err(SEError::Generic(String::from("Transfer Batch ended.")));
         }
     }
 
     // return status of transfers
-    Ok(Json(TransferBatchDataAPI{
-        state_chains: transfer_batch_data.state_chains,
-        finalized: transfer_batch_data.finalized
+    Ok(Json(TransferBatchDataAPI {
+        state_chains,
+        finalized,
     }))
 }
-
 
 /// Prepare to co-sign a transaction input. This is where SE checks that the tx to be signed is
 /// honest and error free:
@@ -283,42 +294,55 @@ pub fn get_transfer_batch_status(
 #[post("/prepare-sign", format = "json", data = "<prepare_sign_msg>")]
 pub fn prepare_sign_tx(
     state: State<Config>,
-    claim: Claims,
+    db_read: DatabaseR,
+    db_write: DatabaseW,
     prepare_sign_msg: Json<PrepareSignTxMsg>,
 ) -> Result<Json<()>> {
-    let shared_key_id = prepare_sign_msg.shared_key_id.clone();
-
-    // Auth user
-    check_user_auth(&state, &claim, &shared_key_id)?;
+    let user_id = prepare_sign_msg.shared_key_id;
+    check_user_auth(&db_read, &user_id)?;
 
     let prepare_sign_msg: PrepareSignTxMsg = prepare_sign_msg.into_inner();
-
-    // Get user session for this user
-    let mut user_session: UserSession =
-        db::get(&state.db, &claim.sub, &shared_key_id, &StateEntityStruct::UserSession)?
-            .ok_or(SEError::DBError(NoDataForID, shared_key_id.clone()))?;
 
     // Which protocol are we signing for?
     match prepare_sign_msg.protocol {
         Protocol::Withdraw => {
-
-            // Verify withdrawl has been authorised via presense of withdraw_sc_sig
-            if user_session.withdraw_sc_sig.is_none() {
-                return Err(SEError::Generic(String::from("Withdraw has not been authorised. /withdraw/init must be called first.")));
+            // Verify withdrawal has been authorised via presense of withdraw_sc_sig
+            if let Err(_) = db_get_1::<String>(
+                &db_read,
+                &user_id,
+                Table::UserSession,
+                vec![Column::WithdrawScSig],
+            ) {
+                return Err(SEError::Generic(String::from(
+                    "Withdraw has not been authorised. /withdraw/init must be called first.",
+                )));
             }
 
             // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data
             tx_withdraw_verify(&prepare_sign_msg, &state.fee_address, &state.fee_withdraw)?;
 
+            let (tx_backup_str) = db_get_1::<String>(
+                &db_read,
+                &user_id,
+                Table::UserSession,
+                vec![Column::TxBackup],
+            )?;
+            let tx_backup: Transaction = db_deser(tx_backup_str)?;
+
             // Check funding txid UTXO info
-            let state_chain_id = user_session.state_chain_id.clone() // check exists
-                .ok_or(SEError::Generic(String::from("No state chain session found for this user.")))?;
-            let state_chain: StateChain =
-                db::get(&state.db, &claim.sub, &state_chain_id, &StateEntityStruct::StateChain)?
-                    .ok_or(SEError::DBError(NoDataForID, state_chain_id.clone()))?;
-            let tx_backup_input = state_chain.tx_backup.input.get(0).unwrap().previous_output.to_owned();
-            if prepare_sign_msg.tx.input.get(0).unwrap().previous_output.to_owned() != tx_backup_input {
-                return Err(SEError::Generic(String::from("Incorrect withdraw transacton input.")));
+            let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
+            if prepare_sign_msg
+                .tx
+                .input
+                .get(0)
+                .unwrap()
+                .previous_output
+                .to_owned()
+                != tx_backup_input
+            {
+                return Err(SEError::Generic(String::from(
+                    "Incorrect withdraw transacton input.",
+                )));
             }
 
             // Update UserSession with withdraw tx info
@@ -327,21 +351,21 @@ pub fn prepare_sign_tx(
                 &0,
                 &prepare_sign_msg.input_addrs[0],
                 &prepare_sign_msg.input_amounts[0],
-                &state.network
+                &state.network,
             );
 
-            user_session.sig_hash = Some(sig_hash);
-            user_session.tx_withdraw = Some(prepare_sign_msg.tx);
-
-            db::insert(
-                &state.db,
-                &claim.sub,
-                &shared_key_id,
-                &StateEntityStruct::UserSession,
-                &user_session
+            db_update(
+                &db_write,
+                &user_id,
+                Table::UserSession,
+                vec![Column::SigHash, Column::TxWithdraw],
+                vec![&db_ser(sig_hash)?, &db_ser(prepare_sign_msg.tx)?],
             )?;
 
-            info!("WITHDRAW: Withdraw tx ready for signing. Shared Key ID: {}. State Chain ID: {}.",shared_key_id, state_chain_id);
+            info!(
+                "WITHDRAW: Withdraw tx ready for signing. User ID: {:?}.",
+                user_id
+            );
         }
         _ => {
             // Verify unsigned backup tx to ensure co-sign will be signing the correct data
@@ -352,27 +376,34 @@ pub fn prepare_sign_tx(
                 &0,
                 &prepare_sign_msg.input_addrs[0],
                 &prepare_sign_msg.input_amounts[0],
-                &state.network
+                &state.network,
             );
 
-            user_session.sig_hash = Some(sig_hash.clone());
+            db_update(
+                &db_write,
+                &user_id,
+                Table::UserSession,
+                vec![Column::SigHash],
+                vec![&db_ser(sig_hash)?],
+            )?;
+
             // Only in deposit case add backup tx to UserSession
             if prepare_sign_msg.protocol == Protocol::Deposit {
-                user_session.tx_backup = Some(prepare_sign_msg.tx.clone());
+                db_update(
+                    &db_write,
+                    &user_id,
+                    Table::UserSession,
+                    vec![Column::TxBackup],
+                    vec![&db_ser(prepare_sign_msg.tx)?],
+                )?;
             }
 
-            info!("DEPOSIT: Backup tx ready for signing. Shared Key ID: {}.", shared_key_id);
+            info!(
+                "DEPOSIT: Backup tx ready for signing. Shared Key ID: {}.",
+                user_id
+            );
         }
     }
-
-    // Update DB UserSession object
-    db::insert(
-        &state.db,
-        &claim.sub,
-        &shared_key_id,
-        &StateEntityStruct::UserSession,
-        &user_session
-    )?;
 
     Ok(Json(()))
 }

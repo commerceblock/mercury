@@ -1,15 +1,15 @@
 #![allow(unused_parens)]
 #![recursion_limit = "128"]
-#![feature(proc_macro_hygiene)]
-#![feature(decl_macro)]
+#![feature(proc_macro_hygiene, decl_macro)]
 #[macro_use]
 extern crate rocket;
+#[macro_use]
+extern crate rocket_contrib;
+extern crate chrono;
 extern crate config;
 extern crate curv;
 extern crate kms;
 extern crate multi_party_ecdsa;
-extern crate rocket_contrib;
-extern crate rocksdb;
 extern crate uuid;
 extern crate zk_paillier;
 #[macro_use]
@@ -41,34 +41,29 @@ use shared_lib::mainstay;
 #[macro_use]
 extern crate serial_test;
 
-pub mod auth;
+pub mod error;
 pub mod routes;
 pub mod server;
 pub mod storage;
 pub mod tests;
-pub mod error;
 
 type Result<T> = std::result::Result<T, error::SEError>;
 
+use rocket_contrib::databases::postgres;
+#[database("postgres_w")]
+pub struct DatabaseW(postgres::Connection);
+#[database("postgres_r")]
+pub struct DatabaseR(postgres::Connection);
+
 pub struct Config {
-    pub db: rocksdb::DB,
     pub electrum_server: String,
     pub network: String,
     pub testing_mode: bool,  // set for testing mode
     pub fee_address: String, // receive address for fee payments
-    pub fee_deposit: u64, // satoshis
-    pub fee_withdraw: u64, // satoshis
+    pub fee_deposit: u64,    // satoshis
+    pub fee_withdraw: u64,   // satoshis
     pub block_time: u64,
     pub batch_lifetime: u64,
     pub punishment_duration: u64,
-    pub mainstay_config: Option<mainstay::Config>
-    
-}
-
-#[derive(Deserialize)]
-pub struct AuthConfig {
-    pub issuer: String,
-    pub audience: String,
-    pub region: String,
-    pub pool_id: String,
+    pub mainstay_config: Option<mainstay::Config>,
 }

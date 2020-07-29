@@ -10,5 +10,5 @@ Cargo.lock
 **/*.rs.bk
 .idea
 db/
-db-statechain/
+db-smt/
 log/

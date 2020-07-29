@@ -1,78 +1,68 @@
 use super::routes::*;
-use super::storage::db;
-use super::{Config, AuthConfig};
+use super::Config;
+
+use crate::DatabaseR;
+use crate::{storage::db_reset_test_dbs, DatabaseW};
 
 use config;
 use rocket;
+use rocket::config::{Config as RocketConfig, Environment, Value};
 use rocket::{Request, Rocket};
-use rocksdb;
 use shared_lib::mainstay;
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
-use log4rs::encode::pattern::PatternEncoder;
 use log4rs::config::{Appender, Config as LogConfig, Root};
-
+use log4rs::encode::pattern::PatternEncoder;
 use std::{collections::HashMap, str::FromStr};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 impl Config {
     pub fn load(settings: HashMap<String, String>) -> Result<Config> {
-        let db = get_db(settings.clone())?;
         let fee_address = settings.get("fee_address").unwrap().to_string();
         if let Err(e) = bitcoin::Address::from_str(&fee_address) {
-            panic!("Invalid fee address: {}",e)
+            panic!("Invalid fee address: {}", e)
         };
 
-        let testing_mode=bool::from_str(settings.get("testing_mode").unwrap()).unwrap();
+        let testing_mode = bool::from_str(settings.get("testing_mode").unwrap()).unwrap();
 
         //mainstay_config is optional
         let mainstay_config = match testing_mode {
             true => mainstay::Config::from_test(),
-            false => {
-                match settings.get("mainstay_config"){
-                    Some(o) => {
-                        Some(o.parse::<mainstay::Config>().unwrap())
-                    },
-                    None => None
-                }
-            }
+            false => match settings.get("mainstay_config") {
+                Some(o) => Some(o.parse::<mainstay::Config>().unwrap()),
+                None => None,
+            },
         };
-        
-        if mainstay_config.is_none()  {
+        if mainstay_config.is_none() {
             panic!("expected mainstay config");
         }
-        
-        Ok(
-            Config {
-                db,
-                electrum_server: settings.get("electrum_server").unwrap().to_string(),
-                network: settings.get("network").unwrap().to_string(),
-                testing_mode,
-                fee_address,
-                fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
-                fee_withdraw: settings.get("fee_withdraw").unwrap().parse::<u64>().unwrap(),
-                block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
-                batch_lifetime: settings.get("batch_lifetime").unwrap().parse::<u64>().unwrap(),
-                punishment_duration: settings.get("punishment_duration").unwrap().parse::<u64>().unwrap(),
-                mainstay_config
-            }
-        )
-    }
-}
 
-impl AuthConfig {
-    pub fn load(settings: HashMap<String, String>) -> AuthConfig {
-        AuthConfig {
-            issuer: settings.get("issuer").unwrap_or(&"".to_string()).to_owned(),
-            audience: settings.get("audience")
-                .unwrap_or(&"".to_string()).to_owned(),
-            region: settings.get("region")
-                .unwrap_or(&"".to_string()).to_owned(),
-            pool_id: settings.get("pool_id")
-                .unwrap_or(&"".to_string()).to_owned(),
-        }
+        Ok(Config {
+            electrum_server: settings.get("electrum_server").unwrap().to_string(),
+            network: settings.get("network").unwrap().to_string(),
+            testing_mode,
+            fee_address,
+            fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
+            fee_withdraw: settings
+                .get("fee_withdraw")
+                .unwrap()
+                .parse::<u64>()
+                .unwrap(),
+            block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
+            batch_lifetime: settings
+                .get("batch_lifetime")
+                .unwrap()
+                .parse::<u64>()
+                .unwrap(),
+            punishment_duration: settings
+                .get("punishment_duration")
+                .unwrap()
+                .parse::<u64>()
+                .unwrap(),
+            mainstay_config,
+        })
     }
 }
 
@@ -91,15 +81,20 @@ fn not_found(req: &Request) -> String {
     format!("Unknown route '{}'.", req.uri())
 }
 
-pub fn get_server() -> Result<Rocket> {
+/// Start Rocket Server. testing_mode parameter overrides Settings.toml.
+pub fn get_server(testing_mode: bool) -> Result<Rocket> {
     let settings = get_settings_as_map();
 
-    let config = Config::load(settings.clone())?;
-    let auth_config = AuthConfig::load(settings.clone());
+    let mut config = Config::load(settings.clone())?;
+    if testing_mode {
+        config.testing_mode = true;
+    }
 
     set_logging_config(settings.get("log_file"));
 
-    let rock = rocket::ignite()
+    let rocket_config = get_rocket_config(&config.testing_mode);
+
+    let rock = rocket::custom(rocket_config)
         .register(catchers![internal_error, not_found, bad_request])
         .mount(
             "/",
@@ -109,15 +104,8 @@ pub fn get_server() -> Result<Rocket> {
                 ecdsa::second_message,
                 ecdsa::third_message,
                 ecdsa::fourth_message,
-                ecdsa::chain_code_first_message,
-                ecdsa::chain_code_second_message,
                 ecdsa::sign_first,
                 ecdsa::sign_second,
-                ecdsa::recover,
-                schnorr::keygen_first,
-                schnorr::keygen_second,
-                schnorr::keygen_third,
-                schnorr::sign,
                 util::get_statechain,
                 util::get_smt_root,
                 util::get_confirmed_smt_root,
@@ -136,7 +124,13 @@ pub fn get_server() -> Result<Rocket> {
             ],
         )
         .manage(config)
-        .manage(auth_config);
+        .attach(DatabaseR::fairing()) // read
+        .attach(DatabaseW::fairing()); // write
+
+    if testing_mode {
+        db_reset_test_dbs()?;
+    }
+
     Ok(rock)
 }
 
@@ -155,15 +149,6 @@ fn get_settings_as_map() -> HashMap<String, String> {
     settings.try_into::<HashMap<String, String>>().unwrap()
 }
 
-fn get_db(_settings: HashMap<String, String>) -> Result<rocksdb::DB> {
-    // let env = settings
-    //     .get("env")
-    //     .unwrap_or(&"dev".to_string())
-    //     .to_string();
-
-    Ok(rocksdb::DB::open_default(db::DB_LOC)?)
-}
-
 fn set_logging_config(log_file: Option<&String>) {
     if log_file.is_none() {
         let _ = env_logger::try_init();
@@ -171,13 +156,56 @@ fn set_logging_config(log_file: Option<&String>) {
         // Write log to file
         let logfile = FileAppender::builder()
             .encoder(Box::new(PatternEncoder::new("{l} - {m}\n")))
-            .build(log_file.unwrap()).unwrap();
+            .build(log_file.unwrap())
+            .unwrap();
         let log_config = LogConfig::builder()
             .appender(Appender::builder().build("logfile", Box::new(logfile)))
-            .build(Root::builder()
-                       .appender("logfile")
-                       .build(LevelFilter::Info)).unwrap();
-
+            .build(Root::builder().appender("logfile").build(LevelFilter::Info))
+            .unwrap();
         let _ = log4rs::init_config(log_config);
     }
+}
+
+fn get_rocket_config(testing_mode: &bool) -> RocketConfig {
+    let mut database_config = HashMap::new();
+    let mut databases = HashMap::new();
+
+    // Make postgres URL. If testing use Test DB for reads and writes.
+    match testing_mode {
+        true => {
+            database_config.insert("url", Value::from(get_postgres_url("TEST".to_string())));
+            databases.insert("postgres_w", Value::from(database_config.clone()));
+            databases.insert("postgres_r", Value::from(database_config));
+        }
+        false => {
+            database_config.insert("url", Value::from(get_postgres_url("W".to_string())));
+            databases.insert("postgres_w", Value::from(database_config));
+            let mut database_config = HashMap::new();
+            database_config.insert("url", Value::from(get_postgres_url("R".to_string())));
+            databases.insert("postgres_r", Value::from(database_config));
+        }
+    };
+
+    RocketConfig::build(Environment::Development)
+        .extra("databases", databases)
+        .finalize()
+        .unwrap()
+}
+
+/// Get postgres URL from env vars. Suffix can be "TEST", "W", or "R"
+pub fn get_postgres_url(var_suffix: String) -> String {
+    let mut db_vars = vec![];
+    for db_var_name in vec!["DB_USER", "DB_PASS", "DB_HOST", "DB_PORT", "DB_DATABASE"] {
+        match std::env::var(format!("{}_{}", db_var_name, var_suffix)) {
+            Ok(v) => db_vars.push(v),
+            Err(_) => panic!(
+                "Missing environment variable {}",
+                format!("{}_{}", db_var_name, var_suffix)
+            ),
+        }
+    }
+    format!(
+        "postgresql://{}:{}@{}:{}/{}",
+        db_vars[0], db_vars[1], db_vars[2], db_vars[3], db_vars[4]
+    )
 }

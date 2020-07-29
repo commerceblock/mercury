@@ -1,15 +1,15 @@
-use std::error;
 use bitcoin::secp256k1::Error as SecpError;
 use bitcoin::util::address::Error as AddressError;
 use monotree::Errors as MonotreeErrors;
-use reqwest::UrlError as UrlError;
-use serde_json::Error as SerdeJSONError;
 use reqwest::Error as ReqwestError;
+use reqwest::UrlError;
+use serde_json::Error as SerdeJSONError;
+use std::error;
 
-use rocket::http::{ Status, ContentType };
-use rocket::Response;
-use rocket::Request;
+use rocket::http::{ContentType, Status};
 use rocket::response::Responder;
+use rocket::Request;
+use rocket::Response;
 
 use std::fmt;
 use std::io::Cursor;
@@ -20,7 +20,7 @@ pub enum SharedLibError {
     /// Generic error from string error message
     Generic(String),
     /// Invalid argument error
-    FormatError(String)
+    FormatError(String),
 }
 
 impl From<AddressError> for SharedLibError {
@@ -69,7 +69,7 @@ impl fmt::Display for SharedLibError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             SharedLibError::Generic(ref e) => write!(f, "Error: {}", e),
-            SharedLibError::FormatError(ref e) => write!(f,"Format Error: {}",e),
+            SharedLibError::FormatError(ref e) => write!(f, "Format Error: {}", e),
         }
     }
 }

@@ -7,9 +7,9 @@
 // version 3 of the License, or (at your option) any later version.
 //
 pub mod keygen;
+pub mod recover;
 pub mod sign;
 pub mod types;
-pub mod recover;
 
 pub use keygen::get_master_key;
 pub use sign::sign;
