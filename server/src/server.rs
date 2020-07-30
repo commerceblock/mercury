@@ -200,7 +200,7 @@ fn get_rocket_config(testing_mode: &bool) -> RocketConfig {
         }
     };
 
-    RocketConfig::build(Environment::Development)
+    RocketConfig::build(Environment::Staging)
         .extra("databases", databases)
         .finalize()
         .unwrap()
