@@ -2,7 +2,7 @@ use super::routes::*;
 use super::Config;
 
 use crate::DatabaseR;
-use crate::{storage::db_reset_test_dbs, DatabaseW};
+use crate::{storage::{db_make_tables, db_reset_dbs, get_test_postgres_connection}, DatabaseW};
 
 use config;
 use rocket;
@@ -82,17 +82,24 @@ fn not_found(req: &Request) -> String {
 }
 
 /// Start Rocket Server. testing_mode parameter overrides Settings.toml.
-pub fn get_server(testing_mode: bool) -> Result<Rocket> {
+pub fn get_server(force_testing_mode: bool) -> Result<Rocket> {
     let settings = get_settings_as_map();
 
     let mut config = Config::load(settings.clone())?;
-    if testing_mode {
+    if force_testing_mode {
         config.testing_mode = true;
     }
 
     set_logging_config(settings.get("log_file"));
 
     let rocket_config = get_rocket_config(&config.testing_mode);
+
+    if config.testing_mode {
+        let conn = get_test_postgres_connection();
+        if let Err(_) = db_reset_dbs(&conn) {
+            db_make_tables(&conn)?;
+        }
+    }
 
     let rock = rocket::custom(rocket_config)
         .register(catchers![internal_error, not_found, bad_request])
@@ -126,10 +133,6 @@ pub fn get_server(testing_mode: bool) -> Result<Rocket> {
         .manage(config)
         .attach(DatabaseR::fairing()) // read
         .attach(DatabaseW::fairing()); // write
-
-    if testing_mode {
-        db_reset_test_dbs()?;
-    }
 
     Ok(rock)
 }
