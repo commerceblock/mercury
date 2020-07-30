@@ -24,6 +24,7 @@ use std::sync::mpsc::RecvTimeoutError;
 use std::time::Instant;
 use std::{thread, time};
 use uuid::Uuid;
+use std::env;
 
 #[cfg(test)]
 #[macro_use]
@@ -75,10 +76,13 @@ impl From<RecvTimeoutError> for SpawnError {
 pub fn spawn_server() -> Result<(), SpawnError> {
     let (tx, rx) = mpsc::channel::<SpawnError>();
 
+    // Set enviroment variable to testing_mode=true to override Settings.toml
+    env::set_var("MERC_TESTING_MODE", "true");
+
     // Rocket server is blocking, so we spawn a new thread.
     thread::spawn(move || {
         tx.send({
-            match server::get_server(true) {
+            match server::get_server() {
                 Ok(s) => {
                     let try_launch = s.launch();
                     let _ = try_launch.kind(); // LaunchError needs to be accessed here for this to work. Be carfeul modifying this code.

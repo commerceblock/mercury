@@ -82,13 +82,10 @@ fn not_found(req: &Request) -> String {
 }
 
 /// Start Rocket Server. testing_mode parameter overrides Settings.toml.
-pub fn get_server(force_testing_mode: bool) -> Result<Rocket> {
+pub fn get_server() -> Result<Rocket> {
     let settings = get_settings_as_map();
 
-    let mut config = Config::load(settings.clone())?;
-    if force_testing_mode {
-        config.testing_mode = true;
-    }
+    let config = Config::load(settings.clone())?;
 
     set_logging_config(settings.get("log_file"));
 
