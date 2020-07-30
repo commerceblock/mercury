@@ -134,6 +134,10 @@ pub fn get_server(testing_mode: bool) -> Result<Rocket> {
     Ok(rock)
 }
 
+/// List of available settings. Set via Settings.toml or enviroment variables MERC_[SETTING_STR.to_uppercase()].
+static SETTING_STRS: [&str; 9] = ["electrum_server", "network", "block_time", "testing_mode", "fee_address",
+    "fee_deposit", "fee_withdraw", "punishment_duration", "batch_lifetime"];
+
 fn get_settings_as_map() -> HashMap<String, String> {
     let config_file = include_str!("../Settings.toml");
     let mut settings = config::Config::default();
@@ -142,11 +146,21 @@ fn get_settings_as_map() -> HashMap<String, String> {
             config_file,
             config::FileFormat::Toml,
         ))
-        .unwrap()
-        .merge(config::Environment::new())
         .unwrap();
 
-    settings.try_into::<HashMap<String, String>>().unwrap()
+    let mut settings_as_map: HashMap<String, String> = settings.try_into().unwrap();
+
+    // Override Setting.toml parameters with any environment variable parameters that are set
+    for var_name in SETTING_STRS.iter() {
+        let env_name = format!("MERC_{}",var_name.to_uppercase());
+        match std::env::var(env_name) {
+            Ok(v) => {
+                let _ = settings_as_map.insert(var_name.to_string(), v);
+            },
+            Err(_) => {}
+        }
+    }
+    settings_as_map
 }
 
 fn set_logging_config(log_file: Option<&String>) {
@@ -192,14 +206,16 @@ fn get_rocket_config(testing_mode: &bool) -> RocketConfig {
         .unwrap()
 }
 
+static DB_SETTING_STRS: [&str; 5] = ["MERC_DB_USER", "MERC_DB_PASS", "MERC_DB_HOST", "MERC_DB_PORT", "MERC_DB_DATABASE"];
+
 /// Get postgres URL from env vars. Suffix can be "TEST", "W", or "R"
 pub fn get_postgres_url(var_suffix: String) -> String {
     let mut db_vars = vec![];
-    for db_var_name in vec!["DB_USER", "DB_PASS", "DB_HOST", "DB_PORT", "DB_DATABASE"] {
+    for db_var_name in DB_SETTING_STRS.iter() {
         match std::env::var(format!("{}_{}", db_var_name, var_suffix)) {
             Ok(v) => db_vars.push(v),
             Err(_) => panic!(
-                "Missing environment variable {}",
+                "Missing DB environment variable {}",
                 format!("{}_{}", db_var_name, var_suffix)
             ),
         }

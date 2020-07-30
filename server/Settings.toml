@@ -11,7 +11,7 @@ fee_withdraw = 300
 
 # Swap parameters
 punishment_duration = "3600" # 1 hour
-batch_lifetime = "3600" #
+batch_lifetime = "3600" # 1 hour
 
 #Mainstay config
 mainstay_config = ""
