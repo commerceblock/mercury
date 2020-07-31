@@ -15,6 +15,10 @@ use std::hash::Hasher;
 use std::io::Cursor;
 use std::str::FromStr;
 use std::string::ToString;
+#[cfg(test)]
+use serde_json::json;
+#[cfg(test)]
+use mockito::{mock, Matcher, Mock};
 
 pub type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 
@@ -225,7 +229,7 @@ impl Request {
     ) -> Result<Self> {
         //Build request
         let client = reqwest::Client::new();
-        let url = reqwest::Url::parse(&format!("{}/{}", config.url, command))?;
+        let url = reqwest::Url::parse(&format!("{}/{}", config.url(), command))?;
 
         //If there is a payload this is a 'POST' request, otherwise a 'GET' request
         let req = match payload {
@@ -258,8 +262,10 @@ impl Request {
 }
 
 fn get(command: &str, config: &Config) -> Result<serde_json::Value> {
-    let url = reqwest::Url::parse(&format!("{}/{}", config.url, command))?;
-    Ok(reqwest::get(url)?.json()?)
+    let url = reqwest::Url::parse(&format!("{}/{}", config.url(), command))?;
+    let mut resp = reqwest::get(url)?;
+    let resp_json = resp.json()?;
+    Ok(resp_json)
 }
 
 pub trait Attestable {
@@ -364,7 +370,21 @@ pub struct Config {
     key: Option<PrivateKey>,
 }
 
+#[cfg(test)]
+fn test_url() -> String {
+    String::from(&mockito::server_url())
+}
+
 impl Config {
+    #[cfg(not(test))]
+    pub fn url(&self) -> String {
+        self.url.clone()
+    }
+    #[cfg(test)]
+    pub fn url(&self) -> String {
+        test_url()
+    }
+
     pub fn from_test() -> Option<Self> {
         match (Self::test_slot(), Self::test_token()) {
             (Some(s), Some(t)) => Some(Self {
@@ -412,12 +432,23 @@ impl FromStr for Config {
 }
 
 impl Default for Config {
+    #[cfg(not(test))]
     fn default() -> Self {
         Self {
             url: String::from("https://mainstay.xyz/api/v1"),
             key: None,
             position: u64::default(),
             token: String::default(),
+        }
+    }
+
+    #[cfg(test)]
+    fn default() -> Self {
+        Self {
+            url: test_url(),
+            key: None,
+            position: 1,
+            token: String::from("f0000000-0000-0000-0000-00000000000d"),
         }
     }
 }
@@ -453,7 +484,7 @@ pub trait APIObject: Sized {
         let response = get(command, config);
         match response {
             Ok(r) => Self::from_json(&r),
-            Err(e) => Err(MainstayError::Generic(e.to_string()).into()),
+            Err(e) => Err(MainstayError::Generic(format!("Error getting API object from command: {}",e.to_string())).into()),
         }
     }
 
@@ -852,8 +883,70 @@ pub mod merkle {
 }
 
 #[cfg(test)]
+pub mod mocks {
+    use super::*;
+
+    pub fn mock_post_commitment() -> Mock {
+        mock("POST", "/commitment/send")
+        .match_header("content-type", "application/json")
+        .with_body(json!({"response":"Commitment added","timestamp":1541761540,"allowance":{"cost":4832691}}).to_string())
+        .with_header("content-type", "application/json")
+    }
+
+    pub fn mock_commitment_proof_not_found() -> Mock {
+            mock("GET", Matcher::Regex(r"^/commitment/commitment\?commitment=[abcdef\d]{64}".to_string()))
+
+                       .with_header("Content-Type", "application/json")
+                        .with_body("{\"error\":\"Not found\",\"timestamp\":1596123963077,
+                        \"allowance\":{\"cost\":3796208}}")
+    }
+
+    pub fn mock_commitment() -> Mock {
+            mock("GET", "/latestcommitment?position=1")
+
+               .with_header("Content-Type", "application/json")
+
+               .with_body("{
+                    \"response\":
+                    {
+                        \"commitment\": \"71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d\",
+                        \"merkle_root\": \"47fc767ebc5095133d6de9a060c248c115b3fdf5f30921de2ee111225690de01\",
+                        \"txid\": \"4be7f5fbd3272cec65e520f5b04c79c2059548c4576558aac3f4f6655138d5d4\"
+                    },
+                    \"timestamp\": 1548329166363,
+                    \"allowance\":
+                    {
+                        \"cost\": 3119659
+                    }
+                }")
+    }
+
+    pub fn mock_commitment_proof() -> Mock {
+            mock("GET", 
+                        "/commitment/commitment?commitment=71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d")
+                        .with_header("Content-Type", "application/json")
+                        .with_body("{\"response\":{
+                            \"attestation\":{\"merkle_root\":\"47fc767ebc5095133d6de9a060c248c115b3fdf5f30921de2ee111225690de01\",
+                    \"txid\":\"4be7f5fbd3272cec65e520f5b04c79c2059548c4576558aac3f4f6655138d5d4\",\"confirmed\":true,
+                    \"inserted_at\":\"12:07:54 05/02/2020 UTC\"},
+                    \"merkleproof\":{\"position\":1,
+                    \"merkle_root\":\"47fc767ebc5095133d6de9a060c248c115b3fdf5f30921de2ee111225690de01\",
+                    \"commitment\":\"71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d\",
+                    \"ops\":[{\"append\":false,\"commitment\":\"31e66288b9074bcfeb3bc5734f2d0b189ad601b61f86b8241ee427648b59fdbc\"},
+                    {\"append\":true,\"commitment\":\"60da74551926c4283dd4b4e295d2a1eb5147b5cf6c7c2019e8b64c22a1ba5bab\"},{\"append\":true,
+                    \"commitment\":\"94adb04ab09036fbc6cc164ec6df4d9d8fba45bcd7901a03d2e91b123071a5ec\"}]}}
+                    ,\"timestamp\":1593160486862,
+                    \"allowance\":{\"cost\":17954530}
+                    }")
+                
+    }
+}
+
+
+#[cfg(test)]
 mod tests {
     use super::*;
+    use super::mocks::*;
     use crate::util::keygen::generate_keypair;
 
     #[test]
@@ -878,26 +971,14 @@ mod tests {
     fn test_commit() {
         let random_hash = Commitment::from_hash(&monotree::utils::random_hash());
 
-        let config = Config::from_test().expect(Config::info());
+        let mut config = Config::from_test().expect(Config::info());
+        config.position=1;
+
+        let _m = mock_post_commitment().create();
 
         match random_hash.attest(&config) {
             Ok(()) => assert!(true),
-            Err(_) => assert!(false),
-        }
-
-        //Incorrect token should fail.
-        let token = String::from("wrong_token");
-        let config = Config {
-            position: Config::test_slot().unwrap(),
-            token,
-            ..Default::default()
-        };
-
-        match random_hash.attest(&config) {
-            Ok(()) => assert!(false, "should have failed with incorrect token"),
-            Err(_) => {
-                println!("Correctly failed with incorrect token");
-            }
+            Err(e) => assert!(false, format!("error: {}", e)),
         }
     }
 
@@ -912,8 +993,9 @@ mod tests {
             "{\"url\":\"https://mainstay.xyz/api/v1\", \"position\":234, \"token\":\"mytoken\"}";
         let str_2=format!("{{\"url\":\"https://mainstay.xyz/api/v1\", \"position\":234, \"token\":\"mytoken\", \"key\":\"{}\"}}", privkey_str);
         let config_1 = Config::from_str(str_1).unwrap();
+        //This is a tessts so we always get the test url
         assert!(
-            config_1.url == "https://mainstay.xyz/api/v1",
+            config_1.url() == test_url(),
             "url parse fail"
         );
         assert!(config_1.position == 234, "position parse fail");
@@ -1060,9 +1142,10 @@ mod tests {
 
     #[test]
     fn test_get_proof_from_confirmed() {
+        let _m1 = mock_commitment_proof().create();
         let result = test_get_proof_from_commitment(
             &Commitment::from_str(
-                "31e66288b9074bcfeb3bc5734f2d0b189ad601b61f86b8241ee427648b59fdbc",
+                "71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d",
             )
             .unwrap(),
         );
@@ -1074,6 +1157,8 @@ mod tests {
         let exp_err_string = "Not found".to_string();
         let exp_err_type = MainstayAPIError::NotFoundError;
         let exp_err = &exp_err_type(exp_err_string);
+
+        let _m1 = mock_commitment_proof_not_found().create();
 
         match test_get_proof_from_commitment(
             &Commitment::from_hash(&monotree::utils::random_hash()),
@@ -1087,7 +1172,9 @@ mod tests {
     }
 
     fn test_get_proof_from_commitment(commitment: &Commitment) -> Result<()> {
-        let config = Config::from_test().expect(Config::info());
+        let mut config = Config::from_test().expect(Config::info());
+        config.position=1;
+        let _m = mock_commitment_proof().create();
 
         let proof1 = merkle::Proof::from_commitment(&config, commitment)?;
 
@@ -1111,11 +1198,13 @@ mod tests {
 
     #[test]
     fn test_get_commitment_info() {
-        let config = Config::from_test().expect(Config::info());
+        let mut config = Config::from_test().expect(Config::info());
+        config.position=1;
+        let _m = mock_commitment_proof().create();
 
         //Retrieve the proof for a commitment
         let commitment = &Commitment::from_str(
-            "31e66288b9074bcfeb3bc5734f2d0b189ad601b61f86b8241ee427648b59fdbc",
+            "71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d",
         )
         .unwrap();
 
@@ -1146,8 +1235,22 @@ mod tests {
     }
 
     #[test]
-    fn test_from_latest() {
-        let config = &Config::from_test().expect(Config::info());
+    fn test_commitment_from_latest() {
+        let mut config = Config::default();
+        config.position=1;
+        let _m1 = mock_commitment().create();
+        
+        let commitment = Commitment::from_latest(&config).unwrap();
+        let commitment_exp = Commitment::from_str("71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d").unwrap();
+        assert_eq!(commitment.to_hash(), commitment_exp.to_hash(), "wrong commitment hash");
+    }
+
+    #[test]
+    fn test_ci_from_latest() {
+        let config = &Config::default();
+        let _m1 = mock_commitment().create();
+        let _m2 = mock_commitment_proof().create();
+        
         match CommitmentInfo::from_latest(config) {
             Ok(ci) => assert!(ci.verify(), "invalid commitment info"),
             Err(e) => assert!(false, e.to_string()),
