@@ -56,6 +56,7 @@ pub struct DatabaseW(postgres::Connection);
 pub struct DatabaseR(postgres::Connection);
 
 pub struct Config {
+    pub smt_db_loc: String,
     pub electrum_server: String,
     pub network: String,
     pub testing_mode: bool,  // set for testing mode

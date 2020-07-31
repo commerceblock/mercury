@@ -18,6 +18,9 @@ use std::{collections::HashMap, str::FromStr};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+pub static SMT_DB_LOC_DEFAULT: &str = "./db-smt";
+pub static SMT_DB_LOC_TESTING: &str = "./db-smt-testing";
+
 impl Config {
     pub fn load(settings: HashMap<String, String>) -> Result<Config> {
         let fee_address = settings.get("fee_address").unwrap().to_string();
@@ -40,6 +43,10 @@ impl Config {
         }
 
         Ok(Config {
+            smt_db_loc: settings
+                .get("smt_db_loc")
+                .unwrap_or(&SMT_DB_LOC_DEFAULT.to_string())
+                .to_string(),
             electrum_server: settings.get("electrum_server").unwrap().to_string(),
             network: settings.get("network").unwrap().to_string(),
             testing_mode,
@@ -85,15 +92,18 @@ fn not_found(req: &Request) -> String {
 pub fn get_server() -> Result<Rocket> {
     let settings = get_settings_as_map();
 
-    let config = Config::load(settings.clone())?;
+    let mut config = Config::load(settings.clone())?;
 
     set_logging_config(settings.get("log_file"));
 
     let rocket_config = get_rocket_config(&config.testing_mode);
 
     if config.testing_mode {
+        // Use test SMT DB
+        config.smt_db_loc = SMT_DB_LOC_TESTING.to_string();
+        // reset dbs
         let conn = get_test_postgres_connection();
-        if let Err(_) = db_reset_dbs(&conn) {
+        if let Err(_) = db_reset_dbs(&conn, &config.smt_db_loc) {
             db_make_tables(&conn)?;
         }
     }
@@ -135,8 +145,8 @@ pub fn get_server() -> Result<Rocket> {
 }
 
 /// List of available settings. Set via Settings.toml or enviroment variables MERC_[SETTING_STR.to_uppercase()].
-static SETTING_STRS: [&str; 9] = ["electrum_server", "network", "block_time", "testing_mode", "fee_address",
-    "fee_deposit", "fee_withdraw", "punishment_duration", "batch_lifetime"];
+static SETTING_STRS: [&str; 10] = ["electrum_server", "network", "block_time", "testing_mode", "fee_address",
+    "fee_deposit", "fee_withdraw", "punishment_duration", "batch_lifetime", "smt_db_loc"];
 
 fn get_settings_as_map() -> HashMap<String, String> {
     let config_file = include_str!("../Settings.toml");

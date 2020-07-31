@@ -613,7 +613,7 @@ pub fn db_get_confirmed_root(db_read: &DatabaseR) -> Result<Option<Root>> {
 mod tests {
 
     use super::*;
-    use crate::{routes::util::update_smt_db, storage::get_test_postgres_connection};
+    use crate::{routes::util::update_smt_db, storage::get_test_postgres_connection, server::SMT_DB_LOC_TESTING};
 
     // use shared_lib::{state_chain::update_statechain_smt, mainstay::Commitment};
 
@@ -666,6 +666,7 @@ mod tests {
         let mc = mainstay::Config::from_test();
 
         let (_, new_root) = update_smt_db(
+            &SMT_DB_LOC_TESTING.to_string(),
             &db_read,
             &db_write,
             &mc,

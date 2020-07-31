@@ -137,6 +137,7 @@ pub fn withdraw_confirm(
 
     // Update sparse merkle tree
     let (new_root, prev_root) = update_smt_db(
+        &state.smt_db_loc,
         &db_read,
         &db_write,
         &state.mainstay_config,

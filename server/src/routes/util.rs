@@ -14,12 +14,9 @@ use shared_lib::{
 
 use crate::error::{DBErrorType, SEError};
 use crate::routes::transfer::finalize_batch;
-use crate::storage::{
-    db::{
-        self, db_deser, db_get_1, db_get_2, db_get_3, db_remove, db_root_get,
-        db_root_get_current_id, db_ser, db_update, Column, Table,
-    },
-    DB_SC_LOC,
+use crate::storage::db::{
+    self, db_deser, db_get_1, db_get_2, db_get_3, db_remove, db_root_get,
+    db_root_get_current_id, db_ser, db_update, Column, Table,
 };
 use crate::{DatabaseR, DatabaseW};
 
@@ -88,6 +85,7 @@ pub fn state_chain_punish(
 
 /// Update SMT with new (key: value) pair and update current root value
 pub fn update_smt_db(
+    smt_db_loc: &String,
     db_read: &DatabaseR,
     db_write: &DatabaseW,
     mc: &Option<mainstay::Config>,
@@ -96,7 +94,7 @@ pub fn update_smt_db(
 ) -> Result<(Option<Root>, Root)> {
     let current_root = db_root_get(&db_read, &db_root_get_current_id(&db_read)?)?;
     let new_root_hash = update_statechain_smt(
-        DB_SC_LOC,
+        smt_db_loc,
         &current_root.clone().map(|r| r.hash()),
         funding_txid,
         proof_key,
@@ -154,6 +152,7 @@ pub fn get_statechain(
 /// API: Generates sparse merkle tree inclusion proof for some key in a tree with some root.
 #[post("/info/proof", format = "json", data = "<smt_proof_msg>")]
 pub fn get_smt_proof(
+    state: State<Config>,
     db_read: DatabaseR,
     smt_proof_msg: Json<SmtProofMsgAPI>,
 ) -> Result<Json<Option<Proof>>> {
@@ -176,7 +175,7 @@ pub fn get_smt_proof(
     }
 
     Ok(Json(gen_proof_smt(
-        DB_SC_LOC,
+        &state.smt_db_loc,
         &Some(smt_proof_msg.root.hash()),
         &smt_proof_msg.funding_txid,
     )?))

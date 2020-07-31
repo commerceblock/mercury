@@ -8,8 +8,6 @@ use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
 use rocksdb::{Options, DB};
 
-pub static DB_SC_LOC: &str = "../server/db-smt";
-
 /// Build DB tables and Schemas
 pub fn db_make_tables(conn: &Connection) -> Result<()> {
     // Create Schemas if they do not already exist
@@ -192,12 +190,12 @@ fn db_truncate_tables(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-pub fn db_reset_dbs(conn: &Connection) -> Result<()> {
+pub fn db_reset_dbs(conn: &Connection, smt_db_loc: &String) -> Result<()> {
     // truncate all postgres tables
     db_truncate_tables(&conn)?;
 
     // Destroy Sparse Merkle Tree RocksDB instance
-    let _ = DB::destroy(&Options::default(), DB_SC_LOC); // ignore error
+    let _ = DB::destroy(&Options::default(), smt_db_loc); // ignore error
     Ok(())
 }
 
