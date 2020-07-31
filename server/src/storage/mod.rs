@@ -201,7 +201,7 @@ pub fn db_reset_test_dbs() -> Result<()> {
     Ok(())
 }
 
-fn get_test_postgres_connection() -> r2d2::PooledConnection<PostgresConnectionManager> {
+pub fn get_test_postgres_connection() -> r2d2::PooledConnection<PostgresConnectionManager> {
     let rocket_url = get_postgres_url("TEST".to_string());
     let manager = PostgresConnectionManager::new(rocket_url, TlsMode::None).unwrap();
     r2d2::Pool::new(manager).unwrap().get().unwrap()
