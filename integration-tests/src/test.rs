@@ -7,14 +7,19 @@ mod tests {
     extern crate shared_lib;
 
     use shared_lib::{mocks::mock_electrum::MockElectrum, structs::Protocol};
+    use shared_lib::mainstay;
 
     use curv::elliptic::curves::traits::ECScalar;
     use curv::FE;
 
+    use mockito;
+
     #[test]
     #[serial]
     fn test_gen_shared_key() {
-        let _ = spawn_server();
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let _ = spawn_server(Some(mainstay_config));
+
         let mut wallet = gen_wallet();
         let proof_key = wallet.se_proof_keys.get_new_key().unwrap();
         let init_res =
@@ -27,7 +32,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_failed_auth() {
-        let _ = spawn_server();
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let _ = spawn_server(Some(mainstay_config));
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
         let secret_key: FE = ECScalar::new_random();
         let invalid_key = Uuid::new_v4();
@@ -44,7 +50,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_deposit() {
-        let _ = spawn_server();
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let _ = spawn_server(Some(mainstay_config));
         let wallet = gen_wallet_with_deposit(10000);
 
         let state_chains_info = wallet.get_state_chains_info();
@@ -85,7 +92,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_get_statechain() {
-        let _ = spawn_server();
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let _ = spawn_server(Some(mainstay_config));
         let mut wallet = gen_wallet();
 
         let err = state_entity::api::get_statechain(&wallet.client_shim, &Uuid::new_v4());
@@ -103,7 +111,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_transfer() {
-        let _ = spawn_server();
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let _ = spawn_server(Some(mainstay_config));
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
         wallets.push(gen_wallet()); // receiver
@@ -161,6 +170,7 @@ mod tests {
         let proof = state_entity::api::get_smt_proof(&wallets[1].client_shim, &root, &funding_txid)
             .unwrap();
         // Ensure wallet's shared key is updated with proof info
+        println!("ensure wallet's sC is updated with proof info");
         let shared_key = wallets[1].get_shared_key(&new_shared_key_id).unwrap();
         assert_eq!(shared_key.smt_proof.clone().unwrap().root, root);
         assert_eq!(shared_key.smt_proof.clone().unwrap().proof, proof);
@@ -168,12 +178,14 @@ mod tests {
             shared_key.proof_key.clone().unwrap(),
             receiver_addr.proof_key
         );
+        println!("end");
     }
 
     #[test]
     #[serial]
     fn test_double_transfer() {
-        let _ = spawn_server();
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let _ = spawn_server(Some(mainstay_config));
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
         wallets.push(gen_wallet()); // receiver1
@@ -302,7 +314,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_withdraw() {
-        let _ = spawn_server();
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let _ = spawn_server(Some(mainstay_config));
         let mut wallet = gen_wallet();
 
         let deposit_resp = run_deposit(&mut wallet, &10000);
@@ -360,7 +373,8 @@ mod tests {
     #[serial]
     /// Test wallet load from json correctly when shared key present.
     fn test_wallet_load_with_shared_key() {
-        let _ = spawn_server();
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let _ = spawn_server(Some(mainstay_config));
 
         let mut wallet = gen_wallet();
         run_deposit(&mut wallet, &10000);

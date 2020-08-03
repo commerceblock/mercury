@@ -35,15 +35,12 @@ impl StateChainEntity {
 
         //mainstay_config is optional
         let mainstay_config = match testing_mode {
-            true => mainstay::Config::from_test(),
+            true =>  None,
             false => match settings.get("mainstay_config") {
                 Some(o) => Some(o.parse::<mainstay::Config>().unwrap()),
                 None => None,
             },
         };
-        if mainstay_config.is_none() {
-            panic!("expected mainstay config");
-        }
 
         Ok(StateChainEntity {
             smt_db_loc: settings
@@ -92,10 +89,21 @@ fn not_found(req: &Request) -> String {
 }
 
 /// Start Rocket Server. testing_mode parameter overrides Settings.toml.
-pub fn get_server() -> Result<Rocket> {
+pub fn get_server(mainstay_config: Option<mainstay::Config>) -> Result<Rocket> {
     let settings = get_settings_as_map();
 
     let mut sc_entity = StateChainEntity::load(settings.clone())?;
+
+    //Set the mainstay config if Some (used for testing)
+    match mainstay_config {
+        Some(c) => sc_entity.mainstay_config = Some(c),
+        None => ()
+    }
+    //At this point the mainstay config should be set,
+    //either in testing mode or specified in the settings file
+    if sc_entity.mainstay_config.is_none() {
+        panic!("expected mainstay config");
+    }
 
     set_logging_config(settings.get("log_file"));
 

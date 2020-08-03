@@ -134,13 +134,23 @@ use std::fmt;
 
 impl fmt::Display for Root {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let id_str = match self.id {
+            Some(id) => id.to_string(),
+            None => "None".to_string()
+        };
+
+        let ci_str = match self.commitment_info() {
+            Some(ci) => ci.to_string(),
+            None => "None".to_string()
+        };
+
         write!(
             f,
-            "id: {:?}, hash: {:?}, is_confirmed: {}, commitment_info: {:?})",
-            self.id(),
-            self.hash(),
+            "id: {}, hash: {}, is_confirmed: {}, commitment_info: {})",
+            id_str,
+            hex::encode(self.hash()),
             self.is_confirmed(),
-            self.commitment_info()
+            ci_str
         )
     }
 }

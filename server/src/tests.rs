@@ -5,20 +5,23 @@ mod tests {
     use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
     use rocket::http::{ContentType, Status};
     use rocket::local::Client;
-    use shared_lib::structs::{
-        DepositMsg1, KeyGenMsg1, Protocol, SmtProofMsgAPI, StateEntityFeeInfoAPI,
-    };
-    use shared_lib::Root;
+    use shared_lib::structs::{DepositMsg1, SmtProofMsgAPI, StateEntityFeeInfoAPI, KeyGenMsg1, Protocol};
+    use shared_lib::{Root, mainstay};
 
     use serde_json;
     use std::str::FromStr;
     use uuid::Uuid;
 
+    #[cfg(test)]
+    use mockito;
+
+
     // test ecdsa::sign can be performed only by authorised user
     #[test]
     #[serial]
     fn test_auth_token() {
-        let client = Client::new(server::get_server().unwrap()).expect("valid rocket instance");
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
         // get ID
         let deposit_msg1 = DepositMsg1 {
             auth: String::from("auth"),
@@ -66,7 +69,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_err_get_statechain() {
-        let client = Client::new(server::get_server().unwrap()).expect("valid rocket instance");
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
         // get_statechain invalid id
         let invalid_id = Uuid::new_v4();
@@ -92,7 +96,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_err_get_smt_proof() {
-        let client = Client::new(server::get_server().unwrap()).expect("valid rocket instance");
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
         // None root
         let smt_proof_msg = SmtProofMsgAPI {
@@ -172,7 +177,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_err_get_transfer_batch_status() {
-        let client = Client::new(server::get_server().unwrap()).expect("valid rocket instance");
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
         // get_transfer_batch_status invalid id
         let invalid_id = Uuid::new_v4();
@@ -198,7 +204,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_get_state_entity_fees() {
-        let client = Client::new(server::get_server().unwrap()).expect("valid rocket instance");
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
         let mut response = client
             .post("/info/fee")
