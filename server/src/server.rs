@@ -1,8 +1,11 @@
-use super::routes::*;
-use super::Config;
+use super::protocol::*;
+use super::StateChainEntity;
 
 use crate::DatabaseR;
-use crate::{storage::{db_make_tables, db_reset_dbs, get_test_postgres_connection}, DatabaseW};
+use crate::{
+    storage::{db_make_tables, db_reset_dbs, get_test_postgres_connection},
+    DatabaseW,
+};
 
 use config;
 use rocket;
@@ -21,8 +24,8 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 pub static SMT_DB_LOC_DEFAULT: &str = "./db-smt";
 pub static SMT_DB_LOC_TESTING: &str = "./db-smt-testing";
 
-impl Config {
-    pub fn load(settings: HashMap<String, String>) -> Result<Config> {
+impl StateChainEntity {
+    pub fn load(settings: HashMap<String, String>) -> Result<StateChainEntity> {
         let fee_address = settings.get("fee_address").unwrap().to_string();
         if let Err(e) = bitcoin::Address::from_str(&fee_address) {
             panic!("Invalid fee address: {}", e)
@@ -42,7 +45,7 @@ impl Config {
             panic!("expected mainstay config");
         }
 
-        Ok(Config {
+        Ok(StateChainEntity {
             smt_db_loc: settings
                 .get("smt_db_loc")
                 .unwrap_or(&SMT_DB_LOC_DEFAULT.to_string())
@@ -92,18 +95,18 @@ fn not_found(req: &Request) -> String {
 pub fn get_server() -> Result<Rocket> {
     let settings = get_settings_as_map();
 
-    let mut config = Config::load(settings.clone())?;
+    let mut sc_entity = StateChainEntity::load(settings.clone())?;
 
     set_logging_config(settings.get("log_file"));
 
-    let rocket_config = get_rocket_config(&config.testing_mode);
+    let rocket_config = get_rocket_config(&sc_entity.testing_mode);
 
-    if config.testing_mode {
+    if sc_entity.testing_mode {
         // Use test SMT DB
-        config.smt_db_loc = SMT_DB_LOC_TESTING.to_string();
+        sc_entity.smt_db_loc = SMT_DB_LOC_TESTING.to_string();
         // reset dbs
         let conn = get_test_postgres_connection();
-        if let Err(_) = db_reset_dbs(&conn, &config.smt_db_loc) {
+        if let Err(_) = db_reset_dbs(&conn, &sc_entity.smt_db_loc) {
             db_make_tables(&conn)?;
         }
     }
@@ -124,20 +127,20 @@ pub fn get_server() -> Result<Rocket> {
                 util::get_smt_root,
                 util::get_confirmed_smt_root,
                 util::get_smt_proof,
-                util::get_state_entity_fees,
+                util::get_fees,
                 util::prepare_sign_tx,
                 util::get_transfer_batch_status,
                 deposit::deposit_init,
                 deposit::deposit_confirm,
                 transfer::transfer_sender,
                 transfer::transfer_receiver,
-                transfer::transfer_batch_init,
-                transfer::transfer_reveal_nonce,
+                transfer_batch::transfer_batch_init,
+                transfer_batch::transfer_reveal_nonce,
                 withdraw::withdraw_init,
                 withdraw::withdraw_confirm
             ],
         )
-        .manage(config)
+        .manage(sc_entity)
         .attach(DatabaseR::fairing()) // read
         .attach(DatabaseW::fairing()); // write
 
@@ -145,10 +148,20 @@ pub fn get_server() -> Result<Rocket> {
 }
 
 /// List of available settings. Set via Settings.toml or enviroment variables MERC_[SETTING_STR.to_uppercase()].
-static SETTING_STRS: [&str; 10] = ["electrum_server", "network", "block_time", "testing_mode", "fee_address",
-    "fee_deposit", "fee_withdraw", "punishment_duration", "batch_lifetime", "smt_db_loc"];
+static SETTING_STRS: [&str; 10] = [
+    "electrum_server",
+    "network",
+    "block_time",
+    "testing_mode",
+    "fee_address",
+    "fee_deposit",
+    "fee_withdraw",
+    "punishment_duration",
+    "batch_lifetime",
+    "smt_db_loc",
+];
 
-fn get_settings_as_map() -> HashMap<String, String> {
+pub fn get_settings_as_map() -> HashMap<String, String> {
     let config_file = include_str!("../Settings.toml");
     let mut settings = config::Config::default();
     settings
@@ -162,11 +175,11 @@ fn get_settings_as_map() -> HashMap<String, String> {
 
     // Override Setting.toml parameters with any environment variable parameters that are set
     for var_name in SETTING_STRS.iter() {
-        let env_name = format!("MERC_{}",var_name.to_uppercase());
+        let env_name = format!("MERC_{}", var_name.to_uppercase());
         match std::env::var(env_name) {
             Ok(v) => {
                 let _ = settings_as_map.insert(var_name.to_string(), v);
-            },
+            }
             Err(_) => {}
         }
     }
@@ -216,7 +229,13 @@ fn get_rocket_config(testing_mode: &bool) -> RocketConfig {
         .unwrap()
 }
 
-static DB_SETTING_STRS: [&str; 5] = ["MERC_DB_USER", "MERC_DB_PASS", "MERC_DB_HOST", "MERC_DB_PORT", "MERC_DB_DATABASE"];
+static DB_SETTING_STRS: [&str; 5] = [
+    "MERC_DB_USER",
+    "MERC_DB_PASS",
+    "MERC_DB_HOST",
+    "MERC_DB_PORT",
+    "MERC_DB_DATABASE",
+];
 
 /// Get postgres URL from env vars. Suffix can be "TEST", "W", or "R"
 pub fn get_postgres_url(var_suffix: String) -> String {

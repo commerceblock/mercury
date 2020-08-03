@@ -17,6 +17,7 @@ use shared_lib::{
     state_chain::StateChainSig,
     structs::{BatchData, PrepareSignTxMsg},
 };
+use std::env;
 use std::error;
 use std::fmt;
 use std::sync::mpsc;
@@ -24,7 +25,6 @@ use std::sync::mpsc::RecvTimeoutError;
 use std::time::Instant;
 use std::{thread, time};
 use uuid::Uuid;
-use std::env;
 
 #[cfg(test)]
 #[macro_use]
@@ -94,7 +94,7 @@ pub fn spawn_server() -> Result<(), SpawnError> {
     });
 
     //If we haven't received an error within 2 secs then assume server running.
-    match rx.recv_timeout(time::Duration::from_millis(2000)) {
+    match rx.recv_timeout(time::Duration::from_millis(4000)) {
         Ok(e) => Err(e),
         Err(e) => match e {
             RecvTimeoutError::Timeout => Ok(()),

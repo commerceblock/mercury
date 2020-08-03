@@ -42,20 +42,20 @@ use shared_lib::mainstay;
 extern crate serial_test;
 
 pub mod error;
-pub mod routes;
+pub mod protocol;
 pub mod server;
 pub mod storage;
 pub mod tests;
 
 type Result<T> = std::result::Result<T, error::SEError>;
-
 use rocket_contrib::databases::postgres;
+
 #[database("postgres_w")]
 pub struct DatabaseW(postgres::Connection);
 #[database("postgres_r")]
 pub struct DatabaseR(postgres::Connection);
 
-pub struct Config {
+pub struct StateChainEntity {
     pub smt_db_loc: String,
     pub electrum_server: String,
     pub network: String,
