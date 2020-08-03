@@ -29,15 +29,12 @@ impl Config {
 
         //mainstay_config is optional
         let mainstay_config = match testing_mode {
-            true => mainstay::Config::from_test(),
+            true =>  None,
             false => match settings.get("mainstay_config") {
                 Some(o) => Some(o.parse::<mainstay::Config>().unwrap()),
                 None => None,
             },
         };
-        if mainstay_config.is_none() {
-            panic!("expected mainstay config");
-        }
 
         Ok(Config {
             electrum_server: settings.get("electrum_server").unwrap().to_string(),
@@ -82,12 +79,23 @@ fn not_found(req: &Request) -> String {
 }
 
 /// Start Rocket Server. testing_mode parameter overrides Settings.toml.
-pub fn get_server(force_testing_mode: bool) -> Result<Rocket> {
+pub fn get_server(force_testing_mode: bool, mainstay_config: Option<mainstay::Config>) -> Result<Rocket> {
     let settings = get_settings_as_map();
 
     let mut config = Config::load(settings.clone())?;
     if force_testing_mode {
         config.testing_mode = true;
+    }
+
+    //Set the mainstay config if Some (used for testing)
+    match mainstay_config {
+        Some(c) => config.mainstay_config = Some(c),
+        None => ()
+    }
+    //At this point the mainstay config should be set,
+    //either in testing mode or specified in the settings file
+    if config.mainstay_config.is_none() {
+        panic!("expected mainstay config");
     }
 
     set_logging_config(settings.get("log_file"));
