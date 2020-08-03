@@ -695,7 +695,7 @@ mod tests {
     fn test_verify_root() {
         let db_read = DatabaseR(get_test_postgres_connection());
         let db_write = DatabaseW(get_test_postgres_connection());
-        let mc = Some(mainstay::Config::mock_from_url(test_url()));
+        let mc = Some(mainstay::Config::mock_from_url(&test_url()));
 
         //No commitments initially
         let _m = mocks::ms::commitment_proof_not_found();
@@ -747,7 +747,7 @@ mod tests {
     fn test_update_root_smt() {
         let db_read = DatabaseR(get_test_postgres_connection());
         let db_write = DatabaseW(get_test_postgres_connection());
-        let mc = Some(mainstay::Config::mock_from_url(test_url()));
+        let mc = Some(mainstay::Config::mock_from_url(&test_url()));
         
         let (_, new_root) = update_smt_db(
             &db_read,

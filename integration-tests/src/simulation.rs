@@ -11,9 +11,18 @@ use crate::*;
 use client_lib::wallet::wallet::Wallet;
 use rand::Rng;
 use std::str::FromStr;
+use shared_lib::mainstay;
 
+#[cfg(test)]
+use serde_json::json;
+#[cfg(test)]
+use mockito::{mock, Matcher, Mock};
+
+#[cfg(test)]
+#[serial]
 pub fn run_simulation() {
-    let _ = spawn_server();
+    let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+    let _ = spawn_server(Some(mainstay_config));
 
     // Begin with a few clients
     let mut wallets = vec![];

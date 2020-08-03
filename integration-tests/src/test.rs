@@ -7,14 +7,20 @@ mod tests {
     extern crate shared_lib;
 
     use shared_lib::mocks::mock_electrum::MockElectrum;
+    use shared_lib::mainstay;
 
     use curv::elliptic::curves::traits::ECScalar;
     use curv::FE;
 
+    use serde_json::json;
+    use mockito::{mock, Matcher, Mock};
+
     #[test]
     #[serial]
     fn test_gen_shared_key() {
-        let _ = spawn_server();
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let _ = spawn_server(Some(mainstay_config));
+
         let mut wallet = gen_wallet();
         let proof_key = wallet.se_proof_keys.get_new_key().unwrap();
         let init_res =
@@ -28,7 +34,8 @@ mod tests {
     #[serial]
     fn test_failed_auth() {
         println!("spawning server...");
-        let _ = spawn_server();
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let _ = spawn_server(Some(mainstay_config));
         println!("starting client...");
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
         let secret_key: FE = ECScalar::new_random();
@@ -41,7 +48,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_deposit() {
-        let _ = spawn_server();
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let _ = spawn_server(Some(mainstay_config));
         let wallet = gen_wallet_with_deposit(10000);
 
         let state_chains_info = wallet.get_state_chains_info();
@@ -82,7 +90,9 @@ mod tests {
     #[test]
     #[serial]
     fn test_get_statechain() {
-        let _ = spawn_server();
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        println!("test_get_statechain: mainstay mock url: {}", mainstay_config.url());
+        let _ = spawn_server(Some(mainstay_config));
         let mut wallet = gen_wallet();
 
         let err = state_entity::api::get_statechain(&wallet.client_shim, &Uuid::new_v4());
@@ -100,12 +110,15 @@ mod tests {
     #[test]
     #[serial]
     fn test_transfer() {
-        let _ = spawn_server();
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let _ = spawn_server(Some(mainstay_config));
         let mut wallets = vec![];
+        println!("gen wallets");
         wallets.push(gen_wallet_with_deposit(10000)); // sender
         wallets.push(gen_wallet()); // receiver
 
         // Get state chain owned by wallet
+        println!("get wallet sc");
         let state_chains_info = wallets[0].get_state_chains_info();
         let shared_key_id = state_chains_info.0.last().unwrap();
         let (state_chain_id, funding_txid, _, _, _) =
@@ -118,6 +131,7 @@ mod tests {
         let new_shared_key_id = run_transfer(&mut wallets, 0, 1, &state_chain_id);
 
         // check shared keys have the same master public key
+        println!("check public keys");
         assert_eq!(
             wallets[0]
                 .get_shared_key(shared_key_id)
@@ -134,6 +148,7 @@ mod tests {
         );
 
         // check shared key is marked spent in sender and unspent in receiver
+        println!("check shard key spent");
         assert!(!wallets[0].get_shared_key(shared_key_id).unwrap().unspent);
         assert!(
             wallets[1]
@@ -143,6 +158,7 @@ mod tests {
         );
 
         // check state chain is updated
+        println!("check state chain updated");
         let state_chain =
             state_entity::api::get_statechain(&wallets[0].client_shim, &state_chain_id).unwrap();
         assert_eq!(state_chain.chain.len(), 2);
@@ -152,12 +168,14 @@ mod tests {
         );
 
         // Get SMT inclusion proof and verify
+        println!("get SMT inclusion proof and verify");
         let root = state_entity::api::get_smt_root(&wallets[1].client_shim)
             .unwrap()
             .unwrap();
         let proof = state_entity::api::get_smt_proof(&wallets[1].client_shim, &root, &funding_txid)
             .unwrap();
         // Ensure wallet's shared key is updated with proof info
+        println!("ensure wallet's sC is updated with proof info");
         let shared_key = wallets[1].get_shared_key(&new_shared_key_id).unwrap();
         assert_eq!(shared_key.smt_proof.clone().unwrap().root, root);
         assert_eq!(shared_key.smt_proof.clone().unwrap().proof, proof);
@@ -165,12 +183,14 @@ mod tests {
             shared_key.proof_key.clone().unwrap(),
             receiver_addr.proof_key
         );
+        println!("end");
     }
 
     #[test]
     #[serial]
     fn test_double_transfer() {
-        let _ = spawn_server();
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let _ = spawn_server(Some(mainstay_config));
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
         wallets.push(gen_wallet()); // receiver1
@@ -299,7 +319,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_withdraw() {
-        let _ = spawn_server();
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let _ = spawn_server(Some(mainstay_config));
         let mut wallet = gen_wallet();
 
         let deposit_resp = run_deposit(&mut wallet, &10000);
@@ -357,7 +378,8 @@ mod tests {
     #[serial]
     /// Test wallet load from json correctly when shared key present.
     fn test_wallet_load_with_shared_key() {
-        let _ = spawn_server();
+        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let _ = spawn_server(Some(mainstay_config));
 
         let mut wallet = gen_wallet();
         run_deposit(&mut wallet, &10000);

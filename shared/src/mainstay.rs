@@ -15,7 +15,9 @@ use std::hash::Hasher;
 use std::io::Cursor;
 use std::str::FromStr;
 use std::string::ToString;
+#[cfg(test)]
 use serde_json::json;
+#[cfg(test)]
 use mockito::{mock, Matcher, Mock};
 use crate::Root;
 
@@ -370,6 +372,7 @@ pub struct Config {
     key: Option<PrivateKey>,
 }
 
+#[cfg(test)]
 fn test_url() -> String {
     String::from(&mockito::server_url())
 }
@@ -379,16 +382,17 @@ impl Config {
         self.url.clone()
     }
 
-    pub fn mock_from_url(url: String) -> Self {
-        Self{url,
+    pub fn mock_from_url(url: &String) -> Self {
+        Self{url: url.to_string(),
         key: None,
         position: 1,
         token: String::from("f0000000-0000-0000-0000-00000000000d"),
         }
     }
 
-    pub fn mock() -> Self {
-        Self::mock_from_url(test_url())
+    #[cfg(test)]
+    fn mock() -> Self {
+        Self::mock_from_url(&test_url())
     }
 
 
@@ -908,7 +912,7 @@ pub mod merkle {
     }
 }
 
-
+#[cfg(test)]
 mod mocks {
     use super::{Mock,Matcher,mock, json};
 
@@ -1241,6 +1245,7 @@ mod tests {
     fn test_get_proof_from_commitment(commitment: &Commitment) -> Result<()> {
         let mut config = Config::from_test().expect(Config::info());
         config.position=1;
+        println!("test_get_proof_from_commitment: mainstay mock url: {}", config.url());
         let _m = mocks::commitment_proof().create();
 
         let proof1 = merkle::Proof::from_commitment(&config, commitment)?;
