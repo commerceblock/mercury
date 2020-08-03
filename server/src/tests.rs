@@ -13,9 +13,7 @@ mod tests {
     use uuid::Uuid;
 
     #[cfg(test)]
-    use serde_json::json;
-    #[cfg(test)]
-    use mockito::{mock, Matcher, Mock};
+    use mockito;
 
 
     // test ecdsa::sign can be performed only by authorised user

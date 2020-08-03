@@ -13,9 +13,7 @@ mod tests {
     use std::{str::FromStr, thread, time::Duration};
 
     #[cfg(test)]
-    use serde_json::json;
-    #[cfg(test)]
-    use mockito::{mock, Matcher, Mock};
+    use mockito;
 
     /// Test batch transfer signature generation
     #[test]

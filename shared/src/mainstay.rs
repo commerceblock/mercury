@@ -19,6 +19,7 @@ use std::string::ToString;
 use serde_json::json;
 #[cfg(test)]
 use mockito::{mock, Matcher, Mock};
+#[cfg(test)]
 use crate::Root;
 
 pub type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
@@ -1029,9 +1030,7 @@ mod tests {
     #[test]
     fn test_root(){
 
-       let random_hash = &monotree::utils::random_hash();
-        let random_hash_string = hex::encode(random_hash);
-        
+        let random_hash = &monotree::utils::random_hash();
         let root = Root::from_hash(random_hash);
         
         assert_eq!(&root.hash(), random_hash, "expected equal hashes");

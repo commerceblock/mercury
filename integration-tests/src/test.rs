@@ -12,8 +12,7 @@ mod tests {
     use curv::elliptic::curves::traits::ECScalar;
     use curv::FE;
 
-    use serde_json::json;
-    use mockito::{mock, Matcher, Mock};
+    use mockito;
 
     #[test]
     #[serial]

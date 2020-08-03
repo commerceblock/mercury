@@ -16,8 +16,6 @@ use mainstay::{Attestable, CommitmentInfo};
 use shared_lib::Root;
 use uuid::Uuid;
 #[cfg(test)]
-use serde_json::json;
-#[cfg(test)]
 use mockito::{mock, Matcher, Mock};
 
 #[derive(Debug)]
@@ -682,7 +680,6 @@ mod tests {
     use super::*;
     use crate::{routes::util::update_smt_db, storage::get_test_postgres_connection};
 
-    use shared_lib::{state_chain::update_statechain_smt, mainstay::Commitment};
 
     fn test_url() -> String {
         String::from(&mockito::server_url())
@@ -710,7 +707,7 @@ mod tests {
          
         let _m_send = mocks::ms::post_commitment().create();
 
-        let root1_id = match root_update(&db_read, &db_write, &mc, &root1) {
+        let _root1_id = match root_update(&db_read, &db_write, &mc, &root1) {
             Ok(id) => id,
             Err(e) => {
                 assert!(false, e.to_string());

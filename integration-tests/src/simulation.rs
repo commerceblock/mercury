@@ -11,12 +11,9 @@ use crate::*;
 use client_lib::wallet::wallet::Wallet;
 use rand::Rng;
 use std::str::FromStr;
-use shared_lib::mainstay;
 
 #[cfg(test)]
-use serde_json::json;
-#[cfg(test)]
-use mockito::{mock, Matcher, Mock};
+use mockito;
 
 #[cfg(test)]
 #[serial]
