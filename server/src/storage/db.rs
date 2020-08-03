@@ -3,12 +3,17 @@
 //! Postgres DB access and update tools.
 
 use super::super::Result;
+use super::super::StateChainEntity;
+use crate::server::get_postgres_url;
+use rocksdb::{Options, DB};
+use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
+
 use crate::{
     error::{
         DBErrorType::{NoDataForID, UpdateFailed},
         SEError,
     },
-    DatabaseR, DatabaseW,
+    Database, 
 };
 use rocket_contrib::databases::postgres::{rows::Row, types::ToSql};
 use shared_lib::mainstay;
@@ -17,10 +22,213 @@ use shared_lib::Root;
 use uuid::Uuid;
 #[cfg(test)]
 use mockito::{mock, Matcher, Mock};
+use rocket_contrib::databases::r2d2;
+
+impl Database {
+    /// Build DB tables and Schemas
+    pub fn make_tables(&self) -> Result<()> {
+    // Create Schemas if they do not already exist
+    let _ = self.database_w.execute(
+        &format!(
+            "
+        CREATE SCHEMA IF NOT EXISTS statechainentity;",
+        ),
+        &[],
+    )?;
+    let _ = self.database_w.execute(
+        &format!(
+            "
+        CREATE SCHEMA IF NOT EXISTS watcher;",
+        ),
+        &[],
+    )?;
+
+    // Create tables if they do not already exist
+    self.database_w.execute(
+        &format!(
+            "
+        CREATE TABLE IF NOT EXISTS {} (
+            id uuid NOT NULL,
+            statechainid uuid,
+            authentication varchar,
+            s2 varchar,
+            sighash varchar,
+            withdrawscsig varchar,
+            txwithdraw varchar,
+            proofkey varchar,
+            txbackup varchar,
+            PRIMARY KEY (id)
+        );",
+            Table::UserSession.to_string(),
+        ),
+        &[],
+    )?;
+
+    self.database_w.execute(
+        &format!(
+            "
+        CREATE TABLE IF NOT EXISTS {} (
+            id uuid NOT NULL,
+            keygenfirstmsg varchar,
+            commwitness varchar,
+            eckeypair varchar,
+            party2public varchar,
+            paillierkeypair varchar,
+            party1private varchar,
+            pdldecommit varchar,
+            alpha varchar,
+            party2pdlfirstmsg varchar,
+            party1masterkey varchar,
+            pos varchar,
+            epheckeypair varchar,
+            ephkeygenfirstmsg varchar,
+            complete bool NOT NULL DEFAULT false,
+            PRIMARY KEY (id)
+        );",
+            Table::Ecdsa.to_string(),
+        ),
+        &[],
+    )?;
+
+    self.database_w.execute(
+        &format!(
+            "
+        CREATE TABLE IF NOT EXISTS {} (
+            id uuid NOT NULL,
+            chain varchar,
+            amount int8,
+            ownerid uuid,
+            lockeduntil timestamp,
+            PRIMARY KEY (id)
+        );",
+            Table::StateChain.to_string(),
+        ),
+        &[],
+    )?;
+
+    self.database_w.execute(
+        &format!(
+            "
+        CREATE TABLE IF NOT EXISTS {} (
+            id uuid NOT NULL,
+            statechainsig varchar,
+            x1 varchar,
+            PRIMARY KEY (id)
+        );",
+            Table::Transfer.to_string(),
+        ),
+        &[],
+    )?;
+
+    self.database_w.execute(
+        &format!(
+            "
+        CREATE TABLE IF NOT EXISTS {} (
+            id uuid NOT NULL,
+            starttime timestamp,
+            statechains varchar,
+            finalizeddata varchar,
+            punishedstatechains varchar,
+            finalized bool,
+            PRIMARY KEY (id)
+        );",
+            Table::TransferBatch.to_string(),
+        ),
+        &[],
+    )?;
+
+    self.database_w.execute(
+        &format!(
+            "
+        CREATE TABLE IF NOT EXISTS {} (
+            id BIGSERIAL,
+            value varchar,
+            commitmentinfo varchar,
+            PRIMARY KEY (id)
+        );",
+            Table::Root.to_string(),
+        ),
+        &[],
+    )?;
+
+    self.database_w.execute(
+        &format!(
+            "
+        CREATE TABLE IF NOT EXISTS {} (
+            id uuid NOT NULL,
+            txbackup varchar,
+            PRIMARY KEY (id)
+        );",
+            Table::BackupTxs.to_string(),
+        ),
+        &[],
+    )?;
+
+    Ok(())
+}
+
+#[allow(dead_code)]
+/// Drop all DB tables and Schemas.
+fn drop_tables(&self) -> Result<()> {
+    let _ = self.database_w.execute(
+        &format!(
+            "
+        DROP SCHEMA statechainentity CASCADE;",
+        ),
+        &[],
+    )?;
+    let _ = self.database_w.execute(
+        &format!(
+            "
+        DROP SCHEMA watcher CASCADE;",
+        ),
+        &[],
+    )?;
+
+    Ok(())
+}
+
+/// Drop all DB tables and schemas.
+fn truncate_tables(&self) -> Result<()> {
+    self.database_w.execute(
+        &format!(
+            "
+        TRUNCATE {},{},{},{},{},{},{} RESTART IDENTITY;",
+            Table::UserSession.to_string(),
+            Table::Ecdsa.to_string(),
+            Table::StateChain.to_string(),
+            Table::Transfer.to_string(),
+            Table::TransferBatch.to_string(),
+            Table::Root.to_string(),
+            Table::BackupTxs.to_string(),
+        ),
+        &[],
+    )?;
+    Ok(())
+}
+
+pub fn reset_dbs(&self) -> Result<()> {
+    // truncate all postgres tables
+    self.truncate_tables()?;
+
+    // Destroy Sparse Merkle Tree RocksDB instance
+    let _ = DB::destroy(&Options::default(), self.smt_db_loc); // ignore error
+    Ok(())
+}
+
+pub fn get_test_postgres_connection() -> r2d2::PooledConnection<PostgresConnectionManager> {
+    let rocket_url = get_postgres_url("TEST".to_string());
+    let manager = PostgresConnectionManager::new(rocket_url, TlsMode::None).unwrap();
+    r2d2::Pool::new(manager).unwrap().get().unwrap()
+}
+
+
+
 
 #[derive(Debug)]
 pub enum Schema {
-    StateChainEntity,
+
+   StateChainEntity,
     Watcher,
 }
 impl Schema {
@@ -125,7 +333,7 @@ impl Column {
 }
 
 /// Serialize data into string. To add custom types to Postgres they must be serialized to String.
-pub fn db_ser<T>(data: T) -> Result<String>
+pub fn ser<T>(data: T) -> Result<String>
 where
     T: serde::ser::Serialize,
 {
@@ -135,8 +343,8 @@ where
     }
 }
 
-/// Deserialize custom type data from string. Reverse of db_ser().
-pub fn db_deser<T>(data: String) -> Result<T>
+/// Deserialize custom type data from string. Reverse of ser().
+pub fn deser<T>(data: String) -> Result<T>
 where
     T: serde::de::DeserializeOwned,
 {
@@ -149,7 +357,7 @@ where
 }
 
 /// Create new item in table
-pub fn db_insert(db_write: &DatabaseW, id: &Uuid, table: Table) -> Result<u64> {
+pub fn insert(write: &DatabaseW, id: &Uuid, table: Table) -> Result<u64> {
     let statement = db_write.prepare(&format!(
         "INSERT INTO {} (id) VALUES ($1)",
         table.to_string()
@@ -159,7 +367,7 @@ pub fn db_insert(db_write: &DatabaseW, id: &Uuid, table: Table) -> Result<u64> {
 }
 
 /// Remove row in table
-pub fn db_remove(db_write: &DatabaseW, id: &Uuid, table: Table) -> Result<()> {
+pub fn remove(db_write: &DatabaseW, id: &Uuid, table: Table) -> Result<()> {
     let statement =
         db_write.prepare(&format!("DELETE FROM {} WHERE id = $1;", table.to_string()))?;
     if statement.execute(&[&id])? == 0 {
@@ -170,7 +378,7 @@ pub fn db_remove(db_write: &DatabaseW, id: &Uuid, table: Table) -> Result<()> {
 }
 
 /// Update items in table for some ID with PostgreSql data types (String, int, bool, Uuid, chrono::NaiveDateTime).
-pub fn db_update(
+pub fn update(
     db_write: &DatabaseW,
     id: &Uuid,
     table: Table,
@@ -210,7 +418,7 @@ fn update_columns_str(cols: Vec<Column>) -> String {
 
 /// Get items from table for some ID with PostgreSql data types (String, int, Uuid, bool, Uuid, chrono::NaiveDateTime).
 /// Err if ID not found. Return None if data item empty.
-fn db_get<T, U, V, W>(
+fn get<T, U, V, W>(
     db_read: &DatabaseR,
     id: &Uuid,
     table: Table,
@@ -284,15 +492,15 @@ where
 }
 
 /// Get 1 item from row in table. Err if ID not found. Return None if data item empty.
-pub fn db_get_1<T>(db_read: &DatabaseR, id: &Uuid, table: Table, column: Vec<Column>) -> Result<T>
+pub fn get_1<T>(db_read: &DatabaseR, id: &Uuid, table: Table, column: Vec<Column>) -> Result<T>
 where
     T: rocket_contrib::databases::postgres::types::FromSql,
 {
-    let (res, _, _, _) = db_get::<T, T, T, T>(db_read, id, table, column)?;
+    let (res, _, _, _) = get::<T, T, T, T>(db_read, id, table, column)?;
     Ok(res.unwrap())  //  err returned from db_get if desired item is None
 }
 /// Get 2 items from row in table. Err if ID not found. Return None if data item empty.
-pub fn db_get_2<T, U>(
+pub fn get_2<T, U>(
     db_read: &DatabaseR,
     id: &Uuid,
     table: Table,
@@ -302,11 +510,11 @@ where
     T: rocket_contrib::databases::postgres::types::FromSql,
     U: rocket_contrib::databases::postgres::types::FromSql,
 {
-    let (res1, res2, _, _) = db_get::<T, U, U, U>(db_read, id, table, column)?;
+    let (res1, res2, _, _) = get::<T, U, U, U>(read, id, table, column)?;
     Ok((res1.unwrap(), res2.unwrap()))
 }
 /// Get 3 items from row in table. Err if ID not found. Return None if data item empty.
-pub fn db_get_3<T, U, V>(
+pub fn get_3<T, U, V>(
     db_read: &DatabaseR,
     id: &Uuid,
     table: Table,
@@ -321,7 +529,7 @@ where
     Ok((res1.unwrap(), res2.unwrap(), res3.unwrap()))
 }
 /// Get 4 items from row in table. Err if ID not found. Return None if data item empty.
-pub fn db_get_4<T, U, V, W>(
+pub fn get_4<T, U, V, W>(
     db_read: &DatabaseR,
     id: &Uuid,
     table: Table,
@@ -333,9 +541,14 @@ where
     V: rocket_contrib::databases::postgres::types::FromSql,
     W: rocket_contrib::databases::postgres::types::FromSql,
 {
-    let (res1, res2, res3, res4) = db_get::<T, U, V, W>(db_read, id, table, column)?;
+    let (res1, res2, res3, res4) = get::<T, U, V, W>(db_read, id, table, column)?;
     Ok((res1.unwrap(), res2.unwrap(), res3.unwrap(), res4.unwrap()))
 }
+
+
+
+}
+
 
 /// Update the database with the latest available mainstay attestation info
 pub fn get_confirmed_root(
@@ -381,7 +594,7 @@ pub fn get_confirmed_root(
                 Err(e) => Err(e),
         }
     }
-      
+
 
     match mc {
         Some(conf) => {
@@ -650,7 +863,7 @@ mod mocks {
         }
 
         pub fn commitment_proof() -> Mock {
-            mock("GET", 
+            mock("GET",
                         "/commitment/commitment?commitment=71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d")
                         .with_header("Content-Type", "application/json")
                         .with_body("{\"response\":{
@@ -666,7 +879,7 @@ mod mocks {
                     ,\"timestamp\":1593160486862,
                     \"allowance\":{\"cost\":17954530}
                     }")
-                
+
         }
 
     }
@@ -678,8 +891,15 @@ mod tests {
 
     use std::str::FromStr;
     use super::*;
-    use crate::{routes::util::update_smt_db, storage::get_test_postgres_connection};
+    use crate::storage::get_test_postgres_connection;
+    use super::super::super::server::get_settings_as_map;
+    use super::super::super::StateChainEntity;
 
+    fn test_sc_entity() -> StateChainEntity {
+        let mut sc_entity = StateChainEntity::load(get_settings_as_map()).unwrap();
+        sc_entity.mainstay_config = mainstay::Config::from_test();
+        sc_entity
+    }
 
     fn test_url() -> String {
         String::from(&mockito::server_url())
@@ -704,7 +924,7 @@ mod tests {
         let root1 = Root::from_hash(&com1.to_hash());
 
         assert_eq!(root1.hash(), com1.to_hash(), "expected roots to match");
-         
+
         let _m_send = mocks::ms::post_commitment().create();
 
         let _root1_id = match root_update(&db_read, &db_write, &mc, &root1) {
@@ -719,7 +939,7 @@ mod tests {
 
         //Update the local copy of root1
         //let root1 = db_root_get(&db_read, &(root1_id as i64)).unwrap().unwrap();
-    
+
         assert!(root1.is_confirmed() == false);
 
         //Some time later, the root is committed to mainstay
@@ -731,7 +951,7 @@ mod tests {
         assert!(rootc.is_confirmed(), "expected the root to be confirmed");
 
         //let root1 = db_root_get(&db_read, &(root1_id as i64)).unwrap().unwrap();
-    
+
         assert_eq!(rootc.hash(), root1.hash(), "expected equal Root hashes:\n{:?}\n\n{:?}", rootc, root1);
 
         assert!(rootc.is_confirmed(), "expected root to be confirmed");
@@ -742,12 +962,11 @@ mod tests {
     fn test_update_root_smt() {
         let db_read = DatabaseR(get_test_postgres_connection());
         let db_write = DatabaseW(get_test_postgres_connection());
-        let mc = Some(mainstay::Config::mock_from_url(&test_url()));
-        
-        let (_, new_root) = update_smt_db(
+        let sc_entity = test_sc_entity();
+
+        let (_, new_root) = sc_entity.update_smt_db(
             &db_read,
             &db_write,
-            &mc,
             &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
             &"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
         )
@@ -759,6 +978,6 @@ mod tests {
         assert_eq!(new_root.hash(), current_root.hash());
 
 
-        
+
     }
 }

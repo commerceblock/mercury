@@ -3,7 +3,10 @@
 //! Basic Bitcoin wallet functionality. Full key owned by this wallet.
 
 use super::super::Result;
-use shared_lib::{structs::StateEntityAddress, util::get_sighash};
+use shared_lib::{
+    structs::{Protocol, StateEntityAddress},
+    util::get_sighash,
+};
 
 use super::key_paths::{funding_txid_to_int, KeyPath, KeyPathWithAddresses};
 use crate::error::{CError, WalletErrorType};
@@ -379,7 +382,13 @@ impl Wallet {
             .private_key
             .key;
 
-        let shared_key = SharedKey::new(id, &self.client_shim, &key_share_priv, value, false)?;
+        let shared_key = SharedKey::new(
+            id,
+            &self.client_shim,
+            &key_share_priv,
+            value,
+            Protocol::Deposit,
+        )?;
         self.shared_keys.push(shared_key);
         Ok(self.shared_keys.last().unwrap())
     }
@@ -396,7 +405,7 @@ impl Wallet {
             &self.client_shim,
             secret_key,
             value,
-            true,
+            Protocol::Transfer,
         )?);
         Ok(())
     }

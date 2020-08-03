@@ -5,7 +5,7 @@ mod tests {
     use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
     use rocket::http::{ContentType, Status};
     use rocket::local::Client;
-    use shared_lib::structs::{DepositMsg1, SmtProofMsgAPI, StateEntityFeeInfoAPI};
+    use shared_lib::structs::{DepositMsg1, SmtProofMsgAPI, StateEntityFeeInfoAPI, KeyGenMsg1, Protocol};
     use shared_lib::{Root, mainstay};
 
     use serde_json;
@@ -21,7 +21,7 @@ mod tests {
     #[serial]
     fn test_auth_token() {
         let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
-        let client = Client::new(server::get_server(true, Some(mainstay_config)).unwrap()).expect("valid rocket instance");
+        let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
         // get ID
         let deposit_msg1 = DepositMsg1 {
             auth: String::from("auth"),
@@ -34,10 +34,15 @@ mod tests {
             .header(ContentType::JSON)
             .dispatch();
         let id_str: String = serde_json::from_str(&response.body_string().unwrap()).unwrap();
-        let id = Uuid::from_str(&id_str).unwrap();
+
+        let mut key_gen_msg1 = KeyGenMsg1 {
+            shared_key_id: Uuid::from_str(&id_str).unwrap(),
+            protocol: Protocol::Deposit,
+        };
 
         let mut response = client
-            .post(format!("/ecdsa/keygen/{}/first/deposit", id))
+            .post(format!("/ecdsa/keygen/first"))
+            .body(serde_json::to_string(&key_gen_msg1).unwrap())
             .header(ContentType::JSON)
             .dispatch();
         assert_eq!(response.status(), Status::Ok);
@@ -47,8 +52,10 @@ mod tests {
         assert_eq!(res, id_str);
 
         // use incorrect ID
+        key_gen_msg1.shared_key_id = Uuid::new_v4();
         let mut response = client
-            .post(format!("/ecdsa/keygen/{}/first/deposit", Uuid::new_v4()))
+            .post(format!("/ecdsa/keygen/first"))
+            .body(serde_json::to_string(&key_gen_msg1).unwrap())
             .header(ContentType::JSON)
             .dispatch();
 
@@ -63,7 +70,7 @@ mod tests {
     #[serial]
     fn test_err_get_statechain() {
         let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
-        let client = Client::new(server::get_server(true, Some(mainstay_config)).unwrap()).expect("valid rocket instance");
+        let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
         // get_statechain invalid id
         let invalid_id = Uuid::new_v4();
@@ -90,7 +97,7 @@ mod tests {
     #[serial]
     fn test_err_get_smt_proof() {
         let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
-        let client = Client::new(server::get_server(true, Some(mainstay_config)).unwrap()).expect("valid rocket instance");
+        let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
         // None root
         let smt_proof_msg = SmtProofMsgAPI {
@@ -171,7 +178,7 @@ mod tests {
     #[serial]
     fn test_err_get_transfer_batch_status() {
         let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
-        let client = Client::new(server::get_server(true, Some(mainstay_config)).unwrap()).expect("valid rocket instance");
+        let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
         // get_transfer_batch_status invalid id
         let invalid_id = Uuid::new_v4();
@@ -198,7 +205,7 @@ mod tests {
     #[serial]
     fn test_get_state_entity_fees() {
         let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
-        let client = Client::new(server::get_server(true, Some(mainstay_config)).unwrap()).expect("valid rocket instance");
+        let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
         let mut response = client
             .post("/info/fee")

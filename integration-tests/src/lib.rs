@@ -18,6 +18,7 @@ use shared_lib::{
     structs::{BatchData, PrepareSignTxMsg},
     mainstay
 };
+use std::env;
 use std::error;
 use std::fmt;
 use std::sync::mpsc;
@@ -76,10 +77,13 @@ impl From<RecvTimeoutError> for SpawnError {
 pub fn spawn_server(mainstay_config: Option<mainstay::Config>) -> Result<(), SpawnError> {
     let (tx, rx) = mpsc::channel::<SpawnError>();
 
+    // Set enviroment variable to testing_mode=true to override Settings.toml
+    env::set_var("MERC_TESTING_MODE", "true");
+
     // Rocket server is blocking, so we spawn a new thread.
     thread::spawn(move || {
         tx.send({
-            match server::get_server(true, mainstay_config) {
+            match server::get_server(mainstay_config) {
                 Ok(s) => {
                     let try_launch = s.launch();
                     let _ = try_launch.kind(); // LaunchError needs to be accessed here for this to work. Be carfeul modifying this code.
@@ -90,8 +94,8 @@ pub fn spawn_server(mainstay_config: Option<mainstay::Config>) -> Result<(), Spa
         })
     });
 
-    //If we haven't received an error within 2 secs then assume server running.
-    match rx.recv_timeout(time::Duration::from_millis(2000)) {
+    //If we haven't received an error within 5 secs then assume server running.
+    match rx.recv_timeout(time::Duration::from_millis(5000)) {
         Ok(e) => Err(e),
         Err(e) => match e {
             RecvTimeoutError::Timeout => Ok(()),

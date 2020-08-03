@@ -1,208 +1,161 @@
 pub mod db;
 
 use super::Result;
-use crate::server::get_postgres_url;
 use db::Table;
 use postgres::Connection;
-use rocket_contrib::databases::r2d2;
-use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
-use rocksdb::{Options, DB};
 
-pub static DB_SC_LOC: &str = "../server/db-smt";
+use std::{fmt,error};
+use rocket::response::Responder;
+use rocket::http::{ContentType, Status};
+use uuid::Uuid;
+use shared_lib::state_chain::{StateChain, StateChainSig};
+use shared_lib::Root;
+use std::io::Cursor;
+use bitcoin::blockdata::transaction::Transaction;
+use kms::ecdsa::two_party::*;
+use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
+use rocket_contrib::json::Json;
 
-/// Build DB tables and Schemas
-pub fn db_make_tables(conn: &Connection) -> Result<()> {
-    // Create Schemas if they do not already exist
-    let _ = conn.execute(
-        &format!(
-            "
-        CREATE SCHEMA IF NOT EXISTS statechainentity;",
-        ),
-        &[],
-    )?;
-    let _ = conn.execute(
-        &format!(
-            "
-        CREATE SCHEMA IF NOT EXISTS watcher;",
-        ),
-        &[],
-    )?;
-
-    // Create tables if they do not already exist
-    conn.execute(
-        &format!(
-            "
-        CREATE TABLE IF NOT EXISTS {} (
-            id uuid NOT NULL,
-            statechainid uuid,
-            authentication varchar,
-            s2 varchar,
-            sighash varchar,
-            withdrawscsig varchar,
-            txwithdraw varchar,
-            proofkey varchar,
-            txbackup varchar,
-            PRIMARY KEY (id)
-        );",
-            Table::UserSession.to_string(),
-        ),
-        &[],
-    )?;
-
-    conn.execute(
-        &format!(
-            "
-        CREATE TABLE IF NOT EXISTS {} (
-            id uuid NOT NULL,
-            keygenfirstmsg varchar,
-            commwitness varchar,
-            eckeypair varchar,
-            party2public varchar,
-            paillierkeypair varchar,
-            party1private varchar,
-            pdldecommit varchar,
-            alpha varchar,
-            party2pdlfirstmsg varchar,
-            party1masterkey varchar,
-            pos varchar,
-            epheckeypair varchar,
-            ephkeygenfirstmsg varchar,
-            complete bool NOT NULL DEFAULT false,
-            PRIMARY KEY (id)
-        );",
-            Table::Ecdsa.to_string(),
-        ),
-        &[],
-    )?;
-
-    conn.execute(
-        &format!(
-            "
-        CREATE TABLE IF NOT EXISTS {} (
-            id uuid NOT NULL,
-            chain varchar,
-            amount int8,
-            ownerid uuid,
-            lockeduntil timestamp,
-            PRIMARY KEY (id)
-        );",
-            Table::StateChain.to_string(),
-        ),
-        &[],
-    )?;
-
-    conn.execute(
-        &format!(
-            "
-        CREATE TABLE IF NOT EXISTS {} (
-            id uuid NOT NULL,
-            statechainsig varchar,
-            x1 varchar,
-            PRIMARY KEY (id)
-        );",
-            Table::Transfer.to_string(),
-        ),
-        &[],
-    )?;
-
-    conn.execute(
-        &format!(
-            "
-        CREATE TABLE IF NOT EXISTS {} (
-            id uuid NOT NULL,
-            starttime timestamp,
-            statechains varchar,
-            finalizeddata varchar,
-            punishedstatechains varchar,
-            finalized bool,
-            PRIMARY KEY (id)
-        );",
-            Table::TransferBatch.to_string(),
-        ),
-        &[],
-    )?;
-
-    conn.execute(
-        &format!(
-            "
-        CREATE TABLE IF NOT EXISTS {} (
-            id BIGSERIAL,
-            value varchar,
-            commitmentinfo varchar,
-            PRIMARY KEY (id)
-        );",
-            Table::Root.to_string(),
-        ),
-        &[],
-    )?;
-
-    conn.execute(
-        &format!(
-            "
-        CREATE TABLE IF NOT EXISTS {} (
-            id uuid NOT NULL,
-            txbackup varchar,
-            PRIMARY KEY (id)
-        );",
-            Table::BackupTxs.to_string(),
-        ),
-        &[],
-    )?;
-
-    Ok(())
+#[derive(Debug, Deserialize)]
+pub enum StorageError {
+    /// Generic error from string error message
+    Generic(String),
+    /// Invalid argument error
+    FormatError(String),
+    /// Item not found error
+    NotFoundError(String),
+    ConfigurationError(String),
 }
 
-#[allow(dead_code)]
-/// Drop all DB tables and Schemas.
-fn db_drop_tables(conn: &Connection) -> Result<()> {
-    let _ = conn.execute(
-        &format!(
-            "
-        DROP SCHEMA statechainentity CASCADE;",
-        ),
-        &[],
-    )?;
-    let _ = conn.execute(
-        &format!(
-            "
-        DROP SCHEMA watcher CASCADE;",
-        ),
-        &[],
-    )?;
-
-    Ok(())
+impl PartialEq for StorageError {
+    fn eq(&self, other: &Self) -> bool {
+        use StorageError::*;
+        match (self, other) {
+            (Generic(ref a), Generic(ref b)) => a == b,
+            (FormatError(ref a), FormatError(ref b)) => a == b,
+            (NotFoundError(ref a), NotFoundError(ref b)) => a == b,
+            (ConfigurationError(ref a), ConfigurationError(ref b)) => a == b,
+            _ => false,
+        }
+    }
 }
 
-/// Drop all DB tables and schemas.
-fn db_truncate_tables(conn: &Connection) -> Result<()> {
-    conn.execute(
-        &format!(
-            "
-        TRUNCATE {},{},{},{},{},{},{} RESTART IDENTITY;",
-            Table::UserSession.to_string(),
-            Table::Ecdsa.to_string(),
-            Table::StateChain.to_string(),
-            Table::Transfer.to_string(),
-            Table::TransferBatch.to_string(),
-            Table::Root.to_string(),
-            Table::BackupTxs.to_string(),
-        ),
-        &[],
-    )?;
-    Ok(())
+impl From<String> for StorageError {
+    fn from(e: String) -> Self {
+        Self::Generic(e)
+    }
 }
 
-pub fn db_reset_dbs(conn: &Connection) -> Result<()> {
-    // truncate all postgres tables
-    db_truncate_tables(&conn)?;
-
-    // Destroy Sparse Merkle Tree RocksDB instance
-    let _ = DB::destroy(&Options::default(), DB_SC_LOC); // ignore error
-    Ok(())
+impl From<&str> for StorageError {
+    fn from(e: &str) -> Self {
+        Self::Generic(String::from(e))
+    }
 }
 
-pub fn get_test_postgres_connection() -> r2d2::PooledConnection<PostgresConnectionManager> {
-    let rocket_url = get_postgres_url("TEST".to_string());
-    let manager = PostgresConnectionManager::new(rocket_url, TlsMode::None).unwrap();
-    r2d2::Pool::new(manager).unwrap().get().unwrap()
+impl fmt::Display for StorageError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            StorageError::Generic(ref e) => write!(f, "StorageError: {}", e),
+            StorageError::FormatError(ref e) => write!(f, "StorageError::FormatError: {}", e),
+            StorageError::NotFoundError(ref e) => write!(f, "StorageError::NotFoundError: {}", e),
+            StorageError::ConfigurationError(ref e) => {
+                write!(f, "StorageError::ConfigurationError: {}", e)
+            }
+        }
+    }
+}
+
+impl error::Error for StorageError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match *self {
+            _ => None,
+        }
+    }
+}
+
+impl Responder<'static> for StorageError {
+    fn respond_to(
+        self,
+        _: &rocket::Request,
+    ) -> ::std::result::Result<rocket::Response<'static>, Status> {
+        rocket::Response::build()
+            .header(ContentType::JSON)
+            .sized_body(Cursor::new(format!("{}", self)))
+            .ok()
+    }
+}
+
+pub trait Storage {
+   // fn insert<T,U>(&self, id: &T, data: U) -> Result<>;
+   // fn remove<T,U>&self, id: &T, data: U) -> Result<()>;
+
+   //Create a new user session or update an existing one 
+   //If Uuid is not None, that session is updated. Otherwise, a new one is created.
+   fn save_user_session(&self, id: &Uuid, auth: String, proof_key: String) 
+        -> Result<()>;
+
+   fn create_user_session(&self, auth: String, proof_key: String) 
+        -> Result<()>{
+     let id = Uuid::new_v4();
+     self.save_user_session(&id, auth, proof_key)
+   }
+
+   fn save_statechain(&self, statechain_id: &Uuid, statechain: &StateChain, 
+                            amount: i64, 
+                            user_id: &Uuid) -> Result<()>;
+
+    fn save_backup_tx(&self, statechain_id: &Uuid, backup_tx: &Transaction) 
+        -> Result<()>;
+
+    //Returns: (new_root, current_root)
+    fn update_smt(&self, backup_tx: &Transaction, proof_key: &String)
+        -> Result<(Option<Root>, Root)>;
+
+    fn save_ecdsa(&self, user_id: &Uuid, 
+        first_msg: party_one::KeyGenFirstMsg) -> Result<()>;
+
+    fn get_latest_confirmed_root(&self) -> Result<Option<Root>>;
+
+    fn get_latest_root(&self, id: &i64) -> Result<Option<Root>>;
+
+    fn get_confirmed_root(&self, id: &i64) -> Result<Option<Root>>;
+
+    fn get_root(&self, id: &i64) -> Result<Option<Root>>;
+
+    //Returns locked until time, owner id, state chain
+    fn get_statechain(&self, user_id: &Uuid) -> Result<(NaiveDateTime, Uuid, StateChain)>;
+
+    fn authorise_withdrawal(&self, user_id: &Uuid, signature: StateChainSig) -> Result<()>;
+
+    // /withdraw/confirm
+    fn confirm_withdrawal(&self, user_id: &Uuid, address: &String)->Result<()>;
+
+    // /transfer/sender
+    fn init_transfer(&self, user_id: &Uuid, sig: &StateChainSig)->Result<()>;
+
+    // Returns statechain_id, sstatechain_sig_str, x1_str
+    fn get_transfer(&self, statechain_id: &Uuid) -> Result<(Uuid, StateChainSig, FE)>;
+
+    //Returns party1_private_str, party2_public_str
+    fn get_transfer_ecdsa_pair(&self, user_id: &Uuid) -> Result<Party1Private, GE>;
+
+    fn finalize_transfer(&self, &Option<BatchData>, tf_data: &TransferFinalizeData);
+
+    fn batch_transfer_exists(&self, batch_id: &Uuid, sig: &StateChainSig)-> bool;
+
+    // /transfer/batch/init
+    fn init_batch_transfer(&self, batch_id: &Uuid, 
+                        state_chains: &HashMap<Uuid, bool>) -> Result<()>;
+
+
+    // Returns: finalized, start_time, state_chains, punished
+    fn get_batch_transfer_status(&self, batch_id: &Uuid) 
+        -> Result<(bool, NaiveDateTime, HashMap<Uuid, bool>, Vec<Uuid>)>;
+
+    // Update the locked until time of a state chain (used for punishment)
+    fn update_locked_until(&self, state_chain_id: &Uuid, time: &NaiveDateTime);
+
+    //Update the list of punished state chains
+    fn update_punished(&self, punished: &Vec<Uuid>);
+
 }

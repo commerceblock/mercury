@@ -115,7 +115,7 @@ pub fn deposit(
     // Wait for server confirmation of funding tx and receive new StateChain's id
     let state_chain_id: Uuid = requests::postb(
         &wallet.client_shim,
-        &format!("/deposit/confirm"),
+        &format!("deposit/confirm"),
         &DepositMsg2 {
             shared_key_id: shared_key_id.to_owned(),
         },
