@@ -1,4 +1,4 @@
-FROM rustlang/rust:nightly-stretch
+FROM rustlang/rust:nightly-stretch AS builder
 
 ARG MERC_MS_TEST_SLOT
 ARG MERC_MS_TEST_TOKEN
@@ -42,4 +42,14 @@ ENV MERC_DB_HOST_TEST=
 ENV MERC_DB_PORT_TEST=
 ENV MERC_DB_DATABASE_TEST=
 
-ENTRYPOINT ["/mercury/docker-entrypoint.sh"]
+FROM debian:buster
+
+COPY --from=builder /mercury/target/release/server_exec /usr/local/bin/mercury
+COPY ./docker-entrypoint.sh /docker-entrypoint.sh
+
+RUN set -ex \
+    && apt update \
+    && apt install -y libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
