@@ -27,10 +27,13 @@ mod tests {
     #[test]
     #[serial]
     fn test_failed_auth() {
+        println!("spawning server...");
         let _ = spawn_server();
+        println!("starting client...");
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
         let secret_key: FE = ECScalar::new_random();
         let invalid_key = Uuid::new_v4();
+        println!("getting master key...");
         let err = ecdsa::get_master_key(&invalid_key, &client_shim, &secret_key, &1000, false);
         assert!(err.is_err());
     }

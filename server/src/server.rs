@@ -29,7 +29,7 @@ impl Config {
 
         //mainstay_config is optional
         let mainstay_config = match testing_mode {
-            true => mainstay::Config::from_test(),
+            true => Some(mainstay::Config::mock()),
             false => match settings.get("mainstay_config") {
                 Some(o) => Some(o.parse::<mainstay::Config>().unwrap()),
                 None => None,

@@ -693,7 +693,6 @@ mod tests {
     #[test]
     #[serial]
     fn test_verify_root() {
-        db_reset_test_dbs();
         let db_read = DatabaseR(get_test_postgres_connection());
         let db_write = DatabaseW(get_test_postgres_connection());
         let mc = Some(mainstay::Config::mock_from_url(test_url()));
@@ -746,7 +745,6 @@ mod tests {
     #[test]
     #[serial]
     fn test_update_root_smt() {
-        db_reset_test_dbs();
         let db_read = DatabaseR(get_test_postgres_connection());
         let db_write = DatabaseW(get_test_postgres_connection());
         let mc = Some(mainstay::Config::mock_from_url(test_url()));

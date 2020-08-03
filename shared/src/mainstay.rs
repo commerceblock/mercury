@@ -15,9 +15,7 @@ use std::hash::Hasher;
 use std::io::Cursor;
 use std::str::FromStr;
 use std::string::ToString;
-#[cfg(test)]
 use serde_json::json;
-#[cfg(test)]
 use mockito::{mock, Matcher, Mock};
 use crate::Root;
 
@@ -372,7 +370,6 @@ pub struct Config {
     key: Option<PrivateKey>,
 }
 
-#[cfg(test)]
 fn test_url() -> String {
     String::from(&mockito::server_url())
 }
@@ -390,8 +387,7 @@ impl Config {
         }
     }
 
-    #[cfg(test)]
-    fn mock() -> Self {
+    pub fn mock() -> Self {
         Self::mock_from_url(test_url())
     }
 
@@ -912,7 +908,7 @@ pub mod merkle {
     }
 }
 
-#[cfg(test)]
+
 mod mocks {
     use super::{Mock,Matcher,mock, json};
 
