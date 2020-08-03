@@ -613,9 +613,16 @@ pub fn db_get_confirmed_root(db_read: &DatabaseR) -> Result<Option<Root>> {
 mod tests {
 
     use super::*;
-    use crate::{routes::util::update_smt_db, storage::get_test_postgres_connection, server::SMT_DB_LOC_TESTING};
-
+    use crate::storage::get_test_postgres_connection;
     // use shared_lib::{state_chain::update_statechain_smt, mainstay::Commitment};
+    use super::super::super::StateChainEntity;
+    use super::super::super::server::get_settings_as_map;
+
+    pub fn test_sc_entity() -> StateChainEntity {
+        let mut sc_entity = StateChainEntity::load(get_settings_as_map()).unwrap();
+        sc_entity.mainstay_config = mainstay::Config::from_test();
+        sc_entity
+    }
 
     // #[test]
     // #[serial]
@@ -663,13 +670,11 @@ mod tests {
     fn test_update_root_smt() {
         let db_read = DatabaseR(get_test_postgres_connection());
         let db_write = DatabaseW(get_test_postgres_connection());
-        let mc = mainstay::Config::from_test();
+        let sc_entity = test_sc_entity();
 
-        let (_, new_root) = update_smt_db(
-            &SMT_DB_LOC_TESTING.to_string(),
+        let (_, new_root) = sc_entity.update_smt_db(
             &db_read,
             &db_write,
-            &mc,
             &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
             &"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
         )

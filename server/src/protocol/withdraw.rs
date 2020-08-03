@@ -2,15 +2,11 @@
 //!
 //! StateEntity Withdraw protocol.
 
-use super::{
-    super::{Config, Result},
-    util::update_smt_db,
-};
+use super::super::{StateChainEntity, Result};
 extern crate shared_lib;
 use shared_lib::{state_chain::*, structs::*};
 
 use crate::error::SEError;
-use crate::routes::util::check_user_auth;
 use crate::storage::db::{db_deser, db_get_1, db_get_3, db_ser, db_update, Column, Table};
 use crate::{DatabaseR, DatabaseW};
 
@@ -86,7 +82,7 @@ pub fn withdraw_init(
 ///     - Return withdraw tx signature
 #[post("/withdraw/confirm", format = "json", data = "<withdraw_msg2>")]
 pub fn withdraw_confirm(
-    state: State<Config>,
+    state: State<StateChainEntity>,
     db_read: DatabaseR,
     db_write: DatabaseW,
     withdraw_msg2: Json<WithdrawMsg2>,

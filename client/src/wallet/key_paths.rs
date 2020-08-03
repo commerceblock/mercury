@@ -1,6 +1,6 @@
 //! Key paths
 //!
-//! Structs defining and storing routes of key generation.
+//! Structs defining and storing protocol of key generation.
 //! Structs differ in their storage/access of keys:
 //!     Storage by Bitcoin address, Public key and State Entity Address
 

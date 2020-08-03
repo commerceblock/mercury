@@ -94,7 +94,7 @@ pub fn spawn_server() -> Result<(), SpawnError> {
     });
 
     //If we haven't received an error within 2 secs then assume server running.
-    match rx.recv_timeout(time::Duration::from_millis(2000)) {
+    match rx.recv_timeout(time::Duration::from_millis(4000)) {
         Ok(e) => Err(e),
         Err(e) => match e {
             RecvTimeoutError::Timeout => Ok(()),

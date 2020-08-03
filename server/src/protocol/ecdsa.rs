@@ -1,8 +1,7 @@
-use super::super::Result;
+use super::super::{StateChainEntity,Result};
 
 use crate::error::{DBErrorType, SEError};
 use crate::{
-    routes::util::check_user_auth,
     storage::db::{
         db_deser, db_get_1, db_get_2, db_get_3, db_get_4, db_insert, db_ser, db_update, Column,
         Table,
@@ -24,6 +23,7 @@ use curv::{
 
 use kms::ecdsa::two_party::*;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
+use rocket::State;
 use rocket_contrib::json::Json;
 
 use std::str::FromStr;
@@ -42,13 +42,14 @@ struct Alpha {
 
 #[post("/ecdsa/keygen/<id>/first/<protocol>", format = "json")]
 pub fn first_message(
+    sc_entity: State<StateChainEntity>,
     db_read: DatabaseR,
     db_write: DatabaseW,
     id: String,
     protocol: String,
 ) -> Result<Json<(Uuid, party_one::KeyGenFirstMsg)>> {
     let user_id = Uuid::from_str(&id).unwrap();
-    check_user_auth(&db_read, &user_id)?;
+    sc_entity.check_user_auth(&db_read, &user_id)?;
 
     // Create new entry in ecdsa table if key not already in table.
     match db_get_1::<Option<String>>(
@@ -289,13 +290,14 @@ pub fn master_key(db_read: DatabaseR, db_write: DatabaseW, id: String) -> Result
     data = "<eph_key_gen_first_message_party_two>"
 )]
 pub fn sign_first(
+    sc_entity: State<StateChainEntity>,
     db_read: DatabaseR,
     db_write: DatabaseW,
     id: String,
     eph_key_gen_first_message_party_two: Json<party_two::EphKeyGenFirstMsg>,
 ) -> Result<Json<party_one::EphKeyGenFirstMsg>> {
     let user_id = Uuid::from_str(&id).unwrap();
-    check_user_auth(&db_read, &user_id)?;
+    sc_entity.check_user_auth(&db_read, &user_id)?;
 
     let (sign_party_one_first_message, eph_ec_key_pair_party1) = MasterKey1::sign_first_message();
 
@@ -315,13 +317,14 @@ pub fn sign_first(
 
 #[post("/ecdsa/sign/<id>/second", format = "json", data = "<request>")]
 pub fn sign_second(
+    sc_entity: State<StateChainEntity>,
     db_read: DatabaseR,
     db_write: DatabaseW,
     id: String,
     request: Json<SignSecondMsgRequest>,
 ) -> Result<Json<Vec<Vec<u8>>>> {
     let user_id = Uuid::from_str(&id).unwrap();
-    check_user_auth(&db_read, &user_id)?;
+    sc_entity.check_user_auth(&db_read, &user_id)?;
 
     // Get validated sig hash for this user
     let sig_hash: sha256d::Hash = db_deser(db_get_1(
