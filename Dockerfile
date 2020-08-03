@@ -31,9 +31,8 @@ RUN set -ex \
 
 RUN set -ex \
     && cd server \
+    && cargo test -j 4 -- --test-threads=4 \
     && cargo build --release
-    #&& cargo test -j 4 -- --test-threads=4 \
-    #&& cargo build --release
 
 ENV MERC_MS_TEST_SLOT=
 ENV MERC_MS_TEST_TOKEN=
