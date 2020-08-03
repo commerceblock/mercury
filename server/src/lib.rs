@@ -44,7 +44,6 @@ extern crate serial_test;
 pub mod error;
 pub mod protocol;
 pub mod server;
-pub mod state_chain_entity;
 pub mod storage;
 pub mod tests;
 
