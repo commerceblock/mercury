@@ -1244,7 +1244,6 @@ mod tests {
     fn test_get_proof_from_commitment(commitment: &Commitment) -> Result<()> {
         let mut config = Config::from_test().expect(Config::info());
         config.position=1;
-        println!("test_get_proof_from_commitment: mainstay mock url: {}", config.url());
         let _m = mocks::commitment_proof().create();
 
         let proof1 = merkle::Proof::from_commitment(&config, commitment)?;
