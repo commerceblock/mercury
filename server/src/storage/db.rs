@@ -19,8 +19,6 @@ use uuid::Uuid;
 use serde_json::json;
 #[cfg(test)]
 use mockito::{mock, Matcher, Mock};
-#[cfg(test)]
-use crate::storage::db_reset_test_dbs;
 
 #[derive(Debug)]
 pub enum Schema {

@@ -16,14 +16,14 @@ pub fn db_make_tables(conn: &Connection) -> Result<()> {
     let _ = conn.execute(
         &format!(
             "
-        CREATE SCHEMA statechainentity;",
+        CREATE SCHEMA IF NOT EXISTS statechainentity;",
         ),
         &[],
     )?;
     let _ = conn.execute(
         &format!(
             "
-        CREATE SCHEMA watcher;",
+        CREATE SCHEMA IF NOT EXISTS watcher;",
         ),
         &[],
     )?;
@@ -32,7 +32,7 @@ pub fn db_make_tables(conn: &Connection) -> Result<()> {
     conn.execute(
         &format!(
             "
-        CREATE TABLE {} (
+        CREATE TABLE IF NOT EXISTS {} (
             id uuid NOT NULL,
             statechainid uuid,
             authentication varchar,
@@ -52,7 +52,7 @@ pub fn db_make_tables(conn: &Connection) -> Result<()> {
     conn.execute(
         &format!(
             "
-        CREATE TABLE {} (
+        CREATE TABLE IF NOT EXISTS {} (
             id uuid NOT NULL,
             keygenfirstmsg varchar,
             commwitness varchar,
@@ -78,7 +78,7 @@ pub fn db_make_tables(conn: &Connection) -> Result<()> {
     conn.execute(
         &format!(
             "
-        CREATE TABLE {} (
+        CREATE TABLE IF NOT EXISTS {} (
             id uuid NOT NULL,
             chain varchar,
             amount int8,
@@ -94,7 +94,7 @@ pub fn db_make_tables(conn: &Connection) -> Result<()> {
     conn.execute(
         &format!(
             "
-        CREATE TABLE {} (
+        CREATE TABLE IF NOT EXISTS {} (
             id uuid NOT NULL,
             statechainsig varchar,
             x1 varchar,
@@ -108,7 +108,7 @@ pub fn db_make_tables(conn: &Connection) -> Result<()> {
     conn.execute(
         &format!(
             "
-        CREATE TABLE {} (
+        CREATE TABLE IF NOT EXISTS {} (
             id uuid NOT NULL,
             starttime timestamp,
             statechains varchar,
@@ -125,7 +125,7 @@ pub fn db_make_tables(conn: &Connection) -> Result<()> {
     conn.execute(
         &format!(
             "
-        CREATE TABLE {} (
+        CREATE TABLE IF NOT EXISTS {} (
             id BIGSERIAL,
             value varchar,
             commitmentinfo varchar,
@@ -139,7 +139,7 @@ pub fn db_make_tables(conn: &Connection) -> Result<()> {
     conn.execute(
         &format!(
             "
-        CREATE TABLE {} (
+        CREATE TABLE IF NOT EXISTS {} (
             id uuid NOT NULL,
             txbackup varchar,
             PRIMARY KEY (id)
@@ -152,8 +152,9 @@ pub fn db_make_tables(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 /// Drop all DB tables and Schemas.
-pub fn db_drop_tables(conn: &Connection) -> Result<()> {
+fn db_drop_tables(conn: &Connection) -> Result<()> {
     let _ = conn.execute(
         &format!(
             "
@@ -173,7 +174,7 @@ pub fn db_drop_tables(conn: &Connection) -> Result<()> {
 }
 
 /// Drop all DB tables and schemas.
-pub fn db_truncate_tables(conn: &Connection) -> Result<()> {
+fn db_truncate_tables(conn: &Connection) -> Result<()> {
     conn.execute(
         &format!(
             "
@@ -191,10 +192,9 @@ pub fn db_truncate_tables(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-pub fn db_reset_test_dbs() -> Result<()> {
+pub fn db_reset_dbs(conn: &Connection) -> Result<()> {
     // truncate all postgres tables
-    let conn = get_test_postgres_connection();
-    let _ = db_truncate_tables(&conn);
+    db_truncate_tables(&conn)?;
 
     // Destroy Sparse Merkle Tree RocksDB instance
     let _ = DB::destroy(&Options::default(), DB_SC_LOC); // ignore error

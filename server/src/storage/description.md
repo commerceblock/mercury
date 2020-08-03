@@ -78,6 +78,14 @@ When all transfers in the batch are complete these transfers are finalized atomi
 | epheckeypair      | String | false    | Seriaized MPC library struct |
 
 
+### Root
+Store all SMT roots in order. 
+
+| Name           | Type      | Required | Description                  |
+|----------------|-----------|----------|------------------------------|
+| id             | BIGSERIAL | true     | Incrememnt from 1 to 2^63 -1 |
+| value          | String    | false    | Serialized SMT root value |
+| commitmentinfo | String    | false    | Serialized Mainstay commitment information for this root |
 
 
 ## Schema: watcher

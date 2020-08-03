@@ -2,7 +2,7 @@ use super::routes::*;
 use super::Config;
 
 use crate::DatabaseR;
-use crate::{storage::db_reset_test_dbs, DatabaseW};
+use crate::{storage::{db_make_tables, db_reset_dbs, get_test_postgres_connection}, DatabaseW};
 
 use config;
 use rocket;
@@ -79,11 +79,11 @@ fn not_found(req: &Request) -> String {
 }
 
 /// Start Rocket Server. testing_mode parameter overrides Settings.toml.
-pub fn get_server(testing_mode: bool, mainstay_config: Option<mainstay::Config>) -> Result<Rocket> {
+pub fn get_server(force_testing_mode: bool, mainstay_config: Option<mainstay::Config>) -> Result<Rocket> {
     let settings = get_settings_as_map();
 
     let mut config = Config::load(settings.clone())?;
-    if testing_mode {
+    if force_testing_mode {
         config.testing_mode = true;
     }
 
@@ -101,6 +101,13 @@ pub fn get_server(testing_mode: bool, mainstay_config: Option<mainstay::Config>)
     set_logging_config(settings.get("log_file"));
 
     let rocket_config = get_rocket_config(&config.testing_mode);
+
+    if config.testing_mode {
+        let conn = get_test_postgres_connection();
+        if let Err(_) = db_reset_dbs(&conn) {
+            db_make_tables(&conn)?;
+        }
+    }
 
     let rock = rocket::custom(rocket_config)
         .register(catchers![internal_error, not_found, bad_request])
@@ -135,12 +142,12 @@ pub fn get_server(testing_mode: bool, mainstay_config: Option<mainstay::Config>)
         .attach(DatabaseR::fairing()) // read
         .attach(DatabaseW::fairing()); // write
 
-    if testing_mode {
-        db_reset_test_dbs()?;
-    }
-
     Ok(rock)
 }
+
+/// List of available settings. Set via Settings.toml or enviroment variables MERC_[SETTING_STR.to_uppercase()].
+static SETTING_STRS: [&str; 9] = ["electrum_server", "network", "block_time", "testing_mode", "fee_address",
+    "fee_deposit", "fee_withdraw", "punishment_duration", "batch_lifetime"];
 
 fn get_settings_as_map() -> HashMap<String, String> {
     let config_file = include_str!("../Settings.toml");
@@ -150,11 +157,21 @@ fn get_settings_as_map() -> HashMap<String, String> {
             config_file,
             config::FileFormat::Toml,
         ))
-        .unwrap()
-        .merge(config::Environment::new())
         .unwrap();
 
-    settings.try_into::<HashMap<String, String>>().unwrap()
+    let mut settings_as_map: HashMap<String, String> = settings.try_into().unwrap();
+
+    // Override Setting.toml parameters with any environment variable parameters that are set
+    for var_name in SETTING_STRS.iter() {
+        let env_name = format!("MERC_{}",var_name.to_uppercase());
+        match std::env::var(env_name) {
+            Ok(v) => {
+                let _ = settings_as_map.insert(var_name.to_string(), v);
+            },
+            Err(_) => {}
+        }
+    }
+    settings_as_map
 }
 
 fn set_logging_config(log_file: Option<&String>) {
@@ -194,20 +211,22 @@ fn get_rocket_config(testing_mode: &bool) -> RocketConfig {
         }
     };
 
-    RocketConfig::build(Environment::Development)
+    RocketConfig::build(Environment::Staging)
         .extra("databases", databases)
         .finalize()
         .unwrap()
 }
 
+static DB_SETTING_STRS: [&str; 5] = ["MERC_DB_USER", "MERC_DB_PASS", "MERC_DB_HOST", "MERC_DB_PORT", "MERC_DB_DATABASE"];
+
 /// Get postgres URL from env vars. Suffix can be "TEST", "W", or "R"
 pub fn get_postgres_url(var_suffix: String) -> String {
     let mut db_vars = vec![];
-    for db_var_name in vec!["DB_USER", "DB_PASS", "DB_HOST", "DB_PORT", "DB_DATABASE"] {
+    for db_var_name in DB_SETTING_STRS.iter() {
         match std::env::var(format!("{}_{}", db_var_name, var_suffix)) {
             Ok(v) => db_vars.push(v),
             Err(_) => panic!(
-                "Missing environment variable {}",
+                "Missing DB environment variable {}",
                 format!("{}_{}", db_var_name, var_suffix)
             ),
         }
