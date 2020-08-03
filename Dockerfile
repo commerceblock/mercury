@@ -48,7 +48,8 @@ FROM debian:buster
 COPY --from=builder /mercury/target/release/server_exec /usr/local/bin/mercury
 COPY ./docker-entrypoint.sh /docker-entrypoint.sh
 
-RUN set -x \
+RUN set -ex \
+    && apt update \
     && apt install -y libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
