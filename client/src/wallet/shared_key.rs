@@ -3,7 +3,10 @@
 //! Key shares of co-owned keys between user and server.
 
 use super::super::{ecdsa, ClientShim, Result};
-use shared_lib::{structs::PrepareSignTxMsg, Root};
+use shared_lib::{
+    structs::{PrepareSignTxMsg, Protocol},
+    Root,
+};
 
 use bitcoin::secp256k1::key::SecretKey;
 use curv::elliptic::curves::traits::ECScalar;
@@ -36,11 +39,11 @@ impl SharedKey {
         client_shim: &ClientShim,
         secret_key: &SecretKey,
         value: &u64,
-        is_transfer: bool,
+        protocol: Protocol,
     ) -> Result<SharedKey> {
         let mut key_share_priv: FE = ECScalar::zero(); // convert to curv lib
         key_share_priv.set_element(*secret_key);
-        ecdsa::get_master_key(id, client_shim, &key_share_priv, value, is_transfer)
+        ecdsa::get_master_key(id, client_shim, &key_share_priv, value, protocol)
     }
 
     pub fn add_proof_data(

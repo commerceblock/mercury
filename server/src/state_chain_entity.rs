@@ -1,6 +1,1 @@
-
-
-
-pub struct StateChainEntity {
-    
-}
+pub struct StateChainEntity {}

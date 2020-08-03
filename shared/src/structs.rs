@@ -5,8 +5,9 @@
 use crate::state_chain::{State, StateChainSig};
 use crate::Root;
 use bitcoin::{OutPoint, Transaction};
-use curv::{BigInt, FE, GE, PK};
+use curv::{cryptographic_primitives::proofs::sigma_dlog::DLogProof, BigInt, FE, GE, PK};
 use kms::ecdsa::two_party::party2;
+use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_two;
 
 use std::{collections::HashMap, fmt};
 use uuid::Uuid;
@@ -75,6 +76,42 @@ pub struct PrepareSignTxMsg {
 }
 
 // 2P-ECDSA Co-signing algorithm structs
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct KeyGenMsg1 {
+    pub shared_key_id: Uuid,
+    pub protocol: Protocol,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct KeyGenMsg2 {
+    pub shared_key_id: Uuid,
+    pub dlog_proof: DLogProof,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct KeyGenMsg3 {
+    pub shared_key_id: Uuid,
+    pub party_two_pdl_first_message: party_two::PDLFirstMessage,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct KeyGenMsg4 {
+    pub shared_key_id: Uuid,
+    pub party_two_pdl_second_message: party_two::PDLSecondMessage,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SignMsg1 {
+    pub shared_key_id: Uuid,
+    pub eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SignMsg2 {
+    pub shared_key_id: Uuid,
+    pub sign_second_msg_request: SignSecondMsgRequest,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SignSecondMsgRequest {

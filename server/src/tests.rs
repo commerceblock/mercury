@@ -5,7 +5,9 @@ mod tests {
     use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
     use rocket::http::{ContentType, Status};
     use rocket::local::Client;
-    use shared_lib::structs::{DepositMsg1, SmtProofMsgAPI, StateEntityFeeInfoAPI};
+    use shared_lib::structs::{
+        DepositMsg1, KeyGenMsg1, Protocol, SmtProofMsgAPI, StateEntityFeeInfoAPI,
+    };
     use shared_lib::Root;
 
     use serde_json;
@@ -29,10 +31,15 @@ mod tests {
             .header(ContentType::JSON)
             .dispatch();
         let id_str: String = serde_json::from_str(&response.body_string().unwrap()).unwrap();
-        let id = Uuid::from_str(&id_str).unwrap();
+
+        let mut key_gen_msg1 = KeyGenMsg1 {
+            shared_key_id: Uuid::from_str(&id_str).unwrap(),
+            protocol: Protocol::Deposit,
+        };
 
         let mut response = client
-            .post(format!("/ecdsa/keygen/{}/first/deposit", id))
+            .post(format!("/ecdsa/keygen/first"))
+            .body(serde_json::to_string(&key_gen_msg1).unwrap())
             .header(ContentType::JSON)
             .dispatch();
         assert_eq!(response.status(), Status::Ok);
@@ -42,8 +49,10 @@ mod tests {
         assert_eq!(res, id_str);
 
         // use incorrect ID
+        key_gen_msg1.shared_key_id = Uuid::new_v4();
         let mut response = client
-            .post(format!("/ecdsa/keygen/{}/first/deposit", Uuid::new_v4()))
+            .post(format!("/ecdsa/keygen/first"))
+            .body(serde_json::to_string(&key_gen_msg1).unwrap())
             .header(ContentType::JSON)
             .dispatch();
 
