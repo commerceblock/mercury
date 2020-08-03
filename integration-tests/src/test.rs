@@ -32,14 +32,11 @@ mod tests {
     #[test]
     #[serial]
     fn test_failed_auth() {
-        println!("spawning server...");
         let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
         let _ = spawn_server(Some(mainstay_config));
-        println!("starting client...");
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
         let secret_key: FE = ECScalar::new_random();
         let invalid_key = Uuid::new_v4();
-        println!("getting master key...");
         let err = ecdsa::get_master_key(&invalid_key, &client_shim, &secret_key, &1000, false);
         assert!(err.is_err());
     }
@@ -90,7 +87,6 @@ mod tests {
     #[serial]
     fn test_get_statechain() {
         let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
-        println!("test_get_statechain: mainstay mock url: {}", mainstay_config.url());
         let _ = spawn_server(Some(mainstay_config));
         let mut wallet = gen_wallet();
 
@@ -112,12 +108,10 @@ mod tests {
         let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
         let _ = spawn_server(Some(mainstay_config));
         let mut wallets = vec![];
-        println!("gen wallets");
         wallets.push(gen_wallet_with_deposit(10000)); // sender
         wallets.push(gen_wallet()); // receiver
 
         // Get state chain owned by wallet
-        println!("get wallet sc");
         let state_chains_info = wallets[0].get_state_chains_info();
         let shared_key_id = state_chains_info.0.last().unwrap();
         let (state_chain_id, funding_txid, _, _, _) =
@@ -130,7 +124,6 @@ mod tests {
         let new_shared_key_id = run_transfer(&mut wallets, 0, 1, &state_chain_id);
 
         // check shared keys have the same master public key
-        println!("check public keys");
         assert_eq!(
             wallets[0]
                 .get_shared_key(shared_key_id)
@@ -147,7 +140,6 @@ mod tests {
         );
 
         // check shared key is marked spent in sender and unspent in receiver
-        println!("check shard key spent");
         assert!(!wallets[0].get_shared_key(shared_key_id).unwrap().unspent);
         assert!(
             wallets[1]
@@ -157,7 +149,6 @@ mod tests {
         );
 
         // check state chain is updated
-        println!("check state chain updated");
         let state_chain =
             state_entity::api::get_statechain(&wallets[0].client_shim, &state_chain_id).unwrap();
         assert_eq!(state_chain.chain.len(), 2);
@@ -167,7 +158,6 @@ mod tests {
         );
 
         // Get SMT inclusion proof and verify
-        println!("get SMT inclusion proof and verify");
         let root = state_entity::api::get_smt_root(&wallets[1].client_shim)
             .unwrap()
             .unwrap();
