@@ -1,11 +1,11 @@
 use super::super::utilities::requests;
 use super::super::ClientShim;
 use super::super::Result;
-use shared_lib::structs::{Protocol, SignSecondMsgRequest};
+use shared_lib::structs::{Protocol, SignMsg1, SignMsg2, SignSecondMsgRequest};
 
 use curv::BigInt;
 use kms::ecdsa::two_party::MasterKey2;
-use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
+use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one;
 use uuid::Uuid;
 
 /// Co-sign message with shared key
@@ -14,14 +14,17 @@ pub fn sign(
     message: BigInt,
     mk: &MasterKey2,
     protocol: Protocol,
-    id: &Uuid,
+    shared_key_id: &Uuid,
 ) -> Result<Vec<Vec<u8>>> {
     let (eph_key_gen_first_message_party_two, eph_comm_witness, eph_ec_key_pair_party2) =
         MasterKey2::sign_first_message();
 
-    let request: party_two::EphKeyGenFirstMsg = eph_key_gen_first_message_party_two;
+    let sign_msg1 = SignMsg1 {
+        shared_key_id: *shared_key_id,
+        eph_key_gen_first_message_party_two,
+    };
     let sign_party_one_first_message: party_one::EphKeyGenFirstMsg =
-        requests::postb(client_shim, &format!("ecdsa/sign/{}/first", id), &request)?;
+        requests::postb(client_shim, &format!("ecdsa/sign/first"), &sign_msg1)?;
 
     let party_two_sign_message = mk.sign_second_message(
         &eph_ec_key_pair_party2,
@@ -30,16 +33,19 @@ pub fn sign(
         &message,
     );
 
-    let request: SignSecondMsgRequest = SignSecondMsgRequest {
-        protocol,
-        message,
-        party_two_sign_message,
+    let sign_msg2 = SignMsg2 {
+        shared_key_id: *shared_key_id,
+        sign_second_msg_request: SignSecondMsgRequest {
+            protocol,
+            message,
+            party_two_sign_message,
+        },
     };
 
-    let signature = requests::postb::<&SignSecondMsgRequest, Vec<Vec<u8>>>(
+    let signature = requests::postb::<&SignMsg2, Vec<Vec<u8>>>(
         client_shim,
-        &format!("ecdsa/sign/{}/second", id),
-        &request,
+        &format!("ecdsa/sign/second",),
+        &sign_msg2,
     )?;
 
     Ok(signature)

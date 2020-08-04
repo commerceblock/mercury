@@ -44,7 +44,7 @@ fn main() {
         Box::new(ElectrumxClient::new(electrum_server_addr).unwrap())
     };
 
-    let network = "regtest".to_string();
+    let network = "testnet".to_string();
 
     if let Some(_matches) = matches.subcommand_matches("create-wallet") {
         println!("Network: [{}], Creating wallet", network);

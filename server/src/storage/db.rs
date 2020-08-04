@@ -381,7 +381,7 @@ pub fn get_confirmed_root(
                 Err(e) => Err(e),
         }
     }
-      
+
 
     match mc {
         Some(conf) => {
@@ -650,7 +650,7 @@ mod mocks {
         }
 
         pub fn commitment_proof() -> Mock {
-            mock("GET", 
+            mock("GET",
                         "/commitment/commitment?commitment=71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d")
                         .with_header("Content-Type", "application/json")
                         .with_body("{\"response\":{
@@ -666,7 +666,7 @@ mod mocks {
                     ,\"timestamp\":1593160486862,
                     \"allowance\":{\"cost\":17954530}
                     }")
-                
+
         }
 
     }
@@ -678,8 +678,15 @@ mod tests {
 
     use std::str::FromStr;
     use super::*;
-    use crate::{routes::util::update_smt_db, storage::get_test_postgres_connection};
+    use crate::storage::get_test_postgres_connection;
+    use super::super::super::server::get_settings_as_map;
+    use super::super::super::StateChainEntity;
 
+    fn test_sc_entity() -> StateChainEntity {
+        let mut sc_entity = StateChainEntity::load(get_settings_as_map()).unwrap();
+        sc_entity.mainstay_config = mainstay::Config::from_test();
+        sc_entity
+    }
 
     fn test_url() -> String {
         String::from(&mockito::server_url())
@@ -704,7 +711,7 @@ mod tests {
         let root1 = Root::from_hash(&com1.to_hash());
 
         assert_eq!(root1.hash(), com1.to_hash(), "expected roots to match");
-         
+
         let _m_send = mocks::ms::post_commitment().create();
 
         let _root1_id = match root_update(&db_read, &db_write, &mc, &root1) {
@@ -719,7 +726,7 @@ mod tests {
 
         //Update the local copy of root1
         //let root1 = db_root_get(&db_read, &(root1_id as i64)).unwrap().unwrap();
-    
+
         assert!(root1.is_confirmed() == false);
 
         //Some time later, the root is committed to mainstay
@@ -731,7 +738,7 @@ mod tests {
         assert!(rootc.is_confirmed(), "expected the root to be confirmed");
 
         //let root1 = db_root_get(&db_read, &(root1_id as i64)).unwrap().unwrap();
-    
+
         assert_eq!(rootc.hash(), root1.hash(), "expected equal Root hashes:\n{:?}\n\n{:?}", rootc, root1);
 
         assert!(rootc.is_confirmed(), "expected root to be confirmed");
@@ -742,12 +749,11 @@ mod tests {
     fn test_update_root_smt() {
         let db_read = DatabaseR(get_test_postgres_connection());
         let db_write = DatabaseW(get_test_postgres_connection());
-        let mc = Some(mainstay::Config::mock_from_url(&test_url()));
-        
-        let (_, new_root) = update_smt_db(
+        let sc_entity = test_sc_entity();
+
+        let (_, new_root) = sc_entity.update_smt_db(
             &db_read,
             &db_write,
-            &mc,
             &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
             &"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
         )
@@ -759,6 +765,6 @@ mod tests {
         assert_eq!(new_root.hash(), current_root.hash());
 
 
-        
+
     }
 }

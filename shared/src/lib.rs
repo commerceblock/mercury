@@ -4,6 +4,7 @@ extern crate bitcoin_hashes;
 extern crate chrono;
 extern crate hex;
 extern crate kms;
+extern crate multi_party_ecdsa;
 extern crate rocket;
 extern crate rocket_contrib;
 extern crate uuid;
