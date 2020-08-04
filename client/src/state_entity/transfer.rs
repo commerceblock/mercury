@@ -37,7 +37,7 @@ use uuid::Uuid;
 pub fn transfer_sender(
     wallet: &mut Wallet,
     state_chain_id: &Uuid,
-    receiver_addr: StateEntityAddress,
+    receiver_addr: SCEAddress,
 ) -> Result<TransferMsg3> {
     // Get required shared key data
     let shared_key_id;

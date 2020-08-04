@@ -1,3 +1,4 @@
+pub mod conductor;
 pub mod deposit;
 pub mod ecdsa;
 pub mod ping;

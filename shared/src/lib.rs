@@ -136,12 +136,12 @@ impl fmt::Display for Root {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let id_str = match self.id {
             Some(id) => id.to_string(),
-            None => "None".to_string()
+            None => "None".to_string(),
         };
 
         let ci_str = match self.commitment_info() {
             Some(ci) => ci.to_string(),
-            None => "None".to_string()
+            None => "None".to_string(),
         };
 
         write!(
