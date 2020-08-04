@@ -10,13 +10,13 @@ use crate::{
     },
     DatabaseR, DatabaseW,
 };
-use rocket_contrib::databases::postgres::{rows::Row, types::ToSql};
-use shared_lib::mainstay;
 use mainstay::{Attestable, CommitmentInfo};
-use shared_lib::Root;
-use uuid::Uuid;
 #[cfg(test)]
 use mockito::{mock, Matcher, Mock};
+use rocket_contrib::databases::postgres::{rows::Row, types::ToSql};
+use shared_lib::mainstay;
+use shared_lib::Root;
+use uuid::Uuid;
 
 #[derive(Debug)]
 pub enum Schema {
@@ -289,7 +289,7 @@ where
     T: rocket_contrib::databases::postgres::types::FromSql,
 {
     let (res, _, _, _) = db_get::<T, T, T, T>(db_read, id, table, column)?;
-    Ok(res.unwrap())  //  err returned from db_get if desired item is None
+    Ok(res.unwrap()) //  err returned from db_get if desired item is None
 }
 /// Get 2 items from row in table. Err if ID not found. Return None if data item empty.
 pub fn db_get_2<T, U>(
@@ -375,13 +375,10 @@ pub fn get_confirmed_root(
         let root = root;
 
         match db_root_update(db_read, db_write, &root) {
-                Ok(_) => {
-                    Ok(Some(root))
-                }
-                Err(e) => Err(e),
+            Ok(_) => Ok(Some(root)),
+            Err(e) => Err(e),
         }
     }
-
 
     match mc {
         Some(conf) => {
@@ -611,24 +608,31 @@ pub fn db_get_confirmed_root(db_read: &DatabaseR) -> Result<Option<Root>> {
 
 #[cfg(test)]
 mod mocks {
-    use super::{Mock,Matcher,mock};
+    use super::{mock, Matcher, Mock};
 
     pub mod ms {
         use super::*;
         pub fn commitment_proof_not_found() -> Mock {
-            mock("GET", Matcher::Regex(r"^/commitment/commitment\?commitment=[abcdef\d]{64}".to_string()))
-
-               .with_header("Content-Type", "application/json")
-                .with_body("{\"error\":\"Not found\",\"timestamp\":1596123963077,
-                \"allowance\":{\"cost\":3796208}}")
+            mock(
+                "GET",
+                Matcher::Regex(r"^/commitment/commitment\?commitment=[abcdef\d]{64}".to_string()),
+            )
+            .with_header("Content-Type", "application/json")
+            .with_body(
+                "{\"error\":\"Not found\",\"timestamp\":1596123963077,
+                \"allowance\":{\"cost\":3796208}}",
+            )
         }
 
         pub fn post_commitment() -> Mock {
             mock("POST", "/commitment/send")
-            .match_header("content-type", "application/json")
-            .with_body(serde_json::json!({"response":"Commitment added","timestamp":1541761540,
-            "allowance":{"cost":4832691}}).to_string())
-            .with_header("content-type", "application/json")
+                .match_header("content-type", "application/json")
+                .with_body(
+                    serde_json::json!({"response":"Commitment added","timestamp":1541761540,
+            "allowance":{"cost":4832691}})
+                    .to_string(),
+                )
+                .with_header("content-type", "application/json")
         }
 
         pub fn commitment() -> Mock {
@@ -666,21 +670,18 @@ mod mocks {
                     ,\"timestamp\":1593160486862,
                     \"allowance\":{\"cost\":17954530}
                     }")
-
         }
-
     }
-
 }
 
 #[cfg(test)]
 mod tests {
 
-    use std::str::FromStr;
-    use super::*;
-    use crate::storage::get_test_postgres_connection;
     use super::super::super::server::get_settings_as_map;
     use super::super::super::StateChainEntity;
+    use super::*;
+    use crate::storage::get_test_postgres_connection;
+    use std::str::FromStr;
 
     fn test_sc_entity() -> StateChainEntity {
         let mut sc_entity = StateChainEntity::load(get_settings_as_map()).unwrap();
@@ -702,11 +703,16 @@ mod tests {
         //No commitments initially
         let _m = mocks::ms::commitment_proof_not_found();
 
-        assert_eq!(db_get_confirmed_root(&db_read).unwrap(), None, "expected Ok(None)");
+        assert_eq!(
+            db_get_confirmed_root(&db_read).unwrap(),
+            None,
+            "expected Ok(None)"
+        );
 
         let com1 = mainstay::Commitment::from_str(
-            "71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d")
-            .unwrap();
+            "71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d",
+        )
+        .unwrap();
 
         let root1 = Root::from_hash(&com1.to_hash());
 
@@ -734,12 +740,20 @@ mod tests {
         let _m_com_proof = mocks::ms::commitment_proof().create();
 
         //The root should be confirmed now
-        let rootc = get_confirmed_root(&db_read, &db_write, &mc).unwrap().unwrap();
+        let rootc = get_confirmed_root(&db_read, &db_write, &mc)
+            .unwrap()
+            .unwrap();
         assert!(rootc.is_confirmed(), "expected the root to be confirmed");
 
         //let root1 = db_root_get(&db_read, &(root1_id as i64)).unwrap().unwrap();
 
-        assert_eq!(rootc.hash(), root1.hash(), "expected equal Root hashes:\n{:?}\n\n{:?}", rootc, root1);
+        assert_eq!(
+            rootc.hash(),
+            root1.hash(),
+            "expected equal Root hashes:\n{:?}\n\n{:?}",
+            rootc,
+            root1
+        );
 
         assert!(rootc.is_confirmed(), "expected root to be confirmed");
     }
@@ -751,20 +765,18 @@ mod tests {
         let db_write = DatabaseW(get_test_postgres_connection());
         let sc_entity = test_sc_entity();
 
-        let (_, new_root) = sc_entity.update_smt_db(
-            &db_read,
-            &db_write,
-            &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
-            &"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
-        )
-        .unwrap();
+        let (_, new_root) = sc_entity
+            .update_smt_db(
+                &db_read,
+                &db_write,
+                &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
+                &"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
+            )
+            .unwrap();
 
         let current_root = db_root_get(&db_read, &db_root_get_current_id(&db_read).unwrap())
             .unwrap()
             .unwrap();
         assert_eq!(new_root.hash(), current_root.hash());
-
-
-
     }
 }

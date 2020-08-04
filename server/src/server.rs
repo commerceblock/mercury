@@ -35,7 +35,7 @@ impl StateChainEntity {
 
         //mainstay_config is optional
         let mainstay_config = match testing_mode {
-            true =>  None,
+            true => None,
             false => match settings.get("mainstay_config") {
                 Some(o) => Some(o.parse::<mainstay::Config>().unwrap()),
                 None => None,
@@ -99,7 +99,7 @@ pub fn get_server(mainstay_config: Option<mainstay::Config>) -> Result<Rocket> {
     //Set the mainstay config if Some (used for testing)
     match mainstay_config {
         Some(c) => sc_entity.mainstay_config = Some(c),
-        None => ()
+        None => (),
     }
     //At this point the mainstay config should be set,
     //either in testing mode or specified in the settings file
@@ -153,8 +153,8 @@ pub fn get_server(mainstay_config: Option<mainstay::Config>) -> Result<Rocket> {
             ],
         )
         .manage(sc_entity)
-        .attach(DatabaseR::fairing())   // read
-        .attach(DatabaseW::fairing());  // write
+        .attach(DatabaseR::fairing()) // read
+        .attach(DatabaseW::fairing()); // write
     Ok(rock)
 }
 

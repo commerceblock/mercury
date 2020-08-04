@@ -139,7 +139,7 @@ pub struct DepositMsg2 {
 
 /// Address generated for State Entity transfer protocol
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct StateEntityAddress {
+pub struct SCEAddress {
     pub tx_backup_addr: String,
     pub proof_key: String,
 }
@@ -163,7 +163,7 @@ pub struct TransferMsg3 {
     pub state_chain_sig: StateChainSig,
     pub state_chain_id: Uuid,
     pub tx_backup_psm: PrepareSignTxMsg,
-    pub rec_addr: StateEntityAddress, // receivers state entity address (btc address and proof key)
+    pub rec_addr: SCEAddress, // receivers state entity address (btc address and proof key)
 }
 
 /// Receiver -> State Entity
@@ -221,6 +221,28 @@ pub struct WithdrawMsg1 {
 pub struct WithdrawMsg2 {
     pub shared_key_id: Uuid,
     pub address: String,
+}
+
+// Swaps
+
+/// Owner -> Conductor
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RegisterUtxo {
+    pub state_chain_id: Uuid,
+    pub signature: StateChainSig,
+}
+
+/// Owner -> Conductor
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SwapMsg1 {
+    pub swap_token_sig: String,
+    pub address: SCEAddress,
+}
+
+/// Owner -> Conductor
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SwapMsg2 {
+    pub blinded_token: String,
 }
 
 impl Default for TransferMsg5 {

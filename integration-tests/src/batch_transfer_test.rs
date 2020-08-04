@@ -6,7 +6,7 @@ mod tests {
     extern crate server_lib;
     extern crate shared_lib;
 
-    use shared_lib::{commitment::verify_commitment, state_chain::StateChainSig, mainstay};
+    use shared_lib::{commitment::verify_commitment, mainstay, state_chain::StateChainSig};
 
     use bitcoin::PublicKey;
     use client_lib::state_entity;
