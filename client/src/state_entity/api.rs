@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 /// Get state chain fee
 pub fn get_statechain_fee_info(client_shim: &ClientShim) -> Result<StateEntityFeeInfoAPI> {
-    requests::post(client_shim, &format!("info/fee"))
+    requests::get(client_shim, &format!("info/fee"))
 }
 
 /// Get state chain by ID
@@ -24,17 +24,17 @@ pub fn get_statechain(
     client_shim: &ClientShim,
     state_chain_id: &Uuid,
 ) -> Result<StateChainDataAPI> {
-    requests::post(client_shim, &format!("info/statechain/{}", state_chain_id))
+    requests::get(client_shim, &format!("info/statechain/{}", state_chain_id))
 }
 
 /// Get state entity's sparse merkle tree root
 pub fn get_smt_root(client_shim: &ClientShim) -> Result<Option<Root>> {
-    requests::post(&client_shim, &format!("info/root"))
+    requests::get(&client_shim, &format!("info/root"))
 }
 
 /// Get state entity's sparse merkle tree root that has been confirmed by mainstay
 pub fn get_confirmed_smt_root(client_shim: &ClientShim) -> Result<Option<Root>> {
-    requests::post(&client_shim, &format!("info/confirmed_root"))
+    requests::get(&client_shim, &format!("info/confirmed_root"))
 }
 
 /// Get state chain inclusion proof

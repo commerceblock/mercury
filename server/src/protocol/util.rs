@@ -365,7 +365,7 @@ impl Utilities for StateChainEntity {
     }
 }
 
-#[post("/info/fee", format = "json")]
+#[get("/info/fee", format = "json")]
 pub fn get_fees(sc_entity: State<StateChainEntity>) -> Result<Json<StateEntityFeeInfoAPI>> {
     match sc_entity.get_fees() {
         Ok(res) => return Ok(Json(res)),
@@ -373,13 +373,36 @@ pub fn get_fees(sc_entity: State<StateChainEntity>) -> Result<Json<StateEntityFe
     }
 }
 
-#[post("/info/statechain/<state_chain_id>", format = "json")]
+#[get("/info/statechain/<state_chain_id>", format = "json")]
 pub fn get_statechain(
     sc_entity: State<StateChainEntity>,
     db_read: DatabaseR,
     state_chain_id: String,
 ) -> Result<Json<StateChainDataAPI>> {
     match sc_entity.get_statechain(db_read, state_chain_id) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[get("/info/root", format = "json")]
+pub fn get_smt_root(
+    sc_entity: State<StateChainEntity>,
+    db_read: DatabaseR,
+) -> Result<Json<Option<Root>>> {
+    match sc_entity.get_smt_root(db_read) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[get("/info/confirmed_root", format = "json")]
+pub fn get_confirmed_smt_root(
+    sc_entity: State<StateChainEntity>,
+    db_read: DatabaseR,
+    db_write: DatabaseW,
+) -> Result<Json<Option<Root>>> {
+    match sc_entity.get_confirmed_smt_root(db_read, db_write) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -392,29 +415,6 @@ pub fn get_smt_proof(
     smt_proof_msg: Json<SmtProofMsgAPI>,
 ) -> Result<Json<Option<Proof>>> {
     match sc_entity.get_smt_proof(db_read, smt_proof_msg.into_inner()) {
-        Ok(res) => return Ok(Json(res)),
-        Err(e) => return Err(e),
-    }
-}
-
-#[post("/info/root", format = "json")]
-pub fn get_smt_root(
-    sc_entity: State<StateChainEntity>,
-    db_read: DatabaseR,
-) -> Result<Json<Option<Root>>> {
-    match sc_entity.get_smt_root(db_read) {
-        Ok(res) => return Ok(Json(res)),
-        Err(e) => return Err(e),
-    }
-}
-
-#[post("/info/confirmed_root", format = "json")]
-pub fn get_confirmed_smt_root(
-    sc_entity: State<StateChainEntity>,
-    db_read: DatabaseR,
-    db_write: DatabaseW,
-) -> Result<Json<Option<Root>>> {
-    match sc_entity.get_confirmed_smt_root(db_read, db_write) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }

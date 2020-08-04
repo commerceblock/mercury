@@ -38,13 +38,13 @@ fn test_auth_token() {
 }
 
 #[test]
-fn test_get_statechain() {
+fn test_err_get_statechain() {
     let client = spawn_test_server();
 
     // get_statechain invalid id
     let invalid_id = Uuid::new_v4();
     let mut response = client
-        .post(format!("/info/statechain/{}", invalid_id))
+        .get(format!("/info/statechain/{}", invalid_id))
         .header(ContentType::JSON)
         .dispatch();
     let res = response.body_string().unwrap();
@@ -94,7 +94,7 @@ fn test_err_get_smt_proof() {
     //update_root(db, mc);
 
     let mut response = client // first grab current root id
-        .post(format!("/info/root"))
+        .get(format!("/info/root"))
         .header(ContentType::JSON)
         .dispatch();
     let res = response.body_string().unwrap();
@@ -171,7 +171,7 @@ fn test_get_state_entity_fees() {
     let client = spawn_test_server();
 
     let mut response = client
-        .post("/info/fee")
+        .get("/info/fee")
         .header(ContentType::JSON)
         .dispatch();
 
