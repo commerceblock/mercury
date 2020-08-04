@@ -1,10 +1,10 @@
 # Integration tests
 
-Runs the State Entity server and calls it using client's API.<br>
+Runs the State Entity server and tests with basic client implementation.<br>
 
 Ensure testing_mode is set to "true" in `Settings.toml`.
 
-Run it simply with:
+Run with:
 ```sh
-$ RUST_TEST_THREADS=1 cargo test
+$ cargo test
 ```
