@@ -88,10 +88,12 @@ fn not_found(req: &Request) -> String {
     format!("Unknown route '{}'.", req.uri())
 }
 
-/// Start Rocket Server. testing_mode parameter overrides Settings.toml.
+/// Start Rocket Server.
 pub fn get_server(mainstay_config: Option<mainstay::Config>) -> Result<Rocket> {
+    //Get settings from Setting.toml and env vars
     let settings = get_settings_as_map();
 
+    //Load StateChainEntity struct
     let mut sc_entity = StateChainEntity::load(settings.clone())?;
 
     //Set the mainstay config if Some (used for testing)
@@ -105,8 +107,10 @@ pub fn get_server(mainstay_config: Option<mainstay::Config>) -> Result<Rocket> {
         panic!("expected mainstay config");
     }
 
+    // Set Logging to stdout or file
     set_logging_config(settings.get("log_file"));
 
+    // Get Rocket config from Rocket.toml and env vars
     let rocket_config = get_rocket_config(&sc_entity.testing_mode);
 
     if sc_entity.testing_mode {
@@ -149,9 +153,8 @@ pub fn get_server(mainstay_config: Option<mainstay::Config>) -> Result<Rocket> {
             ],
         )
         .manage(sc_entity)
-        .attach(DatabaseR::fairing()) // read
-        .attach(DatabaseW::fairing()); // write
-
+        .attach(DatabaseR::fairing())   // read
+        .attach(DatabaseW::fairing());  // write
     Ok(rock)
 }
 

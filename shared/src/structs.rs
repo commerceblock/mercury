@@ -185,7 +185,7 @@ pub struct TransferMsg5 {
     pub s2_pub: GE,
 }
 
-/// Coordinator -> StateEntity
+/// Conductor -> StateEntity
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferBatchInitMsg {
     pub id: Uuid,
