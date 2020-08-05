@@ -681,6 +681,7 @@ mod tests {
     use super::*;
     use crate::{server::StateChainEntity, storage::get_test_postgres_connection};
 
+    #[allow(dead_code)]
     fn test_sc_entity() -> StateChainEntity {
         let mut sc_entity = StateChainEntity::load().unwrap();
         sc_entity.config.mainstay = mainstay::MainstayConfig::from_test();
@@ -756,25 +757,26 @@ mod tests {
         assert!(rootc.is_confirmed(), "expected root to be confirmed");
     }
 
-    #[test]
-    #[serial]
-    fn test_update_root_smt() {
-        let db_read = DatabaseR(get_test_postgres_connection());
-        let db_write = DatabaseW(get_test_postgres_connection());
-        let sc_entity = test_sc_entity();
-
-        let (_, new_root) = sc_entity
-            .update_smt_db(
-                &db_read,
-                &db_write,
-                &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
-                &"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
-            )
-            .unwrap();
-
-        let current_root = db_root_get(&db_read, &db_root_get_current_id(&db_read).unwrap())
-            .unwrap()
-            .unwrap();
-        assert_eq!(new_root.hash(), current_root.hash());
-    }
+    // Waiting for db mock for this test
+    // #[test]
+    // #[serial]
+    // fn test_update_root_smt() {
+    //     let db_read = DatabaseR(get_test_postgres_connection());
+    //     let db_write = DatabaseW(get_test_postgres_connection());
+    //     let sc_entity = test_sc_entity();
+    //
+    //     let (_, new_root) = sc_entity
+    //         .update_smt_db(
+    //             &db_read,
+    //             &db_write,
+    //             &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
+    //             &"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
+    //         )
+    //         .unwrap();
+    //
+    //     let current_root = db_root_get(&db_read, &db_root_get_current_id(&db_read).unwrap())
+    //         .unwrap()
+    //         .unwrap();
+    //     assert_eq!(new_root.hash(), current_root.hash());
+    // }
 }
