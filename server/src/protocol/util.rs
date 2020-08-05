@@ -131,7 +131,6 @@ impl Utilities for StateChainEntity {
     }
 
   
-
     
     fn prepare_sign_tx(
         &self,
@@ -653,7 +652,7 @@ impl Storage for StateChainEntity {
         
         //let state_chain_id = Uuid::from_str(&state_chain_id).unwrap();
 
-        let state_chain = self.database.get_statechain_amount(&state_chain_id)?;
+        let state_chain = self.get_statechain(&state_chain_id)?;
         let tx_backup = self.database.get_backup_transaction(&state_chain_id)?;
         
         Ok({
