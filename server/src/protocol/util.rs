@@ -420,7 +420,7 @@ pub fn get_smt_proof(
     }
 }
 
-#[post("/info/transfer-batch/<batch_id>", format = "json")]
+#[get("/info/transfer-batch/<batch_id>", format = "json")]
 pub fn get_transfer_batch_status(
     sc_entity: State<StateChainEntity>,
     db_read: DatabaseR,

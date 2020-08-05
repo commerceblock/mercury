@@ -1,6 +1,6 @@
 use shared_lib::Root;
 mod tools;
-use tools::{spawn_test_server, test_server_post};
+use tools::{spawn_test_server, test_server_post, test_server_get};
 
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
 use rocket::http::ContentType;
@@ -25,12 +25,12 @@ fn test_auth_token() {
         shared_key_id: id.clone(),
         protocol: Protocol::Deposit,
     };
-    let res: String = test_server_post::<KeyGenMsg1>(&client, "/ecdsa/keygen/first", &key_gen_msg1);
+    let res: String = test_server_post(&client, "/ecdsa/keygen/first", &key_gen_msg1);
     assert_eq!(serde_json::from_str::<(Uuid, party_one::KeyGenFirstMsg)>(&res).unwrap().0, id);
 
     // use incorrect ID
     key_gen_msg1.shared_key_id = Uuid::new_v4();
-    let res = test_server_post::<KeyGenMsg1>(&client, "/ecdsa/keygen/first", &key_gen_msg1);
+    let res = test_server_post(&client, "/ecdsa/keygen/first", &key_gen_msg1);
     assert_eq!(
         res,
         "Authentication Error: User authorisation failed".to_string()
@@ -43,22 +43,15 @@ fn test_err_get_statechain() {
 
     // get_statechain invalid id
     let invalid_id = Uuid::new_v4();
-    let mut response = client
-        .get(format!("/info/statechain/{}", invalid_id))
-        .header(ContentType::JSON)
-        .dispatch();
-    let res = response.body_string().unwrap();
+    let res = test_server_get(&client, &format!("/info/statechain/{}", invalid_id));
+
     assert_eq!(
         res,
         format!("DB Error: No data for identifier. (id: {})", invalid_id)
     );
 
     // get_statechain no ID
-    let mut response = client
-        .post(format!("/info/statechain/"))
-        .header(ContentType::JSON)
-        .dispatch();
-    let res = response.body_string().unwrap();
+    let res = test_server_get(&client, &format!("/info/statechain/"));
     assert_eq!(res, "Unknown route \'/info/statechain/\'.".to_string());
 }
 
@@ -73,13 +66,8 @@ fn test_err_get_smt_proof() {
             "c1562f7f15d6b8a51ea2e7035b9cdb8c6c0c41fecb62d459a3a6bf738ff0db0e",
         ),
     };
-    let body = serde_json::to_string(&smt_proof_msg).unwrap();
-    let mut response = client
-        .post(format!("/info/proof"))
-        .body(body)
-        .header(ContentType::JSON)
-        .dispatch();
-    let res = response.body_string().unwrap();
+
+    let res = test_server_post(&client, "/info/proof", &smt_proof_msg);
     assert_eq!(
         res,
         format!(
@@ -92,7 +80,6 @@ fn test_err_get_smt_proof() {
     // first push a random root to tree
 
     //update_root(db, mc);
-
     let mut response = client // first grab current root id
         .get(format!("/info/root"))
         .header(ContentType::JSON)
@@ -114,14 +101,7 @@ fn test_err_get_smt_proof() {
             "c1562f7f15d6b8a51ea2e7035b9cdb8c6c0c41fecb62d459a3a6bf738ff0db0e",
         ),
     };
-    let body = serde_json::to_string(&smt_proof_msg).unwrap();
-    let mut response = client
-        .post(format!("/info/proof"))
-        .body(body)
-        .header(ContentType::JSON)
-        .dispatch();
-    let res = response.body_string().unwrap();
-
+    let res = test_server_post(&client, "/info/proof", &smt_proof_msg);
     assert_eq!(
         res,
         format!(
@@ -147,22 +127,14 @@ fn test_err_get_transfer_batch_status() {
 
     // get_transfer_batch_status invalid id
     let invalid_id = Uuid::new_v4();
-    let mut response = client
-        .post(format!("/info/transfer-batch/{}", invalid_id))
-        .header(ContentType::JSON)
-        .dispatch();
-    let res = response.body_string().unwrap();
+    let res = test_server_get(&client, &format!("/info/transfer-batch/{}", invalid_id));
     assert_eq!(
         res,
         format!("DB Error: No data for identifier. (id: {})", invalid_id)
     );
 
     // get_transfer_batch_status no ID
-    let mut response = client
-        .post(format!("/info/transfer-batch/"))
-        .header(ContentType::JSON)
-        .dispatch();
-    let res = response.body_string().unwrap();
+    let res = test_server_get(&client, &format!("/info/transfer-batch/"));
     assert_eq!(res, "Unknown route \'/info/transfer-batch/\'.".to_string());
 }
 
@@ -170,17 +142,13 @@ fn test_err_get_transfer_batch_status() {
 fn test_get_state_entity_fees() {
     let client = spawn_test_server();
 
-    let mut response = client
-        .get("/info/fee")
-        .header(ContentType::JSON)
-        .dispatch();
-
-    let resp: StateEntityFeeInfoAPI =
-        serde_json::from_str(&response.body_string().unwrap()).unwrap();
+    let res = test_server_get(&client,"/info/fee");
+    let fee_info: StateEntityFeeInfoAPI =
+        serde_json::from_str(&res).unwrap();
     assert_eq!(
-        resp.address,
+        fee_info.address,
         "bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x".to_string()
     );
-    assert_eq!(resp.deposit, 300);
-    assert_eq!(resp.withdraw, 300);
+    assert_eq!(fee_info.deposit, 300);
+    assert_eq!(fee_info.withdraw, 300);
 }

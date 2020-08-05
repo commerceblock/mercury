@@ -683,7 +683,7 @@ mod tests {
     use crate::{server::SMT_DB_LOC_TESTING, storage::get_test_postgres_connection};
     use std::str::FromStr;
 
-
+    #[allow(dead_code)]
     fn test_sc_entity() -> StateChainEntity {
         let mut sc_entity = StateChainEntity::load(get_settings_as_map()).unwrap();
         sc_entity.mainstay_config = mainstay::Config::from_test();
