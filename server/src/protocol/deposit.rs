@@ -5,21 +5,22 @@
 use super::super::{Result, StateChainEntity};
 extern crate shared_lib;
 use crate::error::SEError;
-use crate::storage::db::{db_deser, db_get_2, db_insert, db_ser, db_update, Column, Table};
-use crate::{DatabaseR, DatabaseW};
+//use crate::storage::db::{db_deser, db_get_2, db_insert, db_ser, db_update, Column, Table};
+//use crate::{DatabaseR, DatabaseW};
 use bitcoin::Transaction;
 use shared_lib::{state_chain::*, structs::*, util::FEE};
 
 use rocket::State;
 use rocket_contrib::json::Json;
 use uuid::Uuid;
+use crate::storage::Storage;
 
 /// StateChain Deposit protocol trait
 pub trait Deposit {
     /// API: Initiliase deposit protocol:
     ///     - Generate and return shared wallet ID
     ///     - Can do auth or other DoS mitigation here
-    fn deposit_init(&self, db_write: DatabaseW, deposit_msg1: DepositMsg1) -> Result<Uuid>;
+    fn deposit_init(&self, deposit_msg1: DepositMsg1) -> Result<Uuid>;
 
     /// API: Complete deposit protocol:
     ///     - Wait for confirmation of funding tx in blockchain
@@ -27,14 +28,12 @@ pub trait Deposit {
     ///     - Update sparse merkle tree with new StateChain entry
     fn deposit_confirm(
         &self,
-        db_read: DatabaseR,
-        db_write: DatabaseW,
         deposit_msg2: DepositMsg2,
     ) -> Result<Uuid>;
 }
 
 impl Deposit for StateChainEntity {
-    fn deposit_init(&self, db_write: DatabaseW, deposit_msg1: DepositMsg1) -> Result<Uuid> {
+    fn deposit_init(&self, deposit_msg1: DepositMsg1) -> Result<Uuid> {
         // Generate shared wallet ID (user ID)
         let user_id = Uuid::new_v4();
 
@@ -45,17 +44,8 @@ impl Deposit for StateChainEntity {
 
         // Create DB entry for newly generated ID signalling that user has passed some
         // verification. For now use ID as 'password' to interact with state entity
-        db_insert(&db_write, &user_id, Table::UserSession)?;
-        db_update(
-            &db_write,
-            &user_id,
-            Table::UserSession,
-            vec![Column::Authentication, Column::ProofKey],
-            vec![
-                &deposit_msg1.auth.clone(),
-                &deposit_msg1.proof_key.to_owned(),
-            ],
-        )?;
+        self.database.create_user_session(&user_id, &deposit_msg1.auth, 
+            &deposit_msg1.proof_key)?;
 
         info!(
             "DEPOSIT: Protocol initiated. User ID generated: {}",
@@ -72,21 +62,13 @@ impl Deposit for StateChainEntity {
 
     fn deposit_confirm(
         &self,
-        db_read: DatabaseR,
-        db_write: DatabaseW,
         deposit_msg2: DepositMsg2,
     ) -> Result<Uuid> {
         // let shared_key_id = deposit_msg2.shared_key_id.clone();
         let user_id = deposit_msg2.shared_key_id;
 
         // Get back up tx and proof key
-        let (tx_backup_str, proof_key) = db_get_2::<String, String>(
-            &db_read,
-            &user_id,
-            Table::UserSession,
-            vec![Column::TxBackup, Column::ProofKey],
-        )?;
-        let tx_backup: Transaction = db_deser(tx_backup_str)?;
+        let (tx_backup, proof_key) = self.database.get_backup_transaction_and_proof_key(&user_id)?;
 
         // Ensure backup tx exists is signed
         if tx_backup.input[0].witness.len() == 0 {
@@ -104,34 +86,10 @@ impl Deposit for StateChainEntity {
         let state_chain = StateChain::new(proof_key.clone());
 
         // Insert into StateChain table
-        db_insert(&db_write, &state_chain_id, Table::StateChain)?;
-        db_update(
-            &db_write,
-            &state_chain_id,
-            Table::StateChain,
-            vec![
-                Column::Chain,
-                Column::Amount,
-                Column::LockedUntil,
-                Column::OwnerId,
-            ],
-            vec![
-                &db_ser(state_chain)?,
-                &amount,
-                &get_time_now(),
-                &user_id.to_owned(),
-            ],
-        )?;
+        self.database.create_statechain(&state_chain_id, &user_id, &state_chain, &amount)?;
 
         // Insert into BackupTx table
-        db_insert(&db_write, &state_chain_id, Table::BackupTxs)?;
-        db_update(
-            &db_write,
-            &state_chain_id,
-            Table::BackupTxs,
-            vec![Column::TxBackup],
-            vec![&db_ser(tx_backup.clone())?],
-        )?;
+        self.database.create_backup_transaction(&state_chain_id, &tx_backup)?;
 
         info!(
             "DEPOSIT: State Chain created. ID: {} For user ID: {}",
@@ -139,9 +97,7 @@ impl Deposit for StateChainEntity {
         );
 
         // Update sparse merkle tree with new StateChain entry
-        let (new_root, current_root) = self.update_smt_db(
-            &db_read,
-            &db_write,
+        let (new_root, current_root) = self.update_smt(
             &tx_backup
                 .input
                 .get(0)
@@ -149,7 +105,7 @@ impl Deposit for StateChainEntity {
                 .previous_output
                 .txid
                 .to_string(),
-            &proof_key,
+                &proof_key,
         )?;
 
         info!(
@@ -162,14 +118,7 @@ impl Deposit for StateChainEntity {
         );
 
         // Update UserSession with StateChain's ID
-        db_update(
-            &db_write,
-            &user_id,
-            Table::UserSession,
-            vec![Column::StateChainId],
-            vec![&state_chain_id],
-        )?;
-
+        self.database.update_statechain_id(&user_id, &state_chain_id)?;
         Ok(state_chain_id)
     }
 }
@@ -177,10 +126,9 @@ impl Deposit for StateChainEntity {
 #[post("/deposit/init", format = "json", data = "<deposit_msg1>")]
 pub fn deposit_init(
     sc_entity: State<StateChainEntity>,
-    db_write: DatabaseW,
     deposit_msg1: Json<DepositMsg1>,
 ) -> Result<Json<Uuid>> {
-    match sc_entity.deposit_init(db_write, deposit_msg1.into_inner()) {
+    match sc_entity.deposit_init(deposit_msg1.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -189,11 +137,9 @@ pub fn deposit_init(
 #[post("/deposit/confirm", format = "json", data = "<deposit_msg2>")]
 pub fn deposit_confirm(
     sc_entity: State<StateChainEntity>,
-    db_read: DatabaseR,
-    db_write: DatabaseW,
     deposit_msg2: Json<DepositMsg2>,
 ) -> Result<Json<Uuid>> {
-    match sc_entity.deposit_confirm(db_read, db_write, deposit_msg2.into_inner()) {
+    match sc_entity.deposit_confirm(deposit_msg2.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
