@@ -13,10 +13,10 @@ use rocket::error::LaunchError;
 use server_lib::server;
 use shared_lib::{
     commitment::make_commitment,
+    mainstay,
     mocks::mock_electrum::MockElectrum,
     state_chain::StateChainSig,
     structs::{BatchData, PrepareSignTxMsg},
-    mainstay
 };
 use std::env;
 use std::error;

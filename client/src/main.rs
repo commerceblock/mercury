@@ -7,7 +7,7 @@ use client_lib::wallet::wallet;
 use client_lib::ClientShim;
 use shared_lib::{
     mocks::mock_electrum::MockElectrum,
-    structs::{StateEntityAddress, TransferMsg3},
+    structs::{SCEAddress, TransferMsg3},
 };
 
 use bitcoin::consensus;
@@ -150,7 +150,7 @@ fn main() {
         } else if matches.is_present("transfer-sender") {
             if let Some(matches) = matches.subcommand_matches("transfer-sender") {
                 let shared_key_id: &str = matches.value_of("id").unwrap();
-                let receiver_addr: StateEntityAddress =
+                let receiver_addr: SCEAddress =
                     serde_json::from_str(matches.value_of("addr").unwrap()).unwrap();
                 let transfer_msg = state_entity::transfer::transfer_sender(
                     &mut wallet,

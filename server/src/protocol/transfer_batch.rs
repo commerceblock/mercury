@@ -1,6 +1,7 @@
 //! StateEntity Batch Transfer
 //!
-//! StateEntity Batch Transfer protocol trait and implementation.
+//! StateEntity Batch Transfer protocol trait and implementation. API is used by Conductor and
+//! swap partipants to organise swaps.
 
 use super::{
     super::Result,

@@ -5,8 +5,10 @@ mod tests {
     use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
     use rocket::http::{ContentType, Status};
     use rocket::local::Client;
-    use shared_lib::structs::{DepositMsg1, SmtProofMsgAPI, StateEntityFeeInfoAPI, KeyGenMsg1, Protocol};
-    use shared_lib::{Root, mainstay};
+    use shared_lib::structs::{
+        DepositMsg1, KeyGenMsg1, Protocol, SmtProofMsgAPI, StateEntityFeeInfoAPI,
+    };
+    use shared_lib::{mainstay, Root};
 
     use serde_json;
     use std::str::FromStr;
@@ -14,7 +16,6 @@ mod tests {
 
     #[cfg(test)]
     use mockito;
-
 
     // test ecdsa::sign can be performed only by authorised user
     #[test]

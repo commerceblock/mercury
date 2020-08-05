@@ -6,8 +6,8 @@ mod tests {
     extern crate server_lib;
     extern crate shared_lib;
 
-    use shared_lib::{mocks::mock_electrum::MockElectrum, structs::Protocol};
     use shared_lib::mainstay;
+    use shared_lib::{mocks::mock_electrum::MockElectrum, structs::Protocol};
 
     use curv::elliptic::curves::traits::ECScalar;
     use curv::FE;

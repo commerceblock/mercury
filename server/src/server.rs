@@ -110,7 +110,6 @@ pub fn get_server(mainstay_config: Option<mainstay::MainstayConfig>) -> Result<R
         .manage(sc_entity)
         .attach(DatabaseR::fairing()) // read
         .attach(DatabaseW::fairing()); // write
-
     Ok(rock)
 }
 
@@ -148,7 +147,7 @@ fn get_rocket_config(config: &Config) -> RocketConfig {
         )
     ));
     databases.insert("postgres_w", Value::from(database_config));
-    
+
     // read DB
     let mut database_config = HashMap::new();
     database_config.insert("url", Value::from(

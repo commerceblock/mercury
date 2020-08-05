@@ -4,7 +4,7 @@
 
 use super::super::Result;
 use shared_lib::{
-    structs::{Protocol, StateEntityAddress},
+    structs::{Protocol, SCEAddress},
     util::get_sighash,
 };
 
@@ -311,17 +311,14 @@ impl Wallet {
         return Err(CError::WalletError(WalletErrorType::NotEnoughFunds));
     }
 
-    pub fn get_new_state_entity_address(
-        &mut self,
-        funding_txid: &String,
-    ) -> Result<StateEntityAddress> {
+    pub fn get_new_state_entity_address(&mut self, funding_txid: &String) -> Result<SCEAddress> {
         let backup_addr = self
             .se_backup_keys
             .get_new_address_encoded_id(funding_txid_to_int(funding_txid)?)?;
         let proof_key = self
             .se_proof_keys
             .get_new_key_encoded_id(funding_txid_to_int(funding_txid)?)?;
-        Ok(StateEntityAddress {
+        Ok(SCEAddress {
             tx_backup_addr: backup_addr.to_string(),
             proof_key: proof_key.to_string(),
         })
