@@ -3,8 +3,9 @@ use super::StateChainEntity;
 
 use crate::DatabaseR;
 use crate::{
-    storage::{db_make_tables, db_reset_dbs, get_test_postgres_connection},
+    //storage::{db_make_tables, db_reset_dbs, get_test_postgres_connection},
     DatabaseW,
+    Database
 };
 
 use config;
@@ -42,11 +43,25 @@ impl StateChainEntity {
             },
         };
 
-        Ok(StateChainEntity {
-            smt_db_loc: settings
+        let database = Database::get_test();
+
+        let mut smt_db_loc: String;
+        if testing_mode {
+            // Use test SMT DB
+            smt_db_loc = SMT_DB_LOC_TESTING.to_string();
+            // reset dbs
+            if let Err(_) = database.reset_dbs(&smt_db_loc) {
+                database.make_tables()?;
+            }
+        } else {
+            smt_db_loc = settings
                 .get("smt_db_loc")
                 .unwrap_or(&SMT_DB_LOC_DEFAULT.to_string())
-                .to_string(),
+                .to_string();
+        }
+
+        Ok(StateChainEntity {
+            smt_db_loc,
             electrum_server: settings.get("electrum_server").unwrap().to_string(),
             network: settings.get("network").unwrap().to_string(),
             testing_mode,
@@ -69,6 +84,7 @@ impl StateChainEntity {
                 .parse::<u64>()
                 .unwrap(),
             mainstay_config,
+            database,
         })
     }
 }
@@ -108,16 +124,6 @@ pub fn get_server(mainstay_config: Option<mainstay::Config>) -> Result<Rocket> {
     set_logging_config(settings.get("log_file"));
 
     let rocket_config = get_rocket_config(&sc_entity.testing_mode);
-
-    if sc_entity.testing_mode {
-        // Use test SMT DB
-        sc_entity.smt_db_loc = SMT_DB_LOC_TESTING.to_string();
-        // reset dbs
-        let conn = get_test_postgres_connection();
-        if let Err(_) = db_reset_dbs(&conn, &sc_entity.smt_db_loc) {
-            db_make_tables(&conn)?;
-        }
-    }
 
     let rock = rocket::custom(rocket_config)
         .register(catchers![internal_error, not_found, bad_request])

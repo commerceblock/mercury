@@ -1,13 +1,13 @@
 use super::super::{Result, StateChainEntity};
 
 use crate::error::{DBErrorType, SEError};
-use crate::{
-    storage::db::{
-        db_deser, db_get_1, db_get_2, db_get_3, db_get_4, db_insert, db_ser, db_update, Column,
-        Table,
-    },
-    DatabaseR, DatabaseW,
-};
+//use crate::{
+//    storage::db::{
+        //db_deser, db_get_1, db_get_2, db_get_3, db_get_4, db_insert, db_ser, db_update, Column,
+        //Table,
+    //},
+    //DatabaseR, DatabaseW,
+//};
 use shared_lib::{
     structs::{KeyGenMsg1, KeyGenMsg2, KeyGenMsg3, KeyGenMsg4, Protocol, SignMsg1, SignMsg2},
     util::reverse_hex_str,
@@ -32,43 +32,31 @@ use uuid::Uuid;
 pub trait Ecdsa {
     fn first_message(
         &self,
-        db_read: DatabaseR,
-        db_write: DatabaseW,
         key_gen_msg1: KeyGenMsg1,
     ) -> Result<(Uuid, party_one::KeyGenFirstMsg)>;
 
     fn second_message(
         &self,
-        db_read: DatabaseR,
-        db_write: DatabaseW,
         key_gen_msg2: KeyGenMsg2,
     ) -> Result<party1::KeyGenParty1Message2>;
 
     fn third_message(
         &self,
-        db_read: DatabaseR,
-        db_write: DatabaseW,
         key_gen_msg3: KeyGenMsg3,
     ) -> Result<party_one::PDLFirstMessage>;
 
     fn fourth_message(
         &self,
-        db_read: DatabaseR,
-        db_write: DatabaseW,
         key_gen_msg4: KeyGenMsg4,
     ) -> Result<party_one::PDLSecondMessage>;
 
     fn sign_first(
         &self,
-        db_read: DatabaseR,
-        db_write: DatabaseW,
         sign_msg1: SignMsg1,
     ) -> Result<party_one::EphKeyGenFirstMsg>;
 
     fn sign_second(
         &self,
-        db_read: DatabaseR,
-        db_write: DatabaseW,
         sign_msg2: SignMsg2,
     ) -> Result<Vec<Vec<u8>>>;
 }
@@ -86,8 +74,6 @@ struct Alpha {
 impl Ecdsa for StateChainEntity {
     fn first_message(
         &self,
-        db_read: DatabaseR,
-        db_write: DatabaseW,
         key_gen_msg1: KeyGenMsg1,
     ) -> Result<(Uuid, party_one::KeyGenFirstMsg)> {
         let user_id = key_gen_msg1.shared_key_id;

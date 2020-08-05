@@ -1,20 +1,28 @@
-pub mod db;
-
-use super::Result;
-use db::Table;
-use postgres::Connection;
-
 use std::{fmt,error};
 use rocket::response::Responder;
 use rocket::http::{ContentType, Status};
 use uuid::Uuid;
 use shared_lib::state_chain::{StateChain, StateChainSig};
 use shared_lib::Root;
+use shared_lib::structs::*;
 use std::io::Cursor;
 use bitcoin::blockdata::transaction::Transaction;
 use kms::ecdsa::two_party::*;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
+use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 use rocket_contrib::json::Json;
+use curv::{
+    elliptic::curves::traits::{ECPoint, ECScalar},
+    {BigInt, FE, GE},
+};
+use chrono::NaiveDateTime;
+use crate::protocol::transfer::{Transfer, TransferFinalizeData};
+use std::collections::HashMap;
+use crate::storage::db::StateChainAmount;
+
+pub mod db;
+
+use super::Result;
 
 #[derive(Debug, Deserialize)]
 pub enum StorageError {
@@ -85,77 +93,82 @@ impl Responder<'static> for StorageError {
     }
 }
 
+
 pub trait Storage {
    // fn insert<T,U>(&self, id: &T, data: U) -> Result<>;
    // fn remove<T,U>&self, id: &T, data: U) -> Result<()>;
 
    //Create a new user session or update an existing one 
    //If Uuid is not None, that session is updated. Otherwise, a new one is created.
-   fn save_user_session(&self, id: &Uuid, auth: String, proof_key: String) 
-        -> Result<()>;
+   //fn save_user_session(&self, id: &Uuid, auth: String, proof_key: String) 
+   //     -> Result<()>;
 
-   fn create_user_session(&self, auth: String, proof_key: String) 
-        -> Result<()>{
-     let id = Uuid::new_v4();
-     self.save_user_session(&id, auth, proof_key)
-   }
+   //fn create_user_session(&self, auth: String, proof_key: String) 
+   //     -> Result<()>{
+   //  let id = Uuid::new_v4();
+   //  self.save_user_session(&id, auth, proof_key)
+   //}
 
-   fn save_statechain(&self, statechain_id: &Uuid, statechain: &StateChain, 
-                            amount: i64, 
-                            user_id: &Uuid) -> Result<()>;
+   //fn save_statechain(&self, statechain_id: &Uuid, statechain: &StateChain, 
+//                        amount: i64, 
+  //                          user_id: &Uuid) -> Result<()>;
 
-    fn save_backup_tx(&self, statechain_id: &Uuid, backup_tx: &Transaction) 
-        -> Result<()>;
+//    fn save_backup_tx(&self, statechain_id: &Uuid, backup_tx: &Transaction) 
+  //      -> Result<()>;
 
     //Returns: (new_root, current_root)
-    fn update_smt(&self, backup_tx: &Transaction, proof_key: &String)
+    fn update_smt(&self, funding_txid: &String, proof_key: &String)
         -> Result<(Option<Root>, Root)>;
 
-    fn save_ecdsa(&self, user_id: &Uuid, 
-        first_msg: party_one::KeyGenFirstMsg) -> Result<()>;
+    //fn save_ecdsa(&self, user_id: &Uuid, 
+    //    first_msg: party_one::KeyGenFirstMsg) -> Result<()>;
 
-    fn get_latest_confirmed_root(&self) -> Result<Option<Root>>;
+    fn get_confirmed_smt_root(&self) -> Result<Option<Root>>;
 
-    fn get_latest_root(&self, id: &i64) -> Result<Option<Root>>;
+    fn get_smt_root(&self) -> Result<Option<Root>>;
 
-    fn get_confirmed_root(&self, id: &i64) -> Result<Option<Root>>;
+    //fn get_confirmed_root(&self) -> Result<Option<Root>>;
 
     fn get_root(&self, id: &i64) -> Result<Option<Root>>;
 
-    //Returns locked until time, owner id, state chain
-    fn get_statechain(&self, user_id: &Uuid) -> Result<(NaiveDateTime, Uuid, StateChain)>;
+    fn update_root(&self, root: &Root) -> Result<i64>;
 
-    fn authorise_withdrawal(&self, user_id: &Uuid, signature: StateChainSig) -> Result<()>;
+    //Returns locked until time, owner id, state chain
+    fn get_statechain_data_api(&self,state_chain_id: &Uuid) -> Result<StateChainDataAPI>;
+
+    //fn authorise_withdrawal(&self, user_id: &Uuid, signature: StateChainSig) -> Result<()>;
 
     // /withdraw/confirm
-    fn confirm_withdrawal(&self, user_id: &Uuid, address: &String)->Result<()>;
+    //fn confirm_withdrawal(&self, user_id: &Uuid, address: &String)->Result<()>;
 
     // /transfer/sender
-    fn init_transfer(&self, user_id: &Uuid, sig: &StateChainSig)->Result<()>;
+    //fn init_transfer(&self, user_id: &Uuid, sig: &StateChainSig)->Result<()>;
 
     // Returns statechain_id, sstatechain_sig_str, x1_str
-    fn get_transfer(&self, statechain_id: &Uuid) -> Result<(Uuid, StateChainSig, FE)>;
+    //fn get_transfer(&self, statechain_id: &Uuid) -> Result<(Uuid, StateChainSig, FE)>;
+
+    fn get_statechain(&self, state_chain_id: &Uuid) -> Result<StateChain>;
 
     //Returns party1_private_str, party2_public_str
-    fn get_transfer_ecdsa_pair(&self, user_id: &Uuid) -> Result<Party1Private, GE>;
+    //fn get_transfer_ecdsa_pair(&self, user_id: &Uuid) -> Result<(Party1Private, GE)>;
 
-    fn finalize_transfer(&self, &Option<BatchData>, tf_data: &TransferFinalizeData);
+    //fn finalize_transfer(&self, batch_data: &Option<BatchData>, tf_data: &TransferFinalizeData);
 
-    fn batch_transfer_exists(&self, batch_id: &Uuid, sig: &StateChainSig)-> bool;
+    //fn batch_transfer_exists(&self, batch_id: &Uuid, sig: &StateChainSig)-> bool;
 
     // /transfer/batch/init
-    fn init_batch_transfer(&self, batch_id: &Uuid, 
-                        state_chains: &HashMap<Uuid, bool>) -> Result<()>;
+    //fn init_batch_transfer(&self, batch_id: &Uuid, 
+    //                    state_chains: &HashMap<Uuid, bool>) -> Result<()>;
 
 
     // Returns: finalized, start_time, state_chains, punished
-    fn get_batch_transfer_status(&self, batch_id: &Uuid) 
-        -> Result<(bool, NaiveDateTime, HashMap<Uuid, bool>, Vec<Uuid>)>;
+    //fn get_transfer_batch_status(&self, batch_id: &Uuid) 
+    //    -> Result<TransferBatchDataAPI>;
 
     // Update the locked until time of a state chain (used for punishment)
-    fn update_locked_until(&self, state_chain_id: &Uuid, time: &NaiveDateTime);
+    //fn update_locked_until(&self, state_chain_id: &Uuid, time: &NaiveDateTime);
 
     //Update the list of punished state chains
-    fn update_punished(&self, punished: &Vec<Uuid>);
+    //fn update_punished(&self, punished: &Vec<Uuid>);
 
 }

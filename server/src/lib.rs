@@ -47,6 +47,10 @@ pub mod server;
 pub mod storage;
 pub mod tests;
 
+use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
+use rocket_contrib::databases::r2d2;
+
+
 type Result<T> = std::result::Result<T, error::SEError>;
 use rocket_contrib::databases::postgres;
 
@@ -55,10 +59,8 @@ pub struct DatabaseW(postgres::Connection);
 #[database("postgres_r")]
 pub struct DatabaseR(postgres::Connection);
 
-pub struct Database {
-    pub database_w: DatabaseW,
-    pub database_r: DatabaseR,
-    pub smt_db_loc: String,
+struct Database {
+    pub db_connection: fn()->r2d2::PooledConnection<PostgresConnectionManager>
 }
 
 pub struct StateChainEntity {
@@ -72,5 +74,8 @@ pub struct StateChainEntity {
     pub batch_lifetime: u64,
     pub punishment_duration: u64,
     pub mainstay_config: Option<mainstay::Config>,
+    pub smt_db_loc: String,
     pub database: Database
 }
+
+

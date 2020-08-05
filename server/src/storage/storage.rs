@@ -4,11 +4,13 @@ use rocket::http::{ContentType, Status};
 use uuid::Uuid;
 use shared_lib::state_chain::{StateChain, StateChainSig};
 use shared_lib::Root;
+use shared_lib::structs::*;
 use std::io::Cursor;
 use bitcoin::blockdata::transaction::Transaction;
 use kms::ecdsa::two_party::*;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
 use rocket_contrib::json::Json;
+use chrono::NaiveDateTime;
 
 #[derive(Debug, Deserialize)]
 pub enum StorageError {
@@ -112,16 +114,18 @@ pub trait Storage {
     fn save_ecdsa(&self, user_id: &Uuid, 
         first_msg: party_one::KeyGenFirstMsg) -> Result<()>;
 
-    fn get_latest_confirmed_root(&self) -> Result<Option<Root>>;
+    fn get_confirmed_smt_root(&self) -> Result<Option<Root>>;
 
-    fn get_latest_root(&self, id: &i64) -> Result<Option<Root>>;
+    fn get_smt_root(&self) -> Result<Option<Root>>;
 
-    fn get_confirmed_root(&self, id: &i64) -> Result<Option<Root>>;
+    fn get_confirmed_root(&self) -> Result<Option<Root>>;
 
     fn get_root(&self, id: &i64) -> Result<Option<Root>>;
 
+    fn update_root(&self, root: &Root) -> Result<i64>;
+
     //Returns locked until time, owner id, state chain
-    fn get_statechain(&self, user_id: &Uuid) -> Result<(NaiveDateTime, Uuid, StateChain)>;
+    fn get_statechain_data_api(&self,state_chain_id: &Uuid) -> Result<StateChainDataAPI>;
 
     fn authorise_withdrawal(&self, user_id: &Uuid, signature: StateChainSig) -> Result<()>;
 
@@ -147,13 +151,15 @@ pub trait Storage {
 
 
     // Returns: finalized, start_time, state_chains, punished
-    fn get_batch_transfer_status(&self, batch_id: &Uuid) 
-        -> Result<(bool, NaiveDateTime, HashMap<Uuid, bool>, Vec<Uuid>)>;
+    fn get_transfer_batch_status(&self, batch_id: &Uuid) 
+        -> Result<TransferBatchDataAPI>;
 
     // Update the locked until time of a state chain (used for punishment)
     fn update_locked_until(&self, state_chain_id: &Uuid, time: &NaiveDateTime);
 
     //Update the list of punished state chains
     fn update_punished(&self, punished: &Vec<Uuid>);
+
+    fn get_statechain(&self, state_chain_id: &Uuid);
 
 }
