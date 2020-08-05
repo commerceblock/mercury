@@ -22,13 +22,24 @@ use shared_lib::{
 use crate::error::{DBErrorType, SEError};
 use crate::storage::db::{
     self,
-    StateChainAmount
+    StateChainAmount,
+
     //db_deser, db_get_1, db_get_2, db_get_3, db_remove, db_root_get, db_root_get_current_id,
     //db_ser, db_update, 
     //Column, Table,
 };
 use crate::storage::Storage;
-use crate::Database;
+
+use cfg_if::cfg_if;
+
+cfg_if! {
+    if #[cfg(test)]{
+        use crate::storage::db::MockDatabase as Database;
+    } else {
+        use crate::Database as Database;
+    }
+}
+
 
 use bitcoin::Transaction;
 use chrono::NaiveDateTime;
@@ -447,7 +458,23 @@ impl Storage for StateChainEntity {
         funding_txid: &String,
         proof_key: &String,
     ) -> Result<(Option<Root>, Root)> {
-        let current_root = self.database.get_root(&self.database.root_get_current_id()?)?;
+        //Use the mock database trait if in test mode
+        cfg_if! {
+            if #[cfg(test)]{
+                //Create a new mock database
+                let db = Database::get_test();
+                // Set the expectations
+                //Current id is 0
+                db.expect_root_get_current_id().returning(|| Ok(0 as i64));
+                //Current root is randomly chosen
+                db.expect_get_root().returning(|x| Ok(Some(Root::from_random())));
+            } else {
+                let db = &self.database;
+            }
+        }
+
+        //If mocked out current_root will be randomly chosen
+        let current_root = db.get_root(&db.root_get_current_id()?)?;
         let new_root_hash = update_statechain_smt(
             &self.smt_db_loc,
             &current_root.clone().map(|r| r.hash()),

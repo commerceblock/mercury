@@ -2,6 +2,8 @@
 //!
 //! Postgres DB access and update tools.
 
+use mockall::*;
+use mockall::predicate::*;
 use bitcoin::Transaction;
 use super::super::Result;
 use super::super::StateChainEntity;
@@ -144,8 +146,7 @@ impl Column {
     }
 }
 
-
-
+ #[automock]
 impl Database {
 
     pub fn new(con_fun: fn()->r2d2::PooledConnection<PostgresConnectionManager>)
@@ -186,7 +187,7 @@ impl Database {
         }
     }
 
-    pub fn update_withdraw_sc_sig(&self, user_id: &Uuid, sig: &StateChainSig) -> Result<()> {
+    pub fn update_withdraw_sc_sig(&self, user_id: &Uuid, sig: &'static StateChainSig) -> Result<()> {
         self.update(
             user_id,
             Table::UserSession,
@@ -195,7 +196,7 @@ impl Database {
         )
     }
 
-    pub fn update_withdraw_tx_sighash(&self, user_id: &Uuid, sig_hash: &Hash, tx: &Transaction) -> Result<()>{
+    pub fn update_withdraw_tx_sighash(&self, user_id: &Uuid, sig_hash: &'static Hash, tx: &'static Transaction) -> Result<()>{
         self.update(
             user_id,
             Table::UserSession,
@@ -204,7 +205,7 @@ impl Database {
         )
     }
 
-    pub fn update_sighash(&self, user_id: &Uuid, sig_hash: &Hash) -> Result<()> {
+    pub fn update_sighash(&self, user_id: &Uuid, sig_hash: &'static Hash) -> Result<()> {
         self.update(
             user_id,
             Table::UserSession,
@@ -213,7 +214,7 @@ impl Database {
         )
     }
 
-    pub fn update_user_backup_tx(&self,user_id: &Uuid, tx: &Transaction) -> Result<()> {
+    pub fn update_user_backup_tx(&self,user_id: &Uuid, tx: &'static Transaction) -> Result<()> {
         self.update(
             user_id,
             Table::UserSession,
@@ -222,7 +223,7 @@ impl Database {
         )
     }
 
-    pub fn update_backup_tx(&self,state_chain_id: &Uuid, tx: &Transaction) -> Result<()> {
+    pub fn update_backup_tx(&self,state_chain_id: &Uuid, tx: &'static Transaction) -> Result<()> {
         self.update(
             &state_chain_id,
             Table::BackupTxs,
@@ -439,7 +440,7 @@ pub fn reset_dbs(&self, smt_db_loc: &String) -> Result<()> {
 }
 
 /// Serialize data into string. To add custom types to Postgres they must be serialized to String.
-pub fn ser<T>(data: T) -> Result<String>
+pub fn ser<T:'static>(data: T) -> Result<String>
 where
     T: serde::ser::Serialize,
 {
@@ -450,7 +451,7 @@ where
 }
 
 /// Deserialize custom type data from string. Reverse of ser().
-pub fn deser<T>(data: String) -> Result<T>
+pub fn deser<T:'static>(data: String) -> Result<T>
 where
     T: serde::de::DeserializeOwned,
 {
@@ -498,12 +499,12 @@ fn update_columns_str(&self, cols: Vec<Column>) -> String {
 }
 
 /// Update items in table for some ID with PostgreSql data types (String, int, bool, Uuid, chrono::NaiveDateTime).
-pub fn update(
+pub fn update<'a>(
     &self,
     id: &Uuid,
     table: Table,
     column: Vec<Column>,
-    data: Vec<&dyn ToSql>,
+    data: Vec<&'a dyn ToSql>,
 ) -> Result<()> {
     let num_items = column.len();
     let statement = self.database_w().prepare(&format!(
@@ -525,7 +526,7 @@ pub fn update(
 
 /// Get items from table for some ID with PostgreSql data types (String, int, Uuid, bool, Uuid, chrono::NaiveDateTime).
 /// Err if ID not found. Return None if data item empty.
-fn get<T, U, V, W>(
+fn get<T:'static, U:'static, V:'static, W:'static>(
     &self,
     id: &Uuid,
     table: Table,
@@ -585,7 +586,7 @@ pub fn get_columns_str(&self, cols: &Vec<Column>) -> String {
     str
 }
 
-fn get_item_from_row<T>(&self, row: &Row, index: usize, id: &String, column: Column) -> Result<T>
+fn get_item_from_row<T:'static>(&self, row: &'static Row<'static>, index: usize, id: &String, column: Column) -> Result<T>
 where
     T: rocket_contrib::databases::postgres::types::FromSql,
 {
@@ -599,7 +600,7 @@ where
 }
 
 /// Get 1 item from row in table. Err if ID not found. Return None if data item empty.
-pub fn get_1<T>(&self, id: &Uuid, table: Table, column: Vec<Column>) -> Result<T>
+pub fn get_1<T:'static>(&self, id: &Uuid, table: Table, column: Vec<Column>) -> Result<T>
 where
     T: rocket_contrib::databases::postgres::types::FromSql,
 {
@@ -607,7 +608,7 @@ where
     Ok(res.unwrap())  //  err returned from db_get if desired item is None
 }
 /// Get 2 items from row in table. Err if ID not found. Return None if data item empty.
-pub fn get_2<T, U>(
+pub fn get_2<T:'static, U:'static>(
     &self,
     id: &Uuid,
     table: Table,
@@ -621,7 +622,7 @@ where
     Ok((res1.unwrap(), res2.unwrap()))
 }
 /// Get 3 items from row in table. Err if ID not found. Return None if data item empty.
-pub fn get_3<T, U, V>(
+pub fn get_3<T:'static, U:'static, V:'static>(
     &self,
     id: &Uuid,
     table: Table,
@@ -636,7 +637,7 @@ where
     Ok((res1.unwrap(), res2.unwrap(), res3.unwrap()))
 }
 /// Get 4 items from row in table. Err if ID not found. Return None if data item empty.
-pub fn get_4<T, U, V, W>(
+pub fn get_4<T:'static, U:'static, V:'static, W:'static>(
     &self,
     id: &Uuid,
     table: Table,
@@ -693,7 +694,7 @@ pub fn root_update(&self, rt: &Root) -> Result<i64> {
 }
 
 /// Insert a Root into root table
-pub fn root_insert(&self, root: &Root) -> Result<u64> {
+pub fn root_insert(&self, root: &'static Root) -> Result<u64> {
     let statement = self.database_w().prepare(&format!(
         "INSERT INTO {} (value, commitmentinfo) VALUES ($1,$2)",
         Table::Root.to_string()
@@ -809,7 +810,7 @@ pub fn get_statechain_amount(
     Ok(StateChainAmount{chain: state_chain, amount})
 }
 
-pub fn update_statechain_amount(&self, state_chain_id: &Uuid, state_chain: &StateChain, amount: u64) -> Result<()> {
+pub fn update_statechain_amount(&self, state_chain_id: &Uuid, state_chain: &'static StateChain, amount: u64) -> Result<()> {
     self.update(
         &state_chain_id,
         Table::StateChain,
@@ -837,7 +838,7 @@ pub fn create_statechain(&self,
                 &Self::ser(state_chain.to_owned())?,
                 amount,
                 &get_time_now(),
-                user_id.to_owned(),
+                &user_id.to_owned(),
             ],
         )
 }
@@ -856,7 +857,7 @@ pub fn get_statechain(
 }
 
 pub fn update_statechain_owner(&self, state_chain_id: &Uuid, 
-                        state_chain: &StateChain, new_user_id: &Uuid) 
+                        state_chain: &'static StateChain, new_user_id: &Uuid) 
                         -> Result<()> {  
     self.update(
         &state_chain_id,
@@ -982,7 +983,7 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
 
     pub fn create_transfer_batch_data(&self, 
         batch_id: &Uuid, 
-        state_chains: &HashMap<Uuid, bool>) -> Result<()> {
+        state_chains: &'static HashMap<Uuid, bool>) -> Result<()> {
 
         self.insert(&batch_id, Table::TransferBatch)?;
         self.update(
@@ -1042,7 +1043,7 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
         Ok(ECDSAKeypair{party_1_private, party_2_public})
     }
 
-    pub fn update_punished(&self, batch_id: &Uuid, punished_state_chains: &Vec<Uuid>) -> Result<()>{
+    pub fn update_punished(&self, batch_id: &Uuid, punished_state_chains: &'static Vec<Uuid>) -> Result<()>{
         self.update(
             batch_id,
             Table::TransferBatch,
@@ -1064,8 +1065,8 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
     }
 
     pub fn update_finalize_batch_data(&self, batch_id: &Uuid, 
-            state_chains:&HashMap<Uuid, bool>, 
-            finalized_data_vec: & Vec<TransferFinalizeData>) -> Result<()>{
+            state_chains:&'static HashMap<Uuid, bool>, 
+            finalized_data_vec: &'static Vec<TransferFinalizeData>) -> Result<()>{
                 self.update(
                     &batch_id,
                     Table::TransferBatch,
