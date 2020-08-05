@@ -140,19 +140,7 @@ pub enum Column {
     Value,
     CommitmentInfo,
 }
-impl Column {
-    pub fn to_string(&self) -> String {
-        format!("{:?}", self)
-    }
-}
 
-
-
-    // Root
-    // Id,
-    Value,
-    CommitmentInfo,
-}
 impl Column {
     pub fn to_string(&self) -> String {
         format!("{:?}", self)
@@ -1131,52 +1119,6 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
     pub fn transfer_init_user_session(&self, new_user_id: &Uuid,
         state_chain_id: &Uuid, 
         finalized_data: &TransferFinalizeData) -> Result<()> {
-    
-        self.insert(new_user_id, Table::UserSession)?;
-        self.update(
-            &new_user_id,
-            Table::UserSession,
-            vec![
-                Column::Authentication,
-                Column::ProofKey,
-                Column::TxBackup,
-                Column::StateChainId,
-                Column::S2,
-            ],
-            vec![
-                &String::from("auth"),
-                &finalized_data.state_chain_sig.data.to_owned(),
-                &Self::ser(finalized_data.new_tx_backup)?,
-                &state_chain_id,
-                &Self::ser(finalized_data.s2)?,
-            ],
-        )
-    }
-}
-
-pub struct StateChainAmount {
-    pub chain: StateChain,
-    pub amount: i64,
-}
-
-struct TransferBatchData {
-    pub state_chains: HashMap<Uuid, bool>,
-    pub punished_state_chains: Vec<Uuid>,
-    pub start_time: NaiveDateTime,
-    pub finalized: bool,
-}
-
-struct TransferFinalizeBatchData {
-    pub state_chains: HashMap<Uuid, bool>,
-    pub finalized_data_vec: Vec<TransferFinalizeData>,
-    pub start_time: NaiveDateTime,
-}
-
-pub struct StateChainOwner {
-    pub locked_until: NaiveDateTime,
-    pub owner_id: Uuid,
-    pub chain: StateChain,
-}
     
         self.insert(new_user_id, Table::UserSession)?;
         self.update(
