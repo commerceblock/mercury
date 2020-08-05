@@ -8,6 +8,7 @@ use crate::storage::db::Column;
 use bitcoin::secp256k1::Error as SecpError;
 use monotree::Errors as MonotreeErrors;
 use postgres::Error as PostgresError;
+use config_rs::ConfigError;
 use rocket::http::{ContentType, Status};
 use rocket::response::Responder;
 use rocket::{Request, Response};
@@ -62,6 +63,11 @@ impl From<SystemTimeError> for SEError {
 }
 impl From<PostgresError> for SEError {
     fn from(e: PostgresError) -> SEError {
+        SEError::Generic(e.to_string())
+    }
+}
+impl From<ConfigError> for SEError {
+    fn from(e: ConfigError) -> SEError {
         SEError::Generic(e.to_string())
     }
 }

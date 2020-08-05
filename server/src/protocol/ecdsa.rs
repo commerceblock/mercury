@@ -1,4 +1,4 @@
-use super::super::{Result, StateChainEntity};
+use super::super::Result;
 
 use crate::error::{DBErrorType, SEError};
 use crate::{
@@ -6,7 +6,7 @@ use crate::{
         db_deser, db_get_1, db_get_2, db_get_3, db_get_4, db_insert, db_ser, db_update, Column,
         Table,
     },
-    DatabaseR, DatabaseW,
+    DatabaseR, DatabaseW, server::StateChainEntity,
 };
 use shared_lib::{
     structs::{KeyGenMsg1, KeyGenMsg2, KeyGenMsg3, KeyGenMsg4, Protocol, SignMsg1, SignMsg2},

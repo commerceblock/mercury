@@ -20,7 +20,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_auth_token() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
         // get ID
         let deposit_msg1 = DepositMsg1 {
@@ -69,7 +69,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_err_get_statechain() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
         // get_statechain invalid id
@@ -96,7 +96,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_err_get_smt_proof() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
         // None root
@@ -177,7 +177,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_err_get_transfer_batch_status() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
         // get_transfer_batch_status invalid id
@@ -204,7 +204,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_get_state_entity_fees() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
         let mut response = client

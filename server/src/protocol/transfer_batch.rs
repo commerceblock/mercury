@@ -3,7 +3,7 @@
 //! StateEntity Batch Transfer protocol trait and implementation.
 
 use super::{
-    super::{Result, StateChainEntity},
+    super::Result,
     transfer::{Transfer, TransferFinalizeData},
 };
 
@@ -13,7 +13,7 @@ use crate::{
     storage::db::{
         db_deser, db_get_1, db_get_2, db_get_4, db_insert, db_ser, db_update, Column, Table,
     },
-    DatabaseR, DatabaseW,
+    DatabaseR, DatabaseW, server::StateChainEntity,
 };
 use shared_lib::{commitment::verify_commitment, state_chain::*, structs::*};
 
@@ -210,7 +210,7 @@ impl BatchTransfer for StateChainEntity {
             )));
         }
 
-        if !transfer_batch_is_ended(start_time, self.batch_lifetime as i64) {
+        if !transfer_batch_is_ended(start_time, self.config.batch_lifetime as i64) {
             return Err(SEError::Generic(String::from("Transfer Batch still live.")));
         }
 

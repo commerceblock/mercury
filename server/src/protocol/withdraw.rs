@@ -2,13 +2,13 @@
 //!
 //! StateEntity Withdraw protocol trait and implementation for StateChainEntity.
 
-use super::super::{Result, StateChainEntity};
+use super::super::Result;
 extern crate shared_lib;
 use shared_lib::{state_chain::*, structs::*};
 
 use crate::error::SEError;
 use crate::storage::db::{db_deser, db_get_1, db_get_3, db_ser, db_update, Column, Table};
-use crate::{DatabaseR, DatabaseW};
+use crate::{DatabaseR, DatabaseW, server::StateChainEntity};
 
 use bitcoin::Transaction;
 use chrono::NaiveDateTime;

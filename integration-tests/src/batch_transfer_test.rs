@@ -19,7 +19,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_batch_sigs() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let _ = spawn_server(Some(mainstay_config));
         let mut wallet = gen_wallet();
         let num_state_chains = 3;
@@ -116,7 +116,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_batch_transfer() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let _ = spawn_server(Some(mainstay_config));
 
         let num_state_chains = 3; // must be > 1
@@ -224,7 +224,7 @@ mod tests {
     // #[test]
     #[allow(dead_code)]
     fn test_failure_batch_transfer() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let _ = spawn_server(Some(mainstay_config));
 
         let num_state_chains = 3; // must be > 2

@@ -27,7 +27,7 @@ fn main() {
         .unwrap()
         // Add in settings from the environment (with prefix "APP")
         // Eg.. `APP_DEBUG=1 ./target/app` would set the `debug` key
-        .merge(config::Environment::new())
+        .merge(config::Environment::with_prefix("MERC"))
         .unwrap();
     let hm = settings.try_into::<HashMap<String, String>>().unwrap();
     let se_endpoint = hm.get("endpoint").unwrap();
