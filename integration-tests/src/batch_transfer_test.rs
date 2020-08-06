@@ -16,7 +16,7 @@ mod tests {
     use mockito;
 
     /// Test batch transfer signature generation
-    //#[test]
+    #[test]
     #[serial]
     fn test_batch_sigs() {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
@@ -113,7 +113,7 @@ mod tests {
     }
 
     /// Perform batch transfer with tests and checks throughout
-    //]
+    #[test]
     #[serial]
     fn test_batch_transfer() {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
