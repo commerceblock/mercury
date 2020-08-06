@@ -692,7 +692,7 @@ mod tests {
         String::from(&mockito::server_url())
     }
 
-    #[test]
+    //#[test]
     #[serial]
     fn test_verify_root() {
         let db_read = DatabaseR(get_test_postgres_connection());
