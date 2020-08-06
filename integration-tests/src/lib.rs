@@ -74,7 +74,7 @@ impl From<RecvTimeoutError> for SpawnError {
 
 /// Spawn a StateChain Entity server in testing mode if there isn't one running already.
 /// Returns Ok(()) if a new server was spawned, otherwise returns an error.
-pub fn spawn_server(mainstay_config: Option<mainstay::Config>) -> Result<(), SpawnError> {
+pub fn spawn_server(mainstay_config: Option<mainstay::MainstayConfig>) -> Result<(), SpawnError> {
     let (tx, rx) = mpsc::channel::<SpawnError>();
 
     // Set enviroment variable to testing_mode=true to override Settings.toml

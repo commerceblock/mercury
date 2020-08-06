@@ -2,7 +2,7 @@
 //!
 //! Conductor swap protocol trait and implementation. Full protocol descritpion can be found in Conductor Trait.
 
-use super::super::{Result, StateChainEntity};
+use super::super::Result;
 
 extern crate shared_lib;
 use shared_lib::{structs::*, util::keygen::Message};
@@ -14,6 +14,7 @@ use bitcoin::{
 use rocket::State;
 use rocket_contrib::json::Json;
 use uuid::Uuid;
+use crate::server::StateChainEntity;
 
 use mockall::predicate::*;
 use mockall::*;

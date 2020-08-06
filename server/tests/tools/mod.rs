@@ -1,11 +1,10 @@
-
 extern crate shared_lib;
 use server_lib;
 
-use shared_lib::mainstay;
 use rocket::http::ContentType;
 use rocket::local::Client;
 use serde_json;
+use shared_lib::mainstay;
 use std::env;
 use std::str::FromStr;
 use uuid::Uuid;
@@ -35,12 +34,8 @@ where
 }
 
 #[allow(dead_code)]
-pub fn test_server_get(client: &Client, url: &str) -> String
-{
-    let mut response = client
-        .get(url)
-        .header(ContentType::JSON)
-        .dispatch();
+pub fn test_server_get(client: &Client, url: &str) -> String {
+    let mut response = client.get(url).header(ContentType::JSON).dispatch();
     response.body_string().unwrap()
 }
 

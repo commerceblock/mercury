@@ -341,7 +341,7 @@ where
 pub fn get_confirmed_root(
     db_read: &DatabaseR,
     db_write: &DatabaseW,
-    mc: &Option<mainstay::Config>,
+    mc: &Option<mainstay::MainstayConfig>,
 ) -> Result<Option<Root>> {
     use crate::shared_lib::mainstay::{Commitment, CommitmentIndexed, MainstayAPIError};
 
@@ -461,7 +461,7 @@ pub fn get_confirmed_root(
 pub fn root_update(
     db_read: &DatabaseR,
     db_write: &DatabaseW,
-    _mc: &Option<mainstay::Config>,
+    _mc: &Option<mainstay::MainstayConfig>,
     root: &Root,
 ) -> Result<i64> {
     //db_root_update_mainstay(mc, root)?;
@@ -470,7 +470,7 @@ pub fn root_update(
 }
 
 #[allow(dead_code)]
-fn db_root_update_mainstay(config: &Option<mainstay::Config>, root: &Root) -> Result<()> {
+fn db_root_update_mainstay(config: &Option<mainstay::MainstayConfig>, root: &Root) -> Result<()> {
     match config {
         Some(c) => match root.attest(&c) {
             Ok(_) => Ok(()),
@@ -677,17 +677,15 @@ mod mocks {
 #[cfg(test)]
 mod tests {
 
-    use super::super::super::server::get_settings_as_map;
-    use super::super::super::StateChainEntity;
     use super::*;
-    use crate::{server::SMT_DB_LOC_TESTING, storage::get_test_postgres_connection};
+    use crate::storage::get_test_postgres_connection;
     use std::str::FromStr;
+    use crate::server::StateChainEntity;
 
     #[allow(dead_code)]
     fn test_sc_entity() -> StateChainEntity {
-        let mut sc_entity = StateChainEntity::load(get_settings_as_map()).unwrap();
-        sc_entity.mainstay_config = mainstay::Config::from_test();
-        sc_entity.smt_db_loc = SMT_DB_LOC_TESTING.to_string();
+        let mut sc_entity = StateChainEntity::load().unwrap();
+        sc_entity.config.mainstay = mainstay::MainstayConfig::from_test();
         sc_entity
     }
 
@@ -700,7 +698,7 @@ mod tests {
     fn test_verify_root() {
         let db_read = DatabaseR(get_test_postgres_connection());
         let db_write = DatabaseW(get_test_postgres_connection());
-        let mc = Some(mainstay::Config::mock_from_url(&test_url()));
+        let mc = Some(mainstay::MainstayConfig::mock_from_url(&test_url()));
 
         //No commitments initially
         let _m = mocks::ms::commitment_proof_not_found();
@@ -760,6 +758,7 @@ mod tests {
         assert!(rootc.is_confirmed(), "expected root to be confirmed");
     }
 
+    // Waiting for db mock for this test
     // #[test]
     // #[serial]
     // fn test_update_root_smt() {

@@ -18,7 +18,7 @@ use mockito;
 #[cfg(test)]
 #[serial]
 pub fn run_simulation() {
-    let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+    let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
     let _ = spawn_server(Some(mainstay_config));
 
     // Begin with a few clients

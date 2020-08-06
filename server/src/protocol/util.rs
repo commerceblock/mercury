@@ -4,7 +4,7 @@
 //! utility functions.
 
 use super::{
-    super::{Result, StateChainEntity},
+    super::Result,
     transfer_batch::{transfer_batch_is_ended, BatchTransfer},
 };
 extern crate shared_lib;
@@ -21,7 +21,7 @@ use crate::storage::db::{
     self, db_deser, db_get_1, db_get_2, db_get_3, db_remove, db_root_get, db_root_get_current_id,
     db_ser, db_update, Column, Table,
 };
-use crate::{DatabaseR, DatabaseW};
+use crate::{DatabaseR, DatabaseW, server::StateChainEntity};
 
 use bitcoin::Transaction;
 use chrono::NaiveDateTime;
@@ -89,9 +89,9 @@ pub trait Utilities {
 impl Utilities for StateChainEntity {
     fn get_fees(&self) -> Result<StateEntityFeeInfoAPI> {
         Ok(StateEntityFeeInfoAPI {
-            address: self.fee_address.clone(),
-            deposit: self.fee_deposit,
-            withdraw: self.fee_withdraw,
+            address: self.config.fee_address.clone(),
+            deposit: self.config.fee_deposit,
+            withdraw: self.config.fee_withdraw,
         })
     }
 
@@ -151,7 +151,7 @@ impl Utilities for StateChainEntity {
         }
 
         Ok(gen_proof_smt(
-            &self.smt_db_loc,
+            &self.config.smt_db_loc,
             &Some(smt_proof_msg.root.hash()),
             &smt_proof_msg.funding_txid,
         )?)
@@ -169,7 +169,7 @@ impl Utilities for StateChainEntity {
         Ok(db::get_confirmed_root(
             &db_read,
             &db_write,
-            &self.mainstay_config,
+            &self.config.mainstay,
         )?)
     }
 
@@ -201,7 +201,7 @@ impl Utilities for StateChainEntity {
                 );
             }
             // Check batch is still within lifetime
-            if transfer_batch_is_ended(start_time, self.batch_lifetime as i64) {
+            if transfer_batch_is_ended(start_time, self.config.batch_lifetime as i64) {
                 let mut punished_state_chains: Vec<Uuid> = db_deser(db_get_1(
                     &db_read,
                     &batch_id,
@@ -275,7 +275,7 @@ impl Utilities for StateChainEntity {
                 }
 
                 // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data
-                tx_withdraw_verify(&prepare_sign_msg, &self.fee_address, &self.fee_withdraw)?;
+                tx_withdraw_verify(&prepare_sign_msg, &self.config.fee_address, &self.config.fee_withdraw)?;
 
                 let (tx_backup_str) = db_get_1::<String>(
                     &db_read,
@@ -307,7 +307,7 @@ impl Utilities for StateChainEntity {
                     &0,
                     &prepare_sign_msg.input_addrs[0],
                     &prepare_sign_msg.input_amounts[0],
-                    &self.network,
+                    &self.config.network,
                 );
 
                 db_update(
@@ -332,7 +332,7 @@ impl Utilities for StateChainEntity {
                     &0,
                     &prepare_sign_msg.input_addrs[0],
                     &prepare_sign_msg.input_amounts[0],
-                    &self.network,
+                    &self.config.network,
                 );
 
                 db_update(
@@ -451,10 +451,10 @@ impl StateChainEntity {
     /// Query an Electrum Server for a transaction's confirmation status.
     /// Return Ok() if confirmed or Error if not after some waiting period.
     pub fn verify_tx_confirmed(&self, txid: &String, sc_entity: &StateChainEntity) -> Result<()> {
-        let mut electrum: Box<dyn Electrumx> = if sc_entity.testing_mode {
+        let mut electrum: Box<dyn Electrumx> = if sc_entity.config.testing_mode {
             Box::new(MockElectrum::new())
         } else {
-            Box::new(ElectrumxClient::new(sc_entity.electrum_server.clone()).unwrap())
+            Box::new(ElectrumxClient::new(sc_entity.config.electrum_server.clone()).unwrap())
         };
 
         info!(
@@ -475,20 +475,20 @@ impl StateChainEntity {
                             warn!("Funding transaction not mined after 10 blocks. Deposit failed. Txid: {}", txid);
                             return Err(SEError::Generic(String::from("Funding transaction failure to be mined - consider increasing the fee. Deposit failed.")));
                         }
-                        thread::sleep(Duration::from_millis(sc_entity.block_time));
+                        thread::sleep(Duration::from_millis(sc_entity.config.block_time));
                     } else {
                         // If confs increase then wait 6*(block time) and return Ok()
                         info!(
                             "Funding transaction mined. Waiting for 6 blocks confirmation. Txid: {}",
                             txid
                         );
-                        thread::sleep(Duration::from_millis(6 * sc_entity.block_time));
+                        thread::sleep(Duration::from_millis(6 * sc_entity.config.block_time));
                         return Ok(());
                     }
                 }
                 Err(_) => {
                     is_broadcast += 1;
-                    thread::sleep(Duration::from_millis(sc_entity.block_time));
+                    thread::sleep(Duration::from_millis(sc_entity.config.block_time));
                 }
             }
         }
@@ -522,12 +522,12 @@ impl StateChainEntity {
             &state_chain_id,
             Table::StateChain,
             vec![Column::LockedUntil],
-            vec![&get_locked_until(self.punishment_duration as i64)?],
+            vec![&get_locked_until(self.config.punishment_duration as i64)?],
         )?;
 
         info!(
             "PUNISHMENT: State Chain ID: {} locked for {}s.",
-            state_chain_id, self.punishment_duration
+            state_chain_id, self.config.punishment_duration
         );
         Ok(())
     }
@@ -542,14 +542,14 @@ impl StateChainEntity {
     ) -> Result<(Option<Root>, Root)> {
         let current_root = db_root_get(&db_read, &db_root_get_current_id(&db_read)?)?;
         let new_root_hash = update_statechain_smt(
-            &self.smt_db_loc,
+            &self.config.smt_db_loc,
             &current_root.clone().map(|r| r.hash()),
             funding_txid,
             proof_key,
         )?;
 
         let new_root = Root::from_hash(&new_root_hash.unwrap());
-        root_update(db_read, db_write, &self.mainstay_config, &new_root)?; // Update current root
+        root_update(db_read, db_write, &self.config.mainstay, &new_root)?; // Update current root
 
         Ok((current_root, new_root))
     }

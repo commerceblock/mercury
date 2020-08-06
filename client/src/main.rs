@@ -11,28 +11,48 @@ use shared_lib::{
 };
 
 use bitcoin::consensus;
+use serde::{Deserialize, Serialize};
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
-use std::collections::HashMap;
 use std::str::FromStr;
 use uuid::Uuid;
+use config::Config as ConfigRs;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Config {
+    pub endpoint: String,
+    pub electrum_server: String,
+    pub testing_mode: bool
+}
+
+impl Default for Config {
+    fn default() -> Config {
+        Config {
+            endpoint: "http://localhost:8000".to_string(),
+            electrum_server: "127.0.0.1:60401".to_string(),
+            testing_mode: true
+        }
+    }
+}
 
 fn main() {
     let yaml = load_yaml!("../cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
 
-    let mut settings = config::Config::default();
-    settings
+    let mut conf_rs = ConfigRs::new();
+    let _ = conf_rs
+        // First merge struct default config
+        .merge(ConfigRs::try_from(&Config::default()).unwrap()).unwrap();
+    conf_rs
         // Add in `./Settings.toml`
-        .merge(config::File::with_name("Settings"))
+        .merge(config::File::with_name("Settings").required(false))
         .unwrap()
         // Add in settings from the environment (with prefix "APP")
         // Eg.. `APP_DEBUG=1 ./target/app` would set the `debug` key
-        .merge(config::Environment::new())
+        .merge(config::Environment::with_prefix("MERC"))
         .unwrap();
-    let hm = settings.try_into::<HashMap<String, String>>().unwrap();
-    let se_endpoint = hm.get("endpoint").unwrap();
-    let electrum_server_addr = hm.get("electrum_server").unwrap().clone();
-    let testing_mode: bool = bool::from_str(hm.get("testing_mode").unwrap()).unwrap();
+    let se_endpoint: String = conf_rs.get("endpoint").unwrap();
+    let electrum_server_addr: String = conf_rs.get("electrum_server").unwrap();
+    let testing_mode: bool = conf_rs.get("testing_mode").unwrap();
 
     // TODO: random generating of seed and allow input of mnemonic phrase
     let seed = [0xcd; 32];
