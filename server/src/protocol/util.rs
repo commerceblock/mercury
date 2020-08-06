@@ -22,23 +22,23 @@ use shared_lib::{
 use crate::error::{DBErrorType, SEError};
 use crate::storage::db::{
     self,
-    StateChainAmount,
 
     //db_deser, db_get_1, db_get_2, db_get_3, db_remove, db_root_get, db_root_get_current_id,
     //db_ser, db_update, 
     //Column, Table,
 };
+use crate::structs::*;
 use crate::storage::Storage;
-
+use crate::Database;
 use cfg_if::cfg_if;
 
-cfg_if! {
-    if #[cfg(test)]{
-        use crate::storage::db::MockDatabase as Database;
-    } else {
-        use crate::Database as Database;
-    }
-}
+//cfg_if! {
+//    if #[cfg(test)]{
+//        use crate::MockDatabase as DB;
+//    } else {
+        use crate::PGDatabase as DB;
+//    }
+//}
 
 
 use bitcoin::Transaction;
@@ -106,9 +106,9 @@ impl Utilities for StateChainEntity {
         smt_proof_msg: SmtProofMsgAPI,
     ) -> Result<Option<Proof>> {
         // ensure root exists
-        match &smt_proof_msg.root.id() {
+        match smt_proof_msg.root.id() {
             Some(id) => {
-                if self.database.get_root(&(id.clone() as i64))?.is_none() {
+                if self.database.get_root(id as i64)?.is_none() {
                     return Err(SEError::DBError(
                         DBErrorType::NoDataForID,
                         format!("Root id: {:?}", id),
@@ -143,7 +143,7 @@ impl Utilities for StateChainEntity {
         match prepare_sign_msg.protocol {
             Protocol::Withdraw => {
                 // Verify withdrawal has been authorised via presense of withdraw_sc_sig
-                if let Err(_) = self.database.has_withdraw_sc_sig(&user_id){
+                if let Err(_) = self.database.has_withdraw_sc_sig(user_id){
                     return Err(SEError::Generic(String::from(
                         "Withdraw has not been authorised. /withdraw/init must be called first.",
                     )));
@@ -152,7 +152,7 @@ impl Utilities for StateChainEntity {
                 // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data
                 tx_withdraw_verify(&prepare_sign_msg, &self.fee_address, &self.fee_withdraw)?;
 
-                let tx_backup = self.database.get_backup_transaction(&user_id)?;
+                let tx_backup = self.database.get_backup_transaction(user_id)?;
 
                 // Check funding txid UTXO info
                 let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
@@ -179,7 +179,7 @@ impl Utilities for StateChainEntity {
                     &self.network,
                 );
 
-                self.database.update_withdraw_tx_sighash(&user_id, &sig_hash, &prepare_sign_msg.tx)?;
+                self.database.update_withdraw_tx_sighash(&user_id, sig_hash, prepare_sign_msg.tx)?;
 
                 info!(
                     "WITHDRAW: Withdraw tx ready for signing. User ID: {:?}.",
@@ -198,12 +198,12 @@ impl Utilities for StateChainEntity {
                     &self.network,
                 );
 
-                self.database.update_sighash(&user_id, &sig_hash);
+                self.database.update_sighash(&user_id, sig_hash);
 
                 
                 // Only in deposit case add backup tx to UserSession
                 if prepare_sign_msg.protocol == Protocol::Deposit {
-                    self.database.update_user_backup_tx(&user_id, &prepare_sign_msg.tx)?;
+                    self.database.update_user_backup_tx(&user_id, prepare_sign_msg.tx)?;
                 }
 
                 info!(
@@ -230,7 +230,7 @@ pub fn get_statechain(
     sc_entity: State<StateChainEntity>,
     state_chain_id: String,
 ) -> Result<Json<StateChainDataAPI>> {
-    match sc_entity.get_statechain_data_api(&Uuid::from_str(&state_chain_id).unwrap()) {
+    match sc_entity.get_statechain_data_api(Uuid::from_str(&state_chain_id).unwrap()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -272,7 +272,7 @@ pub fn get_transfer_batch_status(
     sc_entity: State<StateChainEntity>,
     batch_id: String,
 ) -> Result<Json<TransferBatchDataAPI>> {
-    match sc_entity.get_transfer_batch_status(&Uuid::from_str(&batch_id).unwrap()) {
+    match sc_entity.get_transfer_batch_status(Uuid::from_str(&batch_id).unwrap()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -345,7 +345,7 @@ impl StateChainEntity {
         &self,
         state_chain_id: Uuid,
     ) -> Result<()> {
-        let sc_locked_until = self.database.get_sc_locked_until(&state_chain_id)?;
+        let sc_locked_until = self.database.get_sc_locked_until(state_chain_id)?;
         
         if is_locked(sc_locked_until).is_err() {
             return Err(SEError::Generic(String::from(
@@ -366,7 +366,7 @@ impl StateChainEntity {
     /// Check if user has passed authentication.
     pub fn check_user_auth(&self, user_id: &Uuid) -> Result<()> {
         // check authorisation id is in DB (and TOOD: check password?)
-        if let Err(_) = self.database.get_user_auth(user_id) {
+        if let Err(_) = self.database.get_user_auth(*user_id) {
             return Err(SEError::AuthError);
         }
         Ok(())
@@ -374,7 +374,7 @@ impl StateChainEntity {
 
     fn get_transfer_batch_status(
         &self,
-        batch_id: &Uuid,
+        batch_id: Uuid,
     ) -> Result<TransferBatchDataAPI> {
         //let batch_id = Uuid::from_str(&batch_id).unwrap();
 
@@ -385,7 +385,7 @@ impl StateChainEntity {
             let mut state_chains_copy = tbd.state_chains.clone();
             state_chains_copy.retain(|_, &mut v| v == false);
             if state_chains_copy.len() == 0 {
-                self.finalize_batch(*batch_id)?;
+                self.finalize_batch(batch_id)?;
                 info!(
                     "TRANSFER_BATCH: All transfers complete in batch. Finalized. ID: {}.",
                     batch_id
@@ -414,7 +414,7 @@ impl StateChainEntity {
                         );
                     }
 
-                    self.database.update_punished(batch_id, &punished_state_chains)?;
+                    self.database.update_punished(&batch_id, punished_state_chains)?;
 
                     info!(
                         "TRANSFER_BATCH: Punished all state chains in failed batch. ID: {}.",
@@ -458,22 +458,22 @@ impl Storage for StateChainEntity {
         proof_key: &String,
     ) -> Result<(Option<Root>, Root)> {
         //Use the mock database trait if in test mode
-        cfg_if! {
-            if #[cfg(test)]{
+        //cfg_if! {
+        //    if #[cfg(test)]{
                 //Create a new mock database
-                let db = Database::get_test();
+        //        let mut db = DB::get_test();
                 // Set the expectations
                 //Current id is 0
-                db.expect_root_get_current_id().returning(|| Ok(0 as i64));
+        //        db.expect_root_get_current_id().returning(|| Ok(0 as i64));
                 //Current root is randomly chosen
-                db.expect_get_root().returning(|x| Ok(Some(Root::from_random())));
-            } else {
+         //       db.expect_get_root().returning(|x| Ok(Some(Root::from_random())));
+         //   } else {
                 let db = &self.database;
-            }
-        }
+         //   }
+        //}
 
         //If mocked out current_root will be randomly chosen
-        let current_root = db.get_root(&db.root_get_current_id()?)?;
+        let current_root = db.get_root(db.root_get_current_id()?)?;
         let new_root_hash = update_statechain_smt(
             &self.smt_db_loc,
             &current_root.clone().map(|r| r.hash()),
@@ -488,7 +488,7 @@ impl Storage for StateChainEntity {
     }
 
     fn get_smt_root(&self) -> Result<Option<Root>> {
-        Ok(self.database.get_root(&self.database.root_get_current_id()?)?)
+        Ok(self.database.get_root(self.database.root_get_current_id()?)?)
     }
 
     /// Update the database with the latest available mainstay attestation info
@@ -496,8 +496,18 @@ impl Storage for StateChainEntity {
         use crate::shared_lib::mainstay::{Commitment, CommitmentIndexed, 
             CommitmentInfo, MainstayAPIError};
 
+        //cfg_if!{
+        //    if #[cfg(test)]{
+                //Create a new mock database
+        //        let db = &DB::get_test();
+       //     } else {
+                let db = &self.database;
+       //     }
+       // }
+
+
         fn update_db_from_ci(
-            db: &Database,
+            db: &DB,
             ci: &CommitmentInfo,
             ) -> Result<Option<Root>> {
                 let mut root = Root::from_commitment_info(ci);
@@ -505,7 +515,7 @@ impl Storage for StateChainEntity {
                 let mut id;
                 for x in 0..=current_id - 1 {
                     id = current_id - x;
-                    let root_get = db.get_root(&id)?;
+                    let root_get = db.get_root(id)?;
                     match root_get {
                         Some(r) => {
                             if r.hash() == ci.commitment().to_hash() {
@@ -535,7 +545,8 @@ impl Storage for StateChainEntity {
 
             match &self.mainstay_config {
                 Some(conf) => {
-                    match &self.database.get_confirmed_smt_root()? {
+                    
+                    match &db.get_confirmed_smt_root()? {
                         Some(cr_db) => {
                         //Search for update
 
@@ -546,10 +557,10 @@ impl Storage for StateChainEntity {
                                     if ci_db == ci {
                                         Ok(Some(cr_db.clone()))
                                     } else {
-                                        update_db_from_ci(&self.database, ci)
+                                        update_db_from_ci(&db, ci)
                                     }
                                 }
-                                None => update_db_from_ci(&self.database, ci),
+                                None => update_db_from_ci(&db, ci),
                             },
                             Err(e) => Err(SEError::SharedLibError(e.to_string())),
                         };
@@ -558,10 +569,10 @@ impl Storage for StateChainEntity {
                         match result? {
                             Some(r) => Ok(Some(r)),
                             None => {
-                                let current_id = &self.database.root_get_current_id()?;
+                                let current_id = db.root_get_current_id()?;
                                 for x in 0..=current_id - 1 {
                                     let id = current_id - x;
-                                    let _ = match &self.database.get_root(&id)? {
+                                    let _ = match db.get_root(id)? {
                                         Some(r) => {
                                             match &CommitmentInfo::from_commitment(
                                                 conf,
@@ -599,7 +610,7 @@ impl Storage for StateChainEntity {
                         }
                     }
                     None => match &CommitmentInfo::from_latest(conf) {
-                        Ok(ci) => update_db_from_ci(&self.database,ci),
+                        Ok(ci) => update_db_from_ci(&db,ci),
                         Err(e) => Err(SEError::SharedLibError(e.to_string())),
                     },
                 }
@@ -609,7 +620,7 @@ impl Storage for StateChainEntity {
     }
 
    
-    fn get_root(&self, id: &i64) -> Result<Option<Root>> {
+    fn get_root(&self, id: i64) -> Result<Option<Root>> {
         self.database.get_root(id)
     }
 
@@ -641,19 +652,19 @@ impl Storage for StateChainEntity {
     //fn update_root(&self, root: &Root) -> Result<i64>;
 
 
-    fn get_statechain(&self, state_chain_id: &Uuid) -> Result<StateChain> {
+    fn get_statechain(&self, state_chain_id: Uuid) -> Result<StateChain> {
         self.database.get_statechain(state_chain_id)
     }
 
     fn get_statechain_data_api(
         &self,
-        state_chain_id: &Uuid,
+        state_chain_id: Uuid,
     ) -> Result<StateChainDataAPI> {
         
         //let state_chain_id = Uuid::from_str(&state_chain_id).unwrap();
 
-        let state_chain = self.get_statechain(&state_chain_id)?;
-        let tx_backup = self.database.get_backup_transaction(&state_chain_id)?;
+        let state_chain = self.database.get_statechain_amount(state_chain_id)?;
+        let tx_backup = self.database.get_backup_transaction(state_chain_id)?;
         
         Ok({
             StateChainDataAPI {
@@ -835,7 +846,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_update_root_smt() {
-        let db = Database::get_test();        
+        let db = DB::get_test();        
         let sc_entity = test_sc_entity();
 
         let (_, new_root) = sc_entity.update_smt(
@@ -844,7 +855,7 @@ mod tests {
         )
         .unwrap();
 
-        let current_root = sc_entity.get_root(&db.root_get_current_id().unwrap())
+        let current_root = sc_entity.get_root(db.root_get_current_id().unwrap())
             .unwrap()
             .unwrap();
         assert_eq!(new_root.hash(), current_root.hash());

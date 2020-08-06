@@ -8,6 +8,8 @@ use crate::{
     Database
 };
 
+use crate::PGDatabase as DB;
+
 use config;
 use rocket;
 use rocket::config::{Config as RocketConfig, Environment, Value};
@@ -43,7 +45,7 @@ impl StateChainEntity {
             },
         };
 
-        let database = Database::get_test();
+        let database = DB::get_test();
 
         let mut smt_db_loc: String;
         if testing_mode {

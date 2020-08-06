@@ -14,6 +14,7 @@ use crate::{
         //db_deser, db_get_1, db_get_2, db_get_4, db_insert, db_ser, db_update, Column, Table,
     //},
     //DatabaseR, DatabaseW,
+    Database
 };
 use shared_lib::{commitment::verify_commitment, state_chain::*, structs::*};
 
@@ -54,7 +55,7 @@ impl BatchTransfer for StateChainEntity {
         let batch_id = transfer_batch_init_msg.id.clone();
         info!("TRANSFER_BATCH_INIT: ID: {}", batch_id);
 
-        if self.database.has_transfer_batch_id(&batch_id) {
+        if self.database.has_transfer_batch_id(batch_id) {
             return Err(SEError::Generic(format!(
                 "Batch transfer with ID {} already exists.",
                 batch_id.to_string()
@@ -80,7 +81,7 @@ impl BatchTransfer for StateChainEntity {
             }
 
             let state_chain_id = Uuid::from_str(&sig.data).unwrap();
-            let sco = self.database.get_statechain_owner(&state_chain_id)?;
+            let sco = self.database.get_statechain_owner(state_chain_id)?;
 
             // Verify sigs
             let proof_key = sco.chain.get_tip()?.data;
@@ -96,7 +97,7 @@ impl BatchTransfer for StateChainEntity {
         // Create new TransferBatchData and add to DB
         self.database.create_transfer_batch_data(
             &batch_id,
-            &state_chains)?;
+            state_chains)?;
 
 
         info!("TRANSFER_BATCH_INIT: Batch ID {} initiated.", batch_id);
@@ -114,7 +115,7 @@ impl BatchTransfer for StateChainEntity {
     ) -> Result<()> {
         info!("TRANSFER_FINALIZE_BATCH: ID: {}", batch_id);
       
-        let fbd = self.database.get_finalize_batch_data(&batch_id)?;
+        let fbd = self.database.get_finalize_batch_data(batch_id)?;
 
 
         if fbd.state_chains.len() != fbd.finalized_data_vec.len() {
@@ -143,7 +144,7 @@ impl BatchTransfer for StateChainEntity {
             batch_id, state_chain_id
         );
 
-        let tbd = self.database.get_transfer_batch_data(&batch_id)?;
+        let tbd = self.database.get_transfer_batch_data(batch_id)?;
 
         if tbd.finalized {
             return Err(SEError::Generic(String::from(
@@ -178,7 +179,7 @@ impl BatchTransfer for StateChainEntity {
             // remove from transfer batch punished list
             let mut new_punished = tbd.punished_state_chains.clone();
             new_punished.retain(|x| x != &state_chain_id);
-            self.database.update_punished(&batch_id, &new_punished)?;
+            self.database.update_punished(&batch_id, new_punished)?;
         }
         Ok(())
     }

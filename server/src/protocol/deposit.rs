@@ -14,6 +14,7 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use uuid::Uuid;
 use crate::storage::Storage;
+use crate::Database;
 
 /// StateChain Deposit protocol trait
 pub trait Deposit {
@@ -68,7 +69,7 @@ impl Deposit for StateChainEntity {
         let user_id = deposit_msg2.shared_key_id;
 
         // Get back up tx and proof key
-        let (tx_backup, proof_key) = self.database.get_backup_transaction_and_proof_key(&user_id)?;
+        let (tx_backup, proof_key) = self.database.get_backup_transaction_and_proof_key(user_id)?;
 
         // Ensure backup tx exists is signed
         if tx_backup.input[0].witness.len() == 0 {

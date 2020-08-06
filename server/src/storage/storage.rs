@@ -91,7 +91,7 @@ pub trait Storage {
 
    //Create a new user session or update an existing one 
    //If Uuid is not None, that session is updated. Otherwise, a new one is created.
-   fn save_user_session(&self, id: &Uuid, auth: String, proof_key: String) 
+   fn save_user_session(&self, id: Uuid, auth: String, proof_key: String) 
         -> Result<()>;
 
    fn create_user_session(&self, auth: String, proof_key: String) 
@@ -100,18 +100,18 @@ pub trait Storage {
      self.save_user_session(&id, auth, proof_key)
    }
 
-   fn save_statechain(&self, statechain_id: &Uuid, statechain: &StateChain, 
+   fn save_statechain(&self, statechain_id: Uuid, statechain: &StateChain, 
                             amount: i64, 
                             user_id: &Uuid) -> Result<()>;
 
-    fn save_backup_tx(&self, statechain_id: &Uuid, backup_tx: &Transaction) 
+    fn save_backup_tx(&self, statechain_id: Uuid, backup_tx: &Transaction) 
         -> Result<()>;
 
     //Returns: (new_root, current_root)
     fn update_smt(&self, backup_tx: &Transaction, proof_key: &String)
         -> Result<(Option<Root>, Root)>;
 
-    fn save_ecdsa(&self, user_id: &Uuid, 
+    fn save_ecdsa(&self, user_id: Uuid, 
         first_msg: party_one::KeyGenFirstMsg) -> Result<()>;
 
     fn get_confirmed_smt_root(&self) -> Result<Option<Root>>;
@@ -125,37 +125,37 @@ pub trait Storage {
     fn update_root(&self, root: &Root) -> Result<i64>;
 
     //Returns locked until time, owner id, state chain
-    fn get_statechain_data_api(&self,state_chain_id: &Uuid) -> Result<StateChainDataAPI>;
+    fn get_statechain_data_api(&self,state_chain_id: Uuid) -> Result<StateChainDataAPI>;
 
-    fn authorise_withdrawal(&self, user_id: &Uuid, signature: StateChainSig) -> Result<()>;
+    fn authorise_withdrawal(&self, user_id: Uuid, signature: StateChainSig) -> Result<()>;
 
     // /withdraw/confirm
-    fn confirm_withdrawal(&self, user_id: &Uuid, address: &String)->Result<()>;
+    fn confirm_withdrawal(&self, user_id: Uuid, address: &String)->Result<()>;
 
     // /transfer/sender
-    fn init_transfer(&self, user_id: &Uuid, sig: &StateChainSig)->Result<()>;
+    fn init_transfer(&self, user_id: Uuid, sig: &StateChainSig)->Result<()>;
 
     // Returns statechain_id, sstatechain_sig_str, x1_str
-    fn get_transfer(&self, statechain_id: &Uuid) -> Result<(Uuid, StateChainSig, FE)>;
+    fn get_transfer(&self, statechain_id: Uuid) -> Result<(Uuid, StateChainSig, FE)>;
 
     //Returns party1_private_str, party2_public_str
-    fn get_transfer_ecdsa_pair(&self, user_id: &Uuid) -> Result<Party1Private, GE>;
+    fn get_transfer_ecdsa_pair(&self, user_id: Uuid) -> Result<Party1Private, GE>;
 
     fn finalize_transfer(&self, &Option<BatchData>, tf_data: &TransferFinalizeData);
 
-    fn batch_transfer_exists(&self, batch_id: &Uuid, sig: &StateChainSig)-> bool;
+    fn batch_transfer_exists(&self, batch_id: Uuid, sig: &StateChainSig)-> bool;
 
     // /transfer/batch/init
-    fn init_batch_transfer(&self, batch_id: &Uuid, 
+    fn init_batch_transfer(&self, batch_id: Uuid, 
                         state_chains: &HashMap<Uuid, bool>) -> Result<()>;
 
 
     // Returns: finalized, start_time, state_chains, punished
-    fn get_transfer_batch_status(&self, batch_id: &Uuid) 
+    fn get_transfer_batch_status(&self, batch_id: Uuid) 
         -> Result<TransferBatchDataAPI>;
 
     // Update the locked until time of a state chain (used for punishment)
-    fn update_locked_until(&self, state_chain_id: &Uuid, time: &NaiveDateTime);
+    fn update_locked_until(&self, state_chain_id: Uuid, time: &NaiveDateTime);
 
     //Update the list of punished state chains
     fn update_punished(&self, punished: &Vec<Uuid>);

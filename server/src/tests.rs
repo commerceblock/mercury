@@ -20,14 +20,17 @@ mod tests {
     #[test]
     #[serial]
     fn test_auth_token() {
+        println!("get client");
         let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
         let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
         // get ID
+        println!("get id");
         let deposit_msg1 = DepositMsg1 {
             auth: String::from("auth"),
             proof_key: String::from("proof key"),
         };
         let body = serde_json::to_string(&deposit_msg1).unwrap();
+        println!("init");
         let mut response = client
             .post("/deposit/init")
             .body(body)
@@ -40,6 +43,7 @@ mod tests {
             protocol: Protocol::Deposit,
         };
 
+        println!("first: {}", serde_json::to_string(&key_gen_msg1).unwrap());
         let mut response = client
             .post(format!("/ecdsa/keygen/first"))
             .body(serde_json::to_string(&key_gen_msg1).unwrap())
@@ -47,12 +51,14 @@ mod tests {
             .dispatch();
         assert_eq!(response.status(), Status::Ok);
 
+        println!("got first");
         let (res, _): (String, party_one::KeyGenFirstMsg) =
             serde_json::from_str(&response.body_string().unwrap()).unwrap();
         assert_eq!(res, id_str);
-
+        println!("finished first");
         // use incorrect ID
         key_gen_msg1.shared_key_id = Uuid::new_v4();
+        println!("first incorrect");
         let mut response = client
             .post(format!("/ecdsa/keygen/first"))
             .body(serde_json::to_string(&key_gen_msg1).unwrap())

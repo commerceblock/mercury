@@ -8,7 +8,7 @@ use shared_lib::{state_chain::*, structs::*};
 
 use crate::error::SEError;
 //use crate::storage::db::{db_deser, db_get_1, db_get_3, db_ser, db_update, Column, Table};
-use crate::{DatabaseR, DatabaseW};
+use crate::{DatabaseR, DatabaseW, Database};
 
 use bitcoin::Transaction;
 use chrono::NaiveDateTime;
@@ -47,10 +47,10 @@ impl Withdraw for StateChainEntity {
 
         info!("WITHDRAW: Init. Shared Key ID: {}", user_id);
 
-        let state_chain_id = self.database.get_statechain_id(&user_id)?;
+        let state_chain_id = self.database.get_statechain_id(user_id)?;
 
         // Get statechain
-        let sco = self.database.get_statechain_owner(&state_chain_id)?;
+        let sco = self.database.get_statechain_owner(state_chain_id)?;
             
         
         // Check if locked
@@ -69,7 +69,7 @@ impl Withdraw for StateChainEntity {
 
         // Mark UserSession as authorised for withdrawal
 
-        self.database.update_withdraw_sc_sig(&user_id, &withdraw_msg1.state_chain_sig)?;
+        self.database.update_withdraw_sc_sig(&user_id, withdraw_msg1.state_chain_sig)?;
         
         info!(
             "WITHDRAW: Authorised. Shared Key ID: {}. State Chain: {}",
@@ -87,14 +87,14 @@ impl Withdraw for StateChainEntity {
         info!("WITHDRAW: Confirm. Shared Key ID: {}", user_id.to_string());
 
         // Get UserSession data - Checking that withdraw tx and statechain signature exists
-        let wcd = self.database.get_withdraw_confirm_data(&user_id)?;
+        let wcd = self.database.get_withdraw_confirm_data(user_id)?;
         
         // Get statechain and update with final StateChainSig
-        let mut state_chain: StateChain = self.database.get_statechain(&wcd.state_chain_id)?;
+        let mut state_chain: StateChain = self.database.get_statechain(wcd.state_chain_id)?;
 
         state_chain.add(wcd.withdraw_sc_sig.to_owned())?;
 
-        self.database.update_statechain_amount(&wcd.state_chain_id, &state_chain, 0)?;
+        self.database.update_statechain_amount(&wcd.state_chain_id, state_chain, 0)?;
 
      
 

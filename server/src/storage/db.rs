@@ -2,11 +2,10 @@
 //!
 //! Postgres DB access and update tools.
 
-use mockall::*;
-use mockall::predicate::*;
 use bitcoin::Transaction;
 use super::super::Result;
 use super::super::StateChainEntity;
+
 
 use rocksdb::{Options, DB};
 use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
@@ -16,7 +15,8 @@ use crate::{
         DBErrorType::{NoDataForID, UpdateFailed},
         SEError,
     },
-    DatabaseR, DatabaseW, Database 
+    DatabaseR, DatabaseW, Database, PGDatabase,
+    structs::*, 
 };
 use rocket_contrib::databases::postgres::{rows::Row, types::ToSql};
 use shared_lib::mainstay;
@@ -31,13 +31,24 @@ use crate::protocol::transfer::TransferFinalizeData;
 use chrono::NaiveDateTime;
 use std::collections::HashMap;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
-
+use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
+use kms::ecdsa::two_party::*;
 pub type Hash = bitcoin::hashes::sha256d::Hash;
 
 use curv::{
     elliptic::curves::traits::{ECPoint, ECScalar},
     {BigInt, FE, GE},
 };
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct Alpha {
+    pub value: BigInt,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct HDPos {
+    pub pos: u32,
+}
 
 #[derive(Debug)]
 pub enum Schema {
@@ -48,7 +59,7 @@ pub enum Schema {
 impl Schema {
     pub fn to_string(&self) -> String {
     format!("{:?}", self)
-}
+    }
 }
 
 #[derive(Debug)]
@@ -147,27 +158,7 @@ impl Column {
     }
 }
 
- #[automock]
-impl Database {
-
-    pub fn new(con_fun: fn()->r2d2::PooledConnection<PostgresConnectionManager>)
-        -> Self {
-        Self{ db_connection: con_fun}
-    }
-
-    pub fn get_test() -> Self {
-        Self::new(Self::get_test_postgres_connection)
-    }
-
-    pub fn get_user_auth(&self, user_id: &Uuid) -> Result<Uuid>{
-        self.get_1::<Uuid>(user_id, Table::UserSession, vec![Column::Id])
-    }
-    
-    pub fn get_test_postgres_connection() -> r2d2::PooledConnection<PostgresConnectionManager> {
-        let rocket_url = get_postgres_url("TEST".to_string());
-        let manager = PostgresConnectionManager::new(rocket_url, TlsMode::None).unwrap();
-        r2d2::Pool::new(manager).unwrap().get().unwrap()
-    }
+impl PGDatabase {
 
     fn database_r(&self) -> DatabaseR {
         DatabaseR((self.db_connection)())
@@ -176,10 +167,446 @@ impl Database {
     fn database_w(&self) -> DatabaseW {
         DatabaseW((self.db_connection)())
     }
-   
-    pub fn has_withdraw_sc_sig(&self, user_id: &Uuid) -> Result<()> {
+
+    pub fn get_test_postgres_connection() -> r2d2::PooledConnection<PostgresConnectionManager> {
+        let rocket_url = get_postgres_url("TEST".to_string());
+        let manager = PostgresConnectionManager::new(rocket_url, TlsMode::None).unwrap();
+        r2d2::Pool::new(manager).unwrap().get().unwrap()
+    }
+
+    /// Build DB tables and Schemas
+    pub fn make_tables(&self) -> Result<()> {
+        // Create Schemas if they do not already exist
+        let _ = self.database_w().execute(
+            &format!(
+                "
+            CREATE SCHEMA IF NOT EXISTS statechainentity;",
+            ),
+            &[],
+        )?;
+        let _ = self.database_w().execute(
+            &format!(
+                "
+            CREATE SCHEMA IF NOT EXISTS watcher;",
+            ),
+            &[],
+        )?;
+    
+        // Create tables if they do not already exist
+        self.database_w().execute(
+            &format!(
+                "
+            CREATE TABLE IF NOT EXISTS {} (
+                id uuid NOT NULL,
+                statechainid uuid,
+                authentication varchar,
+                s2 varchar,
+                sighash varchar,
+                withdrawscsig varchar,
+                txwithdraw varchar,
+                proofkey varchar,
+                txbackup varchar,
+                PRIMARY KEY (id)
+            );",
+                Table::UserSession.to_string(),
+            ),
+            &[],
+        )?;
+    
+        self.database_w().execute(
+            &format!(
+                "
+            CREATE TABLE IF NOT EXISTS {} (
+                id uuid NOT NULL,
+                keygenfirstmsg varchar,
+                commwitness varchar,
+                eckeypair varchar,
+                party2public varchar,
+                paillierkeypair varchar,
+                party1private varchar,
+                pdldecommit varchar,
+                alpha varchar,
+                party2pdlfirstmsg varchar,
+                party1masterkey varchar,
+                pos varchar,
+                epheckeypair varchar,
+                ephkeygenfirstmsg varchar,
+                complete bool NOT NULL DEFAULT false,
+                PRIMARY KEY (id)
+            );",
+                Table::Ecdsa.to_string(),
+            ),
+            &[],
+        )?;
+    
+        self.database_w().execute(
+            &format!(
+                "
+            CREATE TABLE IF NOT EXISTS {} (
+                id uuid NOT NULL,
+                chain varchar,
+                amount int8,
+                ownerid uuid,
+                lockeduntil timestamp,
+                PRIMARY KEY (id)
+            );",
+                Table::StateChain.to_string(),
+            ),
+            &[],
+        )?;
+    
+        self.database_w().execute(
+            &format!(
+                "
+            CREATE TABLE IF NOT EXISTS {} (
+                id uuid NOT NULL,
+                statechainsig varchar,
+                x1 varchar,
+                PRIMARY KEY (id)
+            );",
+                Table::Transfer.to_string(),
+            ),
+            &[],
+        )?;
+    
+        self.database_w().execute(
+            &format!(
+                "
+            CREATE TABLE IF NOT EXISTS {} (
+                id uuid NOT NULL,
+                starttime timestamp,
+                statechains varchar,
+                finalizeddata varchar,
+                punishedstatechains varchar,
+                finalized bool,
+                PRIMARY KEY (id)
+            );",
+                Table::TransferBatch.to_string(),
+            ),
+            &[],
+        )?;
+    
+        self.database_w().execute(
+            &format!(
+                "
+            CREATE TABLE IF NOT EXISTS {} (
+                id BIGSERIAL,
+                value varchar,
+                commitmentinfo varchar,
+                PRIMARY KEY (id)
+            );",
+                Table::Root.to_string(),
+            ),
+            &[],
+        )?;
+    
+        self.database_w().execute(
+            &format!(
+                "
+            CREATE TABLE IF NOT EXISTS {} (
+                id uuid NOT NULL,
+                txbackup varchar,
+                PRIMARY KEY (id)
+            );",
+                Table::BackupTxs.to_string(),
+            ),
+            &[],
+        )?;
+    
+        Ok(())
+    }
+    
+    #[allow(dead_code)]
+    /// Drop all DB tables and Schemas.
+    fn drop_tables(&self) -> Result<()> {
+        let _ = self.database_w().execute(
+            &format!(
+                "
+            DROP SCHEMA statechainentity CASCADE;",
+            ),
+            &[],
+        )?;
+        let _ = self.database_w().execute(
+            &format!(
+                "
+            DROP SCHEMA watcher CASCADE;",
+            ),
+            &[],
+        )?;
+    
+        Ok(())
+    }
+    
+    /// Drop all DB tables and schemas.
+    fn truncate_tables(&self) -> Result<()> {
+        self.database_w().execute(
+            &format!(
+                "
+            TRUNCATE {},{},{},{},{},{},{} RESTART IDENTITY;",
+                Table::UserSession.to_string(),
+                Table::Ecdsa.to_string(),
+                Table::StateChain.to_string(),
+                Table::Transfer.to_string(),
+                Table::TransferBatch.to_string(),
+                Table::Root.to_string(),
+                Table::BackupTxs.to_string(),
+            ),
+            &[],
+        )?;
+        Ok(())
+    }
+    
+    pub fn reset_dbs(&self, smt_db_loc: &String) -> Result<()> {
+        // truncate all postgres tables
+        self.truncate_tables()?;
+    
+        // Destroy Sparse Merkle Tree RocksDB instance
+        let _ = DB::destroy(&Options::default(), smt_db_loc); // ignore error
+        Ok(())
+    }
+    
+    /// Serialize data into string. To add custom types to Postgres they must be serialized to String.
+    pub fn ser<T>(data: T) -> Result<String>
+    where
+        T: serde::ser::Serialize,
+    {
+        match serde_json::to_string(&data) {
+            Ok(v) => Ok(v),
+            Err(_) => Err(SEError::Generic(String::from("Failed to serialize data."))),
+        }
+    }
+    
+    /// Deserialize custom type data from string. Reverse of ser().
+    pub fn deser<T>(data: String) -> Result<T>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        match serde_json::from_str(&data) {
+            Ok(v) => Ok(v),
+            Err(_) => Err(SEError::Generic(String::from(
+                "Failed to deserialize string.",
+            ))),
+        }
+    }
+    
+    /// Create new item in table
+    pub fn insert(&self, id: &Uuid, table: Table) -> Result<u64> {
+        let dbw = self.database_w();
+        let statement = dbw.prepare(&format!(
+            "INSERT INTO {} (id) VALUES ($1)",
+            table.to_string()
+        ))?;
+    
+        Ok(statement.execute(&[id])?)
+    }
+    
+    /// Remove row in table
+    pub fn remove(&self, id: &Uuid, table: Table) -> Result<()> {
+        let dbw = self.database_w();
+        let statement =
+            dbw.prepare(&format!("DELETE FROM {} WHERE id = $1;", table.to_string()))?;
+        if statement.execute(&[&id])? == 0 {
+            return Err(SEError::DBError(UpdateFailed, id.to_string()));
+        }
+    
+        Ok(())
+    }
+    
+    /// Returns str list of column names for SQL UPDATE prepare statement.
+    fn update_columns_str(&self, cols: Vec<Column>) -> String {
+        let cols_len = cols.len();
+        let mut str = "".to_owned();
+        for (i, col) in cols.iter().enumerate() {
+            str.push_str(&col.to_string());
+            str.push_str(&format!("=${}", i + 1));
+            if i != cols_len - 1 {
+                str.push_str(",");
+            }
+        }
+        str
+    }
+    
+    /// Update items in table for some ID with PostgreSql data types (String, int, bool, Uuid, chrono::NaiveDateTime).
+    pub fn update<'a>(
+        &self,
+        id: &Uuid,
+        table: Table,
+        column: Vec<Column>,
+        data: Vec<&'a dyn ToSql>,
+    ) -> Result<()> {
+        let num_items = column.len();
+        let dbw = self.database_w();
+        let statement = dbw.prepare(&format!(
+            "UPDATE {} SET {} WHERE id = ${}",
+            table.to_string(),
+            self.update_columns_str(column),
+            num_items + 1
+        ))?;
+    
+        let mut owned_data = data.clone();
+        owned_data.push(id);
+    
+        if statement.execute(&owned_data)? == 0 {
+            return Err(SEError::DBError(UpdateFailed, id.to_string()));
+        }
+    
+        Ok(())
+    }
+    
+    /// Get items from table for some ID with PostgreSql data types (String, int, Uuid, bool, Uuid, chrono::NaiveDateTime).
+    /// Err if ID not found. Return None if data item empty.
+    fn get<T, U, V, W>(
+        &self,
+        id: Uuid,
+        table: Table,
+        column: Vec<Column>,
+    ) -> Result<(Option<T>, Option<U>, Option<V>, Option<W>)>
+    where
+        T: rocket_contrib::databases::postgres::types::FromSql,
+        U: rocket_contrib::databases::postgres::types::FromSql,
+        V: rocket_contrib::databases::postgres::types::FromSql,
+        W: rocket_contrib::databases::postgres::types::FromSql,
+    {
+        let num_items = column.len();
+        let dbr = self.database_r();
+    
+        let fmt_str = format!(
+            "SELECT {} FROM {} WHERE id = $1",
+            self.get_columns_str(&column),
+            table.to_string());
+    
+        let statement = dbr.prepare(&fmt_str)?;
+    
+        let rows = statement.query(&[&id])?;
+        
+        //if rows.is_empty() {
+        //    return Err(SEError::DBError(NoDataForID, id.to_string()));
+        //};
+        
+        let row = rows.get(0);
+        
+        let col1 = self.get_item_from_row::<T>(&row, 0, &id.to_string(), column[0])?;
+        if num_items == 1 {
+            return Ok((Some(col1), None, None, None));
+        }
+    
+        let col2 = self.get_item_from_row::<U>(&row, 1, &id.to_string(), column[1])?;
+        if num_items == 2 {
+            return Ok((Some(col1), Some(col2), None, None));
+        }
+    
+        let col3 = self.get_item_from_row::<V>(&row, 2, &id.to_string(), column[2])?;
+        if num_items == 3 {
+            return Ok((Some(col1), Some(col2), Some(col3), None));
+        }
+    
+        let col4 = self.get_item_from_row::<W>(&row, 3, &id.to_string(), column[3])?;
+        if num_items == 4 {
+            return Ok((Some(col1), Some(col2), Some(col3), Some(col4)));
+        }
+    
+        Ok((None, None, None, None))
+    }
+    /// Returns str list of column names for SQL SELECT query statement.
+    pub fn get_columns_str(&self, cols: &Vec<Column>) -> String {
+        let cols_len = cols.len();
+        let mut str = "".to_owned();
+        for (i, col) in cols.iter().enumerate() {
+            str.push_str(&col.to_string());
+            if i != cols_len - 1 {
+                str.push_str(",");
+            }
+        }
+        str
+    }
+    
+    fn get_item_from_row<T>(&self, row: &Row, index: usize, id: &String, column: Column) -> Result<T>
+    where
+        T: rocket_contrib::databases::postgres::types::FromSql,
+    {
+        match row.get_opt::<usize, T>(index) {
+            None => return Err(SEError::DBError(NoDataForID, id.to_string())),
+            Some(data) => match data {
+                Ok(v) => Ok(v),
+                Err(_) => return Err(SEError::DBErrorWC(NoDataForID, id.to_string(), column)),
+            },
+        }
+    }
+    
+    /// Get 1 item from row in table. Err if ID not found. Return None if data item empty.
+    pub fn get_1<T>(&self, id: Uuid, table: Table, column: Vec<Column>) -> Result<T>
+    where
+        T: rocket_contrib::databases::postgres::types::FromSql,
+    {
+        let (res, _, _, _) = self.get::<T, T, T, T>(id, table, column)?;
+        Ok(res.unwrap())  //  err returned from db_get if desired item is None
+    }
+    /// Get 2 items from row in table. Err if ID not found. Return None if data item empty.
+    pub fn get_2<T, U>(
+        &self,
+        id: Uuid,
+        table: Table,
+        column: Vec<Column>,
+    ) -> Result<(T, U)>
+    where
+        T: rocket_contrib::databases::postgres::types::FromSql,
+        U: rocket_contrib::databases::postgres::types::FromSql,
+    {
+        let (res1, res2, _, _) = self.get::<T, U, U, U>(id, table, column)?;
+        Ok((res1.unwrap(), res2.unwrap()))
+    }
+    /// Get 3 items from row in table. Err if ID not found. Return None if data item empty.
+    pub fn get_3<T, U, V>(
+        &self,
+        id: Uuid,
+        table: Table,
+        column: Vec<Column>,
+    ) -> Result<(T, U, V)>
+    where
+        T: rocket_contrib::databases::postgres::types::FromSql,
+        U: rocket_contrib::databases::postgres::types::FromSql,
+        V: rocket_contrib::databases::postgres::types::FromSql,
+    {
+        let (res1, res2, res3, _) = self.get::<T, U, V, V>(id, table, column)?;
+        Ok((res1.unwrap(), res2.unwrap(), res3.unwrap()))
+    }
+    /// Get 4 items from row in table. Err if ID not found. Return None if data item empty.
+    pub fn get_4<T, U, V, W>(
+        &self,
+        id: Uuid,
+        table: Table,
+        column: Vec<Column>,
+    ) -> Result<(T, U, V, W)>
+    where
+        T: rocket_contrib::databases::postgres::types::FromSql,
+        U: rocket_contrib::databases::postgres::types::FromSql,
+        V: rocket_contrib::databases::postgres::types::FromSql,
+        W: rocket_contrib::databases::postgres::types::FromSql,
+    {
+        let (res1, res2, res3, res4) = self.get::<T, U, V, W>(id, table, column)?;
+        Ok((res1.unwrap(), res2.unwrap(), res3.unwrap(), res4.unwrap()))
+    }
+
+}
+
+impl Database for PGDatabase {
+
+    fn new(con_fun: fn()->r2d2::PooledConnection<PostgresConnectionManager>)
+        -> Self {
+        Self{ db_connection: con_fun}
+    }
+
+    fn get_test() -> Self {
+        Self::new(Self::get_test_postgres_connection)
+    }
+
+    fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid>{
+        self.get_1::<Uuid>(user_id, Table::UserSession, vec![Column::Id])
+    }
+    
+    fn has_withdraw_sc_sig(&self, user_id: Uuid) -> Result<()> {
         match self.get_1::<String>(
-            &user_id,
+            user_id,
             Table::UserSession,
             vec![Column::WithdrawScSig],
         ) {
@@ -188,7 +615,7 @@ impl Database {
         }
     }
 
-    pub fn update_withdraw_sc_sig(&self, user_id: &Uuid, sig: &'static StateChainSig) -> Result<()> {
+    fn update_withdraw_sc_sig(&self, user_id: &Uuid, sig: StateChainSig) -> Result<()> {
         self.update(
             user_id,
             Table::UserSession,
@@ -197,7 +624,7 @@ impl Database {
         )
     }
 
-    pub fn update_withdraw_tx_sighash(&self, user_id: &Uuid, sig_hash: &'static Hash, tx: &'static Transaction) -> Result<()>{
+    fn update_withdraw_tx_sighash(&self, user_id: &Uuid, sig_hash: Hash, tx: Transaction) -> Result<()>{
         self.update(
             user_id,
             Table::UserSession,
@@ -206,7 +633,7 @@ impl Database {
         )
     }
 
-    pub fn update_sighash(&self, user_id: &Uuid, sig_hash: &'static Hash) -> Result<()> {
+    fn update_sighash(&self, user_id: &Uuid, sig_hash: Hash) -> Result<()> {
         self.update(
             user_id,
             Table::UserSession,
@@ -215,7 +642,7 @@ impl Database {
         )
     }
 
-    pub fn update_user_backup_tx(&self,user_id: &Uuid, tx: &'static Transaction) -> Result<()> {
+    fn update_user_backup_tx(&self,user_id: &Uuid, tx: Transaction) -> Result<()> {
         self.update(
             user_id,
             Table::UserSession,
@@ -224,7 +651,7 @@ impl Database {
         )
     }
 
-    pub fn update_backup_tx(&self,state_chain_id: &Uuid, tx: &'static Transaction) -> Result<()> {
+    fn update_backup_tx(&self,state_chain_id: &Uuid, tx: Transaction) -> Result<()> {
         self.update(
             &state_chain_id,
             Table::BackupTxs,
@@ -233,7 +660,7 @@ impl Database {
         )
     }
 
-    pub fn get_withdraw_confirm_data(&self, user_id: &Uuid) -> Result<WithdrawConfirmData> {
+    fn get_withdraw_confirm_data(&self, user_id: Uuid) -> Result<WithdrawConfirmData> {
         let (tx_withdraw_str, withdraw_sc_sig_str, state_chain_id) =
         self.get_3::<String, String, Uuid>(
             user_id,
@@ -249,419 +676,14 @@ impl Database {
         Ok(WithdrawConfirmData{tx_withdraw, withdraw_sc_sig, state_chain_id})
     }
 
-    /// Build DB tables and Schemas
-    pub fn make_tables(&self) -> Result<()> {
-    // Create Schemas if they do not already exist
-    let _ = self.database_w().execute(
-        &format!(
-            "
-        CREATE SCHEMA IF NOT EXISTS statechainentity;",
-        ),
-        &[],
-    )?;
-    let _ = self.database_w().execute(
-        &format!(
-            "
-        CREATE SCHEMA IF NOT EXISTS watcher;",
-        ),
-        &[],
-    )?;
-
-    // Create tables if they do not already exist
-    self.database_w().execute(
-        &format!(
-            "
-        CREATE TABLE IF NOT EXISTS {} (
-            id uuid NOT NULL,
-            statechainid uuid,
-            authentication varchar,
-            s2 varchar,
-            sighash varchar,
-            withdrawscsig varchar,
-            txwithdraw varchar,
-            proofkey varchar,
-            txbackup varchar,
-            PRIMARY KEY (id)
-        );",
-            Table::UserSession.to_string(),
-        ),
-        &[],
-    )?;
-
-    self.database_w().execute(
-        &format!(
-            "
-        CREATE TABLE IF NOT EXISTS {} (
-            id uuid NOT NULL,
-            keygenfirstmsg varchar,
-            commwitness varchar,
-            eckeypair varchar,
-            party2public varchar,
-            paillierkeypair varchar,
-            party1private varchar,
-            pdldecommit varchar,
-            alpha varchar,
-            party2pdlfirstmsg varchar,
-            party1masterkey varchar,
-            pos varchar,
-            epheckeypair varchar,
-            ephkeygenfirstmsg varchar,
-            complete bool NOT NULL DEFAULT false,
-            PRIMARY KEY (id)
-        );",
-            Table::Ecdsa.to_string(),
-        ),
-        &[],
-    )?;
-
-    self.database_w().execute(
-        &format!(
-            "
-        CREATE TABLE IF NOT EXISTS {} (
-            id uuid NOT NULL,
-            chain varchar,
-            amount int8,
-            ownerid uuid,
-            lockeduntil timestamp,
-            PRIMARY KEY (id)
-        );",
-            Table::StateChain.to_string(),
-        ),
-        &[],
-    )?;
-
-    self.database_w().execute(
-        &format!(
-            "
-        CREATE TABLE IF NOT EXISTS {} (
-            id uuid NOT NULL,
-            statechainsig varchar,
-            x1 varchar,
-            PRIMARY KEY (id)
-        );",
-            Table::Transfer.to_string(),
-        ),
-        &[],
-    )?;
-
-    self.database_w().execute(
-        &format!(
-            "
-        CREATE TABLE IF NOT EXISTS {} (
-            id uuid NOT NULL,
-            starttime timestamp,
-            statechains varchar,
-            finalizeddata varchar,
-            punishedstatechains varchar,
-            finalized bool,
-            PRIMARY KEY (id)
-        );",
-            Table::TransferBatch.to_string(),
-        ),
-        &[],
-    )?;
-
-    self.database_w().execute(
-        &format!(
-            "
-        CREATE TABLE IF NOT EXISTS {} (
-            id BIGSERIAL,
-            value varchar,
-            commitmentinfo varchar,
-            PRIMARY KEY (id)
-        );",
-            Table::Root.to_string(),
-        ),
-        &[],
-    )?;
-
-    self.database_w().execute(
-        &format!(
-            "
-        CREATE TABLE IF NOT EXISTS {} (
-            id uuid NOT NULL,
-            txbackup varchar,
-            PRIMARY KEY (id)
-        );",
-            Table::BackupTxs.to_string(),
-        ),
-        &[],
-    )?;
-
-    Ok(())
-}
-
-#[allow(dead_code)]
-/// Drop all DB tables and Schemas.
-fn drop_tables(&self) -> Result<()> {
-    let _ = self.database_w().execute(
-        &format!(
-            "
-        DROP SCHEMA statechainentity CASCADE;",
-        ),
-        &[],
-    )?;
-    let _ = self.database_w().execute(
-        &format!(
-            "
-        DROP SCHEMA watcher CASCADE;",
-        ),
-        &[],
-    )?;
-
-    Ok(())
-}
-
-/// Drop all DB tables and schemas.
-fn truncate_tables(&self) -> Result<()> {
-    self.database_w().execute(
-        &format!(
-            "
-        TRUNCATE {},{},{},{},{},{},{} RESTART IDENTITY;",
-            Table::UserSession.to_string(),
-            Table::Ecdsa.to_string(),
-            Table::StateChain.to_string(),
-            Table::Transfer.to_string(),
-            Table::TransferBatch.to_string(),
-            Table::Root.to_string(),
-            Table::BackupTxs.to_string(),
-        ),
-        &[],
-    )?;
-    Ok(())
-}
-
-pub fn reset_dbs(&self, smt_db_loc: &String) -> Result<()> {
-    // truncate all postgres tables
-    self.truncate_tables()?;
-
-    // Destroy Sparse Merkle Tree RocksDB instance
-    let _ = DB::destroy(&Options::default(), smt_db_loc); // ignore error
-    Ok(())
-}
-
-/// Serialize data into string. To add custom types to Postgres they must be serialized to String.
-pub fn ser<T:'static>(data: T) -> Result<String>
-where
-    T: serde::ser::Serialize,
-{
-    match serde_json::to_string(&data) {
-        Ok(v) => Ok(v),
-        Err(_) => Err(SEError::Generic(String::from("Failed to serialize data."))),
-    }
-}
-
-/// Deserialize custom type data from string. Reverse of ser().
-pub fn deser<T:'static>(data: String) -> Result<T>
-where
-    T: serde::de::DeserializeOwned,
-{
-    match serde_json::from_str(&data) {
-        Ok(v) => Ok(v),
-        Err(_) => Err(SEError::Generic(String::from(
-            "Failed to deserialize string.",
-        ))),
-    }
-}
-
-/// Create new item in table
-pub fn insert(&self, id: &Uuid, table: Table) -> Result<u64> {
-    let statement = self.database_w().prepare(&format!(
-        "INSERT INTO {} (id) VALUES ($1)",
-        table.to_string()
-    ))?;
-
-    Ok(statement.execute(&[id])?)
-}
-
-/// Remove row in table
-pub fn remove(&self, id: &Uuid, table: Table) -> Result<()> {
-    let statement =
-        self.database_w().prepare(&format!("DELETE FROM {} WHERE id = $1;", table.to_string()))?;
-    if statement.execute(&[&id])? == 0 {
-        return Err(SEError::DBError(UpdateFailed, id.to_string()));
-    }
-
-    Ok(())
-}
-
-/// Returns str list of column names for SQL UPDATE prepare statement.
-fn update_columns_str(&self, cols: Vec<Column>) -> String {
-    let cols_len = cols.len();
-    let mut str = "".to_owned();
-    for (i, col) in cols.iter().enumerate() {
-        str.push_str(&col.to_string());
-        str.push_str(&format!("=${}", i + 1));
-        if i != cols_len - 1 {
-            str.push_str(",");
-        }
-    }
-    str
-}
-
-/// Update items in table for some ID with PostgreSql data types (String, int, bool, Uuid, chrono::NaiveDateTime).
-pub fn update<'a>(
-    &self,
-    id: &Uuid,
-    table: Table,
-    column: Vec<Column>,
-    data: Vec<&'a dyn ToSql>,
-) -> Result<()> {
-    let num_items = column.len();
-    let statement = self.database_w().prepare(&format!(
-        "UPDATE {} SET {} WHERE id = ${}",
-        table.to_string(),
-        self.update_columns_str(column),
-        num_items + 1
-    ))?;
-
-    let mut owned_data = data.clone();
-    owned_data.push(id);
-
-    if statement.execute(&owned_data)? == 0 {
-        return Err(SEError::DBError(UpdateFailed, id.to_string()));
-    }
-
-    Ok(())
-}
-
-/// Get items from table for some ID with PostgreSql data types (String, int, Uuid, bool, Uuid, chrono::NaiveDateTime).
-/// Err if ID not found. Return None if data item empty.
-fn get<T:'static, U:'static, V:'static, W:'static>(
-    &self,
-    id: &Uuid,
-    table: Table,
-    column: Vec<Column>,
-) -> Result<(Option<T>, Option<U>, Option<V>, Option<W>)>
-where
-    T: rocket_contrib::databases::postgres::types::FromSql,
-    U: rocket_contrib::databases::postgres::types::FromSql,
-    V: rocket_contrib::databases::postgres::types::FromSql,
-    W: rocket_contrib::databases::postgres::types::FromSql,
-{
-    let num_items = column.len();
-    let statement = self.database_r().prepare(&format!(
-        "SELECT {} FROM {} WHERE id = $1",
-        self.get_columns_str(&column),
-        table.to_string(),
-    ))?;
-
-    let rows = statement.query(&[id])?;
-    if rows.is_empty() {
-        return Err(SEError::DBError(NoDataForID, id.to_string()));
-    };
-    let row = rows.get(0);
-
-    let col1 = self.get_item_from_row::<T>(&row, 0, &id.to_string(), column[0])?;
-    if num_items == 1 {
-        return Ok((Some(col1), None, None, None));
-    }
-
-    let col2 = self.get_item_from_row::<U>(&row, 1, &id.to_string(), column[1])?;
-    if num_items == 2 {
-        return Ok((Some(col1), Some(col2), None, None));
-    }
-
-    let col3 = self.get_item_from_row::<V>(&row, 2, &id.to_string(), column[2])?;
-    if num_items == 3 {
-        return Ok((Some(col1), Some(col2), Some(col3), None));
-    }
-
-    let col4 = self.get_item_from_row::<W>(&row, 3, &id.to_string(), column[3])?;
-    if num_items == 4 {
-        return Ok((Some(col1), Some(col2), Some(col3), Some(col4)));
-    }
-
-    Ok((None, None, None, None))
-}
-/// Returns str list of column names for SQL SELECT query statement.
-pub fn get_columns_str(&self, cols: &Vec<Column>) -> String {
-    let cols_len = cols.len();
-    let mut str = "".to_owned();
-    for (i, col) in cols.iter().enumerate() {
-        str.push_str(&col.to_string());
-        if i != cols_len - 1 {
-            str.push_str(",");
-        }
-    }
-    str
-}
-
-fn get_item_from_row<T:'static>(&self, row: &'static Row<'static>, index: usize, id: &String, column: Column) -> Result<T>
-where
-    T: rocket_contrib::databases::postgres::types::FromSql,
-{
-    match row.get_opt::<usize, T>(index) {
-        None => return Err(SEError::DBError(NoDataForID, id.to_string())),
-        Some(data) => match data {
-            Ok(v) => Ok(v),
-            Err(_) => return Err(SEError::DBErrorWC(NoDataForID, id.to_string(), column)),
-        },
-    }
-}
-
-/// Get 1 item from row in table. Err if ID not found. Return None if data item empty.
-pub fn get_1<T:'static>(&self, id: &Uuid, table: Table, column: Vec<Column>) -> Result<T>
-where
-    T: rocket_contrib::databases::postgres::types::FromSql,
-{
-    let (res, _, _, _) = self.get::<T, T, T, T>(id, table, column)?;
-    Ok(res.unwrap())  //  err returned from db_get if desired item is None
-}
-/// Get 2 items from row in table. Err if ID not found. Return None if data item empty.
-pub fn get_2<T:'static, U:'static>(
-    &self,
-    id: &Uuid,
-    table: Table,
-    column: Vec<Column>,
-) -> Result<(T, U)>
-where
-    T: rocket_contrib::databases::postgres::types::FromSql,
-    U: rocket_contrib::databases::postgres::types::FromSql,
-{
-    let (res1, res2, _, _) = self.get::<T, U, U, U>(id, table, column)?;
-    Ok((res1.unwrap(), res2.unwrap()))
-}
-/// Get 3 items from row in table. Err if ID not found. Return None if data item empty.
-pub fn get_3<T:'static, U:'static, V:'static>(
-    &self,
-    id: &Uuid,
-    table: Table,
-    column: Vec<Column>,
-) -> Result<(T, U, V)>
-where
-    T: rocket_contrib::databases::postgres::types::FromSql,
-    U: rocket_contrib::databases::postgres::types::FromSql,
-    V: rocket_contrib::databases::postgres::types::FromSql,
-{
-    let (res1, res2, res3, _) = self.get::<T, U, V, V>(id, table, column)?;
-    Ok((res1.unwrap(), res2.unwrap(), res3.unwrap()))
-}
-/// Get 4 items from row in table. Err if ID not found. Return None if data item empty.
-pub fn get_4<T:'static, U:'static, V:'static, W:'static>(
-    &self,
-    id: &Uuid,
-    table: Table,
-    column: Vec<Column>,
-) -> Result<(T, U, V, W)>
-where
-    T: rocket_contrib::databases::postgres::types::FromSql,
-    U: rocket_contrib::databases::postgres::types::FromSql,
-    V: rocket_contrib::databases::postgres::types::FromSql,
-    W: rocket_contrib::databases::postgres::types::FromSql,
-{
-    let (res1, res2, res3, res4) = self.get::<T, U, V, W>(id, table, column)?;
-    Ok((res1.unwrap(), res2.unwrap(), res3.unwrap(), res4.unwrap()))
-}
-
 /// Update root value in DB. Update root with ID or insert new DB item.
-pub fn root_update(&self, rt: &Root) -> Result<i64> {
+fn root_update(&self, rt: &Root) -> Result<i64> {
     let mut root = rt.clone();
     // Get previous ID, or use the one specified in root to update an existing root with mainstay proof
     let id = match root.id() {
         //This will update an existing root in the db
         Some(id) => {
-            let existing_root = self.get_root(&(id as i64))?;
+            let existing_root = self.get_root(id as i64)?;
             match existing_root {
                 None => {
                     return Err(SEError::Generic(format!(
@@ -688,25 +710,28 @@ pub fn root_update(&self, rt: &Root) -> Result<i64> {
 
     // Insert new root
     root.set_id(&id);
-    self.root_insert(&root)?;
+    self.root_insert(root.clone())?;
 
     debug!("Updated root at id {} with value: {:?}", id, root);
     Ok(id)
 }
 
 /// Insert a Root into root table
-pub fn root_insert(&self, root: &'static Root) -> Result<u64> {
-    let statement = self.database_w().prepare(&format!(
+fn root_insert(&self, root: Root) -> Result<u64> {
+    let dbw = self.database_w();
+    let statement = dbw.prepare(&format!(
         "INSERT INTO {} (value, commitmentinfo) VALUES ($1,$2)",
         Table::Root.to_string()
     ))?;
-    Ok(statement.execute(&[&Database::ser(root.hash())?, &Database::ser(root.commitment_info())?])?)
+    let ci = root.commitment_info().clone();
+    Ok(statement.execute(&[&Self::ser(root.hash())?, &Self::ser(ci)?])?)
 }
 
 /// Get Id of current Root
-pub fn root_get_current_id(&self) -> Result<i64> {
+fn root_get_current_id(&self) -> Result<i64> {
+    let dbr = self.database_r();
     let statement =
-        self.database_r().prepare(&format!("SELECT MAX(id) FROM {}", Table::Root.to_string(),))?;
+        dbr.prepare(&format!("SELECT MAX(id) FROM {}", Table::Root.to_string(),))?;
     let rows = statement.query(&[])?;
     if rows.is_empty() {
         return Err(SEError::DBError(NoDataForID, String::from("Current Root")));
@@ -722,15 +747,16 @@ pub fn root_get_current_id(&self) -> Result<i64> {
 }
 
 /// Get root with given ID
-pub fn get_root(&self, id: &i64) -> Result<Option<Root>> {
-    if id == &0 {
+fn get_root(&self, id: i64) -> Result<Option<Root>> {
+    if id == 0 {
         return Ok(None);
     }
-    let statement = self.database_r().prepare(&format!(
+    let dbr = self.database_r();
+    let statement = dbr.prepare(&format!(
         "SELECT * FROM {} WHERE id = $1",
         Table::Root.to_string(),
     ))?;
-    let rows = statement.query(&[id])?;
+    let rows = statement.query(&[&id])?;
     if rows.is_empty() {
         return Err(SEError::DBError(NoDataForID, format!("Root id: {}", id)));
     };
@@ -745,13 +771,13 @@ pub fn get_root(&self, id: &i64) -> Result<Option<Root>> {
     };
     let root = Root::from(
         Some(id),
-        Database::deser(self.get_item_from_row::<String>(
+        Self::deser(self.get_item_from_row::<String>(
             &row,
             1,
             &id.to_string(),
             Column::Value,
         )?)?,
-        &Database::deser::<Option<CommitmentInfo>>(self.get_item_from_row::<String>(
+        &Self::deser::<Option<CommitmentInfo>>(self.get_item_from_row::<String>(
             &row,
             2,
             &id.to_string(),
@@ -762,11 +788,11 @@ pub fn get_root(&self, id: &i64) -> Result<Option<Root>> {
 }
 
 /// Find the latest confirmed root
-pub fn get_confirmed_smt_root(&self) -> Result<Option<Root>> {
+fn get_confirmed_smt_root(&self) -> Result<Option<Root>> {
     let current_id = self.root_get_current_id()?;
     for i in 0..=current_id - 1 {
         let id = current_id - i;
-        let root = self.get_root(&id)?;
+        let root = self.get_root(id)?;
         match root {
             Some(r) => {
                 if r.is_confirmed() {
@@ -780,15 +806,15 @@ pub fn get_confirmed_smt_root(&self) -> Result<Option<Root>> {
     Ok(None)
 }
 
-pub fn get_statechain_id(&self, user_id: &Uuid) -> Result<Uuid>{
+fn get_statechain_id(&self, user_id: Uuid) -> Result<Uuid>{
     self.get_1::<Uuid>(
-        &user_id,
+        user_id,
         Table::UserSession,
         vec![Column::StateChainId],
     )
 }
 
-pub fn update_statechain_id(&self, user_id: &Uuid, state_chain_id: &Uuid)
+fn update_statechain_id(&self, user_id: &Uuid, state_chain_id: &Uuid)
 ->Result<()> {
     self.update(
         user_id,
@@ -798,12 +824,12 @@ pub fn update_statechain_id(&self, user_id: &Uuid, state_chain_id: &Uuid)
     )
 }
 
-pub fn get_statechain_amount(
+fn get_statechain_amount(
     &self,
-    state_chain_id: &Uuid,
+    state_chain_id: Uuid,
 ) -> Result<StateChainAmount> {
     let (amount, state_chain_str) = self.get_2::<i64, String>(
-        &state_chain_id,
+        state_chain_id,
         Table::StateChain,
         vec![Column::Amount, Column::Chain],
     )?;
@@ -811,7 +837,7 @@ pub fn get_statechain_amount(
     Ok(StateChainAmount{chain: state_chain, amount})
 }
 
-pub fn update_statechain_amount(&self, state_chain_id: &Uuid, state_chain: &'static StateChain, amount: u64) -> Result<()> {
+fn update_statechain_amount(&self, state_chain_id: &Uuid, state_chain: StateChain, amount: u64) -> Result<()> {
     self.update(
         &state_chain_id,
         Table::StateChain,
@@ -820,7 +846,7 @@ pub fn update_statechain_amount(&self, state_chain_id: &Uuid, state_chain: &'sta
     )
 }
 
-pub fn create_statechain(&self, 
+fn create_statechain(&self, 
     state_chain_id: &Uuid, 
     user_id: &Uuid, 
     state_chain: &StateChain,
@@ -844,12 +870,12 @@ pub fn create_statechain(&self,
         )
 }
 
-pub fn get_statechain(
+fn get_statechain(
     &self,
-    state_chain_id: &Uuid,
+    state_chain_id: Uuid,
 ) -> Result<StateChain> {
     let (amount, state_chain_str) = self.get_2::<i64, String>(
-        &state_chain_id,
+        state_chain_id,
         Table::StateChain,
         vec![Column::Amount, Column::Chain],
     )?;
@@ -857,8 +883,8 @@ pub fn get_statechain(
     Ok(state_chain)
 }
 
-pub fn update_statechain_owner(&self, state_chain_id: &Uuid, 
-                        state_chain: &'static StateChain, new_user_id: &Uuid) 
+fn update_statechain_owner(&self, state_chain_id: &Uuid, 
+                        state_chain: StateChain, new_user_id: &Uuid) 
                         -> Result<()> {  
     self.update(
         &state_chain_id,
@@ -872,7 +898,7 @@ pub fn update_statechain_owner(&self, state_chain_id: &Uuid,
 }
 
  // Remove state_chain_id from user session to signal end of session
-pub fn remove_statechain_id(&self, user_id: &Uuid) -> Result<()> {
+fn remove_statechain_id(&self, user_id: &Uuid) -> Result<()> {
     self.update(
         user_id,
         Table::UserSession,
@@ -881,7 +907,7 @@ pub fn remove_statechain_id(&self, user_id: &Uuid) -> Result<()> {
     )
 }
 
-pub fn create_backup_transaction(&self, 
+fn create_backup_transaction(&self, 
     state_chain_id: &Uuid,
     tx_backup: &Transaction) -> Result<()> {
         self.insert(state_chain_id, Table::BackupTxs)?;
@@ -893,7 +919,7 @@ pub fn create_backup_transaction(&self,
         )
 }
 
-pub fn get_backup_transaction(&self, state_chain_id: &Uuid) -> Result<Transaction> {
+fn get_backup_transaction(&self, state_chain_id: Uuid) -> Result<Transaction> {
     let (tx_backup_str) = self.get_1::<String>(
         state_chain_id,
         Table::BackupTxs,
@@ -903,11 +929,11 @@ pub fn get_backup_transaction(&self, state_chain_id: &Uuid) -> Result<Transactio
     Ok(tx_backup)
 }
 
-pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
+fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
 -> Result<(Transaction, String)> {
 
     let (tx_backup_str, proof_key) = self.get_2::<String, String>(
-        &user_id,
+        user_id,
         Table::UserSession,
         vec![Column::TxBackup, Column::ProofKey],
     )?;
@@ -915,7 +941,7 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
     Ok((tx_backup, proof_key))
 }
 
-    pub fn get_sc_locked_until(&self, state_chain_id: &Uuid) -> Result<NaiveDateTime>{
+    fn get_sc_locked_until(&self, state_chain_id: Uuid) -> Result<NaiveDateTime>{
         self.get_1::<NaiveDateTime>(
             state_chain_id,
             Table::StateChain,
@@ -923,7 +949,7 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
         )
     }
 
-    pub fn update_locked_until(&self, state_chain_id: &Uuid, 
+    fn update_locked_until(&self, state_chain_id: &Uuid, 
                                 time: &NaiveDateTime)->Result<()>{
         self.update( 
             state_chain_id,
@@ -933,10 +959,10 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
         )
     }
 
-    pub fn get_transfer_batch_data(&self, batch_id: &Uuid) -> Result<TransferBatchData> {
+    fn get_transfer_batch_data(&self, batch_id: Uuid) -> Result<TransferBatchData> {
         let (state_chains_str, start_time, finalized, punished_state_chains_str) = 
         self.get_4::<String, NaiveDateTime, bool, String>(
-            &batch_id,
+            batch_id,
             Table::TransferBatch,
             vec![Column::StateChains, 
                 Column::StartTime, 
@@ -948,17 +974,17 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
         Ok(TransferBatchData{state_chains, start_time, finalized, punished_state_chains})
     }
 
-    pub fn has_transfer_batch_id(&self, batch_id: &Uuid) -> bool {
+    fn has_transfer_batch_id(&self, batch_id: Uuid) -> bool {
         self.get_transfer_batch_id(batch_id).is_ok()
     }
 
-    pub fn get_transfer_batch_id(&self, batch_id: &Uuid) -> Result<Uuid> {
-        self.get_1::<Uuid>(&batch_id, 
+    fn get_transfer_batch_id(&self, batch_id: Uuid) -> Result<Uuid> {
+        self.get_1::<Uuid>(batch_id, 
             Table::TransferBatch, 
             vec![Column::Id])
     }
 
-    pub fn get_punished_state_chains(&self, batch_id: &Uuid) -> Result<Vec<Uuid>>{
+    fn get_punished_state_chains(&self, batch_id: Uuid) -> Result<Vec<Uuid>>{
         Self::deser(self.get_1(
             batch_id,
             Table::TransferBatch,
@@ -966,7 +992,7 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
         )?)
     }
 
-    pub fn create_transfer(&self, state_chain_id: &Uuid,
+    fn create_transfer(&self, state_chain_id: &Uuid,
         state_chain_sig: &StateChainSig,
         x1: &FE) -> Result<()> {
           // Create Transfer table entry
@@ -982,9 +1008,9 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
           )
     }
 
-    pub fn create_transfer_batch_data(&self, 
+    fn create_transfer_batch_data(&self, 
         batch_id: &Uuid, 
-        state_chains: &'static HashMap<Uuid, bool>) -> Result<()> {
+        state_chains: HashMap<Uuid, bool>) -> Result<()> {
 
         self.insert(&batch_id, Table::TransferBatch)?;
         self.update(
@@ -1007,9 +1033,9 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
         )
     }
 
-    pub fn get_transfer_data(&self, state_chain_id: &Uuid) -> Result<TransferData> {
+    fn get_transfer_data(&self, state_chain_id: Uuid) -> Result<TransferData> {
         let (state_chain_id, state_chain_sig_str, x1_str) = self.get_3::<Uuid, String, String>(
-            &state_chain_id,
+            state_chain_id,
             Table::Transfer,
             vec![Column::Id, Column::StateChainSig, Column::X1],
         )?;
@@ -1020,21 +1046,139 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
         return Ok(TransferData{state_chain_id, state_chain_sig, x1})
     }
 
-    pub fn remove_transfer_data(&self, state_chain_id: &Uuid) -> Result<()>{
+    fn remove_transfer_data(&self, state_chain_id: &Uuid) -> Result<()>{
         self.remove(state_chain_id, Table::Transfer)
     }
 
-    pub fn transfer_is_completed(&self, state_chain_id: &Uuid) -> bool {
+    fn transfer_is_completed(&self, state_chain_id: Uuid) -> bool {
         self.get_1::<Uuid>(
-            &state_chain_id, 
+            state_chain_id, 
             Table::Transfer, 
             vec![Column::Id]).is_ok() 
     }
 
-    pub fn get_ecdsa_keypair(&self, user_id: &Uuid) -> Result<ECDSAKeypair> {
+    fn get_ecdsa_master(&self, user_id: Uuid) -> Result<Option<String>>{
+        self.get_1::<Option<String>>(
+            user_id,
+            Table::Ecdsa,
+            vec![Column::Party1MasterKey],
+        )
+    }
+
+    fn get_ecdsa_witness_keypair(&self, user_id: Uuid) 
+        -> Result<(party_one::CommWitness, party_one::EcKeyPair)>{
+        let (comm_witness_str, ec_key_pair_str) = 
+        self.get_2::<String, String>(
+            user_id,
+            Table::Ecdsa,
+            vec![Column::CommWitness, Column::EcKeyPair],
+        )?;
+        let comm_witness: party_one::CommWitness = Self::deser(comm_witness_str)?;
+        let ec_key_pair: party_one::EcKeyPair = Self::deser(ec_key_pair_str)?;
+        Ok((comm_witness, ec_key_pair))
+    }
+
+    fn get_ecdsa_s2(&self, user_id: Uuid) -> Result<FE> {
+        let s2_str = self.get_1(
+            user_id,
+            Table::UserSession,
+            vec![Column::S2])?;
+        let s2: FE = Self::deser(s2_str)?;
+        Ok(s2)
+    }
+
+    fn update_keygen_first_msg(&self, 
+        user_id: &Uuid,
+        key_gen_first_msg: &party_one::KeyGenFirstMsg,
+        comm_witness: party_one::CommWitness,
+        ec_key_pair: party_one::EcKeyPair)
+            ->Result<()>{
+
+                self.update(
+                    &user_id,
+                    Table::Ecdsa,
+                    vec![
+                        Column::POS,
+                        Column::KeyGenFirstMsg,
+                        Column::CommWitness,
+                        Column::EcKeyPair,
+                    ],
+                    vec![
+                        &Self::ser(HDPos { pos: 0u32 })?,
+                        &Self::ser(key_gen_first_msg.to_owned())?,
+                        &Self::ser(comm_witness)?,
+                        &Self::ser(ec_key_pair)?,
+                    ],
+                )?;
+
+        Ok(())
+    }
+
+    fn update_keygen_second_msg(&self, 
+        user_id: &Uuid,
+        party2_public: GE,
+        paillier_key_pair: party_one::PaillierKeyPair,
+        party_one_private: party_one::Party1Private
+    ) ->Result<()>{
+        self.update(
+            &user_id,
+            Table::Ecdsa,
+            vec![
+                Column::Party2Public,
+                Column::PaillierKeyPair,
+                Column::Party1Private,
+            ],
+            vec![
+                &Self::ser(party2_public)?,
+                &Self::ser(paillier_key_pair)?,
+                &Self::ser(party_one_private)?,
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn update_keygen_third_msg(&self, 
+        user_id: &Uuid,
+        party_one_pdl_decommit: party_one::PDLdecommit,
+        party_two_pdl_first_message: party_two::PDLFirstMessage,
+        alpha: BigInt
+    ) ->Result<()>{
+       
+        self.update(
+            &user_id,
+            Table::Ecdsa,
+            vec![
+                Column::PDLDecommit,
+                Column::Alpha,
+                Column::Party2PDLFirstMsg,
+            ],
+            vec![
+                &Self::ser(party_one_pdl_decommit)?,
+                &Self::ser(Alpha { value: alpha.to_owned() })?,
+                &Self::ser(party_two_pdl_first_message)?,
+            ],
+        )?;
+
+        Ok(())
+    }
+
+    fn init_ecdsa(&self, user_id: &Uuid) -> Result<u64> {
+        self.insert(user_id, Table::Ecdsa)
+    }
+
+    fn get_ecdsa_party_1_private(&self, user_id: Uuid) 
+        -> Result<party_one::Party1Private> {
+            Self::deser(self.get_1(
+                user_id,
+                Table::Ecdsa,
+                vec![Column::Party1Private],
+            )?)
+    }
+
+    fn get_ecdsa_keypair(&self, user_id: Uuid) -> Result<ECDSAKeypair> {
 
         let (party_1_private_str, party_2_public_str) = self.get_2::<String, String>(
-            &user_id,
+            user_id,
             Table::Ecdsa,
             vec![Column::Party1Private, Column::Party2Public],
         )?;
@@ -1044,7 +1188,7 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
         Ok(ECDSAKeypair{party_1_private, party_2_public})
     }
 
-    pub fn update_punished(&self, batch_id: &Uuid, punished_state_chains: &'static Vec<Uuid>) -> Result<()>{
+    fn update_punished(&self, batch_id: &Uuid, punished_state_chains: Vec<Uuid>) -> Result<()>{
         self.update(
             batch_id,
             Table::TransferBatch,
@@ -1053,7 +1197,7 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
         )
     }
 
-    pub fn get_finalize_batch_data(&self, batch_id: &Uuid)-> Result<TransferFinalizeBatchData> {
+    fn get_finalize_batch_data(&self, batch_id: Uuid)-> Result<TransferFinalizeBatchData> {
         let (state_chains_str, finalized_data_vec_str, start_time) = self.get_3::<String, String, NaiveDateTime>(
             batch_id,
             Table::TransferBatch,
@@ -1065,9 +1209,9 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
         Ok(TransferFinalizeBatchData{state_chains, finalized_data_vec, start_time})
     }
 
-    pub fn update_finalize_batch_data(&self, batch_id: &Uuid, 
-            state_chains:&'static HashMap<Uuid, bool>, 
-            finalized_data_vec: &'static Vec<TransferFinalizeData>) -> Result<()>{
+    fn update_finalize_batch_data(&self, batch_id: &Uuid, 
+            state_chains:HashMap<Uuid, bool>, 
+            finalized_data_vec: Vec<TransferFinalizeData>) -> Result<()>{
                 self.update(
                     &batch_id,
                     Table::TransferBatch,
@@ -1076,7 +1220,7 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
                 )
     }
 
-    pub fn update_transfer_batch_finalized(&self, batch_id: &Uuid, b_finalized: &bool) -> Result<()>{
+    fn update_transfer_batch_finalized(&self, batch_id: &Uuid, b_finalized: &bool) -> Result<()>{
         self.update(
             batch_id,
             Table::TransferBatch,
@@ -1085,10 +1229,10 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
         )
     }
 
-    pub fn get_statechain_owner(&self, state_chain_id: &Uuid) -> Result<StateChainOwner> {
+    fn get_statechain_owner(&self, state_chain_id: Uuid) -> Result<StateChainOwner> {
         let (locked_until, owner_id, state_chain_str) = 
             self.get_3::<NaiveDateTime, Uuid, String>(
-                &state_chain_id,
+                state_chain_id,
                 Table::StateChain,
                 vec![Column::LockedUntil, Column::OwnerId, Column::Chain],
             )?;
@@ -1099,7 +1243,7 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
 
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
-    pub fn create_user_session(&self, user_id: &Uuid, auth: &String, 
+    fn create_user_session(&self, user_id: &Uuid, auth: &String, 
         proof_key: &String) -> Result<()> {
             self.insert(user_id, Table::UserSession)?;
             self.update(
@@ -1116,9 +1260,9 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
 
 
     // Create new UserSession to allow new owner to generate shared wallet
-    pub fn transfer_init_user_session(&self, new_user_id: &Uuid,
+    fn transfer_init_user_session(&self, new_user_id: &Uuid,
         state_chain_id: &Uuid, 
-        finalized_data: &TransferFinalizeData) -> Result<()> {
+        finalized_data: TransferFinalizeData) -> Result<()> {
     
         self.insert(new_user_id, Table::UserSession)?;
         self.update(
@@ -1134,51 +1278,10 @@ pub fn get_backup_transaction_and_proof_key(&self, user_id: &Uuid)
             vec![
                 &String::from("auth"),
                 &finalized_data.state_chain_sig.data.to_owned(),
-                &Self::ser(finalized_data.new_tx_backup)?,
+                &Self::ser(finalized_data.new_tx_backup.clone())?,
                 &state_chain_id,
                 &Self::ser(finalized_data.s2)?,
             ],
         )
     }
-}
-
-pub struct StateChainAmount {
-    pub chain: StateChain,
-    pub amount: i64,
-}
-
-struct TransferBatchData {
-    pub state_chains: HashMap<Uuid, bool>,
-    pub punished_state_chains: Vec<Uuid>,
-    pub start_time: NaiveDateTime,
-    pub finalized: bool,
-}
-
-struct TransferFinalizeBatchData {
-    pub state_chains: HashMap<Uuid, bool>,
-    pub finalized_data_vec: Vec<TransferFinalizeData>,
-    pub start_time: NaiveDateTime,
-}
-
-pub struct StateChainOwner {
-    pub locked_until: NaiveDateTime,
-    pub owner_id: Uuid,
-    pub chain: StateChain,
-}
-
-pub struct WithdrawConfirmData {
-    pub tx_withdraw: Transaction,
-    pub withdraw_sc_sig: StateChainSig,
-    pub state_chain_id: Uuid,
-}
-
-pub struct TransferData {
-    pub state_chain_id: Uuid,
-    pub state_chain_sig: StateChainSig,
-    pub x1: FE,
-}
-
-pub struct ECDSAKeypair {
-    pub party_1_private: Party1Private,
-    pub party_2_public: GE
 }

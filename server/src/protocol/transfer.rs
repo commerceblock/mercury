@@ -18,6 +18,7 @@ use crate::error::SEError;
     //DatabaseR, DatabaseW,
 //};
 use crate::storage::db;
+use crate::Database;
 use shared_lib::{state_chain::*, structs::*};
 use crate::storage::Storage;
 
@@ -84,17 +85,17 @@ impl Transfer for StateChainEntity {
         info!("TRANSFER: Sender Side. Shared Key ID: {}", user_id);
 
         // Get state_chain id
-        let state_chain_id = self.database.get_statechain_id(&user_id)?;
+        let state_chain_id = self.database.get_statechain_id(user_id)?;
 
         // Check if transfer has already been completed (but not finalized)
-        if self.database.transfer_is_completed(&state_chain_id){    
+        if self.database.transfer_is_completed(state_chain_id){    
             return Err(SEError::Generic(String::from(
                 "Transfer already completed. Waiting for finalize.",
             )));
         }
 
         // Check if state chain is owned by user and not locked
-        let sco = self.database.get_statechain_owner(&state_chain_id)?;
+        let sco = self.database.get_statechain_owner(state_chain_id)?;
 
         is_locked(sco.locked_until)?;
         if sco.owner_id != user_id {
@@ -131,7 +132,7 @@ impl Transfer for StateChainEntity {
         info!("TRANSFER: Receiver side. Shared Key ID: {}", user_id);
 
         // Get Transfer Data for state_chain_id
-        let td = self.database.get_transfer_data(&state_chain_id)?;
+        let td = self.database.get_transfer_data(state_chain_id)?;
 
         // Ensure state_chain_sigs are the same
         if td.state_chain_sig != transfer_msg4.state_chain_sig.to_owned() {
@@ -141,7 +142,7 @@ impl Transfer for StateChainEntity {
             )));
         }
 
-        let kp = self.database.get_ecdsa_keypair(&user_id)?;
+        let kp = self.database.get_ecdsa_keypair(user_id)?;
 
 
         // TODO: decrypt t2
@@ -197,7 +198,7 @@ impl Transfer for StateChainEntity {
                 batch_id, state_chain_id
             );
             // Get TransferBatch data
-            let tbd = self.database.get_finalize_batch_data(&batch_id)?;
+            let mut tbd = self.database.get_finalize_batch_data(batch_id)?;
 
             // Ensure batch transfer is still active
             if transfer_batch_is_ended(tbd.start_time, self.batch_lifetime as i64) {
@@ -209,8 +210,8 @@ impl Transfer for StateChainEntity {
             tbd.state_chains.insert(state_chain_id.clone(), true);
             tbd.finalized_data_vec.push(finalized_data.clone());
 
-            self.database.update_finalize_batch_data(&batch_id, &tbd.state_chains, 
-                                                        &tbd.finalized_data_vec)?;
+            self.database.update_finalize_batch_data(&batch_id, tbd.state_chains, 
+                                                        tbd.finalized_data_vec)?;
 
         // If not batch then finalize transfer now
         } else {
@@ -230,10 +231,6 @@ impl Transfer for StateChainEntity {
         })
     }
 
-    
-    
-
-
     /// Update DB and SMT after successful transfer.
     /// This function is called immediately in the regular transfer case or after confirmation of atomic
     /// transfers completion in the batch transfer case.
@@ -246,7 +243,7 @@ impl Transfer for StateChainEntity {
         info!("TRANSFER_FINALIZE: State Chain ID: {}", state_chain_id);
 
         // Update state chain
-        let mut state_chain: StateChain = self.database.get_statechain(&state_chain_id)?;
+        let mut state_chain: StateChain = self.database.get_statechain(state_chain_id)?;
     
         state_chain.add(finalized_data.state_chain_sig.to_owned())?;
 
@@ -254,13 +251,15 @@ impl Transfer for StateChainEntity {
         let new_user_id = finalized_data.new_shared_key_id;
 
         self.database.update_statechain_owner(&state_chain_id, 
-            &state_chain, &new_user_id)?;
+            state_chain.clone(), &new_user_id)?;
 
         // Create new UserSession to allow new owner to generate shared wallet
 
-        self.database.transfer_init_user_session(&new_user_id, &state_chain_id, &finalized_data)?;
+        self.database.transfer_init_user_session(&new_user_id, &state_chain_id, 
+            finalized_data.to_owned())?;
             
-        self.database.update_backup_tx(&state_chain_id, &finalized_data.new_tx_backup)?;
+
+        self.database.update_backup_tx(&state_chain_id, finalized_data.new_tx_backup.to_owned())?;
       
 
         info!(

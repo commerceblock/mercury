@@ -18,7 +18,7 @@ use curv::{
 use chrono::NaiveDateTime;
 use crate::protocol::transfer::{Transfer, TransferFinalizeData};
 use std::collections::HashMap;
-use crate::storage::db::StateChainAmount;
+use crate::structs::StateChainAmount;
 
 pub mod db;
 
@@ -129,12 +129,12 @@ pub trait Storage {
 
     //fn get_confirmed_root(&self) -> Result<Option<Root>>;
 
-    fn get_root(&self, id: &i64) -> Result<Option<Root>>;
+    fn get_root(&self, id: i64) -> Result<Option<Root>>;
 
     fn update_root(&self, root: &Root) -> Result<i64>;
 
     //Returns locked until time, owner id, state chain
-    fn get_statechain_data_api(&self,state_chain_id: &Uuid) -> Result<StateChainDataAPI>;
+    fn get_statechain_data_api(&self,state_chain_id: Uuid) -> Result<StateChainDataAPI>;
 
     //fn authorise_withdrawal(&self, user_id: &Uuid, signature: StateChainSig) -> Result<()>;
 
@@ -147,7 +147,7 @@ pub trait Storage {
     // Returns statechain_id, sstatechain_sig_str, x1_str
     //fn get_transfer(&self, statechain_id: &Uuid) -> Result<(Uuid, StateChainSig, FE)>;
 
-    fn get_statechain(&self, state_chain_id: &Uuid) -> Result<StateChain>;
+    fn get_statechain(&self, state_chain_id: Uuid) -> Result<StateChain>;
 
     //Returns party1_private_str, party2_public_str
     //fn get_transfer_ecdsa_pair(&self, user_id: &Uuid) -> Result<(Party1Private, GE)>;
