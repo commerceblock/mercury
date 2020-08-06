@@ -7,14 +7,20 @@ extern crate shared_lib;
 use shared_lib::{state_chain::*, structs::*};
 
 use crate::error::SEError;
+<<<<<<< HEAD
 use crate::storage::db::{db_deser, db_get_1, db_get_3, db_ser, db_update, Column, Table};
 use crate::{DatabaseR, DatabaseW, server::StateChainEntity};
+=======
+//use crate::storage::db::{db_deser, db_get_1, db_get_3, db_ser, db_update, Column, Table};
+use crate::{DatabaseR, DatabaseW, Database};
+>>>>>>> 87681e6c8fc0a82806b665c559e624acaac9cb39
 
 use bitcoin::Transaction;
 use chrono::NaiveDateTime;
 use rocket::State;
 use rocket_contrib::json::Json;
 use uuid::Uuid;
+use crate::storage::Storage;
 
 /// StateChain Withdraw protocol trait
 pub trait Withdraw {
@@ -23,8 +29,6 @@ pub trait Withdraw {
     ///     - Mark user as authorised to withdraw
     fn withdraw_init(
         &self,
-        db_read: DatabaseR,
-        db_write: DatabaseW,
         withdraw_msg1: WithdrawMsg1,
     ) -> Result<()>;
 
@@ -34,8 +38,6 @@ pub trait Withdraw {
     ///     - Return withdraw tx signature
     fn withdraw_confirm(
         &self,
-        db_read: DatabaseR,
-        db_write: DatabaseW,
         withdraw_msg2: WithdrawMsg2,
     ) -> Result<Vec<Vec<u8>>>;
 }
@@ -43,35 +45,23 @@ pub trait Withdraw {
 impl Withdraw for StateChainEntity {
     fn withdraw_init(
         &self,
-        db_read: DatabaseR,
-        db_write: DatabaseW,
         withdraw_msg1: WithdrawMsg1,
     ) -> Result<()> {
         let user_id = withdraw_msg1.shared_key_id;
-        self.check_user_auth(&db_read, &user_id)?;
+        self.check_user_auth(&user_id)?;
 
         info!("WITHDRAW: Init. Shared Key ID: {}", user_id);
 
-        let (state_chain_id) = db_get_1::<Uuid>(
-            &db_read,
-            &user_id,
-            Table::UserSession,
-            vec![Column::StateChainId],
-        )?;
+        let state_chain_id = self.database.get_statechain_id(user_id)?;
 
         // Get statechain
-        let (sc_locked_until, sc_owner_id, state_chain_str) =
-            db_get_3::<NaiveDateTime, Uuid, String>(
-                &db_read,
-                &state_chain_id,
-                Table::StateChain,
-                vec![Column::LockedUntil, Column::OwnerId, Column::Chain],
-            )?;
-        let state_chain: StateChain = db_deser(state_chain_str)?;
+        let sco = self.database.get_statechain_owner(state_chain_id)?;
+            
+        
         // Check if locked
-        is_locked(sc_locked_until)?;
+        is_locked(sco.locked_until)?;
         // check if owned by caller
-        if sc_owner_id != user_id {
+        if sco.owner_id != user_id {
             return Err(SEError::Generic(format!(
                 "State Chain not owned by User ID: {}.",
                 state_chain_id
@@ -79,18 +69,13 @@ impl Withdraw for StateChainEntity {
         }
 
         // Verify new StateChainSig
-        let prev_proof_key = state_chain.get_tip()?.data;
+        let prev_proof_key = sco.chain.get_tip()?.data;
         withdraw_msg1.state_chain_sig.verify(&prev_proof_key)?;
 
         // Mark UserSession as authorised for withdrawal
-        db_update(
-            &db_write,
-            &user_id,
-            Table::UserSession,
-            vec![Column::WithdrawScSig],
-            vec![&db_ser(withdraw_msg1.state_chain_sig.clone())?],
-        )?;
 
+        self.database.update_withdraw_sc_sig(&user_id, withdraw_msg1.state_chain_sig)?;
+        
         info!(
             "WITHDRAW: Authorised. Shared Key ID: {}. State Chain: {}",
             user_id, state_chain_id
@@ -101,60 +86,29 @@ impl Withdraw for StateChainEntity {
 
     fn withdraw_confirm(
         &self,
-        db_read: DatabaseR,
-        db_write: DatabaseW,
         withdraw_msg2: WithdrawMsg2,
     ) -> Result<Vec<Vec<u8>>> {
         let user_id = withdraw_msg2.shared_key_id;
         info!("WITHDRAW: Confirm. Shared Key ID: {}", user_id.to_string());
 
         // Get UserSession data - Checking that withdraw tx and statechain signature exists
-        let (tx_withdraw_str, withdraw_sc_sig_str, state_chain_id) =
-            db_get_3::<String, String, Uuid>(
-                &db_read,
-                &user_id,
-                Table::UserSession,
-                vec![
-                    Column::TxWithdraw,
-                    Column::WithdrawScSig,
-                    Column::StateChainId,
-                ],
-            )?;
-        let tx_withdraw: Transaction = db_deser(tx_withdraw_str)?;
-        let withdraw_sc_sig: StateChainSig = db_deser(withdraw_sc_sig_str)?;
-
+        let wcd = self.database.get_withdraw_confirm_data(user_id)?;
+        
         // Get statechain and update with final StateChainSig
-        let mut state_chain: StateChain = db_deser(db_get_1(
-            &db_read,
-            &state_chain_id,
-            Table::StateChain,
-            vec![Column::Chain],
-        )?)?;
+        let mut state_chain: StateChain = self.database.get_statechain(wcd.state_chain_id)?;
 
-        state_chain.add(withdraw_sc_sig.to_owned())?;
+        state_chain.add(wcd.withdraw_sc_sig.to_owned())?;
 
-        db_update(
-            &db_write,
-            &state_chain_id,
-            Table::StateChain,
-            vec![Column::Chain, Column::Amount],
-            vec![&db_ser(state_chain.clone())?, &(0 as i64)], // signals withdrawn funds
-        )?;
+        self.database.update_statechain_amount(&wcd.state_chain_id, state_chain, 0)?;
+
+     
 
         // Remove state_chain_id from user session to signal end of session
-        db_update(
-            &db_write,
-            &user_id,
-            Table::UserSession,
-            vec![Column::StateChainId],
-            vec![&Uuid::nil()],
-        )?;
+        self.database.remove_statechain_id(&user_id)?;
 
         // Update sparse merkle tree
-        let (new_root, prev_root) = self.update_smt_db(
-            &db_read,
-            &db_write,
-            &tx_withdraw
+        let (new_root, prev_root) = self.update_smt(
+            &wcd.tx_withdraw
                 .input
                 .get(0)
                 .unwrap()
@@ -166,31 +120,29 @@ impl Withdraw for StateChainEntity {
 
         info!(
             "WITHDRAW: Address included in sparse merkle tree. State Chain ID: {}",
-            state_chain_id
+            wcd.state_chain_id
         );
         debug!(
             "WITHDRAW: State Chain ID: {}. New root: {:?}. Previous root: {:?}.",
-            state_chain_id, &new_root, &prev_root
+            wcd.state_chain_id, &new_root, &prev_root
         );
 
         info!(
             "WITHDRAW: Complete. Shared Key ID: {}. State Chain: {}",
             user_id.to_string(),
-            state_chain_id
+            wcd.state_chain_id
         );
 
-        Ok(tx_withdraw.input[0].clone().witness)
+        Ok(wcd.tx_withdraw.input[0].clone().witness)
     }
 }
 
 #[post("/withdraw/init", format = "json", data = "<withdraw_msg1>")]
 pub fn withdraw_init(
     sc_entity: State<StateChainEntity>,
-    db_read: DatabaseR,
-    db_write: DatabaseW,
     withdraw_msg1: Json<WithdrawMsg1>,
 ) -> Result<Json<()>> {
-    match sc_entity.withdraw_init(db_read, db_write, withdraw_msg1.into_inner()) {
+    match sc_entity.withdraw_init(withdraw_msg1.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -199,11 +151,9 @@ pub fn withdraw_init(
 #[post("/withdraw/confirm", format = "json", data = "<withdraw_msg2>")]
 pub fn withdraw_confirm(
     sc_entity: State<StateChainEntity>,
-    db_read: DatabaseR,
-    db_write: DatabaseW,
     withdraw_msg2: Json<WithdrawMsg2>,
 ) -> Result<Json<Vec<Vec<u8>>>> {
-    match sc_entity.withdraw_confirm(db_read, db_write, withdraw_msg2.into_inner()) {
+    match sc_entity.withdraw_confirm(withdraw_msg2.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }

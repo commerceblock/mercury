@@ -1,11 +1,14 @@
 use super::protocol::*;
 use crate::DatabaseR;
 use crate::{
-    storage::{db_make_tables, db_reset_dbs, get_test_postgres_connection},
-    DatabaseW, config::SMT_DB_LOC_TESTING,
+    //storage::{db_make_tables, db_reset_dbs, get_test_postgres_connection},
+    DatabaseW,
+    Database
 };
 
-use crate::config::Config;
+use crate::PGDatabase as DB;
+
+use config;
 use rocket;
 use rocket::config::{Config as RocketConfig, Environment, Value};
 use rocket::{Request, Rocket};
@@ -68,14 +71,20 @@ pub fn get_server(mainstay_config: Option<mainstay::MainstayConfig>) -> Result<R
 
     let rocket_config = get_rocket_config(&sc_entity.config);
 
+    let database = DB::get_test();
+    let mut smt_db_loc: String;
     if sc_entity.config.testing_mode {
         // Use test SMT DB
-        sc_entity.config.smt_db_loc = SMT_DB_LOC_TESTING.to_string();
+        smt_db_loc = SMT_DB_LOC_TESTING.to_string();
         // reset dbs
-        let conn = get_test_postgres_connection();
-        if let Err(_) = db_reset_dbs(&conn, &sc_entity.config.smt_db_loc) {
-            db_make_tables(&conn)?;
+        if let Err(_) = database.reset_dbs(&smt_db_loc) {
+            database.make_tables()?;
         }
+    } else {
+        smt_db_loc = settings
+            .get("smt_db_loc")
+            .unwrap_or(&SMT_DB_LOC_DEFAULT.to_string())
+            .to_string();
     }
 
     let rock = rocket::custom(rocket_config)

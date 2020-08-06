@@ -11,10 +11,18 @@ use super::{
 extern crate shared_lib;
 use crate::error::SEError;
 use crate::{
+<<<<<<< HEAD
     storage::db::{
         db_deser, db_get_1, db_get_2, db_get_4, db_insert, db_ser, db_update, Column, Table,
     },
     DatabaseR, DatabaseW, server::StateChainEntity,
+=======
+    //storage::db::{
+        //db_deser, db_get_1, db_get_2, db_get_4, db_insert, db_ser, db_update, Column, Table,
+    //},
+    //DatabaseR, DatabaseW,
+    Database
+>>>>>>> 87681e6c8fc0a82806b665c559e624acaac9cb39
 };
 use shared_lib::{commitment::verify_commitment, state_chain::*, structs::*};
 
@@ -31,24 +39,18 @@ pub trait BatchTransfer {
     ///     - Create TransferBatchData DB object
     fn transfer_batch_init(
         &self,
-        db_read: DatabaseR,
-        db_write: DatabaseW,
         transfer_batch_init_msg: TransferBatchInitMsg,
     ) -> Result<()>;
 
     /// Finalize all transfers in a batch if all are complete and validated.
     fn finalize_batch(
         &self,
-        db_read: &DatabaseR,
-        db_write: &DatabaseW,
         batch_id: Uuid,
     ) -> Result<()>;
 
     /// API: Reveal a nonce for a corresponding Transfer commitment.
     fn transfer_reveal_nonce(
         &self,
-        db_read: DatabaseR,
-        db_write: DatabaseW,
         transfer_reveal_nonce: TransferRevealNonce,
     ) -> Result<()>;
 }
@@ -56,14 +58,12 @@ pub trait BatchTransfer {
 impl BatchTransfer for StateChainEntity {
     fn transfer_batch_init(
         &self,
-        db_read: DatabaseR,
-        db_write: DatabaseW,
         transfer_batch_init_msg: TransferBatchInitMsg,
     ) -> Result<()> {
         let batch_id = transfer_batch_init_msg.id.clone();
         info!("TRANSFER_BATCH_INIT: ID: {}", batch_id);
 
-        if db_get_1::<Uuid>(&db_read, &batch_id, Table::TransferBatch, vec![Column::Id]).is_ok() {
+        if self.database.has_transfer_batch_id(batch_id) {
             return Err(SEError::Generic(format!(
                 "Batch transfer with ID {} already exists.",
                 batch_id.to_string()
@@ -79,7 +79,7 @@ impl BatchTransfer for StateChainEntity {
             }
         }
 
-        let mut state_chains = HashMap::new();
+        let mut state_chains = HashMap::<Uuid, bool>::new();
         for sig in transfer_batch_init_msg.signatures.clone() {
             // Ensure sig is for same batch as others
             if &sig.clone().purpose[15..] != batch_id.to_string() {
@@ -89,47 +89,24 @@ impl BatchTransfer for StateChainEntity {
             }
 
             let state_chain_id = Uuid::from_str(&sig.data).unwrap();
-
-            let (state_chain_str, sc_locked_until) = db_get_2::<String, NaiveDateTime>(
-                &db_read,
-                &state_chain_id,
-                Table::StateChain,
-                vec![Column::Chain, Column::LockedUntil],
-            )?;
-            let state_chain: StateChain = db_deser(state_chain_str)?;
+            let sco = self.database.get_statechain_owner(state_chain_id)?;
 
             // Verify sigs
-            let proof_key = state_chain.get_tip()?.data;
+            let proof_key = sco.chain.get_tip()?.data;
             sig.verify(&proof_key)?;
 
             // Ensure state chains are all available
-            is_locked(sc_locked_until)?;
+            is_locked(sco.locked_until)?;
 
             // Add to TransferBatchData object
             state_chains.insert(state_chain_id, false);
         }
 
         // Create new TransferBatchData and add to DB
-        db_insert(&db_write, &batch_id, Table::TransferBatch)?;
-        db_update(
-            &db_write,
+        self.database.create_transfer_batch_data(
             &batch_id,
-            Table::TransferBatch,
-            vec![
-                Column::StartTime,
-                Column::StateChains,
-                Column::FinalizedData,
-                Column::PunishedStateChains,
-                Column::Finalized,
-            ],
-            vec![
-                &get_time_now(),
-                &db_ser(state_chains)?,
-                &db_ser(Vec::<TransferFinalizeData>::new())?,
-                &db_ser(Vec::<String>::new())?,
-                &false,
-            ],
-        )?;
+            state_chains)?;
+
 
         info!("TRANSFER_BATCH_INIT: Batch ID {} initiated.", batch_id);
         debug!(
@@ -142,45 +119,30 @@ impl BatchTransfer for StateChainEntity {
 
     fn finalize_batch(
         &self,
-        db_read: &DatabaseR,
-        db_write: &DatabaseW,
         batch_id: Uuid,
     ) -> Result<()> {
         info!("TRANSFER_FINALIZE_BATCH: ID: {}", batch_id);
-        // Get transfer batch data
-        let (state_chains_str, finalized_data_vec_str) = db_get_2::<String, String>(
-            db_read,
-            &batch_id,
-            Table::TransferBatch,
-            vec![Column::StateChains, Column::FinalizedData],
-        )?;
-        let state_chains: HashMap<Uuid, bool> = db_deser(state_chains_str)?;
-        let finalized_data_vec: Vec<TransferFinalizeData> = db_deser(finalized_data_vec_str)?;
+      
+        let fbd = self.database.get_finalize_batch_data(batch_id)?;
 
-        if state_chains.len() != finalized_data_vec.len() {
+
+        if fbd.state_chains.len() != fbd.finalized_data_vec.len() {
             return Err(SEError::Generic(String::from(
                 "TransferBatch has unequal finalized data to state chains.",
             )));
         }
 
-        for finalized_data in finalized_data_vec.clone() {
-            self.transfer_finalize(db_read, db_write, &finalized_data)?;
+        for finalized_data in fbd.finalized_data_vec.clone() {
+            self.transfer_finalize(&finalized_data)?;
         }
 
-        db_update(
-            &db_write,
-            &batch_id,
-            Table::TransferBatch,
-            vec![Column::Finalized],
-            vec![&true],
-        )?;
+        self.database.update_transfer_batch_finalized(&batch_id, &true)?;
+
         Ok(())
     }
 
     fn transfer_reveal_nonce(
         &self,
-        db_read: DatabaseR,
-        db_write: DatabaseW,
         transfer_reveal_nonce: TransferRevealNonce,
     ) -> Result<()> {
         let batch_id = transfer_reveal_nonce.batch_id;
@@ -190,32 +152,23 @@ impl BatchTransfer for StateChainEntity {
             batch_id, state_chain_id
         );
 
-        let (finalized, start_time, state_chains_str, punished_state_chains_str) =
-            db_get_4::<bool, NaiveDateTime, String, String>(
-                &db_read,
-                &batch_id,
-                Table::TransferBatch,
-                vec![
-                    Column::Finalized,
-                    Column::StartTime,
-                    Column::StateChains,
-                    Column::PunishedStateChains,
-                ],
-            )?;
-        let state_chains: HashMap<Uuid, bool> = db_deser(state_chains_str)?;
-        let mut punished_state_chains: Vec<Uuid> = db_deser(punished_state_chains_str)?;
+        let tbd = self.database.get_transfer_batch_data(batch_id)?;
 
-        if finalized {
+        if tbd.finalized {
             return Err(SEError::Generic(String::from(
                 "Transfer Batch completed successfully.",
             )));
         }
 
+<<<<<<< HEAD
         if !transfer_batch_is_ended(start_time, self.config.batch_lifetime as i64) {
+=======
+        if !transfer_batch_is_ended(tbd.start_time, self.batch_lifetime as i64) {
+>>>>>>> 87681e6c8fc0a82806b665c559e624acaac9cb39
             return Err(SEError::Generic(String::from("Transfer Batch still live.")));
         }
 
-        if state_chains.get(&state_chain_id).is_none() {
+        if tbd.state_chains.get(&state_chain_id).is_none() {
             return Err(SEError::Generic(String::from(
                 "State chain ID not in this batch.",
             )));
@@ -228,29 +181,17 @@ impl BatchTransfer for StateChainEntity {
         )?;
 
         // If state chain completed + commitment revealed then punishment can be removed from state chain
-        if *state_chains.get(&state_chain_id).unwrap() {
-            db_update(
-                &db_write,
-                &state_chain_id,
-                Table::StateChain,
-                vec![Column::LockedUntil],
-                vec![&get_time_now()],
-            )?;
-
+        if *tbd.state_chains.get(&state_chain_id).unwrap() {
+            self.database.update_locked_until(&state_chain_id, &get_time_now())?;
             info!(
                 "TRANSFER_REVEAL_NONCE: State Chain unlocked. ID: {}",
                 state_chain_id
             );
 
             // remove from transfer batch punished list
-            punished_state_chains.retain(|x| x != &state_chain_id);
-            db_update(
-                &db_write,
-                &batch_id,
-                Table::TransferBatch,
-                vec![Column::PunishedStateChains],
-                vec![&db_ser(punished_state_chains)?],
-            )?;
+            let mut new_punished = tbd.punished_state_chains.clone();
+            new_punished.retain(|x| x != &state_chain_id);
+            self.database.update_punished(&batch_id, new_punished)?;
         }
         Ok(())
     }
@@ -273,11 +214,9 @@ pub fn transfer_batch_is_ended(start_time: NaiveDateTime, batch_lifetime: i64) -
 )]
 pub fn transfer_batch_init(
     sc_entity: State<StateChainEntity>,
-    db_read: DatabaseR,
-    db_write: DatabaseW,
     transfer_batch_init_msg: Json<TransferBatchInitMsg>,
 ) -> Result<Json<()>> {
-    match sc_entity.transfer_batch_init(db_read, db_write, transfer_batch_init_msg.into_inner()) {
+    match sc_entity.transfer_batch_init(transfer_batch_init_msg.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -290,11 +229,9 @@ pub fn transfer_batch_init(
 )]
 pub fn transfer_reveal_nonce(
     sc_entity: State<StateChainEntity>,
-    db_read: DatabaseR,
-    db_write: DatabaseW,
     transfer_reveal_nonce: Json<TransferRevealNonce>,
 ) -> Result<Json<()>> {
-    match sc_entity.transfer_reveal_nonce(db_read, db_write, transfer_reveal_nonce.into_inner()) {
+    match sc_entity.transfer_reveal_nonce(transfer_reveal_nonce.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
