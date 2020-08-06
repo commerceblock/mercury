@@ -14,7 +14,7 @@ mod tests {
 
     use mockito;
 
-    //#[test
+    #[test]
     #[serial]
     fn test_gen_shared_key() {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
@@ -29,7 +29,7 @@ mod tests {
         assert!(key_res.is_ok());
     }
 
-    //#[test
+    #[test]
     #[serial]
     fn test_failed_auth() {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
@@ -47,7 +47,7 @@ mod tests {
         assert!(err.is_err());
     }
 
-    //#[test
+    #[test]
     #[serial]
     fn test_deposit() {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
@@ -78,7 +78,7 @@ mod tests {
         println!("Funding txid: {:?} ", funding_txid);
     }
 
-    // //#[test
+    // #[test]
     // #[serial]
     // fn test_confirm_proofs() {
     //     let _ = spawn_server();
@@ -89,7 +89,7 @@ mod tests {
     //     assert!(unconfirmed.len() == 1, "expected 1 unconfirmed shared key");
     // }
 
-    //#[test
+    #[test]
     #[serial]
     fn test_get_statechain() {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
@@ -108,7 +108,7 @@ mod tests {
         );
     }
 
-    //#[test
+    #[test]
     #[serial]
     fn test_transfer() {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
@@ -181,7 +181,7 @@ mod tests {
         println!("end");
     }
 
-    //#[test
+    #[test]
     #[serial]
     fn test_double_transfer() {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
@@ -311,7 +311,7 @@ mod tests {
         );
     }
 
-    //#[test
+    #[test]
     #[serial]
     fn test_withdraw() {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
@@ -369,7 +369,7 @@ mod tests {
         assert!(err.is_err());
     }
 
-    //#[test
+    #[test]
     #[serial]
     /// Test wallet load from json correctly when shared key present.
     fn test_wallet_load_with_shared_key() {

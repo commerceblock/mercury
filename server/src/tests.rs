@@ -18,7 +18,7 @@ mod tests {
     use mockito;
 
     // test ecdsa::sign can be performed only by authorised user
-    //#[test]
+    #[test]
     #[serial]
     fn test_auth_token() {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
@@ -67,7 +67,7 @@ mod tests {
         );
     }
 
-    //#[test]
+    #[test]
     #[serial]
     fn test_err_get_statechain() {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
@@ -94,7 +94,7 @@ mod tests {
         assert_eq!(res, "Unknown route \'/info/statechain/\'.".to_string());
     }
 
-    //#[test]
+    #[test]
     #[serial]
     fn test_err_get_smt_proof() {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
@@ -175,7 +175,7 @@ mod tests {
         assert_eq!(res, format!("Bad request"));
     }
 
-    //#[test]
+    #[test]
     #[serial]
     fn test_err_get_transfer_batch_status() {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
@@ -202,7 +202,7 @@ mod tests {
         assert_eq!(res, "Unknown route \'/info/transfer-batch/\'.".to_string());
     }
 
-    //#[test]
+    #[test]
     #[serial]
     fn test_get_state_entity_fees() {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
