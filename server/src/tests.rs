@@ -5,8 +5,10 @@ mod tests {
     use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
     use rocket::http::{ContentType, Status};
     use rocket::local::Client;
-    use shared_lib::structs::{DepositMsg1, SmtProofMsgAPI, StateEntityFeeInfoAPI, KeyGenMsg1, Protocol};
-    use shared_lib::{Root, mainstay};
+    use shared_lib::structs::{
+        DepositMsg1, KeyGenMsg1, Protocol, SmtProofMsgAPI, StateEntityFeeInfoAPI,
+    };
+    use shared_lib::{mainstay, Root};
 
     use serde_json;
     use std::str::FromStr;
@@ -15,17 +17,14 @@ mod tests {
     #[cfg(test)]
     use mockito;
 
-
     // test ecdsa::sign can be performed only by authorised user
-    //#[test]
+    #[test]
     #[serial]
     fn test_auth_token() {
-        println!("get client");
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
-        
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
-        
+
         // get ID
         println!("get id");
         let deposit_msg1 = DepositMsg1 {
@@ -76,10 +75,10 @@ mod tests {
     }
 
     //moved into protocol/util.rs
-    //#[test]
+    #[test]
     #[serial]
     fn test_err_get_statechain() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
         // get_statechain invalid id
@@ -106,10 +105,10 @@ mod tests {
         assert_eq!(res, "Unknown route \'/info/statechain/\'.".to_string());
     }
 
-    //#[test]
+    #[test]
     #[serial]
     fn test_err_get_smt_proof() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
         // None root
@@ -187,16 +186,16 @@ mod tests {
         assert_eq!(res, format!("Bad request"));
     }
 
-    //#[test]
+    #[test]
     #[serial]
     fn test_err_get_transfer_batch_status() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
         // get_transfer_batch_status invalid id
         let invalid_id = Uuid::new_v4();
         let mut response = client
-            .post(format!("/info/transfer-batch/{}", invalid_id))
+            .get(format!("/info/transfer-batch/{}", invalid_id))
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();
@@ -207,17 +206,17 @@ mod tests {
 
         // get_transfer_batch_status no ID
         let mut response = client
-            .post(format!("/info/transfer-batch/"))
+            .get(format!("/info/transfer-batch/"))
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();
         assert_eq!(res, "Unknown route \'/info/transfer-batch/\'.".to_string());
     }
 
-    //#[test]
+    #[test]
     #[serial]
     fn test_get_state_entity_fees() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
         let mut response = client

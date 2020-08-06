@@ -6,7 +6,7 @@ extern crate rocket;
 #[macro_use]
 extern crate rocket_contrib;
 extern crate chrono;
-extern crate config;
+extern crate config as config_rs;
 extern crate curv;
 extern crate kms;
 extern crate multi_party_ecdsa;
@@ -17,7 +17,7 @@ extern crate failure;
 
 extern crate error_chain;
 
-#[macro_use] 
+#[macro_use]
 extern crate unborrow;
 
 #[macro_use]
@@ -38,24 +38,25 @@ extern crate serde_dynamodb;
 
 extern crate hex;
 extern crate shared_lib;
-use shared_lib::mainstay;
 
 #[cfg(test)]
 #[macro_use]
 extern crate serial_test;
 
 pub mod error;
+pub mod config;
 pub mod protocol;
 pub mod server;
 pub mod storage;
-pub mod tests;
 
-use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
+type Result<T> = std::result::Result<T, error::SEError>;
+pub type Hash = bitcoin::hashes::sha256d::Hash;
+
+use rocket_contrib::databases::r2d2_postgres::PostgresConnectionManager;
 use rocket_contrib::databases::r2d2;
 
 use uuid::Uuid;
-use shared_lib::{Root, structs::*, state_chain::*};
-use crate::protocol::transfer::TransferFinalizeData;
+use shared_lib::{Root, state_chain::*};
 use chrono::NaiveDateTime;
 use std::collections::HashMap;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
@@ -63,17 +64,12 @@ use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, par
 use kms::ecdsa::two_party::*;
 use mockall::*;
 use mockall::predicate::*;
-use crate::storage::db::{Alpha, HDPos};
-
-type Result<T> = std::result::Result<T, error::SEError>;
+use curv::{BigInt, FE, GE};
 use rocket_contrib::databases::postgres;
-use curv::{
-    elliptic::curves::traits::{ECPoint, ECScalar},
-    {BigInt, FE, GE},
-};
-
 use bitcoin::Transaction;
-pub type Hash = bitcoin::hashes::sha256d::Hash;
+use crate::storage::db::Alpha;
+use crate::protocol::transfer::TransferFinalizeData;
+use bitcoin::hashes::sha256d;
 
 #[database("postgres_w")]
 pub struct DatabaseW(postgres::Connection);
@@ -82,36 +78,6 @@ pub struct DatabaseR(postgres::Connection);
 
 pub struct PGDatabase {
     pub db_connection: fn()->r2d2::PooledConnection<PostgresConnectionManager>
-}
-
-pub struct StateChainEntity {
-    pub electrum_server: String,
-    pub network: String,
-    pub testing_mode: bool,  // set for testing mode
-    pub fee_address: String, // receive address for fee payments
-    pub fee_deposit: u64,    // satoshis
-    pub fee_withdraw: u64,   // satoshis
-    pub block_time: u64,
-    pub batch_lifetime: u64,
-    pub punishment_duration: u64,
-    pub mainstay_config: Option<mainstay::Config>,
-    pub smt_db_loc: String,
-    pub database: PGDatabase
-}
-
-pub struct MockStateChainEntity {
-    pub electrum_server: String,
-    pub network: String,
-    pub testing_mode: bool,  // set for testing mode
-    pub fee_address: String, // receive address for fee payments
-    pub fee_deposit: u64,    // satoshis
-    pub fee_withdraw: u64,   // satoshis
-    pub block_time: u64,
-    pub batch_lifetime: u64,
-    pub punishment_duration: u64,
-    pub mainstay_config: Option<mainstay::Config>,
-    pub smt_db_loc: String,
-    pub database: MockDatabase
 }
 
 use structs::*;
@@ -145,28 +111,28 @@ pub trait Database {
     state_chain_id: Uuid,
     ) -> Result<StateChainAmount>;
     fn update_statechain_amount(&self, state_chain_id: &Uuid, state_chain: StateChain, amount: u64) -> Result<()>;
-    fn create_statechain(&self, 
-        state_chain_id: &Uuid, 
-        user_id: &Uuid, 
+    fn create_statechain(&self,
+        state_chain_id: &Uuid,
+        user_id: &Uuid,
         state_chain: &StateChain,
         amount: &i64) -> Result<()>;
     fn get_statechain(
         &self,
         state_chain_id: Uuid,
         ) -> Result<StateChain>;
-    fn update_statechain_owner(&self, state_chain_id: &Uuid, 
-                    state_chain: StateChain, new_user_id: &Uuid) 
+    fn update_statechain_owner(&self, state_chain_id: &Uuid,
+                    state_chain: StateChain, new_user_id: &Uuid)
                     -> Result<()>;
     // Remove state_chain_id from user session to signal end of session
     fn remove_statechain_id(&self, user_id: &Uuid) -> Result<()>;
-    fn create_backup_transaction(&self, 
+    fn create_backup_transaction(&self,
         state_chain_id: &Uuid,
         tx_backup: &Transaction) -> Result<()>;
     fn get_backup_transaction(&self, state_chain_id: Uuid) -> Result<Transaction>;
     fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
         -> Result<(Transaction, String)>;
     fn get_sc_locked_until(&self, state_chain_id: Uuid) -> Result<NaiveDateTime>;
-    fn update_locked_until(&self, state_chain_id: &Uuid, 
+    fn update_locked_until(&self, state_chain_id: &Uuid,
                             time: &NaiveDateTime)->Result<()>;
     fn get_transfer_batch_data(&self, batch_id: Uuid) -> Result<TransferBatchData>;
     fn has_transfer_batch_id(&self, batch_id: Uuid) -> bool;
@@ -175,63 +141,68 @@ pub trait Database {
     fn create_transfer(&self, state_chain_id: &Uuid,
         state_chain_sig: &StateChainSig,
         x1: &FE) -> Result<()>;
-    fn create_transfer_batch_data(&self, 
-        batch_id: &Uuid, 
+    fn create_transfer_batch_data(&self,
+        batch_id: &Uuid,
         state_chains: HashMap<Uuid, bool>) -> Result<()>;
     fn get_transfer_data(&self, state_chain_id: Uuid) -> Result<TransferData>;
     fn remove_transfer_data(&self, state_chain_id: &Uuid) -> Result<()>;
     fn transfer_is_completed(&self, state_chain_id: Uuid) -> bool;
     fn get_ecdsa_master(&self, user_id: Uuid) -> Result<Option<String>>;
-    fn get_ecdsa_witness_keypair(&self, user_id: Uuid) 
+    fn get_ecdsa_witness_keypair(&self, user_id: Uuid)
     -> Result<(party_one::CommWitness, party_one::EcKeyPair)>;
     fn get_ecdsa_s2(&self, user_id: Uuid) -> Result<FE>;
-    fn update_keygen_first_msg(&self, 
+    fn update_keygen_first_msg(&self,
         user_id: &Uuid,
         key_gen_first_msg: &party_one::KeyGenFirstMsg,
         comm_witness: party_one::CommWitness,
         ec_key_pair: party_one::EcKeyPair)
         ->Result<()>;
-    fn update_keygen_second_msg(&self, 
+    fn update_keygen_second_msg(&self,
         user_id: &Uuid,
         party2_public: GE,
         paillier_key_pair: party_one::PaillierKeyPair,
         party_one_private: party_one::Party1Private
     ) ->Result<()>;
-    fn update_keygen_third_msg(&self, 
+    fn update_keygen_third_msg(&self,
         user_id: &Uuid,
         party_one_pdl_decommit: party_one::PDLdecommit,
         party_two_pdl_first_message: party_two::PDLFirstMessage,
         alpha: BigInt
     ) ->Result<()>;
     fn init_ecdsa(&self, user_id: &Uuid) -> Result<u64>;
-    fn get_ecdsa_party_1_private(&self, user_id: Uuid) 
+    fn get_ecdsa_party_1_private(&self, user_id: Uuid)
         -> Result<party_one::Party1Private>;
     fn get_ecdsa_keypair(&self, user_id: Uuid) -> Result<ECDSAKeypair>;
     fn update_punished(&self, batch_id: &Uuid, punished_state_chains: Vec<Uuid>) -> Result<()>;
     fn get_finalize_batch_data(&self, batch_id: Uuid)-> Result<TransferFinalizeBatchData>;
-    fn update_finalize_batch_data(&self, batch_id: &Uuid, 
-        state_chains:HashMap<Uuid, bool>, 
+    fn update_finalize_batch_data(&self, batch_id: &Uuid,
+        state_chains:HashMap<Uuid, bool>,
         finalized_data_vec: Vec<TransferFinalizeData>) -> Result<()>;
     fn update_transfer_batch_finalized(&self, batch_id: &Uuid, b_finalized: &bool) -> Result<()>;
     fn get_statechain_owner(&self, state_chain_id: Uuid) -> Result<StateChainOwner>;
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
-    fn create_user_session(&self, user_id: &Uuid, auth: &String, 
+    fn create_user_session(&self, user_id: &Uuid, auth: &String,
         proof_key: &String) -> Result<()>;
     // Create new UserSession to allow new owner to generate shared wallet
     fn transfer_init_user_session(&self, new_user_id: &Uuid,
-        state_chain_id: &Uuid, 
+        state_chain_id: &Uuid,
         finalized_data: TransferFinalizeData) -> Result<()>;
     fn get_ecdsa_fourth_message_input(&self, user_id: Uuid) -> Result<ECDSAFourthMessageInput>;
-    fn update_ecdsa_sign_first(&self, user_id: Uuid, 
+    fn update_ecdsa_sign_first(&self, user_id: Uuid,
         eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg,
         eph_ec_key_pair_party1: party_one::EphEcKeyPair) -> Result<()>;
 
-    fn get_ecdsa_sign_second_input(&self, user_id: Uuid) 
+    fn get_ecdsa_sign_second_input(&self, user_id: Uuid)
         -> Result<ECDSASignSecondInput>;
 
     fn get_tx_withdraw(&self, user_id: Uuid) -> Result<Transaction>;
-    fn update_tx_withdraw(&self, user_id: Uuid, tx: Transaction) -> Result<()>; 
+    fn update_tx_withdraw(&self, user_id: Uuid, tx: Transaction) -> Result<()>;
+    fn reset(&self, smt_db_loc: &String) -> Result<()> {Ok(())}
+    fn init(&self) -> Result<()> {Ok(())}
+    fn get_ecdsa_master_key_input(&self, user_id: Uuid) -> Result<ECDSAMasterKeyInput>;
+    fn update_ecdsa_master(&self, user_id: &Uuid, master_key: MasterKey1) -> Result<()>;
+    fn get_sighash(&self, user_id: Uuid) -> Result<sha256d::Hash>;
 }
 
 pub mod structs {
@@ -282,7 +253,7 @@ pub mod structs {
         pub party_one_private: party_one::Party1Private,
         pub party_one_pdl_decommit: party_one::PDLdecommit,
         pub party_two_pdl_first_message: party_two::PDLFirstMessage,
-        pub alpha: Alpha, 
+        pub alpha: Alpha,
     }
 
     pub struct ECDSASignSecondInput {
@@ -290,5 +261,11 @@ pub mod structs {
         pub eph_ec_key_pair_party1: party_one::EphEcKeyPair,
         pub eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg,
     }
-    
+
+    pub struct ECDSAMasterKeyInput {
+        pub party2_public: GE,
+        pub paillier_key_pair: party_one::PaillierKeyPair,
+        pub party_one_private: party_one::Party1Private,
+         pub comm_witness: party_one::CommWitness
+    }
 }

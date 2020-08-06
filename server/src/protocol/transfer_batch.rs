@@ -1,21 +1,16 @@
 //! StateEntity Batch Transfer
 //!
-//! StateEntity Batch Transfer protocol trait and implementation.
+//! StateEntity Batch Transfer protocol trait and implementation. API is used by Conductor and
+//! swap partipants to organise swaps.
 
 use super::{
-    super::{Result, StateChainEntity},
-    transfer::{Transfer, TransferFinalizeData},
+    super::Result,
+    transfer::Transfer,
 };
 
 extern crate shared_lib;
 use crate::error::SEError;
-use crate::{
-    //storage::db::{
-        //db_deser, db_get_1, db_get_2, db_get_4, db_insert, db_ser, db_update, Column, Table,
-    //},
-    //DatabaseR, DatabaseW,
-    Database
-};
+use crate::{server::StateChainEntity, Database, MockDatabase, PGDatabase};
 use shared_lib::{commitment::verify_commitment, state_chain::*, structs::*};
 
 use chrono::{NaiveDateTime, Utc};
@@ -23,6 +18,19 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use std::{collections::HashMap, str::FromStr};
 use uuid::Uuid;
+use cfg_if::cfg_if;
+
+//Generics cannot be used in Rocket State, therefore we define the concrete 
+//type of StateChainEntity here
+cfg_if! {
+    if #[cfg(test)]{
+        use crate::MockDatabase as DB;
+        type SCE = StateChainEntity::<MockDatabase>;
+    } else {
+        use crate::PGDatabase as DB;
+        type SCE = StateChainEntity::<PGDatabase>;
+    }
+}
 
 /// StateChain BatchTransfer protocol trait
 pub trait BatchTransfer {
@@ -47,7 +55,7 @@ pub trait BatchTransfer {
     ) -> Result<()>;
 }
 
-impl BatchTransfer for StateChainEntity {
+impl BatchTransfer for SCE {
     fn transfer_batch_init(
         &self,
         transfer_batch_init_msg: TransferBatchInitMsg,
@@ -114,7 +122,7 @@ impl BatchTransfer for StateChainEntity {
         batch_id: Uuid,
     ) -> Result<()> {
         info!("TRANSFER_FINALIZE_BATCH: ID: {}", batch_id);
-      
+
         let fbd = self.database.get_finalize_batch_data(batch_id)?;
 
 
@@ -152,7 +160,7 @@ impl BatchTransfer for StateChainEntity {
             )));
         }
 
-        if !transfer_batch_is_ended(tbd.start_time, self.batch_lifetime as i64) {
+        if !transfer_batch_is_ended(tbd.start_time, self.config.batch_lifetime as i64) {
             return Err(SEError::Generic(String::from("Transfer Batch still live.")));
         }
 
@@ -201,7 +209,7 @@ pub fn transfer_batch_is_ended(start_time: NaiveDateTime, batch_lifetime: i64) -
     data = "<transfer_batch_init_msg>"
 )]
 pub fn transfer_batch_init(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     transfer_batch_init_msg: Json<TransferBatchInitMsg>,
 ) -> Result<Json<()>> {
     match sc_entity.transfer_batch_init(transfer_batch_init_msg.into_inner()) {
@@ -216,7 +224,7 @@ pub fn transfer_batch_init(
     data = "<transfer_reveal_nonce>"
 )]
 pub fn transfer_reveal_nonce(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     transfer_reveal_nonce: Json<TransferRevealNonce>,
 ) -> Result<Json<()>> {
     match sc_entity.transfer_reveal_nonce(transfer_reveal_nonce.into_inner()) {

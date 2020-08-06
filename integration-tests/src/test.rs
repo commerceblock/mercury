@@ -6,8 +6,8 @@ mod tests {
     extern crate server_lib;
     extern crate shared_lib;
 
-    use shared_lib::{mocks::mock_electrum::MockElectrum, structs::Protocol};
     use shared_lib::mainstay;
+    use shared_lib::{mocks::mock_electrum::MockElectrum, structs::Protocol};
 
     use curv::elliptic::curves::traits::ECScalar;
     use curv::FE;
@@ -17,7 +17,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_gen_shared_key() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let _ = spawn_server(Some(mainstay_config));
 
         let mut wallet = gen_wallet();
@@ -32,7 +32,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_failed_auth() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let _ = spawn_server(Some(mainstay_config));
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
         let secret_key: FE = ECScalar::new_random();
@@ -50,7 +50,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_deposit() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let _ = spawn_server(Some(mainstay_config));
         let wallet = gen_wallet_with_deposit(10000);
 
@@ -92,7 +92,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_get_statechain() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let _ = spawn_server(Some(mainstay_config));
         let mut wallet = gen_wallet();
 
@@ -111,7 +111,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_transfer() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let _ = spawn_server(Some(mainstay_config));
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
@@ -184,7 +184,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_double_transfer() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let _ = spawn_server(Some(mainstay_config));
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
@@ -314,7 +314,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_withdraw() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let _ = spawn_server(Some(mainstay_config));
         let mut wallet = gen_wallet();
 
@@ -373,7 +373,7 @@ mod tests {
     #[serial]
     /// Test wallet load from json correctly when shared key present.
     fn test_wallet_load_with_shared_key() {
-        let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let _ = spawn_server(Some(mainstay_config));
 
         let mut wallet = gen_wallet();

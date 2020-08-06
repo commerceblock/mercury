@@ -1,161 +1,44 @@
 use super::protocol::*;
-use super::{StateChainEntity, MockStateChainEntity};
-
 use crate::DatabaseR;
 use crate::{
     //storage::{db_make_tables, db_reset_dbs, get_test_postgres_connection},
     DatabaseW,
-    Database
+    Database,
+    PGDatabase
 };
 
-use crate::PGDatabase as DB;
-
-use config;
-use rocket;
-use rocket::config::{Config as RocketConfig, Environment, Value};
-use rocket::{Request, Rocket};
+use crate::{config::SMT_DB_LOC_TESTING, PGDatabase as DB};
 use shared_lib::mainstay;
+
+use crate::config::Config;
+use rocket;
+use rocket::{Request, Rocket};
+use rocket::config::{Config as RocketConfig, Environment, Value};
 use crate::MockDatabase;
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config as LogConfig, Root};
 use log4rs::encode::pattern::PatternEncoder;
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-pub static SMT_DB_LOC_DEFAULT: &str = "./db-smt";
-pub static SMT_DB_LOC_TESTING: &str = "./db-smt-testing";
-
-impl StateChainEntity {
-    pub fn load(settings: HashMap<String, String>) -> Result<StateChainEntity> {
-
-       let fee_address = settings.get("fee_address").unwrap().to_string();
-        if let Err(e) = bitcoin::Address::from_str(&fee_address) {
-            panic!("Invalid fee address: {}", e)
-        };
-
-        let testing_mode = bool::from_str(settings.get("testing_mode").unwrap()).unwrap();
-
-        //mainstay_config is optional
-        let mainstay_config = match testing_mode {
-            true =>  None,
-            false => match settings.get("mainstay_config") {
-                Some(o) => Some(o.parse::<mainstay::Config>().unwrap()),
-                None => None,
-            },
-        };
-
-        let database = DB::get_test();
-
-        let mut smt_db_loc: String;
-        if testing_mode {
-            // Use test SMT DB
-            smt_db_loc = SMT_DB_LOC_TESTING.to_string();
-            // reset dbs
-            if let Err(_) = database.reset_dbs(&smt_db_loc) {
-                database.make_tables()?;
-            }
-        } else {
-            smt_db_loc = settings
-                .get("smt_db_loc")
-                .unwrap_or(&SMT_DB_LOC_DEFAULT.to_string())
-                .to_string();
-        }
-
-        Ok(StateChainEntity {
-            smt_db_loc,
-            electrum_server: settings.get("electrum_server").unwrap().to_string(),
-            network: settings.get("network").unwrap().to_string(),
-            testing_mode,
-            fee_address,
-            fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
-            fee_withdraw: settings
-                .get("fee_withdraw")
-                .unwrap()
-                .parse::<u64>()
-                .unwrap(),
-            block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
-            batch_lifetime: settings
-                .get("batch_lifetime")
-                .unwrap()
-                .parse::<u64>()
-                .unwrap(),
-            punishment_duration: settings
-                .get("punishment_duration")
-                .unwrap()
-                .parse::<u64>()
-                .unwrap(),
-            mainstay_config,
-            database,
-        })
-    }
+pub struct StateChainEntity <T: Database + Send + Sync + 'static> {
+    pub config: Config,
+    pub database: T
 }
 
-impl MockStateChainEntity {
-    pub fn load(settings: HashMap<String, String>, mock_db: &MockDatabase) -> Result<MockStateChainEntity> {
-
-       let fee_address = settings.get("fee_address").unwrap().to_string();
-        if let Err(e) = bitcoin::Address::from_str(&fee_address) {
-            panic!("Invalid fee address: {}", e)
-        };
-
-        let testing_mode = bool::from_str(settings.get("testing_mode").unwrap()).unwrap();
-
-        //mainstay_config is optional
-        let mainstay_config = match testing_mode {
-            true =>  None,
-            false => match settings.get("mainstay_config") {
-                Some(o) => Some(o.parse::<mainstay::Config>().unwrap()),
-                None => None,
-            },
-        };
-
-        let database = DB::get_test();
-
-        let mut smt_db_loc: String;
-        if testing_mode {
-            // Use test SMT DB
-            smt_db_loc = SMT_DB_LOC_TESTING.to_string();
-            // reset dbs
-            if let Err(_) = database.reset_dbs(&smt_db_loc) {
-                database.make_tables()?;
-            }
-        } else {
-            smt_db_loc = settings
-                .get("smt_db_loc")
-                .unwrap_or(&SMT_DB_LOC_DEFAULT.to_string())
-                .to_string();
-        }
-
-        Ok(StateChainEntity {
-            smt_db_loc,
-            electrum_server: settings.get("electrum_server").unwrap().to_string(),
-            network: settings.get("network").unwrap().to_string(),
-            testing_mode,
-            fee_address,
-            fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
-            fee_withdraw: settings
-                .get("fee_withdraw")
-                .unwrap()
-                .parse::<u64>()
-                .unwrap(),
-            block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
-            batch_lifetime: settings
-                .get("batch_lifetime")
-                .unwrap()
-                .parse::<u64>()
-                .unwrap(),
-            punishment_duration: settings
-                .get("punishment_duration")
-                .unwrap()
-                .parse::<u64>()
-                .unwrap(),
-            mainstay_config,
-            database,
+impl<T: Database + Send + Sync + 'static> StateChainEntity<T> {
+    pub fn load(db: T) -> Result<StateChainEntity<T>> {
+    // Get config as defaults, Settings.toml and env vars
+        let config_rs = Config::load()?;
+       
+        Ok(Self {
+            config: config_rs,
+            database: db
         })
-    }
+    }  
 }
 
 #[catch(500)]
@@ -173,29 +56,39 @@ fn not_found(req: &Request) -> String {
     format!("Unknown route '{}'.", req.uri())
 }
 
-/// Start Rocket Server. testing_mode parameter overrides Settings.toml.
-pub fn get_server(mainstay_config: Option<mainstay::Config>, mock_db: Option<&MockDatabase>) -> Result<Rocket> {
-    let settings = get_settings_as_map();
+use std::marker::{Send, Sync};
 
-    let mut sc_entity =  match mock_db {
-        None => StateChainEntity::load(settings.clone())?,
-        Some(m) => MockStateChainEntity::load(settings.clone(), m)?,
-    }
-
-    //Set the mainstay config if Some (used for testing)
+/// Start Rocket Server. mainsta_config parameter overrides Settings.toml and env var settings.
+pub fn get_server<T: Database + Send + Sync + 'static>
+    (mainstay_config: Option<mainstay::MainstayConfig>,
+        db: T) -> Result<Rocket> {
+    
+    let mut sc_entity = StateChainEntity::<T>::load(db)?;
+    
     match mainstay_config {
-        Some(c) => sc_entity.mainstay_config = Some(c),
+        Some(c) => sc_entity.config.mainstay = Some(c),
         None => ()
     }
     //At this point the mainstay config should be set,
     //either in testing mode or specified in the settings file
-    if sc_entity.mainstay_config.is_none() {
+    if sc_entity.config.mainstay.is_none() {
         panic!("expected mainstay config");
     }
 
-    set_logging_config(settings.get("log_file"));
+    set_logging_config(&sc_entity.config.log_file);
 
-    let rocket_config = get_rocket_config(&sc_entity.testing_mode);
+    let rocket_config = get_rocket_config(&sc_entity.config);
+
+    let smt_db_loc: String;
+
+    if sc_entity.config.testing_mode {
+        // Use test SMT DB
+        smt_db_loc = SMT_DB_LOC_TESTING.to_string();
+        // reset dbs
+        if let Err(_) = sc_entity.database.reset(&smt_db_loc) {
+            sc_entity.database.init()?;
+        }
+    }
 
     let rock = rocket::custom(rocket_config)
         .register(catchers![internal_error, not_found, bad_request])
@@ -211,7 +104,7 @@ pub fn get_server(mainstay_config: Option<mainstay::Config>, mock_db: Option<&Mo
                 ecdsa::sign_second,
                 util::get_statechain,
                 util::get_smt_root,
-                util::get_confirmed_smt_root,
+                // util::get_confirmed_smt_root,
                 util::get_smt_proof,
                 util::get_fees,
                 util::prepare_sign_tx,
@@ -229,57 +122,18 @@ pub fn get_server(mainstay_config: Option<mainstay::Config>, mock_db: Option<&Mo
         .manage(sc_entity)
         .attach(DatabaseR::fairing()) // read
         .attach(DatabaseW::fairing()); // write
-
     Ok(rock)
 }
 
-/// List of available settings. Set via Settings.toml or enviroment variables MERC_[SETTING_STR.to_uppercase()].
-static SETTING_STRS: [&str; 10] = [
-    "electrum_server",
-    "network",
-    "block_time",
-    "testing_mode",
-    "fee_address",
-    "fee_deposit",
-    "fee_withdraw",
-    "punishment_duration",
-    "batch_lifetime",
-    "smt_db_loc",
-];
 
-pub fn get_settings_as_map() -> HashMap<String, String> {
-    let config_file = include_str!("../Settings.toml");
-    let mut settings = config::Config::default();
-    settings
-        .merge(config::File::from_str(
-            config_file,
-            config::FileFormat::Toml,
-        ))
-        .unwrap();
-
-    let mut settings_as_map: HashMap<String, String> = settings.try_into().unwrap();
-
-    // Override Setting.toml parameters with any environment variable parameters that are set
-    for var_name in SETTING_STRS.iter() {
-        let env_name = format!("MERC_{}", var_name.to_uppercase());
-        match std::env::var(env_name) {
-            Ok(v) => {
-                let _ = settings_as_map.insert(var_name.to_string(), v);
-            }
-            Err(_) => {}
-        }
-    }
-    settings_as_map
-}
-
-fn set_logging_config(log_file: Option<&String>) {
-    if log_file.is_none() {
+fn set_logging_config(log_file: &String) {
+    if log_file.len() == 0 {
         let _ = env_logger::try_init();
     } else {
         // Write log to file
         let logfile = FileAppender::builder()
             .encoder(Box::new(PatternEncoder::new("{l} - {m}\n")))
-            .build(log_file.unwrap())
+            .build(log_file)
             .unwrap();
         let log_config = LogConfig::builder()
             .appender(Appender::builder().build("logfile", Box::new(logfile)))
@@ -289,25 +143,35 @@ fn set_logging_config(log_file: Option<&String>) {
     }
 }
 
-fn get_rocket_config(testing_mode: &bool) -> RocketConfig {
+fn get_rocket_config(config: &Config) -> RocketConfig {
     let mut database_config = HashMap::new();
-    let mut databases = HashMap::new();
 
-    // Make postgres URL. If testing use Test DB for reads and writes.
-    match testing_mode {
-        true => {
-            database_config.insert("url", Value::from(get_postgres_url("TEST".to_string())));
-            databases.insert("postgres_w", Value::from(database_config.clone()));
-            databases.insert("postgres_r", Value::from(database_config));
-        }
-        false => {
-            database_config.insert("url", Value::from(get_postgres_url("W".to_string())));
-            databases.insert("postgres_w", Value::from(database_config));
-            let mut database_config = HashMap::new();
-            database_config.insert("url", Value::from(get_postgres_url("R".to_string())));
-            databases.insert("postgres_r", Value::from(database_config));
-        }
-    };
+    // Make postgres URL.
+    let mut databases = HashMap::new();
+    // write DB
+    database_config.insert("url", Value::from(
+        get_postgres_url(
+            config.storage.db_host_w.clone(),
+            config.storage.db_port_w.clone(),
+            config.storage.db_user_w.clone(),
+            config.storage.db_pass_w.clone(),
+            config.storage.db_database_w.clone(),
+        )
+    ));
+    databases.insert("postgres_w", Value::from(database_config));
+
+    // read DB
+    let mut database_config = HashMap::new();
+    database_config.insert("url", Value::from(
+        get_postgres_url(
+            config.storage.db_host_r.clone(),
+            config.storage.db_port_r.clone(),
+            config.storage.db_user_r.clone(),
+            config.storage.db_pass_r.clone(),
+            config.storage.db_database_r.clone(),
+        )
+    ));
+    databases.insert("postgres_r", Value::from(database_config));
 
     RocketConfig::build(Environment::Staging)
         .extra("databases", databases)
@@ -315,28 +179,7 @@ fn get_rocket_config(testing_mode: &bool) -> RocketConfig {
         .unwrap()
 }
 
-static DB_SETTING_STRS: [&str; 5] = [
-    "MERC_DB_USER",
-    "MERC_DB_PASS",
-    "MERC_DB_HOST",
-    "MERC_DB_PORT",
-    "MERC_DB_DATABASE",
-];
-
 /// Get postgres URL from env vars. Suffix can be "TEST", "W", or "R"
-pub fn get_postgres_url(var_suffix: String) -> String {
-    let mut db_vars = vec![];
-    for db_var_name in DB_SETTING_STRS.iter() {
-        match std::env::var(format!("{}_{}", db_var_name, var_suffix)) {
-            Ok(v) => db_vars.push(v),
-            Err(_) => panic!(
-                "Missing DB environment variable {}",
-                format!("{}_{}", db_var_name, var_suffix)
-            ),
-        }
-    }
-    format!(
-        "postgresql://{}:{}@{}:{}/{}",
-        db_vars[0], db_vars[1], db_vars[2], db_vars[3], db_vars[4]
-    )
+pub fn get_postgres_url(host: String, port: String, user: String, pass: String, database: String) -> String {
+    format!("postgresql://{}:{}@{}:{}/{}",user, pass, host, port, database)
 }

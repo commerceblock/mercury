@@ -1,28 +1,18 @@
+pub mod db;
+use super::Result;
+
 use std::{fmt,error};
 use rocket::response::Responder;
 use rocket::http::{ContentType, Status};
 use uuid::Uuid;
-use shared_lib::state_chain::{StateChain, StateChainSig};
+use shared_lib::state_chain::StateChain;
 use shared_lib::Root;
 use shared_lib::structs::*;
 use std::io::Cursor;
-use bitcoin::blockdata::transaction::Transaction;
-use kms::ecdsa::two_party::*;
-use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
-use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
-use rocket_contrib::json::Json;
-use curv::{
-    elliptic::curves::traits::{ECPoint, ECScalar},
-    {BigInt, FE, GE},
-};
-use chrono::NaiveDateTime;
-use crate::protocol::transfer::{Transfer, TransferFinalizeData};
-use std::collections::HashMap;
-use crate::structs::StateChainAmount;
+use rocket_contrib::databases::r2d2_postgres::{TlsMode,PostgresConnectionManager};
+use rocket_contrib::databases::r2d2;
 
-pub mod db;
-
-use super::Result;
+use crate::server::get_postgres_url;
 
 #[derive(Debug, Deserialize)]
 pub enum StorageError {
@@ -81,6 +71,18 @@ impl error::Error for StorageError {
     }
 }
 
+pub fn get_test_postgres_connection() -> r2d2::PooledConnection<PostgresConnectionManager> {
+    let rocket_url = get_postgres_url(
+        std::env::var("MERC_DB_HOST_W").unwrap(),
+        std::env::var("MERC_DB_PORT_W").unwrap(),
+        std::env::var("MERC_DB_USER_W").unwrap(),
+        std::env::var("MERC_DB_PASS_W").unwrap(),
+        std::env::var("MERC_DB_DATABASE_W").unwrap(),
+    );
+    let manager = PostgresConnectionManager::new(rocket_url, TlsMode::None).unwrap();
+    r2d2::Pool::new(manager).unwrap().get().unwrap()
+}
+
 impl Responder<'static> for StorageError {
     fn respond_to(
         self,
@@ -98,29 +100,29 @@ pub trait Storage {
    // fn insert<T,U>(&self, id: &T, data: U) -> Result<>;
    // fn remove<T,U>&self, id: &T, data: U) -> Result<()>;
 
-   //Create a new user session or update an existing one 
+   //Create a new user session or update an existing one
    //If Uuid is not None, that session is updated. Otherwise, a new one is created.
-   //fn save_user_session(&self, id: &Uuid, auth: String, proof_key: String) 
+   //fn save_user_session(&self, id: &Uuid, auth: String, proof_key: String)
    //     -> Result<()>;
 
-   //fn create_user_session(&self, auth: String, proof_key: String) 
+   //fn create_user_session(&self, auth: String, proof_key: String)
    //     -> Result<()>{
    //  let id = Uuid::new_v4();
    //  self.save_user_session(&id, auth, proof_key)
    //}
 
-   //fn save_statechain(&self, statechain_id: &Uuid, statechain: &StateChain, 
-//                        amount: i64, 
+   //fn save_statechain(&self, statechain_id: &Uuid, statechain: &StateChain,
+//                        amount: i64,
   //                          user_id: &Uuid) -> Result<()>;
 
-//    fn save_backup_tx(&self, statechain_id: &Uuid, backup_tx: &Transaction) 
+//    fn save_backup_tx(&self, statechain_id: &Uuid, backup_tx: &Transaction)
   //      -> Result<()>;
 
     //Returns: (new_root, current_root)
     fn update_smt(&self, funding_txid: &String, proof_key: &String)
         -> Result<(Option<Root>, Root)>;
 
-    //fn save_ecdsa(&self, user_id: &Uuid, 
+    //fn save_ecdsa(&self, user_id: &Uuid,
     //    first_msg: party_one::KeyGenFirstMsg) -> Result<()>;
 
     fn get_confirmed_smt_root(&self) -> Result<Option<Root>>;
@@ -157,12 +159,12 @@ pub trait Storage {
     //fn batch_transfer_exists(&self, batch_id: &Uuid, sig: &StateChainSig)-> bool;
 
     // /transfer/batch/init
-    //fn init_batch_transfer(&self, batch_id: &Uuid, 
+    //fn init_batch_transfer(&self, batch_id: &Uuid,
     //                    state_chains: &HashMap<Uuid, bool>) -> Result<()>;
 
 
     // Returns: finalized, start_time, state_chains, punished
-    //fn get_transfer_batch_status(&self, batch_id: &Uuid) 
+    //fn get_transfer_batch_status(&self, batch_id: &Uuid)
     //    -> Result<TransferBatchDataAPI>;
 
     // Update the locked until time of a state chain (used for punishment)

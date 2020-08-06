@@ -100,6 +100,7 @@ pub fn deposit(
         proof_key: Some(proof_key.to_string()),
     };
     let witness = cosign_tx_input(wallet, &tx_backup_psm)?;
+
     // Add witness to back up tx
     let mut tx_backup_signed = tx_backup_unsigned.clone();
     tx_backup_signed.input[0].witness = witness;

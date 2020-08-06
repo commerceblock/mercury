@@ -13,10 +13,10 @@ use rocket::error::LaunchError;
 use server_lib::server;
 use shared_lib::{
     commitment::make_commitment,
+    mainstay,
     mocks::mock_electrum::MockElectrum,
     state_chain::StateChainSig,
     structs::{BatchData, PrepareSignTxMsg},
-    mainstay
 };
 use std::env;
 use std::error;
@@ -72,9 +72,9 @@ impl From<RecvTimeoutError> for SpawnError {
     }
 }
 
-/// Spawn a StateChain entity server in testing mode if there isn't one running already.
+/// Spawn a StateChain Entity server in testing mode if there isn't one running already.
 /// Returns Ok(()) if a new server was spawned, otherwise returns an error.
-pub fn spawn_server(mainstay_config: Option<mainstay::Config>) -> Result<(), SpawnError> {
+pub fn spawn_server<T: Database>(mainstay_config: Option<mainstay::MainstayConfig>, db: Option<T>) -> Result<(), SpawnError> {
     let (tx, rx) = mpsc::channel::<SpawnError>();
 
     // Set enviroment variable to testing_mode=true to override Settings.toml
@@ -83,7 +83,7 @@ pub fn spawn_server(mainstay_config: Option<mainstay::Config>) -> Result<(), Spa
     // Rocket server is blocking, so we spawn a new thread.
     thread::spawn(move || {
         tx.send({
-            match server::get_server(mainstay_config) {
+            match server::get_server<T>(mainstay_config, db) {
                 Ok(s) => {
                     let try_launch = s.launch();
                     let _ = try_launch.kind(); // LaunchError needs to be accessed here for this to work. Be carfeul modifying this code.

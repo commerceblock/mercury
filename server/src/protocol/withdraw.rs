@@ -2,20 +2,27 @@
 //!
 //! StateEntity Withdraw protocol trait and implementation for StateChainEntity.
 
-use super::super::{Result, StateChainEntity};
+use super::super::Result;
 extern crate shared_lib;
 use shared_lib::{state_chain::*, structs::*};
 
-use crate::error::SEError;
-//use crate::storage::db::{db_deser, db_get_1, db_get_3, db_ser, db_update, Column, Table};
-use crate::{DatabaseR, DatabaseW, Database};
-
-use bitcoin::Transaction;
-use chrono::NaiveDateTime;
 use rocket::State;
 use rocket_contrib::json::Json;
-use uuid::Uuid;
-use crate::storage::Storage;
+
+use crate::error::SEError;
+use crate::{Database, MockDatabase, PGDatabase};
+use crate::{server::StateChainEntity, storage::Storage};
+use cfg_if::cfg_if;
+
+cfg_if! {
+    if #[cfg(test)]{
+        use MockDatabase as DB;
+        type SCE = StateChainEntity::<MockDatabase>;
+    } else {
+        use PGDatabase as DB;
+        type SCE = StateChainEntity::<PGDatabase>;
+    }
+}
 
 /// StateChain Withdraw protocol trait
 pub trait Withdraw {
@@ -37,7 +44,7 @@ pub trait Withdraw {
     ) -> Result<Vec<Vec<u8>>>;
 }
 
-impl Withdraw for StateChainEntity {
+impl Withdraw for SCE {
     fn withdraw_init(
         &self,
         withdraw_msg1: WithdrawMsg1,
@@ -51,8 +58,8 @@ impl Withdraw for StateChainEntity {
 
         // Get statechain
         let sco = self.database.get_statechain_owner(state_chain_id)?;
-            
-        
+
+
         // Check if locked
         is_locked(sco.locked_until)?;
         // check if owned by caller
@@ -70,7 +77,7 @@ impl Withdraw for StateChainEntity {
         // Mark UserSession as authorised for withdrawal
 
         self.database.update_withdraw_sc_sig(&user_id, withdraw_msg1.state_chain_sig)?;
-        
+
         info!(
             "WITHDRAW: Authorised. Shared Key ID: {}. State Chain: {}",
             user_id, state_chain_id
@@ -88,7 +95,7 @@ impl Withdraw for StateChainEntity {
 
         // Get UserSession data - Checking that withdraw tx and statechain signature exists
         let wcd = self.database.get_withdraw_confirm_data(user_id)?;
-        
+
         // Get statechain and update with final StateChainSig
         let mut state_chain: StateChain = self.database.get_statechain(wcd.state_chain_id)?;
 
@@ -96,7 +103,7 @@ impl Withdraw for StateChainEntity {
 
         self.database.update_statechain_amount(&wcd.state_chain_id, state_chain, 0)?;
 
-     
+
 
         // Remove state_chain_id from user session to signal end of session
         self.database.remove_statechain_id(&user_id)?;
@@ -134,7 +141,7 @@ impl Withdraw for StateChainEntity {
 
 #[post("/withdraw/init", format = "json", data = "<withdraw_msg1>")]
 pub fn withdraw_init(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     withdraw_msg1: Json<WithdrawMsg1>,
 ) -> Result<Json<()>> {
     match sc_entity.withdraw_init(withdraw_msg1.into_inner()) {
@@ -145,7 +152,7 @@ pub fn withdraw_init(
 
 #[post("/withdraw/confirm", format = "json", data = "<withdraw_msg2>")]
 pub fn withdraw_confirm(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     withdraw_msg2: Json<WithdrawMsg2>,
 ) -> Result<Json<Vec<Vec<u8>>>> {
     match sc_entity.withdraw_confirm(withdraw_msg2.into_inner()) {
