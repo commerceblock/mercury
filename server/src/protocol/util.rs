@@ -798,7 +798,7 @@ mod tests {
 
     fn test_sc_entity() -> StateChainEntity {
         let mut sc_entity = StateChainEntity::load(get_settings_as_map()).unwrap();
-        sc_entity.mainstay_config = mainstay::Config::from_test();
+        sc_entity.mainstay_config = Some(mainstay::Config::mock_from_url(&test_url()));
         sc_entity
     }
 
