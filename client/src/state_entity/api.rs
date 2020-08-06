@@ -55,5 +55,5 @@ pub fn get_transfer_batch_status(
     client_shim: &ClientShim,
     batch_id: &Uuid,
 ) -> Result<TransferBatchDataAPI> {
-    requests::post(client_shim, &format!("info/transfer-batch/{}", batch_id))
+    requests::get(client_shim, &format!("info/transfer-batch/{}", batch_id))
 }

@@ -184,7 +184,7 @@ mod tests {
         // get_transfer_batch_status invalid id
         let invalid_id = Uuid::new_v4();
         let mut response = client
-            .post(format!("/info/transfer-batch/{}", invalid_id))
+            .get(format!("/info/transfer-batch/{}", invalid_id))
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();
@@ -195,7 +195,7 @@ mod tests {
 
         // get_transfer_batch_status no ID
         let mut response = client
-            .post(format!("/info/transfer-batch/"))
+            .get(format!("/info/transfer-batch/"))
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();

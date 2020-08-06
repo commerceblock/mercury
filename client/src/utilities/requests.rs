@@ -10,13 +10,6 @@ use super::super::ClientShim;
 use super::super::Result;
 use crate::error::CError;
 
-pub fn post<V>(client_shim: &ClientShim, path: &str) -> Result<V>
-where
-    V: serde::de::DeserializeOwned,
-{
-    _postb(client_shim, path, "{}")
-}
-
 pub fn postb<T, V>(client_shim: &ClientShim, path: &str, body: T) -> Result<V>
 where
     T: serde::ser::Serialize,

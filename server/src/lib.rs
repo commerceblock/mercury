@@ -45,7 +45,6 @@ pub mod config;
 pub mod protocol;
 pub mod server;
 pub mod storage;
-// pub mod tests;
 
 type Result<T> = std::result::Result<T, error::SEError>;
 use rocket_contrib::databases::postgres;
