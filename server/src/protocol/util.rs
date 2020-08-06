@@ -474,9 +474,9 @@ impl Storage for StateChainEntity {
                 let db = &mut DB::new();
                 // Set the expectations
                 //Current id is 0
-                db.expect_root_get_current_id().returning(|| Ok(1 as i64));
+                db.expect_root_get_current_id().returning(|| Ok(0 as i64));
                 //Current root is randomly chosen
-                db.expect_get_root().returning(|_x| Ok(Some(Root::from_random())));
+                db.expect_get_root().returning(|_x| Ok(None));
             } else {
                 let db = &self.database;
            }
@@ -492,6 +492,7 @@ impl Storage for StateChainEntity {
         )?;
 
         let new_root = Root::from_hash(&new_root_hash.unwrap());
+        println!("new root: {}", hex::encode(new_root.hash()));
         self.update_root(&new_root)?; // Update current root
 
         Ok((current_root, new_root))
@@ -635,7 +636,18 @@ impl Storage for StateChainEntity {
 
    
     fn get_root(&self, id: i64) -> Result<Option<Root>> {
-        self.database.get_root(id)
+        cfg_if! {
+            if #[cfg(test)]{
+                //Create a new mock database
+                let db = &mut DB::new();
+                // Set the expectations
+                //Current id is 1
+                db.expect_get_root().returning(|x| Ok(Some(Root::from_random())));
+            } else {
+                let db = &self.database;
+           }
+        }
+        db.get_root(id)
     }
 
 
@@ -679,7 +691,7 @@ impl Storage for StateChainEntity {
 
         let state_chain = self.database.get_statechain_amount(state_chain_id)?;
         let tx_backup = self.database.get_backup_transaction(state_chain_id)?;
-        
+
         Ok({
             StateChainDataAPI {
                 amount: state_chain.amount as u64,
@@ -795,6 +807,7 @@ mod tests {
     use super::*;
     use super::super::super::server::get_settings_as_map;
     use super::super::super::StateChainEntity;
+    use std::convert::TryInto;
 
     fn test_sc_entity() -> StateChainEntity {
         let mut sc_entity = StateChainEntity::load(get_settings_as_map()).unwrap();
@@ -864,8 +877,10 @@ mod tests {
     #[serial]
     fn test_update_root_smt() {
         let db = &mut DB::new();  
-        
         let sc_entity = test_sc_entity();
+
+        //Mainstay post commitment mock
+        let _m = mocks::ms::post_commitment().create();
 
         let (_, new_root) = sc_entity.update_smt(
             &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
@@ -873,11 +888,14 @@ mod tests {
         )
         .unwrap();
 
-        db.expect_root_get_current_id().returning(|| Ok(1 as i64));      
-        let current_root = sc_entity.get_root(db.root_get_current_id().unwrap())
-            .unwrap()
-            .unwrap();
-        assert_eq!(new_root.hash(), current_root.hash());
+        let hash_exp: [u8;32] = 
+        hex::decode("bdb8618ea37b27b771da7609b30860568f3e81a2951e62b03f76cd34b14242fc")
+                    .unwrap()[..].try_into().unwrap();
+
+        assert_eq!(new_root.hash(), 
+                hash_exp, 
+                "new root incorrect");
 
     }
+
 }

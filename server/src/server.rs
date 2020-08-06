@@ -1,5 +1,5 @@
 use super::protocol::*;
-use super::StateChainEntity;
+use super::{StateChainEntity, MockStateChainEntity};
 
 use crate::DatabaseR;
 use crate::{
@@ -15,6 +15,7 @@ use rocket;
 use rocket::config::{Config as RocketConfig, Environment, Value};
 use rocket::{Request, Rocket};
 use shared_lib::mainstay;
+use crate::MockDatabase;
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
@@ -29,7 +30,73 @@ pub static SMT_DB_LOC_TESTING: &str = "./db-smt-testing";
 
 impl StateChainEntity {
     pub fn load(settings: HashMap<String, String>) -> Result<StateChainEntity> {
-        let fee_address = settings.get("fee_address").unwrap().to_string();
+
+       let fee_address = settings.get("fee_address").unwrap().to_string();
+        if let Err(e) = bitcoin::Address::from_str(&fee_address) {
+            panic!("Invalid fee address: {}", e)
+        };
+
+        let testing_mode = bool::from_str(settings.get("testing_mode").unwrap()).unwrap();
+
+        //mainstay_config is optional
+        let mainstay_config = match testing_mode {
+            true =>  None,
+            false => match settings.get("mainstay_config") {
+                Some(o) => Some(o.parse::<mainstay::Config>().unwrap()),
+                None => None,
+            },
+        };
+
+        let database = DB::get_test();
+
+        let mut smt_db_loc: String;
+        if testing_mode {
+            // Use test SMT DB
+            smt_db_loc = SMT_DB_LOC_TESTING.to_string();
+            // reset dbs
+            if let Err(_) = database.reset_dbs(&smt_db_loc) {
+                database.make_tables()?;
+            }
+        } else {
+            smt_db_loc = settings
+                .get("smt_db_loc")
+                .unwrap_or(&SMT_DB_LOC_DEFAULT.to_string())
+                .to_string();
+        }
+
+        Ok(StateChainEntity {
+            smt_db_loc,
+            electrum_server: settings.get("electrum_server").unwrap().to_string(),
+            network: settings.get("network").unwrap().to_string(),
+            testing_mode,
+            fee_address,
+            fee_deposit: settings.get("fee_deposit").unwrap().parse::<u64>().unwrap(),
+            fee_withdraw: settings
+                .get("fee_withdraw")
+                .unwrap()
+                .parse::<u64>()
+                .unwrap(),
+            block_time: settings.get("block_time").unwrap().parse::<u64>().unwrap(),
+            batch_lifetime: settings
+                .get("batch_lifetime")
+                .unwrap()
+                .parse::<u64>()
+                .unwrap(),
+            punishment_duration: settings
+                .get("punishment_duration")
+                .unwrap()
+                .parse::<u64>()
+                .unwrap(),
+            mainstay_config,
+            database,
+        })
+    }
+}
+
+impl MockStateChainEntity {
+    pub fn load(settings: HashMap<String, String>, mock_db: &MockDatabase) -> Result<MockStateChainEntity> {
+
+       let fee_address = settings.get("fee_address").unwrap().to_string();
         if let Err(e) = bitcoin::Address::from_str(&fee_address) {
             panic!("Invalid fee address: {}", e)
         };
@@ -107,10 +174,13 @@ fn not_found(req: &Request) -> String {
 }
 
 /// Start Rocket Server. testing_mode parameter overrides Settings.toml.
-pub fn get_server(mainstay_config: Option<mainstay::Config>) -> Result<Rocket> {
+pub fn get_server(mainstay_config: Option<mainstay::Config>, mock_db: Option<&MockDatabase>) -> Result<Rocket> {
     let settings = get_settings_as_map();
 
-    let mut sc_entity = StateChainEntity::load(settings.clone())?;
+    let mut sc_entity =  match mock_db {
+        None => StateChainEntity::load(settings.clone())?,
+        Some(m) => MockStateChainEntity::load(settings.clone(), m)?,
+    }
 
     //Set the mainstay config if Some (used for testing)
     match mainstay_config {
