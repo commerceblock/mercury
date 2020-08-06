@@ -242,7 +242,7 @@ pub struct SwapMsg1 {
 /// Owner -> Conductor
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SwapMsg2 {
-    pub blinded_token: String,
+    pub blinded_spend_token: String,
 }
 
 impl Default for TransferMsg5 {
