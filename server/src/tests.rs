@@ -80,11 +80,14 @@ mod tests {
 
         // get_statechain invalid id
         let invalid_id = Uuid::new_v4();
+        println!("statechain");
         let mut response = client
             .post(format!("/info/statechain/{}", invalid_id))
             .header(ContentType::JSON)
             .dispatch();
+        println!("unwrapping response");
         let res = response.body_string().unwrap();
+        println!("response: {}", res);
         assert_eq!(
             res,
             format!("DB Error: No data for identifier. (id: {})", invalid_id)

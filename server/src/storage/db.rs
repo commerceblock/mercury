@@ -1175,6 +1175,34 @@ fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
             )?)
     }
 
+    fn get_ecdsa_fourth_message_input(&self, user_id: Uuid)
+        ->  Result<ECDSAFourthMessageInput> {
+            let (
+                party_one_private_str,
+                party_one_pdl_decommit_str,
+                party_two_pdl_first_message_str,
+                alpha_str,
+            ) = self.get_4::<String, String, String, String>(
+                user_id,
+                Table::Ecdsa,
+                vec![
+                    Column::Party1Private,
+                    Column::PDLDecommit,
+                    Column::Party2PDLFirstMsg,
+                    Column::Alpha,
+                ],
+            )?;
+    
+            let party_one_private: party_one::Party1Private = Self::deser(party_one_private_str)?;
+            let party_one_pdl_decommit: party_one::PDLdecommit = Self::deser(party_one_pdl_decommit_str)?;
+            let party_two_pdl_first_message: party_two::PDLFirstMessage =
+                Self::deser(party_two_pdl_first_message_str)?;
+            let alpha: Alpha = Self::deser(alpha_str)?;
+
+            Ok({ECDSAFourthMessageInput{party_one_private, party_one_pdl_decommit,
+                party_two_pdl_first_message, alpha}})
+    }
+
     fn get_ecdsa_keypair(&self, user_id: Uuid) -> Result<ECDSAKeypair> {
 
         let (party_1_private_str, party_2_public_str) = self.get_2::<String, String>(
@@ -1282,6 +1310,78 @@ fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
                 &state_chain_id,
                 &Self::ser(finalized_data.s2)?,
             ],
+        )
+    }
+
+    fn update_ecdsa_sign_first(&self, user_id: Uuid, 
+        eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg,
+        eph_ec_key_pair_party1: party_one::EphEcKeyPair) -> Result<()> {
+        
+    //    user_id, 
+    //    sign_msg1.eph_key_gen_first_message_party_two,
+    //    eph_ec_key_pair_party1
+    //) -> Result<()> {
+
+
+        self.update(
+            &user_id,
+            Table::Ecdsa,
+            vec![Column::EphKeyGenFirstMsg, Column::EphEcKeyPair],
+            vec![
+                &Self::ser(eph_key_gen_first_message_party_two)?,
+                &Self::ser(eph_ec_key_pair_party1)?,
+            ],
+        )?;
+
+    //}
+
+        Ok(())
+    }
+
+    fn get_ecdsa_sign_second_input(&self, user_id: Uuid) 
+        -> Result<ECDSASignSecondInput> {
+        
+        let (shared_key_str, eph_ec_key_pair_party1_str, eph_key_gen_first_message_party_two_str) =
+        self.get_3::<String, String, String>(
+            user_id,
+            Table::Ecdsa,
+            vec![
+                Column::Party1MasterKey,
+                Column::EphEcKeyPair,
+                Column::EphKeyGenFirstMsg,
+            ],
+        )?;
+
+        let shared_key: MasterKey1 = Self::deser(shared_key_str)?;
+        let eph_ec_key_pair_party1: party_one::EphEcKeyPair = Self::deser(eph_ec_key_pair_party1_str)?;
+        let eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg =
+        Self::deser(eph_key_gen_first_message_party_two_str)?;
+
+       // pub struct ECDSASignSecondInput {
+       //     pub shared_key: MasterKey1,
+       //     pub eph_ec_key_pair_party1: party_one::EphEcKeyPair,
+       //     pub eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg,
+       // }
+
+
+        Ok(ECDSASignSecondInput{shared_key, eph_ec_key_pair_party1,
+            eph_key_gen_first_message_party_two})
+    }
+
+    fn get_tx_withdraw(&self, user_id: Uuid) -> Result<Transaction>{
+        Self::deser(self.get_1(
+            user_id,
+            Table::UserSession,
+            vec![Column::TxWithdraw],
+        )?)
+    }
+
+    fn update_tx_withdraw(&self, user_id: Uuid, tx: Transaction) -> Result<()> {
+        self.update(
+            &user_id,
+            Table::UserSession,
+            vec![Column::TxWithdraw],
+            vec![&Self::ser(tx)?],
         )
     }
 }

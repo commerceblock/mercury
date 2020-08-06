@@ -834,6 +834,9 @@ mod tests {
 
         //The root should be confirmed now
         let rootc = sc_entity.get_confirmed_smt_root().unwrap().unwrap();
+
+        
+
         assert!(rootc.is_confirmed(), "expected the root to be confirmed");
 
         //let root1 = db_root_get(&db_read, &(root1_id as i64)).unwrap().unwrap();

@@ -63,6 +63,7 @@ use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, par
 use kms::ecdsa::two_party::*;
 use mockall::*;
 use mockall::predicate::*;
+use crate::storage::db::{Alpha, HDPos};
 
 type Result<T> = std::result::Result<T, error::SEError>;
 use rocket_contrib::databases::postgres;
@@ -206,6 +207,16 @@ pub trait Database {
     fn transfer_init_user_session(&self, new_user_id: &Uuid,
         state_chain_id: &Uuid, 
         finalized_data: TransferFinalizeData) -> Result<()>;
+    fn get_ecdsa_fourth_message_input(&self, user_id: Uuid) -> Result<ECDSAFourthMessageInput>;
+    fn update_ecdsa_sign_first(&self, user_id: Uuid, 
+        eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg,
+        eph_ec_key_pair_party1: party_one::EphEcKeyPair) -> Result<()>;
+
+    fn get_ecdsa_sign_second_input(&self, user_id: Uuid) 
+        -> Result<ECDSASignSecondInput>;
+
+    fn get_tx_withdraw(&self, user_id: Uuid) -> Result<Transaction>;
+    fn update_tx_withdraw(&self, user_id: Uuid, tx: Transaction) -> Result<()>; 
 }
 
 pub mod structs {
@@ -251,4 +262,18 @@ pub mod structs {
         pub party_1_private: Party1Private,
         pub party_2_public: GE
     }
+
+    pub struct ECDSAFourthMessageInput{
+        pub party_one_private: party_one::Party1Private,
+        pub party_one_pdl_decommit: party_one::PDLdecommit,
+        pub party_two_pdl_first_message: party_two::PDLFirstMessage,
+        pub alpha: Alpha, 
+    }
+
+    pub struct ECDSASignSecondInput {
+        pub shared_key: MasterKey1,
+        pub eph_ec_key_pair_party1: party_one::EphEcKeyPair,
+        pub eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg,
+    }
+    
 }

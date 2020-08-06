@@ -25,6 +25,7 @@ use curv::{
 use crate::storage::db::{Alpha, HDPos};
 use crate::Database as DB;
 use crate::PGDatabase as PGDB;
+use crate::structs::*;
 
 use kms::ecdsa::two_party::*;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
@@ -214,34 +215,15 @@ impl Ecdsa for StateChainEntity {
         let user_id = key_gen_msg4.shared_key_id;
         let db = &self.database;
 
-        let (
-            party_one_private_str,
-            party_one_pdl_decommit_str,
-            party_two_pdl_first_message_str,
-            alpha_str,
-        ) = db.get_4::<String, String, String, String>(
-            user_id,
-            Table::Ecdsa,
-            vec![
-                Column::Party1Private,
-                Column::PDLDecommit,
-                Column::Party2PDLFirstMsg,
-                Column::Alpha,
-            ],
-        )?;
-
-        let party_one_private: party_one::Party1Private = PGDB::deser(party_one_private_str)?;
-        let party_one_pdl_decommit: party_one::PDLdecommit = PGDB::deser(party_one_pdl_decommit_str)?;
-        let party_two_pdl_first_message: party_two::PDLFirstMessage =
-            PGDB::deser(party_two_pdl_first_message_str)?;
-        let alpha: Alpha = PGDB::deser(alpha_str)?;
+        let fmi : ECDSAFourthMessageInput =
+            db.get_ecdsa_fourth_message_input(user_id)?;
 
         let pdl_second_msg = MasterKey1::key_gen_fourth_message(
-            &party_two_pdl_first_message,
+            &fmi.party_two_pdl_first_message,
             &key_gen_msg4.party_two_pdl_second_message,
-            party_one_private,
-            party_one_pdl_decommit,
-            alpha.value,
+            fmi.party_one_private,
+            fmi.party_one_pdl_decommit,
+            fmi.alpha.value,
         );
 
         assert!(pdl_second_msg.is_ok());
@@ -260,17 +242,15 @@ impl Ecdsa for StateChainEntity {
 
         let db = &self.database;
 
-        let (sign_party_one_first_message, eph_ec_key_pair_party1) =
+        let (sign_party_one_first_message, eph_ec_key_pair_party1) :
+            //(multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::
+                (party_one::EphKeyGenFirstMsg, party_one::EphEcKeyPair) =
+            //(i64, i64) =
             MasterKey1::sign_first_message();
 
-        db.update(
-            &user_id,
-            Table::Ecdsa,
-            vec![Column::EphKeyGenFirstMsg, Column::EphEcKeyPair],
-            vec![
-                &PGDB::ser(sign_msg1.eph_key_gen_first_message_party_two)?,
-                &PGDB::ser(eph_ec_key_pair_party1)?,
-            ],
+        self.database.update_ecdsa_sign_first(user_id, 
+            sign_msg1.eph_key_gen_first_message_party_two,
+            eph_ec_key_pair_party1
         )?;
 
         Ok(sign_party_one_first_message)
@@ -312,27 +292,13 @@ impl Ecdsa for StateChainEntity {
         }
 
         // Get 2P-Ecdsa data
-        let (shared_key_str, eph_ec_key_pair_party1_str, eph_key_gen_first_message_party_two_str) =
-            db.get_3::<String, String, String>(
-                user_id,
-                Table::Ecdsa,
-                vec![
-                    Column::Party1MasterKey,
-                    Column::EphEcKeyPair,
-                    Column::EphKeyGenFirstMsg,
-                ],
-            )?;
-
-        let shared_key: MasterKey1 = PGDB::deser(shared_key_str)?;
-        let eph_ec_key_pair_party1: party_one::EphEcKeyPair = PGDB::deser(eph_ec_key_pair_party1_str)?;
-        let eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg =
-            PGDB::deser(eph_key_gen_first_message_party_two_str)?;
+        let ssi: ECDSASignSecondInput = db.get_ecdsa_sign_second_input(user_id)?;
 
         let signature;
-        match shared_key.sign_second_message(
+        match ssi.shared_key.sign_second_message(
             &sign_msg2.sign_second_msg_request.party_two_sign_message,
-            &eph_key_gen_first_message_party_two,
-            &eph_ec_key_pair_party1,
+            &ssi.eph_key_gen_first_message_party_two,
+            &ssi.eph_ec_key_pair_party1,
             &sign_msg2.sign_second_msg_request.message,
         ) {
             Ok(sig) => signature = sig,
@@ -345,21 +311,10 @@ impl Ecdsa for StateChainEntity {
 
         // Get transaction which is being signed.
         let mut tx: Transaction = match sign_msg2.sign_second_msg_request.protocol {
-            Protocol::Withdraw => PGDB::deser(db.get_1(
-                user_id,
-                Table::UserSession,
-                vec![Column::TxWithdraw],
-            )?)?,
-            _ => {
-                // despoit() and transfer() both sign tx_backup
-                PGDB::deser(db.get_1(
-                    user_id,
-                    Table::UserSession,
-                    vec![Column::TxBackup],
-                )?)?
-            }
+            Protocol::Withdraw => db.get_tx_withdraw(user_id)?,
+            _ => db.get_backup_transaction(user_id)?
         };
-
+     
         // Make signature witness
         let mut r_vec = BigInt::to_vec(&signature.r);
         if r_vec.len() != 32 {
@@ -379,7 +334,7 @@ impl Ecdsa for StateChainEntity {
         v.extend(s_vec);
         let mut sig_vec = Signature::from_compact(&v[..])?.serialize_der().to_vec();
         sig_vec.push(01);
-        let pk_vec = shared_key.public.q.get_element().serialize().to_vec();
+        let pk_vec = ssi.shared_key.public.q.get_element().serialize().to_vec();
         let mut witness = vec![sig_vec, pk_vec];
 
         // Add signature to tx
@@ -388,12 +343,7 @@ impl Ecdsa for StateChainEntity {
         match sign_msg2.sign_second_msg_request.protocol {
             Protocol::Withdraw => {
                 // Store signed withdraw tx in UserSession DB object
-                db.update(
-                    &user_id,
-                    Table::UserSession,
-                    vec![Column::TxWithdraw],
-                    vec![&PGDB::ser(tx)?],
-                )?;
+                db.update_tx_withdraw(user_id, tx)?;
 
                 info!("WITHDRAW: Tx signed and stored. User ID: {}", user_id);
                 // Do not return withdraw tx witness until /withdraw/confirm is complete
@@ -401,12 +351,7 @@ impl Ecdsa for StateChainEntity {
             }
             _ => {
                 // Store signed backup tx in UserSession DB object
-                db.update(
-                    &user_id,
-                    Table::UserSession,
-                    vec![Column::TxBackup],
-                    vec![&PGDB::ser(tx)?],
-                )?;
+                db.update_user_backup_tx(&user_id, tx)?;
                 info!(
                     "DEPOSIT/TRANSFER: Backup Tx signed and stored. User: {}",
                     user_id
