@@ -22,7 +22,10 @@ mod tests {
     fn test_auth_token() {
         println!("get client");
         let mainstay_config = mainstay::Config::mock_from_url(&mockito::server_url());
+        
         let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
+
+        
         // get ID
         println!("get id");
         let deposit_msg1 = DepositMsg1 {
@@ -49,9 +52,9 @@ mod tests {
             .body(serde_json::to_string(&key_gen_msg1).unwrap())
             .header(ContentType::JSON)
             .dispatch();
+        println!("got first");
         assert_eq!(response.status(), Status::Ok);
 
-        println!("got first");
         let (res, _): (String, party_one::KeyGenFirstMsg) =
             serde_json::from_str(&response.body_string().unwrap()).unwrap();
         assert_eq!(res, id_str);
