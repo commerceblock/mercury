@@ -32,13 +32,13 @@ use crate::storage::Storage;
 use crate::Database;
 use cfg_if::cfg_if;
 
-//cfg_if! {
-//    if #[cfg(test)]{
-//        use crate::MockDatabase as DB;
-//    } else {
+cfg_if! {
+    if #[cfg(test)]{
+        use crate::MockDatabase as DB;
+    } else {
         use crate::PGDatabase as DB;
-//    }
-//}
+    }
+}
 
 
 use bitcoin::Transaction;
@@ -437,7 +437,18 @@ impl Storage for StateChainEntity {
 
      /// Update the database and the mainstay slot with the SMT root, if applicable
      fn update_root(&self, root: &Root) -> Result<i64> {
-        
+        cfg_if! {
+            if #[cfg(test)]{
+                //Create a new mock database
+                let db = &mut DB::new();
+                // Set the expectations
+                //Current id is 1
+                db.expect_root_update().returning(|x| Ok(1 as i64));
+            } else {
+                let db = &self.database;
+           }
+        }
+
         match &self.mainstay_config {
             Some(c) => match root.attest(&c) {
                 Ok(_) => (),
@@ -446,9 +457,8 @@ impl Storage for StateChainEntity {
             None => (),
         };
 
-        let id = self.database.root_update(root)?;
+        let id = db.root_update(root)?;
         Ok(id)
-        
      }
 
     // Update SMT with new (key: value) pair and update current root value
@@ -458,19 +468,19 @@ impl Storage for StateChainEntity {
         proof_key: &String,
     ) -> Result<(Option<Root>, Root)> {
         //Use the mock database trait if in test mode
-        //cfg_if! {
-        //    if #[cfg(test)]{
+        cfg_if! {
+            if #[cfg(test)]{
                 //Create a new mock database
-        //        let mut db = DB::get_test();
+                let db = &mut DB::new();
                 // Set the expectations
                 //Current id is 0
-        //        db.expect_root_get_current_id().returning(|| Ok(0 as i64));
+                db.expect_root_get_current_id().returning(|| Ok(1 as i64));
                 //Current root is randomly chosen
-         //       db.expect_get_root().returning(|x| Ok(Some(Root::from_random())));
-         //   } else {
+                db.expect_get_root().returning(|_x| Ok(Some(Root::from_random())));
+            } else {
                 let db = &self.database;
-         //   }
-        //}
+           }
+        }
 
         //If mocked out current_root will be randomly chosen
         let current_root = db.get_root(db.root_get_current_id()?)?;
@@ -496,14 +506,18 @@ impl Storage for StateChainEntity {
         use crate::shared_lib::mainstay::{Commitment, CommitmentIndexed, 
             CommitmentInfo, MainstayAPIError};
 
-        //cfg_if!{
-        //    if #[cfg(test)]{
+        cfg_if!{
+            if #[cfg(test)]{
                 //Create a new mock database
-        //        let db = &DB::get_test();
-       //     } else {
+                let db = &mut DB::new();
+                db.expect_root_get_current_id().returning(|| Ok(1 as i64));
+                db.expect_get_root().returning(|_x| Ok(Some(Root::from_random())));
+                db.expect_root_update().returning(|_x| Ok(1));
+                db.expect_get_confirmed_smt_root().returning(||Ok(Some(Root::from_random())));
+            } else {
                 let db = &self.database;
-       //     }
-       // }
+            }
+        }
 
 
         fn update_db_from_ci(
@@ -835,7 +849,7 @@ mod tests {
         //The root should be confirmed now
         let rootc = sc_entity.get_confirmed_smt_root().unwrap().unwrap();
 
-        
+
 
         assert!(rootc.is_confirmed(), "expected the root to be confirmed");
 
@@ -849,7 +863,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_update_root_smt() {
-        let db = DB::get_test();        
+        let db = &mut DB::new();  
+        
         let sc_entity = test_sc_entity();
 
         let (_, new_root) = sc_entity.update_smt(
@@ -858,6 +873,7 @@ mod tests {
         )
         .unwrap();
 
+        db.expect_root_get_current_id().returning(|| Ok(1 as i64));      
         let current_root = sc_entity.get_root(db.root_get_current_id().unwrap())
             .unwrap()
             .unwrap();

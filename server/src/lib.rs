@@ -103,7 +103,7 @@ use structs::*;
 
 #[automock]
 pub trait Database {
-    fn new(con_fun: fn()->r2d2::PooledConnection<PostgresConnectionManager>)-> Self;
+    fn from_conn(con_fun: fn()->r2d2::PooledConnection<PostgresConnectionManager>)-> Self;
     fn get_test() -> Self;
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid>;
     fn has_withdraw_sc_sig(&self, user_id: Uuid) -> Result<()>;

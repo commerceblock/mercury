@@ -591,13 +591,13 @@ impl PGDatabase {
 
 impl Database for PGDatabase {
 
-    fn new(con_fun: fn()->r2d2::PooledConnection<PostgresConnectionManager>)
+    fn from_conn(con_fun: fn()->r2d2::PooledConnection<PostgresConnectionManager>)
         -> Self {
         Self{ db_connection: con_fun}
     }
 
     fn get_test() -> Self {
-        Self::new(Self::get_test_postgres_connection)
+        Self::from_conn(Self::get_test_postgres_connection)
     }
 
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid>{
