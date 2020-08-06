@@ -3,16 +3,17 @@ use crate::DatabaseR;
 use crate::{
     //storage::{db_make_tables, db_reset_dbs, get_test_postgres_connection},
     DatabaseW,
-    Database
+    Database,
+    PGDatabase
 };
 
-use crate::PGDatabase as DB;
-
-use config;
-use rocket;
-use rocket::config::{Config as RocketConfig, Environment, Value};
-use rocket::{Request, Rocket};
+use crate::{config::SMT_DB_LOC_TESTING, PGDatabase as DB};
 use shared_lib::mainstay;
+
+use crate::config::Config;
+use rocket;
+use rocket::{Request, Rocket};
+use rocket::config::{Config as RocketConfig, Environment, Value};
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
@@ -23,16 +24,19 @@ use std::collections::HashMap;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 pub struct StateChainEntity {
-    pub config: Config
+    pub config: Config,
+    pub database: PGDatabase
 }
 
 impl StateChainEntity {
     pub fn load() -> Result<StateChainEntity> {
         // Get config as defaults, Settings.toml and env vars
         let config_rs = Config::load()?;
+        let database = DB::get_test();
 
         Ok(StateChainEntity {
-            config: config_rs
+            config: config_rs,
+            database
         })
     }
 }
@@ -72,7 +76,7 @@ pub fn get_server(mainstay_config: Option<mainstay::MainstayConfig>) -> Result<R
     let rocket_config = get_rocket_config(&sc_entity.config);
 
     let database = DB::get_test();
-    let mut smt_db_loc: String;
+    let smt_db_loc: String;
     if sc_entity.config.testing_mode {
         // Use test SMT DB
         smt_db_loc = SMT_DB_LOC_TESTING.to_string();
@@ -80,11 +84,6 @@ pub fn get_server(mainstay_config: Option<mainstay::MainstayConfig>) -> Result<R
         if let Err(_) = database.reset_dbs(&smt_db_loc) {
             database.make_tables()?;
         }
-    } else {
-        smt_db_loc = settings
-            .get("smt_db_loc")
-            .unwrap_or(&SMT_DB_LOC_DEFAULT.to_string())
-            .to_string();
     }
 
     let rock = rocket::custom(rocket_config)
@@ -101,7 +100,7 @@ pub fn get_server(mainstay_config: Option<mainstay::MainstayConfig>) -> Result<R
                 ecdsa::sign_second,
                 util::get_statechain,
                 util::get_smt_root,
-                util::get_confirmed_smt_root,
+                // util::get_confirmed_smt_root,
                 util::get_smt_proof,
                 util::get_fees,
                 util::prepare_sign_tx,

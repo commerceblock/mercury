@@ -49,12 +49,14 @@ pub mod protocol;
 pub mod server;
 pub mod storage;
 
-use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
+type Result<T> = std::result::Result<T, error::SEError>;
+pub type Hash = bitcoin::hashes::sha256d::Hash;
+
+use rocket_contrib::databases::r2d2_postgres::PostgresConnectionManager;
 use rocket_contrib::databases::r2d2;
 
 use uuid::Uuid;
-use shared_lib::{Root, structs::*, state_chain::*};
-use crate::protocol::transfer::TransferFinalizeData;
+use shared_lib::{Root, state_chain::*};
 use chrono::NaiveDateTime;
 use std::collections::HashMap;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
@@ -62,17 +64,11 @@ use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, par
 use kms::ecdsa::two_party::*;
 use mockall::*;
 use mockall::predicate::*;
-use crate::storage::db::{Alpha, HDPos};
-
-type Result<T> = std::result::Result<T, error::SEError>;
+use curv::{BigInt, FE, GE};
 use rocket_contrib::databases::postgres;
-use curv::{
-    elliptic::curves::traits::{ECPoint, ECScalar},
-    {BigInt, FE, GE},
-};
-
 use bitcoin::Transaction;
-pub type Hash = bitcoin::hashes::sha256d::Hash;
+use crate::storage::db::Alpha;
+use crate::protocol::transfer::TransferFinalizeData;
 
 #[database("postgres_w")]
 pub struct DatabaseW(postgres::Connection);
@@ -81,21 +77,6 @@ pub struct DatabaseR(postgres::Connection);
 
 pub struct PGDatabase {
     pub db_connection: fn()->r2d2::PooledConnection<PostgresConnectionManager>
-}
-
-pub struct StateChainEntity {
-    pub electrum_server: String,
-    pub network: String,
-    pub testing_mode: bool,  // set for testing mode
-    pub fee_address: String, // receive address for fee payments
-    pub fee_deposit: u64,    // satoshis
-    pub fee_withdraw: u64,   // satoshis
-    pub block_time: u64,
-    pub batch_lifetime: u64,
-    pub punishment_duration: u64,
-    pub mainstay_config: Option<mainstay::Config>,
-    pub smt_db_loc: String,
-    pub database: PGDatabase
 }
 
 use structs::*;

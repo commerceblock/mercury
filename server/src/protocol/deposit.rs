@@ -5,9 +5,7 @@
 use super::super::Result;
 extern crate shared_lib;
 use crate::error::SEError;
-use crate::storage::db::{db_deser, db_get_2, db_insert, db_ser, db_update, Column, Table};
-use crate::{DatabaseR, DatabaseW, server::StateChainEntity};
-use bitcoin::Transaction;
+use crate::server::StateChainEntity;
 use shared_lib::{state_chain::*, structs::*, util::FEE};
 
 use rocket::State;

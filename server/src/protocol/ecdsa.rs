@@ -3,16 +3,11 @@ use super::super::Result;
 use crate::error::{DBErrorType, SEError};
 use crate::{
     storage::db::{
-        //db_deser, db_get_1, db_get_2, db_get_3, db_get_4, db_insert, db_ser, db_update, 
+        //db_deser, db_get_1, db_get_2, db_get_3, db_get_4, db_insert, db_ser, db_update,
         Column,
         Table,
     },
-<<<<<<< HEAD
-    DatabaseR, DatabaseW, server::StateChainEntity,
-=======
-    //DatabaseR, DatabaseW,
     Database
->>>>>>> 87681e6c8fc0a82806b665c559e624acaac9cb39
 };
 use shared_lib::{
     structs::{KeyGenMsg1, KeyGenMsg2, KeyGenMsg3, KeyGenMsg4, Protocol, SignMsg1, SignMsg2},
@@ -29,7 +24,7 @@ use curv::{
 use crate::storage::db::{Alpha, HDPos};
 use crate::Database as DB;
 use crate::PGDatabase as PGDB;
-use crate::structs::*;
+use crate::{server::StateChainEntity, structs::*};
 
 use kms::ecdsa::two_party::*;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
@@ -89,12 +84,12 @@ impl Ecdsa for StateChainEntity {
                     Column::CommWitness,
                 ],
             )?;
-    
+
         let party2_public: GE = PGDB::deser(party2_public_str)?;
         let paillier_key_pair: party_one::PaillierKeyPair = PGDB::deser(paillier_key_pair_str)?;
         let party_one_private: party_one::Party1Private = PGDB::deser(party_one_private_str)?;
         let comm_witness: party_one::CommWitness = PGDB::deser(comm_witness_str)?;
-    
+
         let master_key = MasterKey1::set_master_key(
             &BigInt::from(0),
             party_one_private,
@@ -102,7 +97,7 @@ impl Ecdsa for StateChainEntity {
             &party2_public,
             paillier_key_pair,
         );
-    
+
         db.update(
             &user_id,
             Table::Ecdsa,
@@ -166,12 +161,12 @@ impl Ecdsa for StateChainEntity {
 
         let party2_public: GE = key_gen_msg2.dlog_proof.pk.clone();
 
-        let (comm_witness, ec_key_pair) = 
+        let (comm_witness, ec_key_pair) =
             db.get_ecdsa_witness_keypair(user_id)?;
 
-        
 
-        let (kg_party_one_second_message, paillier_key_pair, party_one_private) : 
+
+        let (kg_party_one_second_message, paillier_key_pair, party_one_private) :
                 (party1::KeyGenParty1Message2, party_one::PaillierKeyPair, party_one::Party1Private) =
             MasterKey1::key_gen_second_message(
                 comm_witness,
@@ -180,8 +175,8 @@ impl Ecdsa for StateChainEntity {
             );
 
         db.update_keygen_second_msg(
-            &user_id, 
-            party2_public, 
+            &user_id,
+            party2_public,
             paillier_key_pair,
             party_one_private
         )?;
@@ -195,7 +190,7 @@ impl Ecdsa for StateChainEntity {
     ) -> Result<party_one::PDLFirstMessage> {
         let user_id = key_gen_msg3.shared_key_id;
         let db = &self.database;
-        let party_one_private: party_one::Party1Private = 
+        let party_one_private: party_one::Party1Private =
             db.get_ecdsa_party_1_private(user_id)?;
 
         let (party_one_third_message, party_one_pdl_decommit, alpha) =
@@ -252,7 +247,7 @@ impl Ecdsa for StateChainEntity {
             //(i64, i64) =
             MasterKey1::sign_first_message();
 
-        self.database.update_ecdsa_sign_first(user_id, 
+        self.database.update_ecdsa_sign_first(user_id,
             sign_msg1.eph_key_gen_first_message_party_two,
             eph_ec_key_pair_party1
         )?;
@@ -318,7 +313,7 @@ impl Ecdsa for StateChainEntity {
             Protocol::Withdraw => db.get_tx_withdraw(user_id)?,
             _ => db.get_backup_transaction(user_id)?
         };
-     
+
         // Make signature witness
         let mut r_vec = BigInt::to_vec(&signature.r);
         if r_vec.len() != 32 {

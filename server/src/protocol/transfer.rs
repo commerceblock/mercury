@@ -9,39 +9,17 @@ use super::{
 
 extern crate shared_lib;
 use crate::error::SEError;
-<<<<<<< HEAD
-use crate::{
-    storage::db::{
-        db_deser, db_get_1, db_get_2, db_get_3, db_insert, db_remove, db_ser, db_update, Column,
-        Table,
-    },
-    DatabaseR, DatabaseW, server::StateChainEntity,
-};
-=======
-//use crate::{
-    //storage::db::{
-        //db_deser, db_get_1, db_get_2, db_get_3, db_insert, db_remove, db_ser, db_update, 
-        //Column,
-        //Table,
-    //},
-    //DatabaseR, DatabaseW,
-//};
-use crate::storage::db;
 use crate::Database;
->>>>>>> 87681e6c8fc0a82806b665c559e624acaac9cb39
 use shared_lib::{state_chain::*, structs::*};
-use crate::storage::Storage;
+use crate::{server::StateChainEntity, storage::Storage};
 
 use bitcoin::Transaction;
-use chrono::NaiveDateTime;
 use curv::{
     elliptic::curves::traits::{ECPoint, ECScalar},
     {BigInt, FE, GE},
 };
-use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 use rocket::State;
 use rocket_contrib::json::Json;
-use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Struct holds data when transfer is complete but not yet finalized
@@ -98,7 +76,7 @@ impl Transfer for StateChainEntity {
         let state_chain_id = self.database.get_statechain_id(user_id)?;
 
         // Check if transfer has already been completed (but not finalized)
-        if self.database.transfer_is_completed(state_chain_id){    
+        if self.database.transfer_is_completed(state_chain_id){
             return Err(SEError::Generic(String::from(
                 "Transfer already completed. Waiting for finalize.",
             )));
@@ -211,11 +189,7 @@ impl Transfer for StateChainEntity {
             let mut tbd = self.database.get_finalize_batch_data(batch_id)?;
 
             // Ensure batch transfer is still active
-<<<<<<< HEAD
-            if transfer_batch_is_ended(start_time, self.config.batch_lifetime as i64) {
-=======
-            if transfer_batch_is_ended(tbd.start_time, self.batch_lifetime as i64) {
->>>>>>> 87681e6c8fc0a82806b665c559e624acaac9cb39
+            if transfer_batch_is_ended(tbd.start_time, self.config.batch_lifetime as i64) {
                 return Err(SEError::Generic(String::from(
                     "Transfer batch ended. Too late to complete transfer.",
                 )));
@@ -224,7 +198,7 @@ impl Transfer for StateChainEntity {
             tbd.state_chains.insert(state_chain_id.clone(), true);
             tbd.finalized_data_vec.push(finalized_data.clone());
 
-            self.database.update_finalize_batch_data(&batch_id, tbd.state_chains, 
+            self.database.update_finalize_batch_data(&batch_id, tbd.state_chains,
                                                         tbd.finalized_data_vec)?;
 
         // If not batch then finalize transfer now
@@ -258,23 +232,23 @@ impl Transfer for StateChainEntity {
 
         // Update state chain
         let mut state_chain: StateChain = self.database.get_statechain(state_chain_id)?;
-    
+
         state_chain.add(finalized_data.state_chain_sig.to_owned())?;
 
-        
+
         let new_user_id = finalized_data.new_shared_key_id;
 
-        self.database.update_statechain_owner(&state_chain_id, 
+        self.database.update_statechain_owner(&state_chain_id,
             state_chain.clone(), &new_user_id)?;
 
         // Create new UserSession to allow new owner to generate shared wallet
 
-        self.database.transfer_init_user_session(&new_user_id, &state_chain_id, 
+        self.database.transfer_init_user_session(&new_user_id, &state_chain_id,
             finalized_data.to_owned())?;
-            
+
 
         self.database.update_backup_tx(&state_chain_id, finalized_data.new_tx_backup.to_owned())?;
-      
+
 
         info!(
             "TRANSFER: Finalized. New shared key ID: {}. State Chain ID: {}",

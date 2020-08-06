@@ -5,25 +5,12 @@
 
 use super::{
     super::Result,
-    transfer::{Transfer, TransferFinalizeData},
+    transfer::Transfer,
 };
 
 extern crate shared_lib;
 use crate::error::SEError;
-use crate::{
-<<<<<<< HEAD
-    storage::db::{
-        db_deser, db_get_1, db_get_2, db_get_4, db_insert, db_ser, db_update, Column, Table,
-    },
-    DatabaseR, DatabaseW, server::StateChainEntity,
-=======
-    //storage::db::{
-        //db_deser, db_get_1, db_get_2, db_get_4, db_insert, db_ser, db_update, Column, Table,
-    //},
-    //DatabaseR, DatabaseW,
-    Database
->>>>>>> 87681e6c8fc0a82806b665c559e624acaac9cb39
-};
+use crate::{server::StateChainEntity, Database};
 use shared_lib::{commitment::verify_commitment, state_chain::*, structs::*};
 
 use chrono::{NaiveDateTime, Utc};
@@ -122,7 +109,7 @@ impl BatchTransfer for StateChainEntity {
         batch_id: Uuid,
     ) -> Result<()> {
         info!("TRANSFER_FINALIZE_BATCH: ID: {}", batch_id);
-      
+
         let fbd = self.database.get_finalize_batch_data(batch_id)?;
 
 
@@ -160,11 +147,7 @@ impl BatchTransfer for StateChainEntity {
             )));
         }
 
-<<<<<<< HEAD
-        if !transfer_batch_is_ended(start_time, self.config.batch_lifetime as i64) {
-=======
-        if !transfer_batch_is_ended(tbd.start_time, self.batch_lifetime as i64) {
->>>>>>> 87681e6c8fc0a82806b665c559e624acaac9cb39
+        if !transfer_batch_is_ended(tbd.start_time, self.config.batch_lifetime as i64) {
             return Err(SEError::Generic(String::from("Transfer Batch still live.")));
         }
 
