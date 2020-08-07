@@ -98,7 +98,13 @@ mod tests {
     fn test_get_statechain() {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let mut db = MockDatabase::new();
-        let _ = spawn_server::<MockDatabase>(Some(mainstay_config), db);
+        
+        db.expect_reset().returning(|_|Ok(()));
+
+        let handle = spawn_server::<MockDatabase>(Some(mainstay_config), db);
+        thread::sleep(std::time::Duration::from_millis(1000));
+        handle.join().expect("The thread being joined has panicked");
+
         let mut wallet = gen_wallet();
 
         let err = state_entity::api::get_statechain(&wallet.client_shim, &Uuid::new_v4());
