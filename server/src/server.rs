@@ -1,4 +1,6 @@
 use super::protocol::*;
+use mockall::*;
+use mockall::predicate::*;
 use crate::DatabaseR;
 use crate::{
     //storage::{db_make_tables, db_reset_dbs, get_test_postgres_connection},
@@ -14,6 +16,7 @@ use crate::config::Config;
 use rocket;
 use rocket::{Request, Rocket};
 use rocket::config::{Config as RocketConfig, Environment, Value};
+use crate::MockDatabase;
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
@@ -23,22 +26,21 @@ use std::collections::HashMap;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-pub struct StateChainEntity {
+pub struct StateChainEntity <T: Database + Send + Sync + 'static> {
     pub config: Config,
-    pub database: PGDatabase
+    pub database: T
 }
 
-impl StateChainEntity {
-    pub fn load() -> Result<StateChainEntity> {
-        // Get config as defaults, Settings.toml and env vars
+impl<T: Database + Send + Sync + 'static> StateChainEntity<T> {
+    pub fn load(db: T) -> Result<StateChainEntity<T>> {
+    // Get config as defaults, Settings.toml and env vars
         let config_rs = Config::load()?;
-        let database = DB::get_test();
-
-        Ok(StateChainEntity {
+       
+        Ok(Self {
             config: config_rs,
-            database
+            database: db
         })
-    }
+    }  
 }
 
 #[catch(500)]
@@ -56,11 +58,15 @@ fn not_found(req: &Request) -> String {
     format!("Unknown route '{}'.", req.uri())
 }
 
-/// Start Rocket Server. mainsta_config parameter overrides Settings.toml and env var settings.
-pub fn get_server(mainstay_config: Option<mainstay::MainstayConfig>) -> Result<Rocket> {
-    let mut sc_entity = StateChainEntity::load()?;
+use std::marker::{Send, Sync};
 
-    //Override the mainstay config if Some (used for testing)
+/// Start Rocket Server. mainsta_config parameter overrides Settings.toml and env var settings.
+pub fn get_server<T: Database + Send + Sync + 'static>
+    (mainstay_config: Option<mainstay::MainstayConfig>,
+        db: T) -> Result<Rocket> {
+    
+    let mut sc_entity = StateChainEntity::<T>::load(db)?;
+    
     match mainstay_config {
         Some(c) => sc_entity.config.mainstay = Some(c),
         None => ()
@@ -75,14 +81,14 @@ pub fn get_server(mainstay_config: Option<mainstay::MainstayConfig>) -> Result<R
 
     let rocket_config = get_rocket_config(&sc_entity.config);
 
-    let database = DB::get_test();
     let smt_db_loc: String;
+
     if sc_entity.config.testing_mode {
         // Use test SMT DB
         smt_db_loc = SMT_DB_LOC_TESTING.to_string();
         // reset dbs
-        if let Err(_) = database.reset_dbs(&smt_db_loc) {
-            database.make_tables()?;
+        if let Err(_) = sc_entity.database.reset(&smt_db_loc) {
+            sc_entity.database.init()?;
         }
     }
 
@@ -178,4 +184,21 @@ fn get_rocket_config(config: &Config) -> RocketConfig {
 /// Get postgres URL from env vars. Suffix can be "TEST", "W", or "R"
 pub fn get_postgres_url(host: String, port: String, user: String, pass: String, database: String) -> String {
     format!("postgresql://{}:{}@{}:{}/{}",user, pass, host, port, database)
+}
+
+use uuid::Uuid;
+use crate::protocol::deposit::Deposit;
+use crate::protocol::deposit;
+use shared_lib::structs::*;
+
+//Mock all the traits implemented by StateChainEntity
+mock!{
+    StateChainEntity{}
+    trait Deposit {
+        fn deposit_init(&self, deposit_msg1: DepositMsg1) -> deposit::Result<Uuid>;
+        fn deposit_confirm(
+            &self,
+            deposit_msg2: DepositMsg2,
+        ) -> deposit::Result<Uuid>;
+    }
 }

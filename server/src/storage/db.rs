@@ -30,6 +30,7 @@ use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Part
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
 use kms::ecdsa::two_party::*;
 use curv::{BigInt, FE, GE};
+use bitcoin::hashes::sha256d;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Alpha {
@@ -169,6 +170,10 @@ impl PGDatabase {
         );
         let manager = PostgresConnectionManager::new(rocket_url, TlsMode::None).unwrap();
         r2d2::Pool::new(manager).unwrap().get().unwrap()
+    }
+
+    pub fn init(&self) -> Result<()>{
+        self.make_tables()
     }
 
     /// Build DB tables and Schemas
@@ -351,6 +356,10 @@ impl PGDatabase {
             &[],
         )?;
         Ok(())
+    }
+
+    fn reset(&self, smt_db_loc: &String) -> Result<()>{
+        self.reset_dbs(smt_db_loc)
     }
 
     pub fn reset_dbs(&self, smt_db_loc: &String) -> Result<()> {
@@ -637,6 +646,15 @@ impl Database for PGDatabase {
             vec![Column::SigHash],
             vec![&Self::ser(sig_hash)?],
         )
+    }
+
+    fn get_sighash(&self, user_id: Uuid) -> Result<sha256d::Hash> {
+        let sig_hash: sha256d::Hash = Self::deser(self.get_1(
+            user_id,
+            Table::UserSession,
+            vec![Column::SigHash],
+        )?)?;
+        Ok(sig_hash)
     }
 
     fn update_user_backup_tx(&self,user_id: &Uuid, tx: Transaction) -> Result<()> {
@@ -1060,6 +1078,37 @@ fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
             Table::Ecdsa,
             vec![Column::Party1MasterKey],
         )
+    }
+
+    //kms::ecdsa::two_party::MasterKey1
+    fn update_ecdsa_master(&self, user_id: &Uuid, master_key: MasterKey1) -> Result<()>{
+        self.update(
+            user_id,
+            Table::Ecdsa,
+            vec![Column::Party1MasterKey],
+            vec![&Self::ser(master_key)?],
+        )
+    }
+
+    fn get_ecdsa_master_key_input(&self, user_id: Uuid) -> Result<ECDSAMasterKeyInput> {
+        let (party2_public_str, paillier_key_pair_str, party_one_private_str, comm_witness_str) =
+            self.get_4::<String, String, String, String>(
+                user_id,
+                Table::Ecdsa,
+                vec![
+                    Column::Party2Public,
+                    Column::PaillierKeyPair,
+                    Column::Party1Private,
+                    Column::CommWitness,
+                ],
+            )?;
+
+        let party2_public: GE = Self::deser(party2_public_str)?;
+        let paillier_key_pair: party_one::PaillierKeyPair = Self::deser(paillier_key_pair_str)?;
+        let party_one_private: party_one::Party1Private = Self::deser(party_one_private_str)?;
+        let comm_witness: party_one::CommWitness = Self::deser(comm_witness_str)?;
+       
+        Ok(ECDSAMasterKeyInput{party2_public, paillier_key_pair, party_one_private, comm_witness})
     }
 
     fn get_ecdsa_witness_keypair(&self, user_id: Uuid)

@@ -10,8 +10,19 @@ use rocket::State;
 use rocket_contrib::json::Json;
 
 use crate::error::SEError;
-use crate::Database;
+use crate::{Database, MockDatabase, PGDatabase};
 use crate::{server::StateChainEntity, storage::Storage};
+use cfg_if::cfg_if;
+
+cfg_if! {
+    if #[cfg(test)]{
+        use MockDatabase as DB;
+        type SCE = StateChainEntity::<MockDatabase>;
+    } else {
+        use PGDatabase as DB;
+        type SCE = StateChainEntity::<PGDatabase>;
+    }
+}
 
 /// StateChain Withdraw protocol trait
 pub trait Withdraw {
@@ -33,7 +44,7 @@ pub trait Withdraw {
     ) -> Result<Vec<Vec<u8>>>;
 }
 
-impl Withdraw for StateChainEntity {
+impl Withdraw for SCE {
     fn withdraw_init(
         &self,
         withdraw_msg1: WithdrawMsg1,
@@ -130,7 +141,7 @@ impl Withdraw for StateChainEntity {
 
 #[post("/withdraw/init", format = "json", data = "<withdraw_msg1>")]
 pub fn withdraw_init(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     withdraw_msg1: Json<WithdrawMsg1>,
 ) -> Result<Json<()>> {
     match sc_entity.withdraw_init(withdraw_msg1.into_inner()) {
@@ -141,7 +152,7 @@ pub fn withdraw_init(
 
 #[post("/withdraw/confirm", format = "json", data = "<withdraw_msg2>")]
 pub fn withdraw_confirm(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     withdraw_msg2: Json<WithdrawMsg2>,
 ) -> Result<Json<Vec<Vec<u8>>>> {
     match sc_entity.withdraw_confirm(withdraw_msg2.into_inner()) {

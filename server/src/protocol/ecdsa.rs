@@ -22,8 +22,6 @@ use curv::{
 };
 
 use crate::storage::db::{Alpha, HDPos};
-use crate::Database as DB;
-use crate::PGDatabase as PGDB;
 use crate::{server::StateChainEntity, structs::*};
 
 use kms::ecdsa::two_party::*;
@@ -33,6 +31,18 @@ use rocket_contrib::json::Json;
 
 use std::string::ToString;
 use uuid::Uuid;
+use crate::{MockDatabase, PGDatabase};
+use cfg_if::cfg_if;
+
+cfg_if! {
+    if #[cfg(test)]{
+        use MockDatabase as DB;
+        type SCE = StateChainEntity::<MockDatabase>;
+    } else {
+        use PGDatabase as DB;
+        type SCE = StateChainEntity::<PGDatabase>;
+    }
+}
 
 /// 2P-ECDSA protocol trait
 pub trait Ecdsa {
@@ -70,40 +80,21 @@ pub trait Ecdsa {
 }
 
 
-impl Ecdsa for StateChainEntity {
+impl Ecdsa for SCE {
     fn master_key(&self, user_id: Uuid) -> Result<()> {
         let db = &self.database;
-        let (party2_public_str, paillier_key_pair_str, party_one_private_str, comm_witness_str) =
-            db.get_4::<String, String, String, String>(
-                user_id,
-                Table::Ecdsa,
-                vec![
-                    Column::Party2Public,
-                    Column::PaillierKeyPair,
-                    Column::Party1Private,
-                    Column::CommWitness,
-                ],
-            )?;
-
-        let party2_public: GE = PGDB::deser(party2_public_str)?;
-        let paillier_key_pair: party_one::PaillierKeyPair = PGDB::deser(paillier_key_pair_str)?;
-        let party_one_private: party_one::Party1Private = PGDB::deser(party_one_private_str)?;
-        let comm_witness: party_one::CommWitness = PGDB::deser(comm_witness_str)?;
+        
+        let mki = db.get_ecdsa_master_key_input(user_id)?;
 
         let master_key = MasterKey1::set_master_key(
             &BigInt::from(0),
-            party_one_private,
-            &comm_witness.public_share,
-            &party2_public,
-            paillier_key_pair,
+            mki.party_one_private,
+            &mki.comm_witness.public_share,
+            &mki.party2_public,
+            mki.paillier_key_pair,
         );
 
-        db.update(
-            &user_id,
-            Table::Ecdsa,
-            vec![Column::Party1MasterKey],
-            vec![&PGDB::ser(master_key)?],
-        )
+        db.update_ecdsa_master(&user_id, master_key)
     }
 
     fn first_message(
@@ -264,11 +255,7 @@ impl Ecdsa for StateChainEntity {
         let db = &self.database;
 
         // Get validated sig hash for this user
-        let sig_hash: sha256d::Hash = PGDB::deser(db.get_1(
-            user_id,
-            Table::UserSession,
-            vec![Column::SigHash],
-        )?)?;
+        let sig_hash: sha256d::Hash = db.get_sighash(user_id)?;
 
         // Check sig hash is of corrcet length. Leading 0s are lost during BigInt conversion so add them
         // back here if necessary.
@@ -364,7 +351,7 @@ impl Ecdsa for StateChainEntity {
 
 #[post("/ecdsa/keygen/first", format = "json", data = "<key_gen_msg1>")]
 pub fn first_message(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     key_gen_msg1: Json<KeyGenMsg1>,
 ) -> Result<Json<(Uuid, party_one::KeyGenFirstMsg)>> {
     match sc_entity.first_message(key_gen_msg1.into_inner()) {
@@ -375,7 +362,7 @@ pub fn first_message(
 
 #[post("/ecdsa/keygen/second", format = "json", data = "<key_gen_msg2>")]
 pub fn second_message(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     key_gen_msg2: Json<KeyGenMsg2>,
 ) -> Result<Json<party1::KeyGenParty1Message2>> {
     match sc_entity.second_message(key_gen_msg2.into_inner()) {
@@ -386,7 +373,7 @@ pub fn second_message(
 
 #[post("/ecdsa/keygen/third", format = "json", data = "<key_gen_msg3>")]
 pub fn third_message(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     key_gen_msg3: Json<KeyGenMsg3>,
 ) -> Result<Json<party_one::PDLFirstMessage>> {
     match sc_entity.third_message(key_gen_msg3.into_inner()) {
@@ -397,7 +384,7 @@ pub fn third_message(
 
 #[post("/ecdsa/keygen/fourth", format = "json", data = "<key_gen_msg4>")]
 pub fn fourth_message(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     key_gen_msg4: Json<KeyGenMsg4>,
 ) -> Result<Json<party_one::PDLSecondMessage>> {
     match sc_entity.fourth_message(key_gen_msg4.into_inner()) {
@@ -408,7 +395,7 @@ pub fn fourth_message(
 
 #[post("/ecdsa/sign/first", format = "json", data = "<sign_msg1>")]
 pub fn sign_first(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     sign_msg1: Json<SignMsg1>,
 ) -> Result<Json<party_one::EphKeyGenFirstMsg>> {
     match sc_entity.sign_first(sign_msg1.into_inner()) {
@@ -419,7 +406,7 @@ pub fn sign_first(
 
 #[post("/ecdsa/sign/second", format = "json", data = "<sign_msg2>")]
 pub fn sign_second(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     sign_msg2: Json<SignMsg2>,
 ) -> Result<Json<Vec<Vec<u8>>>> {
     match sc_entity.sign_second(sign_msg2.into_inner()) {

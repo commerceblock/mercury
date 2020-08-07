@@ -10,7 +10,7 @@ use super::{
 
 extern crate shared_lib;
 use crate::error::SEError;
-use crate::{server::StateChainEntity, Database};
+use crate::{server::StateChainEntity, Database, MockDatabase, PGDatabase};
 use shared_lib::{commitment::verify_commitment, state_chain::*, structs::*};
 
 use chrono::{NaiveDateTime, Utc};
@@ -18,6 +18,19 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use std::{collections::HashMap, str::FromStr};
 use uuid::Uuid;
+use cfg_if::cfg_if;
+
+//Generics cannot be used in Rocket State, therefore we define the concrete 
+//type of StateChainEntity here
+cfg_if! {
+    if #[cfg(test)]{
+        use crate::MockDatabase as DB;
+        type SCE = StateChainEntity::<MockDatabase>;
+    } else {
+        use crate::PGDatabase as DB;
+        type SCE = StateChainEntity::<PGDatabase>;
+    }
+}
 
 /// StateChain BatchTransfer protocol trait
 pub trait BatchTransfer {
@@ -42,7 +55,7 @@ pub trait BatchTransfer {
     ) -> Result<()>;
 }
 
-impl BatchTransfer for StateChainEntity {
+impl BatchTransfer for SCE {
     fn transfer_batch_init(
         &self,
         transfer_batch_init_msg: TransferBatchInitMsg,
@@ -196,7 +209,7 @@ pub fn transfer_batch_is_ended(start_time: NaiveDateTime, batch_lifetime: i64) -
     data = "<transfer_batch_init_msg>"
 )]
 pub fn transfer_batch_init(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     transfer_batch_init_msg: Json<TransferBatchInitMsg>,
 ) -> Result<Json<()>> {
     match sc_entity.transfer_batch_init(transfer_batch_init_msg.into_inner()) {
@@ -211,7 +224,7 @@ pub fn transfer_batch_init(
     data = "<transfer_reveal_nonce>"
 )]
 pub fn transfer_reveal_nonce(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     transfer_reveal_nonce: Json<TransferRevealNonce>,
 ) -> Result<Json<()>> {
     match sc_entity.transfer_reveal_nonce(transfer_reveal_nonce.into_inner()) {

@@ -15,11 +15,14 @@ use std::str::FromStr;
 #[cfg(test)]
 use mockito;
 
+use server_lib::{MockDatabase};
+
 #[cfg(test)]
 #[serial]
 pub fn run_simulation() {
     let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
-    let _ = spawn_server(Some(mainstay_config));
+    let mut db = MockDatabase::new();
+    let _ = spawn_server::<MockDatabase>(Some(mainstay_config), db);
 
     // Begin with a few clients
     let mut wallets = vec![];

@@ -2,7 +2,7 @@
 //!
 //! StateEntity Deposit trait and implementation for StateChainEntity.
 
-use super::super::Result;
+pub use super::super::Result;
 extern crate shared_lib;
 use crate::error::SEError;
 use crate::server::StateChainEntity;
@@ -12,11 +12,19 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use uuid::Uuid;
 use crate::storage::Storage;
-use crate::Database;
-use mockall::predicate::*;
-use mockall::*;
+use crate::{Database, MockDatabase, PGDatabase};
+use cfg_if::cfg_if;
 
-#[automock]
+//Generics cannot be used in Rocket State, therefore we define the concrete
+//type of StateChainEntity here
+cfg_if! {
+    if #[cfg(test)]{
+        type SCE = StateChainEntity::<MockDatabase>;
+    } else {
+        type SCE = StateChainEntity::<PGDatabase>;
+    }
+}
+
 /// StateChain Deposit protocol trait
 pub trait Deposit {
     /// API: Initiliase deposit protocol:
@@ -34,7 +42,7 @@ pub trait Deposit {
     ) -> Result<Uuid>;
 }
 
-impl Deposit for StateChainEntity {
+impl Deposit for SCE {
     fn deposit_init(&self, deposit_msg1: DepositMsg1) -> Result<Uuid> {
         // Generate shared wallet ID (user ID)
         let user_id = Uuid::new_v4();
@@ -80,7 +88,7 @@ impl Deposit for StateChainEntity {
         }
 
         // Wait for funding tx existence in blockchain and confs
-        self.verify_tx_confirmed(&tx_backup.input[0].previous_output.txid.to_string(), self)?;
+        self.verify_tx_confirmed(&tx_backup.input[0].previous_output.txid.to_string())?;
 
         // Create state chain DB object
         let state_chain_id = Uuid::new_v4();
@@ -125,9 +133,10 @@ impl Deposit for StateChainEntity {
     }
 }
 
+
 #[post("/deposit/init", format = "json", data = "<deposit_msg1>")]
 pub fn deposit_init(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     deposit_msg1: Json<DepositMsg1>,
 ) -> Result<Json<Uuid>> {
     match sc_entity.deposit_init(deposit_msg1.into_inner()) {
@@ -138,7 +147,7 @@ pub fn deposit_init(
 
 #[post("/deposit/confirm", format = "json", data = "<deposit_msg2>")]
 pub fn deposit_confirm(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     deposit_msg2: Json<DepositMsg2>,
 ) -> Result<Json<Uuid>> {
     match sc_entity.deposit_confirm(deposit_msg2.into_inner()) {

@@ -20,7 +20,7 @@ use shared_lib::{
 
 use crate::error::{DBErrorType, SEError};
 use crate::storage::Storage;
-use crate::{server::StateChainEntity, Database};
+use crate::{server::StateChainEntity, Database, MockDatabase, PGDatabase};
 use cfg_if::cfg_if;
 
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
@@ -33,11 +33,15 @@ use uuid::Uuid;
 #[cfg(test)]
 use mockito::{mock, Matcher, Mock};
 
+//Generics cannot be used in Rocket State, therefore we define the concrete 
+//type of StateChainEntity here
 cfg_if! {
     if #[cfg(test)]{
         use crate::MockDatabase as DB;
+        type SCE = StateChainEntity::<MockDatabase>;
     } else {
         use crate::PGDatabase as DB;
+        type SCE = StateChainEntity::<PGDatabase>;
     }
 }
 
@@ -79,7 +83,7 @@ pub trait Utilities {
     ) -> Result<()>;
 }
 
-impl Utilities for StateChainEntity {
+impl Utilities for SCE {
     fn get_fees(&self) -> Result<StateEntityFeeInfoAPI> {
         Ok(StateEntityFeeInfoAPI {
             address: self.config.fee_address.clone(),
@@ -296,7 +300,7 @@ impl Utilities for StateChainEntity {
 }
 
 #[get("/info/fee", format = "json")]
-pub fn get_fees(sc_entity: State<StateChainEntity>) -> Result<Json<StateEntityFeeInfoAPI>> {
+pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
     match sc_entity.get_fees() {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -305,7 +309,7 @@ pub fn get_fees(sc_entity: State<StateChainEntity>) -> Result<Json<StateEntityFe
 
 #[get("/info/statechain/<state_chain_id>", format = "json")]
 pub fn get_statechain(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     state_chain_id: String,
 ) -> Result<Json<StateChainDataAPI>> {
     match sc_entity.get_statechain_data_api(Uuid::from_str(&state_chain_id).unwrap()) {
@@ -316,7 +320,7 @@ pub fn get_statechain(
 
 #[post("/info/root", format = "json")]
 pub fn get_smt_root(
-    sc_entity: State<StateChainEntity>
+    sc_entity: State<SCE>
 ) -> Result<Json<Option<Root>>> {
     match sc_entity.get_smt_root() {
         Ok(res) => return Ok(Json(res)),
@@ -326,7 +330,7 @@ pub fn get_smt_root(
 
 #[post("/info/proof", format = "json", data = "<smt_proof_msg>")]
 pub fn get_smt_proof(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     smt_proof_msg: Json<SmtProofMsgAPI>,
 ) -> Result<Json<Option<Proof>>> {
     match sc_entity.get_smt_proof(smt_proof_msg.into_inner()) {
@@ -337,7 +341,7 @@ pub fn get_smt_proof(
 
 #[get("/info/transfer-batch/<batch_id>", format = "json")]
 pub fn get_transfer_batch_status(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     batch_id: String,
 ) -> Result<Json<TransferBatchDataAPI>> {
     match sc_entity.get_transfer_batch_status(Uuid::from_str(&batch_id).unwrap()) {
@@ -348,7 +352,7 @@ pub fn get_transfer_batch_status(
 
 #[post("/prepare-sign", format = "json", data = "<prepare_sign_msg>")]
 pub fn prepare_sign_tx(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     prepare_sign_msg: Json<PrepareSignTxMsg>,
 ) -> Result<Json<()>> {
     match sc_entity.prepare_sign_tx(prepare_sign_msg.into_inner()) {
@@ -358,14 +362,14 @@ pub fn prepare_sign_tx(
 }
 
 // Utily functions for StateChainEntity to be used throughout codebase.
-impl StateChainEntity {
+impl SCE {
     /// Query an Electrum Server for a transaction's confirmation status.
     /// Return Ok() if confirmed or Error if not after some waiting period.
-    pub fn verify_tx_confirmed(&self, txid: &String, sc_entity: &StateChainEntity) -> Result<()> {
-        let mut electrum: Box<dyn Electrumx> = if sc_entity.config.testing_mode {
+    pub fn verify_tx_confirmed(&self, txid: &String) -> Result<()> {
+        let mut electrum: Box<dyn Electrumx> = if self.config.testing_mode {
             Box::new(MockElectrum::new())
         } else {
-            Box::new(ElectrumxClient::new(sc_entity.config.electrum_server.clone()).unwrap())
+            Box::new(ElectrumxClient::new(self.config.electrum_server.clone()).unwrap())
         };
 
         info!(
@@ -386,20 +390,20 @@ impl StateChainEntity {
                             warn!("Funding transaction not mined after 10 blocks. Deposit failed. Txid: {}", txid);
                             return Err(SEError::Generic(String::from("Funding transaction failure to be mined - consider increasing the fee. Deposit failed.")));
                         }
-                        thread::sleep(Duration::from_millis(sc_entity.config.block_time));
+                        thread::sleep(Duration::from_millis(self.config.block_time));
                     } else {
                         // If confs increase then wait 6*(block time) and return Ok()
                         info!(
                             "Funding transaction mined. Waiting for 6 blocks confirmation. Txid: {}",
                             txid
                         );
-                        thread::sleep(Duration::from_millis(6 * sc_entity.config.block_time));
+                        thread::sleep(Duration::from_millis(6 * self.config.block_time));
                         return Ok(());
                     }
                 }
                 Err(_) => {
                     is_broadcast += 1;
-                    thread::sleep(Duration::from_millis(sc_entity.config.block_time));
+                    thread::sleep(Duration::from_millis(self.config.block_time));
                 }
             }
         }
@@ -501,22 +505,12 @@ impl StateChainEntity {
     }
 }
 
-impl Storage for StateChainEntity {
+impl Storage for SCE {
 
      /// Update the database and the mainstay slot with the SMT root, if applicable
      fn update_root(&self, root: &Root) -> Result<i64> {
-        cfg_if! {
-            if #[cfg(test)]{
-                //Create a new mock database
-                let db = &mut DB::new();
-                // Set the expectations
-                //Current id is 1
-                db.expect_root_update().returning(|_| Ok(1 as i64));
-            } else {
-                let db = &self.database;
-           }
-        }
-
+         let db = &self.database;
+    
         match &self.config.mainstay {
             Some(c) => match root.attest(&c) {
                 Ok(_) => (),
@@ -542,9 +536,9 @@ impl Storage for StateChainEntity {
                 let db = &mut DB::new();
                 // Set the expectations
                 //Current id is 0
-                db.expect_root_get_current_id().returning(|| Ok(1 as i64));
+                db.expect_root_get_current_id().returning(|| Ok(0 as i64));
                 //Current root is randomly chosen
-                db.expect_get_root().returning(|_x| Ok(Some(Root::from_random())));
+                db.expect_get_root().returning(|_x| Ok(None));
             } else {
                 let db = &self.database;
            }
@@ -560,6 +554,7 @@ impl Storage for StateChainEntity {
         )?;
 
         let new_root = Root::from_hash(&new_root_hash.unwrap());
+        println!("new root: {}", hex::encode(new_root.hash()));
         self.update_root(&new_root)?; // Update current root
 
         Ok((current_root, new_root))
@@ -573,20 +568,8 @@ impl Storage for StateChainEntity {
     fn get_confirmed_smt_root(&self) -> Result<Option<Root>> {
         use crate::shared_lib::mainstay::{Commitment, CommitmentIndexed,
             CommitmentInfo, MainstayAPIError};
-
-        cfg_if!{
-            if #[cfg(test)]{
-                //Create a new mock database
-                let db = &mut DB::new();
-                db.expect_root_get_current_id().returning(|| Ok(1 as i64));
-                db.expect_get_root().returning(|_x| Ok(Some(Root::from_random())));
-                db.expect_root_update().returning(|_x| Ok(1));
-                db.expect_get_confirmed_smt_root().returning(||Ok(Some(Root::from_random())));
-            } else {
-                let db = &self.database;
-            }
-        }
-
+        
+        let db = &self.database;
 
         fn update_db_from_ci(
             db: &DB,
@@ -703,7 +686,18 @@ impl Storage for StateChainEntity {
 
 
     fn get_root(&self, id: i64) -> Result<Option<Root>> {
-        self.database.get_root(id)
+        cfg_if! {
+            if #[cfg(test)]{
+                //Create a new mock database
+                let db = &mut DB::new();
+                // Set the expectations
+                //Current id is 1
+                db.expect_get_root().returning(|x| Ok(Some(Root::from_random())));
+            } else {
+                let db = &self.database;
+           }
+        }
+        db.get_root(id)
     }
 
 
@@ -855,97 +849,122 @@ mod mocks {
 
 }
 
+#[cfg(test)]
+mod tests {
 
-// #[cfg(test)]
-// mod tests {
-//
-//     use std::str::FromStr;
-//     use super::*;
-//     // use super::super::super::server::get_settings_as_map;
-//     // use super::super::super::StateChainEntity;
-//
-//     fn test_sc_entity() -> StateChainEntity {
-//         let mut sc_entity = StateChainEntity::load().unwrap();
-//         sc_entity.mainstay_config = Some(mainstay::MainstayConfig::mock_from_url(&test_url()));
-//         sc_entity
-//     }
-//
-//     fn test_url() -> String {
-//         String::from(&mockito::server_url())
-//     }
-//
-//     #[test]
-//     #[serial]
-//     fn test_verify_root() {
-//         let sc_entity = test_sc_entity();
-//         let mc = Some(mainstay::MainstayConfig::mock_from_url(&test_url()));
-//
-//         //No commitments initially
-//         let _m = mocks::ms::commitment_proof_not_found();
-//
-//         assert_eq!(sc_entity.get_smt_root().unwrap(), None, "expected Ok(None)");
-//
-//         let com1 = mainstay::Commitment::from_str(
-//             "71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d")
-//             .unwrap();
-//
-//         let root1 = Root::from_hash(&com1.to_hash());
-//
-//         assert_eq!(root1.hash(), com1.to_hash(), "expected roots to match");
-//
-//         let _m_send = mocks::ms::post_commitment().create();
-//
-//         let _root1_id = match sc_entity.update_root(&root1) {
-//             Ok(id) => id,
-//             Err(e) => {
-//                 assert!(false, e.to_string());
-//                 0
-//             }
-//         };
-//
-//         // Root posted but not confirmed yet
-//
-//         //Update the local copy of root1
-//         //let root1 = db_root_get(&db_read, &(root1_id as i64)).unwrap().unwrap();
-//
-//         assert!(root1.is_confirmed() == false);
-//
-//         //Some time later, the root is committed to mainstay
-//         let _m_com = mocks::ms::commitment().create();
-//         let _m_com_proof = mocks::ms::commitment_proof().create();
-//
-//         //The root should be confirmed now
-//         let rootc = sc_entity.get_confirmed_smt_root().unwrap().unwrap();
-//
-//
-//
-//         assert!(rootc.is_confirmed(), "expected the root to be confirmed");
-//
-//         //let root1 = db_root_get(&db_read, &(root1_id as i64)).unwrap().unwrap();
-//
-//         assert_eq!(rootc.hash(), root1.hash(), "expected equal Root hashes:\n{:?}\n\n{:?}", rootc, root1);
-//
-//         assert!(rootc.is_confirmed(), "expected root to be confirmed");
-//     }
-//
-//     #[test]
-//     #[serial]
-//     fn test_update_root_smt() {
-//         let db = &mut DB::new();
-//
-//         let sc_entity = test_sc_entity();
-//
-//         let (_, new_root) = sc_entity.update_smt(
-//             &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
-//             &"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
-//         )
-//         .unwrap();
-//
-//         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
-//         let current_root = sc_entity.get_root(db.root_get_current_id().unwrap())
-//             .unwrap()
-//             .unwrap();
-//         assert_eq!(new_root.hash(), current_root.hash());
-//
-//     }
-// }
+    use std::str::FromStr;
+    use super::*;
+    //use super::super::super::server::get_settings_as_map;
+    //use super::super::super::StateChainEntity;
+    use std::convert::TryInto;
+    use crate::shared_lib::mainstay;
+
+    fn test_sc_entity(db: MockDatabase) -> SCE {
+        let mut sc_entity = SCE::load(db).unwrap();
+        sc_entity.config.mainstay = Some(mainstay::MainstayConfig::mock_from_url(&test_url()));
+        sc_entity
+    }
+
+    fn test_url() -> String {
+        String::from(&mockito::server_url())
+    }
+
+    #[test]
+    #[serial]
+    fn test_verify_root() {
+        let mut db = MockDatabase::new();
+        db.expect_root_update().returning(|_| Ok(1 as i64));
+        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
+        db.expect_get_root().returning(|_| Ok(None));
+        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
+        db.expect_get_root().returning(|_x| Ok(Some(Root::from_random())));
+        db.expect_root_update().returning(|_x| Ok(1));
+        db.expect_get_confirmed_smt_root().returning(||Ok(Some(Root::from_random())));
+
+        let sc_entity = test_sc_entity(db);
+        let mc = Some(mainstay::MainstayConfig::mock_from_url(&test_url()));
+
+        //No commitments initially
+        let _m = mocks::ms::commitment_proof_not_found();
+
+        assert_eq!(sc_entity.get_smt_root().unwrap(), None, "expected Ok(None)");
+
+        let com1 = mainstay::Commitment::from_str(
+            "71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d")
+            .unwrap();
+
+        let root1 = Root::from_hash(&com1.to_hash());
+
+        assert_eq!(root1.hash(), com1.to_hash(), "expected roots to match");
+
+        let _m_send = mocks::ms::post_commitment().create();
+
+        let _root1_id = match sc_entity.update_root(&root1) {
+            Ok(id) => id,
+            Err(e) => {
+                assert!(false, e.to_string());
+                0
+            }
+        };
+
+        // Root posted but not confirmed yet
+
+        //Update the local copy of root1
+        //let root1 = db_root_get(&db_read, &(root1_id as i64)).unwrap().unwrap();
+
+        assert!(root1.is_confirmed() == false);
+
+        //Some time later, the root is committed to mainstay
+        let _m_com = mocks::ms::commitment().create();
+        let _m_com_proof = mocks::ms::commitment_proof().create();
+
+        //The root should be confirmed now
+        let rootc = sc_entity.get_confirmed_smt_root().unwrap().unwrap();
+
+
+
+        assert!(rootc.is_confirmed(), "expected the root to be confirmed");
+
+        //let root1 = db_root_get(&db_read, &(root1_id as i64)).unwrap().unwrap();
+
+        assert_eq!(rootc.hash(), root1.hash(), "expected equal Root hashes:\n{:?}\n\n{:?}", rootc, root1);
+
+        assert!(rootc.is_confirmed(), "expected root to be confirmed");
+    }
+
+    #[test]
+    #[serial]
+    fn test_update_root_smt() {
+        let mut db = MockDatabase::new();  
+        db.expect_root_update().returning(|_| Ok(1 as i64));
+        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
+        db.expect_get_root().returning(|_| Ok(None));
+        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
+        db.expect_get_root().returning(|_x| Ok(Some(Root::from_random())));
+        db.expect_root_update().returning(|_x| Ok(1));
+        db.expect_get_confirmed_smt_root().returning(||Ok(Some(Root::from_random())));
+        let sc_entity = test_sc_entity(db);
+
+        //Mainstay post commitment mock
+        let _m = mocks::ms::post_commitment().create();
+
+        let (_, new_root) = sc_entity.update_smt(
+            &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
+            &"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
+        )
+        .unwrap();
+
+        let hash_exp: [u8;32] = 
+        hex::decode("bdb8618ea37b27b771da7609b30860568f3e81a2951e62b03f76cd34b14242fc")
+                    .unwrap()[..].try_into().unwrap();
+
+        assert_eq!(new_root.hash(), 
+                hash_exp, 
+                "new root incorrect");
+
+    }
+
+}
+
+
+

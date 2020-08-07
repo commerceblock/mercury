@@ -74,6 +74,7 @@ mod tests {
         );
     }
 
+    //moved into protocol/util.rs
     #[test]
     #[serial]
     fn test_err_get_statechain() {

@@ -49,7 +49,7 @@ pub mod protocol;
 pub mod server;
 pub mod storage;
 
-type Result<T> = std::result::Result<T, error::SEError>;
+pub type Result<T> = std::result::Result<T, error::SEError>;
 pub type Hash = bitcoin::hashes::sha256d::Hash;
 
 use rocket_contrib::databases::r2d2_postgres::PostgresConnectionManager;
@@ -69,6 +69,7 @@ use rocket_contrib::databases::postgres;
 use bitcoin::Transaction;
 use crate::storage::db::Alpha;
 use crate::protocol::transfer::TransferFinalizeData;
+use bitcoin::hashes::sha256d;
 
 #[database("postgres_w")]
 pub struct DatabaseW(postgres::Connection);
@@ -197,6 +198,11 @@ pub trait Database {
 
     fn get_tx_withdraw(&self, user_id: Uuid) -> Result<Transaction>;
     fn update_tx_withdraw(&self, user_id: Uuid, tx: Transaction) -> Result<()>;
+    fn reset(&self, smt_db_loc: &String) -> Result<()> {Ok(())}
+    fn init(&self) -> Result<()> {Ok(())}
+    fn get_ecdsa_master_key_input(&self, user_id: Uuid) -> Result<ECDSAMasterKeyInput>;
+    fn update_ecdsa_master(&self, user_id: &Uuid, master_key: MasterKey1) -> Result<()>;
+    fn get_sighash(&self, user_id: Uuid) -> Result<sha256d::Hash>;
 }
 
 pub mod structs {
@@ -256,4 +262,10 @@ pub mod structs {
         pub eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg,
     }
 
+    pub struct ECDSAMasterKeyInput {
+        pub party2_public: GE,
+        pub paillier_key_pair: party_one::PaillierKeyPair,
+        pub party_one_private: party_one::Party1Private,
+         pub comm_witness: party_one::CommWitness
+    }
 }

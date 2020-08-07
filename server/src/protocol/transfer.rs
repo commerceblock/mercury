@@ -12,6 +12,7 @@ use crate::error::SEError;
 use crate::Database;
 use shared_lib::{state_chain::*, structs::*};
 use crate::{server::StateChainEntity, storage::Storage};
+use crate::{MockDatabase, PGDatabase};
 
 use bitcoin::Transaction;
 use curv::{
@@ -21,6 +22,17 @@ use curv::{
 use rocket::State;
 use rocket_contrib::json::Json;
 use uuid::Uuid;
+use cfg_if::cfg_if;
+
+cfg_if! {
+    if #[cfg(test)]{
+        use MockDatabase as DB;
+        type SCE = StateChainEntity::<MockDatabase>;
+    } else {
+        use PGDatabase as DB;
+        type SCE = StateChainEntity::<PGDatabase>;
+    }
+}
 
 /// Struct holds data when transfer is complete but not yet finalized
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -62,7 +74,7 @@ pub trait Transfer {
     ) -> Result<()>;
 }
 
-impl Transfer for StateChainEntity {
+impl Transfer for SCE {
     fn transfer_sender(
         &self,
         transfer_msg1: TransferMsg1,
@@ -290,7 +302,7 @@ impl Transfer for StateChainEntity {
 
 #[post("/transfer/sender", format = "json", data = "<transfer_msg1>")]
 pub fn transfer_sender(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     transfer_msg1: Json<TransferMsg1>,
 ) -> Result<Json<TransferMsg2>> {
     match sc_entity.transfer_sender(transfer_msg1.into_inner()) {
@@ -301,7 +313,7 @@ pub fn transfer_sender(
 
 #[post("/transfer/receiver", format = "json", data = "<transfer_msg4>")]
 pub fn transfer_receiver(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     transfer_msg4: Json<TransferMsg4>,
 ) -> Result<Json<TransferMsg5>> {
     match sc_entity.transfer_receiver(transfer_msg4.into_inner()) {

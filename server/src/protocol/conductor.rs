@@ -14,8 +14,23 @@ use bitcoin::{
 use rocket::State;
 use rocket_contrib::json::Json;
 use uuid::Uuid;
-use mockall::automock;
+use crate::{PGDatabase, MockDatabase};
+
+use mockall::predicate::*;
+use mockall::*;
+
 use std::str::FromStr;
+use cfg_if::cfg_if;
+
+//Generics cannot be used in Rocket State, therefore we define the concrete
+//type of StateChainEntity here
+cfg_if! {
+    if #[cfg(test)]{
+        type SCE = StateChainEntity::<MockDatabase>;
+    } else {
+        type SCE = StateChainEntity::<PGDatabase>;
+    }
+}
 
 /// Conductor protocol trait. Comments explain client and server side of swap protocol.
 #[automock]
@@ -123,7 +138,7 @@ pub struct SwapInfo {
     blinded_spend_token: Option<String>, // Blinded token allowing client to claim an SCE-Address to transfer to.
 }
 
-impl Conductor for StateChainEntity {
+impl Conductor for SCE {
     fn poll_utxo(&self, _state_chain_id: Uuid) -> Result<Option<Uuid>> {
         todo!()
     }
@@ -143,7 +158,7 @@ impl Conductor for StateChainEntity {
 
 #[post("/swap/poll/utxo", format = "json", data = "<state_chain_id>")]
 pub fn poll_utxo(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     state_chain_id: Json<Uuid>,
 ) -> Result<Json<Option<Uuid>>> {
     match sc_entity.poll_utxo(state_chain_id.into_inner()) {
@@ -154,7 +169,7 @@ pub fn poll_utxo(
 
 #[post("/swap/poll/swap", format = "json", data = "<swap_id>")]
 pub fn poll_swap(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     swap_id: Json<Uuid>,
 ) -> Result<Json<SwapInfo>> {
     match sc_entity.poll_swap(swap_id.into_inner()) {
@@ -165,7 +180,7 @@ pub fn poll_swap(
 
 #[post("/swap/register-utxo", format = "json", data = "<register_utxo_msg>")]
 pub fn register_utxo(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     register_utxo_msg: Json<RegisterUtxo>,
 ) -> Result<Json<()>> {
     match sc_entity.register_utxo(register_utxo_msg.into_inner()) {
@@ -176,7 +191,7 @@ pub fn register_utxo(
 
 #[post("/swap/first", format = "json", data = "<swap_msg1>")]
 pub fn swap_first_message(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     swap_msg1: Json<SwapMsg1>,
 ) -> Result<Json<()>> {
     match sc_entity.swap_first_message(swap_msg1.into_inner()) {
@@ -187,7 +202,7 @@ pub fn swap_first_message(
 
 #[post("/swap/second", format = "json", data = "<swap_msg2>")]
 pub fn swap_second_message(
-    sc_entity: State<StateChainEntity>,
+    sc_entity: State<SCE>,
     swap_msg2: Json<SwapMsg2>,
 ) -> Result<Json<(SCEAddress)>> {
     match sc_entity.swap_second_message(swap_msg2.into_inner()) {
