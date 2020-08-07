@@ -3,10 +3,8 @@
 //! StateEntity Batch Transfer protocol trait and implementation. API is used by Conductor and
 //! swap partipants to organise swaps.
 
-use super::{
-    super::Result,
-    transfer::Transfer,
-};
+pub use super::super::Result;
+use super::transfer::Transfer;
 
 extern crate shared_lib;
 use crate::error::SEError;

@@ -1,12 +1,12 @@
 pub mod db;
-use super::Result;
+pub use super::Result;
 
 use std::{fmt,error};
 use rocket::response::Responder;
 use rocket::http::{ContentType, Status};
 use uuid::Uuid;
-use shared_lib::state_chain::StateChain;
-use shared_lib::Root;
+pub use shared_lib::state_chain::StateChain;
+pub use shared_lib::Root;
 use shared_lib::structs::*;
 use std::io::Cursor;
 use rocket_contrib::databases::r2d2_postgres::{TlsMode,PostgresConnectionManager};
