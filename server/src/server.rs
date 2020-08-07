@@ -20,7 +20,7 @@ use crate::MockDatabase;
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
-use log4rs::config::{Appender, Config as LogConfig, Root};
+use log4rs::config::{Appender, Config as LogConfig, Root as LogRoot};
 use log4rs::encode::pattern::PatternEncoder;
 use std::collections::HashMap;
 
@@ -35,12 +35,12 @@ impl<T: Database + Send + Sync + 'static> StateChainEntity<T> {
     pub fn load(db: T) -> Result<StateChainEntity<T>> {
     // Get config as defaults, Settings.toml and env vars
         let config_rs = Config::load()?;
-       
+
         Ok(Self {
             config: config_rs,
             database: db
         })
-    }  
+    }
 }
 
 #[catch(500)]
@@ -64,9 +64,9 @@ use std::marker::{Send, Sync};
 pub fn get_server<T: Database + Send + Sync + 'static>
     (mainstay_config: Option<mainstay::MainstayConfig>,
         db: T) -> Result<Rocket> {
-    
+
     let mut sc_entity = StateChainEntity::<T>::load(db)?;
-    
+
     match mainstay_config {
         Some(c) => sc_entity.config.mainstay = Some(c),
         None => ()
@@ -139,7 +139,7 @@ fn set_logging_config(log_file: &String) {
             .unwrap();
         let log_config = LogConfig::builder()
             .appender(Appender::builder().build("logfile", Box::new(logfile)))
-            .build(Root::builder().appender("logfile").build(LevelFilter::Info))
+            .build(LogRoot::builder().appender("logfile").build(LevelFilter::Info))
             .unwrap();
         let _ = log4rs::init_config(log_config);
     }
@@ -186,10 +186,15 @@ pub fn get_postgres_url(host: String, port: String, user: String, pass: String, 
     format!("postgresql://{}:{}@{}:{}/{}",user, pass, host, port, database)
 }
 
-use uuid::Uuid;
+use shared_lib::structs::*;
 use crate::protocol::deposit::Deposit;
 use crate::protocol::deposit;
-use shared_lib::structs::*;
+use crate::storage::Storage;
+use crate::storage;
+use crate::protocol::util;
+use crate::Root;
+use uuid::Uuid;
+
 
 //Mock all the traits implemented by StateChainEntity
 mock!{

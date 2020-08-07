@@ -32,8 +32,9 @@ use std::{thread, time::Duration};
 use uuid::Uuid;
 #[cfg(test)]
 use mockito::{mock, Matcher, Mock};
+use mockall::automock;
 
-//Generics cannot be used in Rocket State, therefore we define the concrete 
+//Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
 cfg_if! {
     if #[cfg(test)]{
@@ -506,11 +507,10 @@ impl SCE {
 }
 
 impl Storage for SCE {
-
      /// Update the database and the mainstay slot with the SMT root, if applicable
      fn update_root(&self, root: &Root) -> Result<i64> {
          let db = &self.database;
-    
+
         match &self.config.mainstay {
             Some(c) => match root.attest(&c) {
                 Ok(_) => (),
@@ -554,7 +554,6 @@ impl Storage for SCE {
         )?;
 
         let new_root = Root::from_hash(&new_root_hash.unwrap());
-        println!("new root: {}", hex::encode(new_root.hash()));
         self.update_root(&new_root)?; // Update current root
 
         Ok((current_root, new_root))
@@ -568,7 +567,7 @@ impl Storage for SCE {
     fn get_confirmed_smt_root(&self) -> Result<Option<Root>> {
         use crate::shared_lib::mainstay::{Commitment, CommitmentIndexed,
             CommitmentInfo, MainstayAPIError};
-        
+
         let db = &self.database;
 
         fn update_db_from_ci(
@@ -786,7 +785,7 @@ impl Storage for SCE {
 }
 
 #[cfg(test)]
-mod mocks {
+pub mod mocks {
     use super::{Mock,Matcher,mock};
 
     pub mod ms {
@@ -802,8 +801,7 @@ mod mocks {
         pub fn post_commitment() -> Mock {
             mock("POST", "/commitment/send")
             .match_header("content-type", "application/json")
-            .with_body(serde_json::json!({"response":"Commitment added","timestamp":1541761540,
-            "allowance":{"cost":4832691}}).to_string())
+            .with_body(serde_json::json!({"response":"Commitment added","timestamp":1541761540,"allowance":{"cost":4832691}}).to_string())
             .with_header("content-type", "application/json")
         }
 
@@ -850,7 +848,7 @@ mod mocks {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
 
     use std::str::FromStr;
     use super::*;
@@ -859,7 +857,7 @@ mod tests {
     use std::convert::TryInto;
     use crate::shared_lib::mainstay;
 
-    fn test_sc_entity(db: MockDatabase) -> SCE {
+    pub fn test_sc_entity(db: MockDatabase) -> SCE {
         let mut sc_entity = SCE::load(db).unwrap();
         sc_entity.config.mainstay = Some(mainstay::MainstayConfig::mock_from_url(&test_url()));
         sc_entity
@@ -935,7 +933,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_update_root_smt() {
-        let mut db = MockDatabase::new();  
+        let mut db = MockDatabase::new();
         db.expect_root_update().returning(|_| Ok(1 as i64));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
         db.expect_get_root().returning(|_| Ok(None));
@@ -954,17 +952,14 @@ mod tests {
         )
         .unwrap();
 
-        let hash_exp: [u8;32] = 
+        let hash_exp: [u8;32] =
         hex::decode("bdb8618ea37b27b771da7609b30860568f3e81a2951e62b03f76cd34b14242fc")
                     .unwrap()[..].try_into().unwrap();
 
-        assert_eq!(new_root.hash(), 
-                hash_exp, 
+        assert_eq!(new_root.hash(),
+                hash_exp,
                 "new root incorrect");
 
     }
 
 }
-
-
-
