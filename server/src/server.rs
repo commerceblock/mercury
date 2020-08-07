@@ -186,12 +186,21 @@ pub fn get_postgres_url(host: String, port: String, user: String, pass: String, 
     format!("postgresql://{}:{}@{}:{}/{}",user, pass, host, port, database)
 }
 
+//Mock all the traits implemented by StateChainEntity so that they can
+//be called from MockStateChainEntity
 use uuid::Uuid;
 use crate::protocol::deposit::Deposit;
-use crate::protocol::deposit;
+use crate::protocol::ecdsa::Ecdsa;
+use crate::protocol::conductor::{Conductor, SwapInfo};
+use crate::protocol::transfer::{Transfer, TransferFinalizeData};
+use crate::protocol::transfer_batch::BatchTransfer;
+use crate::protocol::util::{Utilities, Proof};
+use crate::protocol::withdraw::Withdraw;
+use crate::storage::Storage;
+use crate::storage;
 use shared_lib::structs::*;
+use kms::ecdsa::two_party::*;
 
-//Mock all the traits implemented by StateChainEntity
 mock!{
     StateChainEntity{}
     trait Deposit {
@@ -200,5 +209,106 @@ mock!{
             &self,
             deposit_msg2: DepositMsg2,
         ) -> deposit::Result<Uuid>;
+    }
+    trait Ecdsa {
+        fn master_key(&self, user_id: Uuid) -> ecdsa::Result<()>;
+
+        fn first_message(
+            &self,
+            key_gen_msg1: KeyGenMsg1,
+        ) -> ecdsa::Result<(Uuid, ecdsa::party_one::KeyGenFirstMsg)>;
+    
+        fn second_message(
+            &self,
+            key_gen_msg2: KeyGenMsg2,
+        ) -> ecdsa::Result<ecdsa::party1::KeyGenParty1Message2>;
+    
+        fn third_message(
+            &self,
+            key_gen_msg3: KeyGenMsg3,
+        ) -> ecdsa::Result<ecdsa::party_one::PDLFirstMessage>;
+    
+        fn fourth_message(
+            &self,
+            key_gen_msg4: KeyGenMsg4,
+        ) -> ecdsa::Result<ecdsa::party_one::PDLSecondMessage>;
+    
+        fn sign_first(
+            &self,
+            sign_msg1: SignMsg1,
+        ) -> ecdsa::Result<ecdsa::party_one::EphKeyGenFirstMsg>;
+    
+        fn sign_second(
+            &self,
+            sign_msg2: SignMsg2,
+        ) -> ecdsa::Result<Vec<Vec<u8>>>;
+    }
+    trait Conductor {
+        fn poll_utxo(&self, state_chain_id: Uuid) -> conductor::Result<Option<Uuid>>;
+        fn poll_swap(&self, swap_id: Uuid) -> conductor::Result<SwapInfo>;
+        fn register_utxo(&self, register_utxo_msg: RegisterUtxo) -> conductor::Result<()>;
+        fn swap_first_message(&self, swap_msg1: SwapMsg1) -> conductor::Result<()>;
+        fn swap_second_message(&self, swap_msg2: SwapMsg2) -> conductor::Result<SCEAddress>;
+    }
+    trait Transfer {
+        fn transfer_sender(
+            &self,
+            transfer_msg1: TransferMsg1,
+        ) -> transfer::Result<TransferMsg2>;
+        fn transfer_receiver(
+            &self,
+            transfer_msg4: TransferMsg4,
+        ) -> transfer::Result<TransferMsg5>;
+        fn transfer_finalize(
+            &self,
+            finalized_data: &TransferFinalizeData,
+        ) -> transfer::Result<()>;
+    }
+    trait BatchTransfer {
+        fn transfer_batch_init(
+            &self,
+            transfer_batch_init_msg: TransferBatchInitMsg,
+        ) -> transfer_batch::Result<()>;
+        fn finalize_batch(
+            &self,
+            batch_id: Uuid,
+        ) -> transfer_batch::Result<()>;
+        fn transfer_reveal_nonce(
+            &self,
+            transfer_reveal_nonce: TransferRevealNonce,
+        ) -> transfer_batch::Result<()>;
+    }
+    trait Utilities {
+        fn get_fees(&self) -> util::Result<StateEntityFeeInfoAPI>;
+
+        /// API: Generates sparse merkle tree inclusion proof for some key in a tree with some root.
+        fn get_smt_proof(
+            &self,
+            smt_proof_msg: SmtProofMsgAPI,
+        ) -> util::Result<Option<Proof>>;
+        fn prepare_sign_tx(
+            &self,
+            prepare_sign_msg: PrepareSignTxMsg,
+        ) -> util::Result<()>;
+    }
+    trait Withdraw{
+        fn withdraw_init(
+            &self,
+            withdraw_msg1: WithdrawMsg1,
+        ) -> withdraw::Result<()>;
+        fn withdraw_confirm(
+            &self,
+            withdraw_msg2: WithdrawMsg2,
+        ) -> withdraw::Result<Vec<Vec<u8>>>;
+    }
+    trait Storage{
+        fn update_smt(&self, funding_txid: &String, proof_key: &String)
+            -> storage::Result<(Option<storage::Root>, storage::Root)>;
+        fn get_confirmed_smt_root(&self) -> storage::Result<Option<storage::Root>>;
+        fn get_smt_root(&self) -> storage::Result<Option<storage::Root>>;
+        fn get_root(&self, id: i64) -> storage::Result<Option<storage::Root>>;
+        fn update_root(&self, root: &storage::Root) -> storage::Result<i64>;
+        fn get_statechain_data_api(&self,state_chain_id: Uuid) -> storage::Result<StateChainDataAPI>;
+        fn get_statechain(&self, state_chain_id: Uuid) -> storage::Result<storage::StateChain>;
     }
 }

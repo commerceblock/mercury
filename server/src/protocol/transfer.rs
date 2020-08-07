@@ -2,10 +2,9 @@
 //!
 //! StateEntity Transfer protocol trait and implementation.
 
-use super::{
-    super::Result,
-    transfer_batch::transfer_batch_is_ended,
-};
+pub use super::super::Result;
+use super::transfer_batch::transfer_batch_is_ended;
+
 
 extern crate shared_lib;
 use crate::error::SEError;

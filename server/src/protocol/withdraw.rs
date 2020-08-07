@@ -2,7 +2,7 @@
 //!
 //! StateEntity Withdraw protocol trait and implementation for StateChainEntity.
 
-use super::super::Result;
+pub use super::super::Result;
 extern crate shared_lib;
 use shared_lib::{state_chain::*, structs::*};
 

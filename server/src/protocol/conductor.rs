@@ -2,7 +2,7 @@
 //!
 //! Conductor swap protocol trait and implementation. Full protocol descritpion can be found in Conductor Trait.
 
-use super::super::Result;
+pub use super::super::Result;
 
 extern crate shared_lib;
 use shared_lib::{structs::*, util::keygen::Message};

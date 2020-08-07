@@ -1,4 +1,4 @@
-use super::super::Result;
+pub use super::super::Result;
 
 use crate::error::{DBErrorType, SEError};
 use crate::{
@@ -24,8 +24,8 @@ use curv::{
 use crate::storage::db::{Alpha, HDPos};
 use crate::{server::StateChainEntity, structs::*};
 
-use kms::ecdsa::two_party::*;
-use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
+pub use kms::ecdsa::two_party::*;
+pub use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
 use rocket::State;
 use rocket_contrib::json::Json;
 

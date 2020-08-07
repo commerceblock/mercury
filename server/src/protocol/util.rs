@@ -3,10 +3,8 @@
 //! StateChain Entity protocol Utilites API calls trait and implementat. Also other non-trait
 //! utility functions.
 
-use super::{
-    super::Result,
-    transfer_batch::{transfer_batch_is_ended, BatchTransfer},
-};
+pub use super::super::Result;
+use super::transfer_batch::{transfer_batch_is_ended, BatchTransfer};
 extern crate shared_lib;
 use shared_lib::{
     mocks::mock_electrum::MockElectrum,
@@ -24,7 +22,7 @@ use crate::{server::StateChainEntity, Database, MockDatabase, PGDatabase};
 use cfg_if::cfg_if;
 
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
-use monotree::Proof;
+pub use monotree::Proof;
 use rocket::State;
 use rocket_contrib::json::Json;
 use std::str::FromStr;
