@@ -3,7 +3,7 @@
 //! Conductor swap protocol trait and implementation. Full protocol descritpion can be found in Conductor Trait.
 
 use super::super::Result;
-
+use crate::server::StateChainEntity;
 extern crate shared_lib;
 use shared_lib::{structs::*, util::keygen::Message};
 
@@ -14,11 +14,7 @@ use bitcoin::{
 use rocket::State;
 use rocket_contrib::json::Json;
 use uuid::Uuid;
-use crate::server::StateChainEntity;
-
-use mockall::predicate::*;
-use mockall::*;
-
+use mockall::automock;
 use std::str::FromStr;
 
 /// Conductor protocol trait. Comments explain client and server side of swap protocol.
@@ -207,6 +203,7 @@ mod tests {
     use shared_lib::state_chain::StateChainSig;
     use std::str::FromStr;
     use std::{thread, time::Duration};
+    use mockall::predicate;
 
     #[test]
     fn test_swap_token_sig_verify() {

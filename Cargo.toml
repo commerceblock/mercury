@@ -1,5 +1,5 @@
 [workspace]
-members = ["client", "server", "shared"]
+members = ["client", "integration-tests", "server", "shared"]
 
 [patch.'https://github.com/KZen-networks/multi-party-ecdsa']
 multi-party-ecdsa = { git = "https://github.com/commerceblock/multi-party-ecdsa" }

@@ -132,7 +132,6 @@ impl Transfer for StateChainEntity {
 
         let kp = self.database.get_ecdsa_keypair(user_id)?;
 
-
         // TODO: decrypt t2
 
         // let x1 = transfer_data.x1;
@@ -309,4 +308,88 @@ pub fn transfer_receiver(
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use shared_lib::Root;
+    use std::str::FromStr;
+    use std::convert::TryInto;
+    use bitcoin::{secp256k1::{PublicKey, Secp256k1, SecretKey}, consensus, Transaction, util::misc::hex_bytes};
+    use crate::structs::StateChainOwner;
+    use chrono::Utc;
+    use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
+
+    fn test_transfer() {
+        let user_id = Uuid::from_str("203001c9-93f0-46f9-aaaa-0678c891b2d3").unwrap();
+        let state_chain_id = String::from("65aab40995d3ed5d03a0567b04819ff12641b84c17f5e9d5dd075571e183469c8f");
+        let state_chain_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let sender_proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap(); // Proof key priv part
+        let sender_proof_key = PublicKey::from_secret_key(&Secp256k1::new(), &sender_proof_key_priv);
+        let receiver_proof_key_priv = SecretKey::from_slice(&[2; 32]).unwrap(); // Proof key priv part
+        let receiver_proof_key = PublicKey::from_secret_key(&Secp256k1::new(), &receiver_proof_key_priv);
+
+        let state_chain = StateChain::new(sender_proof_key_priv.to_string());
+        let state_chain_owner = StateChainOwner{
+            locked_until: Utc::now().naive_utc(),
+            owner_id: user_id,
+            chain: state_chain
+        };
+        let state_chain_sig = StateChainSig::new(&sender_proof_key_priv, &"TRANSFER".to_string(), &receiver_proof_key.to_string());
+
+
+        // Sender
+
+        // server.expect_check_user_auth(user_id)
+        // .returning(|_| Ok());
+
+        // db.expect_get_statechain_id(user_id)
+        // .returning(|_| Ok(state_chain_id));
+
+        // db.expect_transfer_is_completed(state_chain_id)
+        // .returning(|_| Ok(false));
+
+        // db.expect_get_statechain_owner(state_chain_id)
+        // .returning(|_| Ok(StateChainOwner{
+        //     locked_until: Utc::now().naive_utc(),
+        //     owner_id: user_id,
+        //     chain: StateChain::new(proof_key)
+        // }));
+
+        // db.expect_create_transfer(_)
+        // .returning(|_| Ok());
+
+        // let x1 = server.transfer_sender(TransferMsg1{
+        //     shared_key_id: user_id,
+        //     state_chain_sig: state_chain_sig
+        // } )
+
+
+
+        // Receiver
+
+        // db.expect_get_transfer_data(state_chain_id)
+        // .returning(|_| Ok(TransferData {
+        //     state_chain_id,
+        //     state_chain_sig: state_chain_sig,
+        //     x1: x1
+        // }));
+
+        // let party_1_private: Party1Private = db.deser(    "{\"x1\":\"36f0733c49c7c500845ce8c8528700a5766bb2be0afb3dc6a92609bdeb7d77de\",\"paillier_priv\":{\"p\":\"150868972667051630375631289145931811000926269697172215034129550299519830596932237114864076011910332526564014374880702421540181692143893778193268394508356621097793334071789326969733477612737448744970159004363244991682697217411574313037164309131787024001958133617279097706925728557760967475682234607674230244397\",\"q\":\"122604155030420179713896927958393174492845903159909866799286880352148165272070472842234696094969924097112221990618586011682737086679586235795050785989838852426407767438224718505007700566694816217355837730739352784228079347155718834896806259316377005605429791326022985755525955843192908883717457575135889036987\"},\"c_key_randomness\":\"8031148b56d2d9e3323994fb1ca7038083dd86cbd3b41867bdddd8a7b8d95c4e8a0fe5c3be0cf45ebbe3dc637055eecab4f82da9b3071b6302aaf8eed54aaa544822605c849573e1d85a9367fb1a8760958ca5dabd497a642e8dd0286b354a47384dbd10b2aa4a4feeb3b389332029515e61aa1d1c746b2584ef8ebb250b27612e22d184282afdc63773a0b0a40cafb4011fd014c2c189ac016a367012f94eff3e47e77d088f2d7db485b03feecd0d60ffe2837ffe7af54b7fd8636725240c31ccdb9d7dffc1e49f4c480ff30e545cb5b7faa771c211cf9d8e4287cdddba075a85bb95213dec06d9322624872e9d80a41f15cd900118f8b89f16cd5c332ef484\"}"
+        // .to_string()).unwrap();
+        // let party_2_public: GE = db.deser(
+        //     "{\"x\":\"5220bc6ebcc83d0a1e4482ab1f2194cb69648100e8be78acde47ca56b996bd9e\",\"y\":\"8dfbb36ef76f2197598738329ffab7d3b3a06d80467db8e739c6b165abc20231\"}".to_string()
+        // ).unwrap();
+
+        // db.expect_get_ecdsa_keypair(user_id)
+        // .returning(|_| Ok(ECDSAKeypair {
+        //     party_1_private,
+        //     party_2_public,
+        //     x1: x1
+        // }));
+
+    }
+
 }
