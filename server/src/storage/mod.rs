@@ -1,16 +1,16 @@
 pub mod db;
 pub use super::Result;
 
-use std::{fmt,error};
-use rocket::response::Responder;
 use rocket::http::{ContentType, Status};
-use uuid::Uuid;
-pub use shared_lib::state_chain::StateChain;
-pub use shared_lib::Root;
-use shared_lib::structs::*;
-use std::io::Cursor;
-use rocket_contrib::databases::r2d2_postgres::{TlsMode,PostgresConnectionManager};
+use rocket::response::Responder;
 use rocket_contrib::databases::r2d2;
+use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
+pub use shared_lib::state_chain::StateChain;
+use shared_lib::structs::*;
+pub use shared_lib::Root;
+use std::io::Cursor;
+use std::{error, fmt};
+use uuid::Uuid;
 
 use crate::server::get_postgres_url;
 
@@ -95,28 +95,27 @@ impl Responder<'static> for StorageError {
     }
 }
 
-
 pub trait Storage {
-   // fn insert<T,U>(&self, id: &T, data: U) -> Result<>;
-   // fn remove<T,U>&self, id: &T, data: U) -> Result<()>;
+    // fn insert<T,U>(&self, id: &T, data: U) -> Result<>;
+    // fn remove<T,U>&self, id: &T, data: U) -> Result<()>;
 
-   //Create a new user session or update an existing one
-   //If Uuid is not None, that session is updated. Otherwise, a new one is created.
-   //fn save_user_session(&self, id: &Uuid, auth: String, proof_key: String)
-   //     -> Result<()>;
+    //Create a new user session or update an existing one
+    //If Uuid is not None, that session is updated. Otherwise, a new one is created.
+    //fn save_user_session(&self, id: &Uuid, auth: String, proof_key: String)
+    //     -> Result<()>;
 
-   //fn create_user_session(&self, auth: String, proof_key: String)
-   //     -> Result<()>{
-   //  let id = Uuid::new_v4();
-   //  self.save_user_session(&id, auth, proof_key)
-   //}
+    //fn create_user_session(&self, auth: String, proof_key: String)
+    //     -> Result<()>{
+    //  let id = Uuid::new_v4();
+    //  self.save_user_session(&id, auth, proof_key)
+    //}
 
-   //fn save_statechain(&self, statechain_id: &Uuid, statechain: &StateChain,
-//                        amount: i64,
-  //                          user_id: &Uuid) -> Result<()>;
+    //fn save_statechain(&self, statechain_id: &Uuid, statechain: &StateChain,
+    //                        amount: i64,
+    //                          user_id: &Uuid) -> Result<()>;
 
-//    fn save_backup_tx(&self, statechain_id: &Uuid, backup_tx: &Transaction)
-  //      -> Result<()>;
+    //    fn save_backup_tx(&self, statechain_id: &Uuid, backup_tx: &Transaction)
+    //      -> Result<()>;
 
     //Returns: (new_root, current_root)
     fn update_smt(&self, funding_txid: &String, proof_key: &String)
@@ -136,7 +135,7 @@ pub trait Storage {
     fn update_root(&self, root: &Root) -> Result<i64>;
 
     //Returns locked until time, owner id, state chain
-    fn get_statechain_data_api(&self,state_chain_id: Uuid) -> Result<StateChainDataAPI>;
+    fn get_statechain_data_api(&self, state_chain_id: Uuid) -> Result<StateChainDataAPI>;
 
     //fn authorise_withdrawal(&self, user_id: &Uuid, signature: StateChainSig) -> Result<()>;
 
@@ -162,7 +161,6 @@ pub trait Storage {
     //fn init_batch_transfer(&self, batch_id: &Uuid,
     //                    state_chains: &HashMap<Uuid, bool>) -> Result<()>;
 
-
     // Returns: finalized, start_time, state_chains, punished
     //fn get_transfer_batch_status(&self, batch_id: &Uuid)
     //    -> Result<TransferBatchDataAPI>;
@@ -172,5 +170,4 @@ pub trait Storage {
 
     //Update the list of punished state chains
     //fn update_punished(&self, punished: &Vec<Uuid>);
-
 }

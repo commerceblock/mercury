@@ -7,7 +7,7 @@ use crate::{
         Column,
         Table,
     },
-    Database
+    Database,
 };
 use shared_lib::{
     structs::{KeyGenMsg1, KeyGenMsg2, KeyGenMsg3, KeyGenMsg4, Protocol, SignMsg1, SignMsg2},
@@ -29,10 +29,10 @@ pub use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
 use rocket::State;
 use rocket_contrib::json::Json;
 
-use std::string::ToString;
-use uuid::Uuid;
 use crate::{MockDatabase, PGDatabase};
 use cfg_if::cfg_if;
+use std::string::ToString;
+use uuid::Uuid;
 
 cfg_if! {
     if #[cfg(test)]{
@@ -48,42 +48,23 @@ cfg_if! {
 pub trait Ecdsa {
     fn master_key(&self, user_id: Uuid) -> Result<()>;
 
-    fn first_message(
-        &self,
-        key_gen_msg1: KeyGenMsg1,
-    ) -> Result<(Uuid, party_one::KeyGenFirstMsg)>;
+    fn first_message(&self, key_gen_msg1: KeyGenMsg1) -> Result<(Uuid, party_one::KeyGenFirstMsg)>;
 
-    fn second_message(
-        &self,
-        key_gen_msg2: KeyGenMsg2,
-    ) -> Result<party1::KeyGenParty1Message2>;
+    fn second_message(&self, key_gen_msg2: KeyGenMsg2) -> Result<party1::KeyGenParty1Message2>;
 
-    fn third_message(
-        &self,
-        key_gen_msg3: KeyGenMsg3,
-    ) -> Result<party_one::PDLFirstMessage>;
+    fn third_message(&self, key_gen_msg3: KeyGenMsg3) -> Result<party_one::PDLFirstMessage>;
 
-    fn fourth_message(
-        &self,
-        key_gen_msg4: KeyGenMsg4,
-    ) -> Result<party_one::PDLSecondMessage>;
+    fn fourth_message(&self, key_gen_msg4: KeyGenMsg4) -> Result<party_one::PDLSecondMessage>;
 
-    fn sign_first(
-        &self,
-        sign_msg1: SignMsg1,
-    ) -> Result<party_one::EphKeyGenFirstMsg>;
+    fn sign_first(&self, sign_msg1: SignMsg1) -> Result<party_one::EphKeyGenFirstMsg>;
 
-    fn sign_second(
-        &self,
-        sign_msg2: SignMsg2,
-    ) -> Result<Vec<Vec<u8>>>;
+    fn sign_second(&self, sign_msg2: SignMsg2) -> Result<Vec<Vec<u8>>>;
 }
-
 
 impl Ecdsa for SCE {
     fn master_key(&self, user_id: Uuid) -> Result<()> {
         let db = &self.database;
-        
+
         let mki = db.get_ecdsa_master_key_input(user_id)?;
 
         let master_key = MasterKey1::set_master_key(
@@ -97,18 +78,14 @@ impl Ecdsa for SCE {
         db.update_ecdsa_master(&user_id, master_key)
     }
 
-    fn first_message(
-        &self,
-        key_gen_msg1: KeyGenMsg1,
-    ) -> Result<(Uuid, party_one::KeyGenFirstMsg)> {
+    fn first_message(&self, key_gen_msg1: KeyGenMsg1) -> Result<(Uuid, party_one::KeyGenFirstMsg)> {
         let user_id = key_gen_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
 
         let db = &self.database;
 
         // Create new entry in ecdsa table if key not already in table.
-        match db.get_ecdsa_master(user_id)
-        {
+        match db.get_ecdsa_master(user_id) {
             Ok(data) => match data {
                 Some(_) => {
                     return Err(SEError::Generic(format!(
@@ -142,47 +119,39 @@ impl Ecdsa for SCE {
         Ok((user_id, key_gen_first_msg))
     }
 
-    fn second_message(
-        &self,
-        key_gen_msg2: KeyGenMsg2,
-    ) -> Result<party1::KeyGenParty1Message2> {
+    fn second_message(&self, key_gen_msg2: KeyGenMsg2) -> Result<party1::KeyGenParty1Message2> {
         let db = &self.database;
 
         let user_id = key_gen_msg2.shared_key_id;
 
         let party2_public: GE = key_gen_msg2.dlog_proof.pk.clone();
 
-        let (comm_witness, ec_key_pair) =
-            db.get_ecdsa_witness_keypair(user_id)?;
+        let (comm_witness, ec_key_pair) = db.get_ecdsa_witness_keypair(user_id)?;
 
-
-
-        let (kg_party_one_second_message, paillier_key_pair, party_one_private) :
-                (party1::KeyGenParty1Message2, party_one::PaillierKeyPair, party_one::Party1Private) =
-            MasterKey1::key_gen_second_message(
-                comm_witness,
-                &ec_key_pair,
-                &key_gen_msg2.dlog_proof,
-            );
+        let (kg_party_one_second_message, paillier_key_pair, party_one_private): (
+            party1::KeyGenParty1Message2,
+            party_one::PaillierKeyPair,
+            party_one::Party1Private,
+        ) = MasterKey1::key_gen_second_message(
+            comm_witness,
+            &ec_key_pair,
+            &key_gen_msg2.dlog_proof,
+        );
 
         db.update_keygen_second_msg(
             &user_id,
             party2_public,
             paillier_key_pair,
-            party_one_private
+            party_one_private,
         )?;
 
         Ok(kg_party_one_second_message)
     }
 
-    fn third_message(
-        &self,
-        key_gen_msg3: KeyGenMsg3,
-    ) -> Result<party_one::PDLFirstMessage> {
+    fn third_message(&self, key_gen_msg3: KeyGenMsg3) -> Result<party_one::PDLFirstMessage> {
         let user_id = key_gen_msg3.shared_key_id;
         let db = &self.database;
-        let party_one_private: party_one::Party1Private =
-            db.get_ecdsa_party_1_private(user_id)?;
+        let party_one_private: party_one::Party1Private = db.get_ecdsa_party_1_private(user_id)?;
 
         let (party_one_third_message, party_one_pdl_decommit, alpha) =
             MasterKey1::key_gen_third_message(
@@ -190,23 +159,21 @@ impl Ecdsa for SCE {
                 &party_one_private,
             );
 
-        db.update_keygen_third_msg(&user_id,
+        db.update_keygen_third_msg(
+            &user_id,
             party_one_pdl_decommit,
             key_gen_msg3.party_two_pdl_first_message,
-            alpha)?;
+            alpha,
+        )?;
 
         Ok(party_one_third_message)
     }
 
-    fn fourth_message(
-        &self,
-        key_gen_msg4: KeyGenMsg4,
-    ) -> Result<party_one::PDLSecondMessage> {
+    fn fourth_message(&self, key_gen_msg4: KeyGenMsg4) -> Result<party_one::PDLSecondMessage> {
         let user_id = key_gen_msg4.shared_key_id;
         let db = &self.database;
 
-        let fmi : ECDSAFourthMessageInput =
-            db.get_ecdsa_fourth_message_input(user_id)?;
+        let fmi: ECDSAFourthMessageInput = db.get_ecdsa_fourth_message_input(user_id)?;
 
         let pdl_second_msg = MasterKey1::key_gen_fourth_message(
             &fmi.party_two_pdl_first_message,
@@ -223,10 +190,7 @@ impl Ecdsa for SCE {
         Ok(pdl_second_msg.unwrap())
     }
 
-    fn sign_first(
-        &self,
-        sign_msg1: SignMsg1,
-    ) -> Result<party_one::EphKeyGenFirstMsg> {
+    fn sign_first(&self, sign_msg1: SignMsg1) -> Result<party_one::EphKeyGenFirstMsg> {
         let user_id = sign_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
 
@@ -238,18 +202,16 @@ impl Ecdsa for SCE {
             //(i64, i64) =
             MasterKey1::sign_first_message();
 
-        self.database.update_ecdsa_sign_first(user_id,
+        self.database.update_ecdsa_sign_first(
+            user_id,
             sign_msg1.eph_key_gen_first_message_party_two,
-            eph_ec_key_pair_party1
+            eph_ec_key_pair_party1,
         )?;
 
         Ok(sign_party_one_first_message)
     }
 
-    fn sign_second(
-        &self,
-        sign_msg2: SignMsg2,
-    ) -> Result<Vec<Vec<u8>>> {
+    fn sign_second(&self, sign_msg2: SignMsg2) -> Result<Vec<Vec<u8>>> {
         let user_id = sign_msg2.shared_key_id;
         self.check_user_auth(&user_id)?;
         let db = &self.database;
@@ -298,7 +260,7 @@ impl Ecdsa for SCE {
         // Get transaction which is being signed.
         let mut tx: Transaction = match sign_msg2.sign_second_msg_request.protocol {
             Protocol::Withdraw => db.get_tx_withdraw(user_id)?,
-            _ => db.get_backup_transaction(user_id)?
+            _ => db.get_backup_transaction(user_id)?,
         };
 
         // Make signature witness
@@ -405,10 +367,7 @@ pub fn sign_first(
 }
 
 #[post("/ecdsa/sign/second", format = "json", data = "<sign_msg2>")]
-pub fn sign_second(
-    sc_entity: State<SCE>,
-    sign_msg2: Json<SignMsg2>,
-) -> Result<Json<Vec<Vec<u8>>>> {
+pub fn sign_second(sc_entity: State<SCE>, sign_msg2: Json<SignMsg2>) -> Result<Json<Vec<Vec<u8>>>> {
     match sc_entity.sign_second(sign_msg2.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),

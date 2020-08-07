@@ -13,7 +13,7 @@ mod tests {
     use curv::FE;
 
     use mockito;
-    use server_lib::{MockDatabase};
+    use server_lib::MockDatabase;
 
     #[test]
     #[serial]

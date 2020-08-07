@@ -1,22 +1,16 @@
 use super::protocol::*;
-use mockall::*;
-use mockall::predicate::*;
 use crate::DatabaseR;
-use crate::{
-    //storage::{db_make_tables, db_reset_dbs, get_test_postgres_connection},
-    DatabaseW,
-    Database,
-    PGDatabase
-};
+use crate::{Database, DatabaseW};
+use mockall::predicate::*;
+use mockall::*;
 
-use crate::{config::SMT_DB_LOC_TESTING, PGDatabase as DB};
+use crate::config::SMT_DB_LOC_TESTING;
 use shared_lib::mainstay;
 
 use crate::config::Config;
 use rocket;
-use rocket::{Request, Rocket};
 use rocket::config::{Config as RocketConfig, Environment, Value};
-use crate::MockDatabase;
+use rocket::{Request, Rocket};
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
@@ -26,19 +20,19 @@ use std::collections::HashMap;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-pub struct StateChainEntity <T: Database + Send + Sync + 'static> {
+pub struct StateChainEntity<T: Database + Send + Sync + 'static> {
     pub config: Config,
-    pub database: T
+    pub database: T,
 }
 
 impl<T: Database + Send + Sync + 'static> StateChainEntity<T> {
     pub fn load(db: T) -> Result<StateChainEntity<T>> {
-    // Get config as defaults, Settings.toml and env vars
+        // Get config as defaults, Settings.toml and env vars
         let config_rs = Config::load()?;
 
         Ok(Self {
             config: config_rs,
-            database: db
+            database: db,
         })
     }
 }
@@ -61,15 +55,15 @@ fn not_found(req: &Request) -> String {
 use std::marker::{Send, Sync};
 
 /// Start Rocket Server. mainsta_config parameter overrides Settings.toml and env var settings.
-pub fn get_server<T: Database + Send + Sync + 'static>
-    (mainstay_config: Option<mainstay::MainstayConfig>,
-        db: T) -> Result<Rocket> {
-
+pub fn get_server<T: Database + Send + Sync + 'static>(
+    mainstay_config: Option<mainstay::MainstayConfig>,
+    db: T,
+) -> Result<Rocket> {
     let mut sc_entity = StateChainEntity::<T>::load(db)?;
 
     match mainstay_config {
         Some(c) => sc_entity.config.mainstay = Some(c),
-        None => ()
+        None => (),
     }
     //At this point the mainstay config should be set,
     //either in testing mode or specified in the settings file
@@ -127,7 +121,6 @@ pub fn get_server<T: Database + Send + Sync + 'static>
     Ok(rock)
 }
 
-
 fn set_logging_config(log_file: &String) {
     if log_file.len() == 0 {
         let _ = env_logger::try_init();
@@ -139,7 +132,11 @@ fn set_logging_config(log_file: &String) {
             .unwrap();
         let log_config = LogConfig::builder()
             .appender(Appender::builder().build("logfile", Box::new(logfile)))
-            .build(LogRoot::builder().appender("logfile").build(LevelFilter::Info))
+            .build(
+                LogRoot::builder()
+                    .appender("logfile")
+                    .build(LevelFilter::Info),
+            )
             .unwrap();
         let _ = log4rs::init_config(log_config);
     }
@@ -151,28 +148,30 @@ fn get_rocket_config(config: &Config) -> RocketConfig {
     // Make postgres URL.
     let mut databases = HashMap::new();
     // write DB
-    database_config.insert("url", Value::from(
-        get_postgres_url(
+    database_config.insert(
+        "url",
+        Value::from(get_postgres_url(
             config.storage.db_host_w.clone(),
             config.storage.db_port_w.clone(),
             config.storage.db_user_w.clone(),
             config.storage.db_pass_w.clone(),
             config.storage.db_database_w.clone(),
-        )
-    ));
+        )),
+    );
     databases.insert("postgres_w", Value::from(database_config));
 
     // read DB
     let mut database_config = HashMap::new();
-    database_config.insert("url", Value::from(
-        get_postgres_url(
+    database_config.insert(
+        "url",
+        Value::from(get_postgres_url(
             config.storage.db_host_r.clone(),
             config.storage.db_port_r.clone(),
             config.storage.db_user_r.clone(),
             config.storage.db_pass_r.clone(),
             config.storage.db_database_r.clone(),
-        )
-    ));
+        )),
+    );
     databases.insert("postgres_r", Value::from(database_config));
 
     RocketConfig::build(Environment::Staging)
@@ -182,26 +181,34 @@ fn get_rocket_config(config: &Config) -> RocketConfig {
 }
 
 /// Get postgres URL from env vars. Suffix can be "TEST", "W", or "R"
-pub fn get_postgres_url(host: String, port: String, user: String, pass: String, database: String) -> String {
-    format!("postgresql://{}:{}@{}:{}/{}",user, pass, host, port, database)
+pub fn get_postgres_url(
+    host: String,
+    port: String,
+    user: String,
+    pass: String,
+    database: String,
+) -> String {
+    format!(
+        "postgresql://{}:{}@{}:{}/{}",
+        user, pass, host, port, database
+    )
 }
 
 //Mock all the traits implemented by StateChainEntity so that they can
 //be called from MockStateChainEntity
-use uuid::Uuid;
+use crate::protocol::conductor::{Conductor, SwapInfo};
 use crate::protocol::deposit::Deposit;
 use crate::protocol::ecdsa::Ecdsa;
-use crate::protocol::conductor::{Conductor, SwapInfo};
 use crate::protocol::transfer::{Transfer, TransferFinalizeData};
 use crate::protocol::transfer_batch::BatchTransfer;
-use crate::protocol::util::{Utilities, Proof};
+use crate::protocol::util::{Proof, Utilities};
 use crate::protocol::withdraw::Withdraw;
-use crate::storage::Storage;
 use crate::storage;
+use crate::storage::Storage;
 use shared_lib::structs::*;
-use kms::ecdsa::two_party::*;
+use uuid::Uuid;
 
-mock!{
+mock! {
     StateChainEntity{}
     trait Deposit {
         fn deposit_init(&self, deposit_msg1: DepositMsg1) -> deposit::Result<Uuid>;

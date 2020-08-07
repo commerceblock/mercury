@@ -11,14 +11,14 @@ use crate::error::SEError;
 use crate::{server::StateChainEntity, Database, MockDatabase, PGDatabase};
 use shared_lib::{commitment::verify_commitment, state_chain::*, structs::*};
 
+use cfg_if::cfg_if;
 use chrono::{NaiveDateTime, Utc};
 use rocket::State;
 use rocket_contrib::json::Json;
 use std::{collections::HashMap, str::FromStr};
 use uuid::Uuid;
-use cfg_if::cfg_if;
 
-//Generics cannot be used in Rocket State, therefore we define the concrete 
+//Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
 cfg_if! {
     if #[cfg(test)]{
@@ -35,29 +35,17 @@ pub trait BatchTransfer {
     /// API: Request setup of a batch transfer.
     ///     - Verify all signatures
     ///     - Create TransferBatchData DB object
-    fn transfer_batch_init(
-        &self,
-        transfer_batch_init_msg: TransferBatchInitMsg,
-    ) -> Result<()>;
+    fn transfer_batch_init(&self, transfer_batch_init_msg: TransferBatchInitMsg) -> Result<()>;
 
     /// Finalize all transfers in a batch if all are complete and validated.
-    fn finalize_batch(
-        &self,
-        batch_id: Uuid,
-    ) -> Result<()>;
+    fn finalize_batch(&self, batch_id: Uuid) -> Result<()>;
 
     /// API: Reveal a nonce for a corresponding Transfer commitment.
-    fn transfer_reveal_nonce(
-        &self,
-        transfer_reveal_nonce: TransferRevealNonce,
-    ) -> Result<()>;
+    fn transfer_reveal_nonce(&self, transfer_reveal_nonce: TransferRevealNonce) -> Result<()>;
 }
 
 impl BatchTransfer for SCE {
-    fn transfer_batch_init(
-        &self,
-        transfer_batch_init_msg: TransferBatchInitMsg,
-    ) -> Result<()> {
+    fn transfer_batch_init(&self, transfer_batch_init_msg: TransferBatchInitMsg) -> Result<()> {
         let batch_id = transfer_batch_init_msg.id.clone();
         info!("TRANSFER_BATCH_INIT: ID: {}", batch_id);
 
@@ -101,10 +89,8 @@ impl BatchTransfer for SCE {
         }
 
         // Create new TransferBatchData and add to DB
-        self.database.create_transfer_batch_data(
-            &batch_id,
-            state_chains)?;
-
+        self.database
+            .create_transfer_batch_data(&batch_id, state_chains)?;
 
         info!("TRANSFER_BATCH_INIT: Batch ID {} initiated.", batch_id);
         debug!(
@@ -115,14 +101,10 @@ impl BatchTransfer for SCE {
         Ok(())
     }
 
-    fn finalize_batch(
-        &self,
-        batch_id: Uuid,
-    ) -> Result<()> {
+    fn finalize_batch(&self, batch_id: Uuid) -> Result<()> {
         info!("TRANSFER_FINALIZE_BATCH: ID: {}", batch_id);
 
         let fbd = self.database.get_finalize_batch_data(batch_id)?;
-
 
         if fbd.state_chains.len() != fbd.finalized_data_vec.len() {
             return Err(SEError::Generic(String::from(
@@ -134,15 +116,13 @@ impl BatchTransfer for SCE {
             self.transfer_finalize(&finalized_data)?;
         }
 
-        self.database.update_transfer_batch_finalized(&batch_id, &true)?;
+        self.database
+            .update_transfer_batch_finalized(&batch_id, &true)?;
 
         Ok(())
     }
 
-    fn transfer_reveal_nonce(
-        &self,
-        transfer_reveal_nonce: TransferRevealNonce,
-    ) -> Result<()> {
+    fn transfer_reveal_nonce(&self, transfer_reveal_nonce: TransferRevealNonce) -> Result<()> {
         let batch_id = transfer_reveal_nonce.batch_id;
         let state_chain_id = transfer_reveal_nonce.state_chain_id;
         info!(
@@ -176,7 +156,8 @@ impl BatchTransfer for SCE {
 
         // If state chain completed + commitment revealed then punishment can be removed from state chain
         if *tbd.state_chains.get(&state_chain_id).unwrap() {
-            self.database.update_locked_until(&state_chain_id, &get_time_now())?;
+            self.database
+                .update_locked_until(&state_chain_id, &get_time_now())?;
             info!(
                 "TRANSFER_REVEAL_NONCE: State Chain unlocked. ID: {}",
                 state_chain_id

@@ -7,40 +7,38 @@ pub use super::super::Result;
 use super::transfer_batch::{transfer_batch_is_ended, BatchTransfer};
 extern crate shared_lib;
 use shared_lib::{
+    mainstay::Attestable,
     mocks::mock_electrum::MockElectrum,
     state_chain::*,
     structs::*,
     util::{get_sighash, tx_backup_verify, tx_withdraw_verify},
     Root,
-    mainstay::Attestable,
 };
-
 
 use crate::error::{DBErrorType, SEError};
 use crate::storage::Storage;
-use crate::{server::StateChainEntity, Database, MockDatabase, PGDatabase};
+use crate::{server::StateChainEntity, Database};
 use cfg_if::cfg_if;
 
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
+#[cfg(test)]
+use mockito::{mock, Matcher, Mock};
 pub use monotree::Proof;
 use rocket::State;
 use rocket_contrib::json::Json;
 use std::str::FromStr;
 use std::{thread, time::Duration};
 use uuid::Uuid;
-#[cfg(test)]
-use mockito::{mock, Matcher, Mock};
-use mockall::automock;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
 cfg_if! {
     if #[cfg(test)]{
         use crate::MockDatabase as DB;
-        type SCE = StateChainEntity::<MockDatabase>;
+        type SCE = StateChainEntity::<DB>;
     } else {
         use crate::PGDatabase as DB;
-        type SCE = StateChainEntity::<PGDatabase>;
+        type SCE = StateChainEntity::<DB>;
     }
 }
 
@@ -51,10 +49,7 @@ pub trait Utilities {
     fn get_fees(&self) -> Result<StateEntityFeeInfoAPI>;
 
     /// API: Generates sparse merkle tree inclusion proof for some key in a tree with some root.
-    fn get_smt_proof(
-        &self,
-        smt_proof_msg: SmtProofMsgAPI,
-    ) -> Result<Option<Proof>>;
+    fn get_smt_proof(&self, smt_proof_msg: SmtProofMsgAPI) -> Result<Option<Proof>>;
 
     /// API: Get root of sparse merkle tree. Will be via Mainstay in the future.
     //fn get_smt_root(&self) -> Result<Option<Root>>;
@@ -76,10 +71,7 @@ pub trait Utilities {
     /// honest and error free:
     ///     - Check tx data
     ///     - Calculate and store tx sighash for validation before performing ecdsa::sign
-    fn prepare_sign_tx(
-        &self,
-        prepare_sign_msg: PrepareSignTxMsg,
-    ) -> Result<()>;
+    fn prepare_sign_tx(&self, prepare_sign_msg: PrepareSignTxMsg) -> Result<()>;
 }
 
 impl Utilities for SCE {
@@ -91,10 +83,7 @@ impl Utilities for SCE {
         })
     }
 
-    fn get_smt_proof(
-        &self,
-        smt_proof_msg: SmtProofMsgAPI,
-    ) -> Result<Option<Proof>> {
+    fn get_smt_proof(&self, smt_proof_msg: SmtProofMsgAPI) -> Result<Option<Proof>> {
         // ensure root exists
         match smt_proof_msg.root.id() {
             Some(id) => {
@@ -213,10 +202,7 @@ impl Utilities for SCE {
     //     })
     // }
 
-    fn prepare_sign_tx(
-        &self,
-        prepare_sign_msg: PrepareSignTxMsg,
-    ) -> Result<()> {
+    fn prepare_sign_tx(&self, prepare_sign_msg: PrepareSignTxMsg) -> Result<()> {
         let user_id = prepare_sign_msg.shared_key_id;
         self.check_user_auth(&user_id)?;
 
@@ -224,14 +210,18 @@ impl Utilities for SCE {
         match prepare_sign_msg.protocol {
             Protocol::Withdraw => {
                 // Verify withdrawal has been authorised via presense of withdraw_sc_sig
-                if let Err(_) = self.database.has_withdraw_sc_sig(user_id){
+                if let Err(_) = self.database.has_withdraw_sc_sig(user_id) {
                     return Err(SEError::Generic(String::from(
                         "Withdraw has not been authorised. /withdraw/init must be called first.",
                     )));
                 }
 
                 // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data
-                tx_withdraw_verify(&prepare_sign_msg, &self.config.fee_address, &self.config.fee_withdraw)?;
+                tx_withdraw_verify(
+                    &prepare_sign_msg,
+                    &self.config.fee_address,
+                    &self.config.fee_withdraw,
+                )?;
 
                 let tx_backup = self.database.get_backup_transaction(user_id)?;
 
@@ -260,7 +250,11 @@ impl Utilities for SCE {
                     &self.config.network,
                 );
 
-                self.database.update_withdraw_tx_sighash(&user_id, sig_hash, prepare_sign_msg.tx)?;
+                self.database.update_withdraw_tx_sighash(
+                    &user_id,
+                    sig_hash,
+                    prepare_sign_msg.tx,
+                )?;
 
                 info!(
                     "WITHDRAW: Withdraw tx ready for signing. User ID: {:?}.",
@@ -281,10 +275,10 @@ impl Utilities for SCE {
 
                 self.database.update_sighash(&user_id, sig_hash)?;
 
-
                 // Only in deposit case add backup tx to UserSession
                 if prepare_sign_msg.protocol == Protocol::Deposit {
-                    self.database.update_user_backup_tx(&user_id, prepare_sign_msg.tx)?;
+                    self.database
+                        .update_user_backup_tx(&user_id, prepare_sign_msg.tx)?;
                 }
 
                 info!(
@@ -318,9 +312,7 @@ pub fn get_statechain(
 }
 
 #[post("/info/root", format = "json")]
-pub fn get_smt_root(
-    sc_entity: State<SCE>
-) -> Result<Json<Option<Root>>> {
+pub fn get_smt_root(sc_entity: State<SCE>) -> Result<Json<Option<Root>>> {
     match sc_entity.get_smt_root() {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -412,10 +404,7 @@ impl SCE {
     }
 
     // Set state chain time-out
-    pub fn state_chain_punish(
-        &self,
-        state_chain_id: Uuid,
-    ) -> Result<()> {
+    pub fn state_chain_punish(&self, state_chain_id: Uuid) -> Result<()> {
         let sc_locked_until = self.database.get_sc_locked_until(state_chain_id)?;
 
         if is_locked(sc_locked_until).is_err() {
@@ -424,8 +413,10 @@ impl SCE {
             )));
         }
 
-        self.database.update_locked_until(&state_chain_id,
-            &get_locked_until(self.config.punishment_duration as i64)?)?;
+        self.database.update_locked_until(
+            &state_chain_id,
+            &get_locked_until(self.config.punishment_duration as i64)?,
+        )?;
 
         info!(
             "PUNISHMENT: State Chain ID: {} locked for {}s.",
@@ -443,10 +434,7 @@ impl SCE {
         Ok(())
     }
 
-    fn get_transfer_batch_status(
-        &self,
-        batch_id: Uuid,
-    ) -> Result<TransferBatchDataAPI> {
+    fn get_transfer_batch_status(&self, batch_id: Uuid) -> Result<TransferBatchDataAPI> {
         //let batch_id = Uuid::from_str(&batch_id).unwrap();
 
         let tbd = self.database.get_transfer_batch_data(batch_id)?;
@@ -467,7 +455,6 @@ impl SCE {
                 let mut punished_state_chains: Vec<Uuid> =
                     self.database.get_punished_state_chains(batch_id)?;
 
-
                 if punished_state_chains.len() == 0 {
                     // Punishments not yet set
                     info!("TRANSFER_BATCH: Lifetime reached. ID: {}.", batch_id);
@@ -485,7 +472,8 @@ impl SCE {
                         );
                     }
 
-                    self.database.update_punished(&batch_id, punished_state_chains)?;
+                    self.database
+                        .update_punished(&batch_id, punished_state_chains)?;
 
                     info!(
                         "TRANSFER_BATCH: Punished all state chains in failed batch. ID: {}.",
@@ -505,9 +493,17 @@ impl SCE {
 }
 
 impl Storage for SCE {
-     /// Update the database and the mainstay slot with the SMT root, if applicable
-     fn update_root(&self, root: &Root) -> Result<i64> {
-         let db = &self.database;
+    /// Update the database and the mainstay slot with the SMT root, if applicable
+    fn update_root(&self, root: &Root) -> Result<i64> {
+        cfg_if! {
+            if #[cfg(test)]{
+                //Create a new mock database
+                let db = &mut DB::new();
+                db.expect_root_update().returning(|_| Ok((1)));
+            } else {
+                let db = &self.database;
+           }
+        }
 
         match &self.config.mainstay {
             Some(c) => match root.attest(&c) {
@@ -519,7 +515,7 @@ impl Storage for SCE {
 
         let id = db.root_update(root)?;
         Ok(id)
-     }
+    }
 
     // Update SMT with new (key: value) pair and update current root value
     fn update_smt(
@@ -558,58 +554,54 @@ impl Storage for SCE {
     }
 
     fn get_smt_root(&self) -> Result<Option<Root>> {
-        Ok(self.database.get_root(self.database.root_get_current_id()?)?)
+        Ok(self
+            .database
+            .get_root(self.database.root_get_current_id()?)?)
     }
 
     /// Update the database with the latest available mainstay attestation info
     fn get_confirmed_smt_root(&self) -> Result<Option<Root>> {
-        use crate::shared_lib::mainstay::{Commitment, CommitmentIndexed,
-            CommitmentInfo, MainstayAPIError};
+        use crate::shared_lib::mainstay::{
+            Commitment, CommitmentIndexed, CommitmentInfo, MainstayAPIError,
+        };
 
         let db = &self.database;
 
-        fn update_db_from_ci(
-            db: &DB,
-            ci: &CommitmentInfo,
-            ) -> Result<Option<Root>> {
-                let mut root = Root::from_commitment_info(ci);
-                let current_id = db.root_get_current_id()?;
-                let mut id;
-                for x in 0..=current_id - 1 {
-                    id = current_id - x;
-                    let root_get = db.get_root(id)?;
-                    match root_get {
-                        Some(r) => {
-                            if r.hash() == ci.commitment().to_hash() {
-                                match r.id() {
-                                    Some(r_id) => {
-                                        root.set_id(&r_id);
-                                        break;
-                                    }
-                                    None => (),
+        fn update_db_from_ci(db: &DB, ci: &CommitmentInfo) -> Result<Option<Root>> {
+            let mut root = Root::from_commitment_info(ci);
+            let current_id = db.root_get_current_id()?;
+            let mut id;
+            for x in 0..=current_id - 1 {
+                id = current_id - x;
+                let root_get = db.get_root(id)?;
+                match root_get {
+                    Some(r) => {
+                        if r.hash() == ci.commitment().to_hash() {
+                            match r.id() {
+                                Some(r_id) => {
+                                    root.set_id(&r_id);
+                                    break;
                                 }
+                                None => (),
                             }
                         }
-                        None => (),
-                    };
-                }
-
-                let root = root;
-
-                match db.root_update(&root) {
-                    Ok(_) => {
-                        Ok(Some(root))
                     }
-                    Err(e) => Err(e),
-                }
+                    None => (),
+                };
             }
 
+            let root = root;
 
-            match &self.config.mainstay {
-                Some(conf) => {
+            match db.root_update(&root) {
+                Ok(_) => Ok(Some(root)),
+                Err(e) => Err(e),
+            }
+        }
 
-                    match &db.get_confirmed_smt_root()? {
-                        Some(cr_db) => {
+        match &self.config.mainstay {
+            Some(conf) => {
+                match &db.get_confirmed_smt_root()? {
+                    Some(cr_db) => {
                         //Search for update
 
                         //First try to find the latest root in the latest commitment
@@ -651,17 +643,25 @@ impl Storage for SCE {
                                                 }
 
                                                 //MainStay::NotFoundRrror is acceptable - continue the search. Otherwise return the error
-                                                Err(e) => match e.downcast_ref::<MainstayAPIError>() {
-                                                    Some(e) => match e {
-                                                        MainstayAPIError::NotFoundError(_) => (),
-                                                        _ => {
-                                                            return Err(SEError::Generic(e.to_string()))
+                                                Err(e) => {
+                                                    match e.downcast_ref::<MainstayAPIError>() {
+                                                        Some(e) => match e {
+                                                            MainstayAPIError::NotFoundError(_) => {
+                                                                ()
+                                                            }
+                                                            _ => {
+                                                                return Err(SEError::Generic(
+                                                                    e.to_string(),
+                                                                ))
+                                                            }
+                                                        },
+                                                        None => {
+                                                            return Err(SEError::Generic(
+                                                                e.to_string(),
+                                                            ))
                                                         }
-                                                    },
-                                                    None => {
-                                                        return Err(SEError::Generic(e.to_string()))
                                                     }
-                                                },
+                                                }
                                             };
                                         }
                                         None => (),
@@ -672,7 +672,7 @@ impl Storage for SCE {
                         }
                     }
                     None => match &CommitmentInfo::from_latest(conf) {
-                        Ok(ci) => update_db_from_ci(&db,ci),
+                        Ok(ci) => update_db_from_ci(&db, ci),
                         Err(e) => Err(SEError::SharedLibError(e.to_string())),
                     },
                 }
@@ -681,7 +681,6 @@ impl Storage for SCE {
         }
     }
 
-
     fn get_root(&self, id: i64) -> Result<Option<Root>> {
         cfg_if! {
             if #[cfg(test)]{
@@ -689,7 +688,7 @@ impl Storage for SCE {
                 let db = &mut DB::new();
                 // Set the expectations
                 //Current id is 1
-                db.expect_get_root().returning(|x| Ok(Some(Root::from_random())));
+                db.expect_get_root().returning(|_| Ok(Some(Root::from_random())));
             } else {
                 let db = &self.database;
            }
@@ -697,26 +696,22 @@ impl Storage for SCE {
         db.get_root(id)
     }
 
+    //    fn save_user_session(&self, id: &Uuid, auth: String, proof_key: String)
+    //-> Result<()>;
 
-
-//    fn save_user_session(&self, id: &Uuid, auth: String, proof_key: String)
-        //-> Result<()>;
-
-
-  // fn save_statechain(&self, statechain_id: &Uuid, statechain: &StateChain,
-                            //amount: i64,
-                            //user_id: &Uuid) -> Result<()>;
+    // fn save_statechain(&self, statechain_id: &Uuid, statechain: &StateChain,
+    //amount: i64,
+    //user_id: &Uuid) -> Result<()>;
 
     //fn save_backup_tx(&self, statechain_id: &Uuid, backup_tx: &Transaction)
-     //   -> Result<()>;
+    //   -> Result<()>;
 
     //Returns: (new_root, current_root)
     //fn update_smt(&self, backup_tx: &Transaction, proof_key: &String)
-     //   -> Result<(Option<Root>, Root)>;
+    //   -> Result<(Option<Root>, Root)>;
 
     //fn save_ecdsa(&self, user_id: &Uuid,
     //    first_msg: party_one::KeyGenFirstMsg) -> Result<()>;
-
 
     //fn get_confirmed_root(&self, id: &i64) -> Result<Option<Root>>;
 
@@ -724,16 +719,11 @@ impl Storage for SCE {
 
     //fn update_root(&self, root: &Root) -> Result<i64>;
 
-
     fn get_statechain(&self, state_chain_id: Uuid) -> Result<StateChain> {
         self.database.get_statechain(state_chain_id)
     }
 
-    fn get_statechain_data_api(
-        &self,
-        state_chain_id: Uuid,
-    ) -> Result<StateChainDataAPI> {
-
+    fn get_statechain_data_api(&self, state_chain_id: Uuid) -> Result<StateChainDataAPI> {
         //let state_chain_id = Uuid::from_str(&state_chain_id).unwrap();
 
         let state_chain = self.database.get_statechain_amount(state_chain_id)?;
@@ -747,7 +737,6 @@ impl Storage for SCE {
             }
         })
     }
-
 
     //fn authorise_withdrawal(&self, user_id: &Uuid, signature: StateChainSig) -> Result<()>;
 
@@ -769,31 +758,31 @@ impl Storage for SCE {
 
     // /transfer/batch/init
     //fn init_batch_transfer(&self, batch_id: &Uuid,
-     //                   state_chains: &HashMap<Uuid, bool>) -> Result<()>;
-
-
-
+    //                   state_chains: &HashMap<Uuid, bool>) -> Result<()>;
 
     // Update the locked until time of a state chain (used for punishment)
     //fn update_locked_until(&self, state_chain_id: &Uuid, time: &NaiveDateTime);
 
     //Update the list of punished state chains
     //fn update_punished(&self, punished: &Vec<Uuid>);
-
 }
 
 #[cfg(test)]
 pub mod mocks {
-    use super::{Mock,Matcher,mock};
+    use super::{mock, Matcher, Mock};
 
     pub mod ms {
         use super::*;
         pub fn commitment_proof_not_found() -> Mock {
-            mock("GET", Matcher::Regex(r"^/commitment/commitment\?commitment=[abcdef\d]{64}".to_string()))
-
-               .with_header("Content-Type", "application/json")
-                .with_body("{\"error\":\"Not found\",\"timestamp\":1596123963077,
-                \"allowance\":{\"cost\":3796208}}")
+            mock(
+                "GET",
+                Matcher::Regex(r"^/commitment/commitment\?commitment=[abcdef\d]{64}".to_string()),
+            )
+            .with_header("Content-Type", "application/json")
+            .with_body(
+                "{\"error\":\"Not found\",\"timestamp\":1596123963077,
+                \"allowance\":{\"cost\":3796208}}",
+            )
         }
 
         pub fn post_commitment() -> Mock {
@@ -838,22 +827,23 @@ pub mod mocks {
                     ,\"timestamp\":1593160486862,
                     \"allowance\":{\"cost\":17954530}
                     }")
-
         }
-
     }
-
 }
 
 #[cfg(test)]
 pub mod tests {
-
-    use std::str::FromStr;
     use super::*;
-    //use super::super::super::server::get_settings_as_map;
-    //use super::super::super::StateChainEntity;
-    use std::convert::TryInto;
     use crate::shared_lib::mainstay;
+    use crate::MockDatabase;
+    use std::convert::TryInto;
+    use std::str::FromStr;
+
+    // Useful data structs for tests throughout codebase
+    pub static BACKUP_TX_NO_SIG: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
+    pub static STATE_CHAIN_SIG: &str = "{ \"purpose\": \"TRANSFER\", \"data\": \"024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766\", \"sig\": \"3045022100e1171094db96e68392bb2a72695dc7cbce86db7be9d2e943444b6fa08877eec9022036dc63a3b2536d8e2327e0f44ff990f18e6166dce66d87bdcb57f825158a507c\"}";
+    pub static PARTY_1_PRIVATE: &str = "{\"x1\":\"2107a78c61a4fde9cec50dac93a429d8831cbb54b60f93dc90d872de07fdc4f9\",\"paillier_priv\":{\"p\":\"125827148904551123475040787665045834955141209960463598431828689442116933702274725512683483425531139325455222784572197185174160098699612134603536219143517944242710183891622641424399840391859214309358773699692431779676968959811667976059628517842234130929586189795147869686632665691531175404544849080970186982787\",\"q\":\"108775014903684873129393367738776108746990688880484475150644377147517322126277331141546577791890088281625152305777484976996562256412254162036298258491144412421241544091368874015716004036206815612344516648438182799292916557487753834185896219587397835938838699303770167613464141374592918769412558995443434316539\"},\"c_key_randomness\":\"55fb17d6e5b64dadaaa0cd147876668b3b1410e67a2965751977e4321ae298baa36773dd220356228e25bb8a6166e0a45633b9631b3dfecf0e4e733ee299fce3098599d8b9aabdfa6daa875e458644812f7d693fbc0195197db2910a61101f41173b7e1d66879a3c3451b0b133e068dff2c7baafa60a5310a1c9618a9b1da9582beb753bb9ae0e6f701a2f86403a799d6e05091c3b046cd50ef2c15ecfa7d7afe3205a1b0609b9ce16724e2ccd7eef4d71ee16ece802a38f9949314a6d6d0b614ea2a493ed7007286058fae5ca37cf191f52b51d7c7ec914331bc81999560e241fd9688aa315f77e8bed17ef47019b100c8ab0cddbf6617f78bfe4cdef9cc1a\"}";
+    pub static PARTY_2_PUBLIC: &str = "{\"x\":\"5220bc6ebcc83d0a1e4482ab1f2194cb69648100e8be78acde47ca56b996bd9e\",\"y\":\"8dfbb36ef76f2197598738329ffab7d3b3a06d80467db8e739c6b165abc20231\"}";
 
     pub fn test_sc_entity(db: MockDatabase) -> SCE {
         let mut sc_entity = SCE::load(db).unwrap();
@@ -873,12 +863,13 @@ pub mod tests {
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
         db.expect_get_root().returning(|_| Ok(None));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
-        db.expect_get_root().returning(|_x| Ok(Some(Root::from_random())));
+        db.expect_get_root()
+            .returning(|_x| Ok(Some(Root::from_random())));
         db.expect_root_update().returning(|_x| Ok(1));
-        db.expect_get_confirmed_smt_root().returning(||Ok(Some(Root::from_random())));
+        db.expect_get_confirmed_smt_root()
+            .returning(|| Ok(Some(Root::from_random())));
 
         let sc_entity = test_sc_entity(db);
-        let mc = Some(mainstay::MainstayConfig::mock_from_url(&test_url()));
 
         //No commitments initially
         let _m = mocks::ms::commitment_proof_not_found();
@@ -886,8 +877,9 @@ pub mod tests {
         assert_eq!(sc_entity.get_smt_root().unwrap(), None, "expected Ok(None)");
 
         let com1 = mainstay::Commitment::from_str(
-            "71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d")
-            .unwrap();
+            "71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d",
+        )
+        .unwrap();
 
         let root1 = Root::from_hash(&com1.to_hash());
 
@@ -917,13 +909,17 @@ pub mod tests {
         //The root should be confirmed now
         let rootc = sc_entity.get_confirmed_smt_root().unwrap().unwrap();
 
-
-
         assert!(rootc.is_confirmed(), "expected the root to be confirmed");
 
         //let root1 = db_root_get(&db_read, &(root1_id as i64)).unwrap().unwrap();
 
-        assert_eq!(rootc.hash(), root1.hash(), "expected equal Root hashes:\n{:?}\n\n{:?}", rootc, root1);
+        assert_eq!(
+            rootc.hash(),
+            root1.hash(),
+            "expected equal Root hashes:\n{:?}\n\n{:?}",
+            rootc,
+            root1
+        );
 
         assert!(rootc.is_confirmed(), "expected root to be confirmed");
     }
@@ -936,28 +932,29 @@ pub mod tests {
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
         db.expect_get_root().returning(|_| Ok(None));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
-        db.expect_get_root().returning(|_x| Ok(Some(Root::from_random())));
+        db.expect_get_root()
+            .returning(|_x| Ok(Some(Root::from_random())));
         db.expect_root_update().returning(|_x| Ok(1));
-        db.expect_get_confirmed_smt_root().returning(||Ok(Some(Root::from_random())));
+        db.expect_get_confirmed_smt_root()
+            .returning(|| Ok(Some(Root::from_random())));
         let sc_entity = test_sc_entity(db);
 
         //Mainstay post commitment mock
         let _m = mocks::ms::post_commitment().create();
 
-        let (_, new_root) = sc_entity.update_smt(
-            &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
-            &"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
-        )
-        .unwrap();
+        let (_, new_root) = sc_entity
+            .update_smt(
+                &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
+                &"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
+            )
+            .unwrap();
 
-        let hash_exp: [u8;32] =
-        hex::decode("bdb8618ea37b27b771da7609b30860568f3e81a2951e62b03f76cd34b14242fc")
-                    .unwrap()[..].try_into().unwrap();
+        let hash_exp: [u8; 32] =
+            hex::decode("bdb8618ea37b27b771da7609b30860568f3e81a2951e62b03f76cd34b14242fc")
+                .unwrap()[..]
+                .try_into()
+                .unwrap();
 
-        assert_eq!(new_root.hash(),
-                hash_exp,
-                "new root incorrect");
-
+        assert_eq!(new_root.hash(), hash_exp, "new root incorrect");
     }
-
 }

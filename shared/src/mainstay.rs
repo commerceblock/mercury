@@ -456,7 +456,7 @@ impl Default for MainstayConfig {
 
     #[cfg(test)]
     fn default() -> Self {
-       MainstayConfig::mock()
+        MainstayConfig::mock()
     }
 }
 
@@ -997,7 +997,6 @@ mod mocks {
                     ,\"timestamp\":1593160486862,
                     \"allowance\":{\"cost\":17954530}
                     }")
-
     }
 }
 
@@ -1023,7 +1022,6 @@ mod tests {
         .to_hash();
         assert_eq!(hash, expected_hash);
     }
-
 
     #[test]
     fn test_commitment() {
@@ -1059,7 +1057,7 @@ mod tests {
         let random_hash = Commitment::from_hash(&monotree::utils::random_hash());
 
         let mut config = MainstayConfig::from_test().expect(MainstayConfig::info());
-        config.position=1;
+        config.position = 1;
 
         let _m = mocks::post_commitment().create();
 
@@ -1260,7 +1258,7 @@ mod tests {
 
     fn test_get_proof_from_commitment(commitment: &Commitment) -> Result<()> {
         let mut config = MainstayConfig::from_test().expect(MainstayConfig::info());
-        config.position=1;
+        config.position = 1;
         let _m = mocks::commitment_proof().create();
 
         let proof1 = merkle::Proof::from_commitment(&config, commitment)?;
@@ -1286,7 +1284,7 @@ mod tests {
     #[test]
     fn test_get_commitment_info() {
         let mut config = MainstayConfig::from_test().expect(MainstayConfig::info());
-        config.position=1;
+        config.position = 1;
         let _m = mocks::commitment_proof().create();
 
         //Retrieve the proof for a commitment

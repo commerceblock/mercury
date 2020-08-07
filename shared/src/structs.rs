@@ -167,7 +167,7 @@ pub struct TransferMsg3 {
 }
 
 /// Receiver -> State Entity
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferMsg4 {
     pub shared_key_id: Uuid,
     pub state_chain_id: Uuid,

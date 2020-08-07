@@ -10,10 +10,8 @@ mod tests {
 
     use bitcoin::PublicKey;
     use client_lib::state_entity;
+    use server_lib::MockDatabase;
     use std::{str::FromStr, thread, time::Duration};
-    use server_lib::{MockDatabase};
-
-
 
     #[cfg(test)]
     use mockito;
@@ -123,7 +121,7 @@ mod tests {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let mut db = MockDatabase::new();
         let _ = spawn_server::<MockDatabase>(Some(mainstay_config), db);
-        
+
         let num_state_chains = 3; // must be > 1
         let mut amounts = vec![];
         for i in 0..num_state_chains {

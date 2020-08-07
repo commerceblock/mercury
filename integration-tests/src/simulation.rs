@@ -15,7 +15,7 @@ use std::str::FromStr;
 #[cfg(test)]
 use mockito;
 
-use server_lib::{MockDatabase};
+use server_lib::MockDatabase;
 
 #[cfg(test)]
 #[serial]

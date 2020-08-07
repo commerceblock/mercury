@@ -33,7 +33,6 @@ pub struct StorageConfig {
     pub db_pass_r: String,
     /// Storage read database
     pub db_database_r: String,
-
 }
 
 impl Default for StorageConfig {
@@ -116,10 +115,10 @@ impl Config {
         let _ = conf_rs
             // First merge struct default config
             .merge(ConfigRs::try_from(&Config::default())?)?;
-            // Override with settings in file Settings.toml if exists
-            conf_rs.merge(File::with_name("Settings").required(false))?;
-            // Override any config from env using MERC prefix
-            conf_rs.merge(Environment::with_prefix("MERC"))?;
+        // Override with settings in file Settings.toml if exists
+        conf_rs.merge(File::with_name("Settings").required(false))?;
+        // Override any config from env using MERC prefix
+        conf_rs.merge(Environment::with_prefix("MERC"))?;
 
         // Override storage and mainstay config from env variables.
         // Currently doesn't seem to be supported by config_rs.

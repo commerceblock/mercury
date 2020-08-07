@@ -10,16 +10,16 @@ use rocket::State;
 use rocket_contrib::json::Json;
 
 use crate::error::SEError;
-use crate::{Database, MockDatabase, PGDatabase};
+use crate::Database;
 use crate::{server::StateChainEntity, storage::Storage};
 use cfg_if::cfg_if;
 
 cfg_if! {
     if #[cfg(test)]{
-        use MockDatabase as DB;
+        use crate::MockDatabase;
         type SCE = StateChainEntity::<MockDatabase>;
     } else {
-        use PGDatabase as DB;
+        use crate::PGDatabase;
         type SCE = StateChainEntity::<PGDatabase>;
     }
 }
@@ -29,26 +29,17 @@ pub trait Withdraw {
     /// User request withdraw:
     ///     - Check StateChainSig validity
     ///     - Mark user as authorised to withdraw
-    fn withdraw_init(
-        &self,
-        withdraw_msg1: WithdrawMsg1,
-    ) -> Result<()>;
+    fn withdraw_init(&self, withdraw_msg1: WithdrawMsg1) -> Result<()>;
 
     /// Finish withdrawal:
     ///     - Ensure withdraw tx has been signed
     ///     - Update UserSession, StateChain and Sparse merkle tree
     ///     - Return withdraw tx signature
-    fn withdraw_confirm(
-        &self,
-        withdraw_msg2: WithdrawMsg2,
-    ) -> Result<Vec<Vec<u8>>>;
+    fn withdraw_confirm(&self, withdraw_msg2: WithdrawMsg2) -> Result<Vec<Vec<u8>>>;
 }
 
 impl Withdraw for SCE {
-    fn withdraw_init(
-        &self,
-        withdraw_msg1: WithdrawMsg1,
-    ) -> Result<()> {
+    fn withdraw_init(&self, withdraw_msg1: WithdrawMsg1) -> Result<()> {
         let user_id = withdraw_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
 
@@ -58,7 +49,6 @@ impl Withdraw for SCE {
 
         // Get statechain
         let sco = self.database.get_statechain_owner(state_chain_id)?;
-
 
         // Check if locked
         is_locked(sco.locked_until)?;
@@ -76,7 +66,8 @@ impl Withdraw for SCE {
 
         // Mark UserSession as authorised for withdrawal
 
-        self.database.update_withdraw_sc_sig(&user_id, withdraw_msg1.state_chain_sig)?;
+        self.database
+            .update_withdraw_sc_sig(&user_id, withdraw_msg1.state_chain_sig)?;
 
         info!(
             "WITHDRAW: Authorised. Shared Key ID: {}. State Chain: {}",
@@ -86,10 +77,7 @@ impl Withdraw for SCE {
         Ok(())
     }
 
-    fn withdraw_confirm(
-        &self,
-        withdraw_msg2: WithdrawMsg2,
-    ) -> Result<Vec<Vec<u8>>> {
+    fn withdraw_confirm(&self, withdraw_msg2: WithdrawMsg2) -> Result<Vec<Vec<u8>>> {
         let user_id = withdraw_msg2.shared_key_id;
         info!("WITHDRAW: Confirm. Shared Key ID: {}", user_id.to_string());
 
@@ -101,9 +89,8 @@ impl Withdraw for SCE {
 
         state_chain.add(wcd.withdraw_sc_sig.to_owned())?;
 
-        self.database.update_statechain_amount(&wcd.state_chain_id, state_chain, 0)?;
-
-
+        self.database
+            .update_statechain_amount(&wcd.state_chain_id, state_chain, 0)?;
 
         // Remove state_chain_id from user session to signal end of session
         self.database.remove_statechain_id(&user_id)?;
@@ -140,10 +127,7 @@ impl Withdraw for SCE {
 }
 
 #[post("/withdraw/init", format = "json", data = "<withdraw_msg1>")]
-pub fn withdraw_init(
-    sc_entity: State<SCE>,
-    withdraw_msg1: Json<WithdrawMsg1>,
-) -> Result<Json<()>> {
+pub fn withdraw_init(sc_entity: State<SCE>, withdraw_msg1: Json<WithdrawMsg1>) -> Result<Json<()>> {
     match sc_entity.withdraw_init(withdraw_msg1.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),

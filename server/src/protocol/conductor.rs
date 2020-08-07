@@ -7,6 +7,7 @@ pub use super::super::Result;
 extern crate shared_lib;
 use shared_lib::{structs::*, util::keygen::Message};
 
+use crate::{server::StateChainEntity, MockDatabase, PGDatabase};
 use bitcoin::{
     hashes::{sha256d, Hash},
     secp256k1::{PublicKey, Secp256k1, SecretKey, Signature},
@@ -14,13 +15,12 @@ use bitcoin::{
 use rocket::State;
 use rocket_contrib::json::Json;
 use uuid::Uuid;
-use crate::{PGDatabase, MockDatabase, server::StateChainEntity};
 
 use mockall::predicate::*;
 use mockall::*;
 
-use std::str::FromStr;
 use cfg_if::cfg_if;
+use std::str::FromStr;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -157,10 +157,7 @@ impl Conductor for SCE {
 }
 
 #[post("/swap/poll/utxo", format = "json", data = "<state_chain_id>")]
-pub fn poll_utxo(
-    sc_entity: State<SCE>,
-    state_chain_id: Json<Uuid>,
-) -> Result<Json<Option<Uuid>>> {
+pub fn poll_utxo(sc_entity: State<SCE>, state_chain_id: Json<Uuid>) -> Result<Json<Option<Uuid>>> {
     match sc_entity.poll_utxo(state_chain_id.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -168,10 +165,7 @@ pub fn poll_utxo(
 }
 
 #[post("/swap/poll/swap", format = "json", data = "<swap_id>")]
-pub fn poll_swap(
-    sc_entity: State<SCE>,
-    swap_id: Json<Uuid>,
-) -> Result<Json<SwapInfo>> {
+pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<Uuid>) -> Result<Json<SwapInfo>> {
     match sc_entity.poll_swap(swap_id.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -190,10 +184,7 @@ pub fn register_utxo(
 }
 
 #[post("/swap/first", format = "json", data = "<swap_msg1>")]
-pub fn swap_first_message(
-    sc_entity: State<SCE>,
-    swap_msg1: Json<SwapMsg1>,
-) -> Result<Json<()>> {
+pub fn swap_first_message(sc_entity: State<SCE>, swap_msg1: Json<SwapMsg1>) -> Result<Json<()>> {
     match sc_entity.swap_first_message(swap_msg1.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -215,10 +206,10 @@ pub fn swap_second_message(
 mod tests {
     use super::*;
     use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
+    use mockall::predicate;
     use shared_lib::state_chain::StateChainSig;
     use std::str::FromStr;
     use std::{thread, time::Duration};
-    use mockall::predicate;
 
     #[test]
     fn test_swap_token_sig_verify() {
