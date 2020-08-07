@@ -219,6 +219,7 @@ pub mod structs {
         pub start_time: NaiveDateTime,
     }
 
+    #[derive(Debug)]
     pub struct StateChainOwner {
         pub locked_until: NaiveDateTime,
         pub owner_id: Uuid,

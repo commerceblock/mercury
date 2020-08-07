@@ -10,16 +10,16 @@ use rocket::State;
 use rocket_contrib::json::Json;
 
 use crate::error::SEError;
-use crate::{Database, MockDatabase, PGDatabase};
+use crate::Database;
 use crate::{server::StateChainEntity, storage::Storage};
 use cfg_if::cfg_if;
 
 cfg_if! {
     if #[cfg(test)]{
-        use MockDatabase as DB;
+        use crate::MockDatabase;
         type SCE = StateChainEntity::<MockDatabase>;
     } else {
-        use PGDatabase as DB;
+        use crate::PGDatabase;
         type SCE = StateChainEntity::<PGDatabase>;
     }
 }

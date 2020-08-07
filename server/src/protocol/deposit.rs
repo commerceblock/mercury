@@ -85,6 +85,7 @@ impl Deposit for SCE {
     ) -> Result<Uuid> {
         // let shared_key_id = deposit_msg2.shared_key_id.clone();
         let user_id = deposit_msg2.shared_key_id;
+        self.check_user_auth(&user_id)?;
 
         // Get back up tx and proof key
         let (tx_backup, proof_key) = self.database.get_backup_transaction_and_proof_key(user_id)?;
@@ -167,12 +168,12 @@ pub fn deposit_confirm(
 
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use std::str::FromStr;
     use bitcoin::Transaction;
     use crate::protocol::util::{
-        tests::test_sc_entity,
+        tests::{test_sc_entity, BACKUP_TX_NO_SIG},
         mocks};
     use mockall::predicate;
 
@@ -189,7 +190,7 @@ mod tests {
             auth: String::from("auth"),
             proof_key: String::from("")
         }) {
-            Ok(_) => assert!(false),
+            Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("Proof key not in correct format."))
         }
         // Invalid proof key
@@ -197,7 +198,7 @@ mod tests {
             auth: String::from("auth"),
             proof_key: String::from("65aab40995d3ed5d03a0567b04819ff12641b84c17f5e9d5dd075571e18346")
         }) {
-            Ok(_) => assert!(false),
+            Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("Proof key not in correct format."))
         }
 
@@ -210,12 +211,13 @@ mod tests {
     #[test]
     fn integration_test_deposit_confirm() {
         let user_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
-        let proof_key = String::from("65aab40995d3ed5d03a0567b04819ff12641b84c17f5e9d5dd075571e183469c8f");
-        let tx_backup: Transaction = serde_json::from_str(&"{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}").unwrap();
+        let proof_key = String::from("026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e");
+        let tx_backup: Transaction = serde_json::from_str(&BACKUP_TX_NO_SIG.to_string()).unwrap();
         let mut tx_backup_signed = tx_backup.clone();
         tx_backup_signed.input[0].witness = vec!(vec!(48,68,2,32,45,42,91,77,252,143,55,65,154,96,191,149,204,131,88,79,80,161,231,209,234,229,217,100,28,99,48,148,136,194,204,98,2,32,90,111,183,68,74,24,75,120,179,80,20,183,60,198,127,106,102,64,37,193,174,226,199,118,237,35,96,236,45,94,203,49,1),vec!(2,242,131,110,175,215,21,123,219,179,199,144,85,14,163,42,19,197,97,249,41,130,243,139,15,17,51,185,147,228,100,122,213));
 
         let mut db = MockDatabase::new();
+        db.expect_get_user_auth().returning(move |_| Ok(user_id));
         // First return unsigned back up tx
         db.expect_get_backup_transaction_and_proof_key()
             .times(1)
@@ -234,7 +236,7 @@ mod tests {
         match sc_entity.deposit_confirm(DepositMsg2{
             shared_key_id: user_id
         }) {
-            Ok(_) => assert!(false),
+            Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("Signed Back up transaction not found."))
         }
 

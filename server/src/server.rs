@@ -3,20 +3,17 @@ use mockall::*;
 use mockall::predicate::*;
 use crate::DatabaseR;
 use crate::{
-    //storage::{db_make_tables, db_reset_dbs, get_test_postgres_connection},
     DatabaseW,
     Database,
-    PGDatabase
 };
 
-use crate::{config::SMT_DB_LOC_TESTING, PGDatabase as DB};
+use crate::config::SMT_DB_LOC_TESTING;
 use shared_lib::mainstay;
 
 use crate::config::Config;
 use rocket;
 use rocket::{Request, Rocket};
 use rocket::config::{Config as RocketConfig, Environment, Value};
-use crate::MockDatabase;
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
@@ -199,7 +196,6 @@ use crate::protocol::withdraw::Withdraw;
 use crate::storage::Storage;
 use crate::storage;
 use shared_lib::structs::*;
-use kms::ecdsa::two_party::*;
 
 mock!{
     StateChainEntity{}
