@@ -49,7 +49,7 @@ pub mod protocol;
 pub mod server;
 pub mod storage;
 
-type Result<T> = std::result::Result<T, error::SEError>;
+pub type Result<T> = std::result::Result<T, error::SEError>;
 pub type Hash = bitcoin::hashes::sha256d::Hash;
 
 use rocket_contrib::databases::r2d2_postgres::PostgresConnectionManager;

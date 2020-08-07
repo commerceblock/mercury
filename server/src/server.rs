@@ -1,4 +1,6 @@
 use super::protocol::*;
+use mockall::*;
+use mockall::predicate::*;
 use crate::DatabaseR;
 use crate::{
     //storage::{db_make_tables, db_reset_dbs, get_test_postgres_connection},
@@ -182,4 +184,21 @@ fn get_rocket_config(config: &Config) -> RocketConfig {
 /// Get postgres URL from env vars. Suffix can be "TEST", "W", or "R"
 pub fn get_postgres_url(host: String, port: String, user: String, pass: String, database: String) -> String {
     format!("postgresql://{}:{}@{}:{}/{}",user, pass, host, port, database)
+}
+
+use uuid::Uuid;
+use crate::protocol::deposit::Deposit;
+use crate::protocol::deposit;
+use shared_lib::structs::*;
+
+//Mock all the traits implemented by StateChainEntity
+mock!{
+    StateChainEntity{}
+    trait Deposit {
+        fn deposit_init(&self, deposit_msg1: DepositMsg1) -> deposit::Result<Uuid>;
+        fn deposit_confirm(
+            &self,
+            deposit_msg2: DepositMsg2,
+        ) -> deposit::Result<Uuid>;
+    }
 }
