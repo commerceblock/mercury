@@ -43,7 +43,7 @@ pub fn withdraw(wallet: &mut Wallet, state_chain_id: &Uuid) -> Result<(String, U
     let rec_address = wallet.keys.get_new_address()?;
 
     // Sign state chain
-    let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id)?;
+    let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id, false)?;
     if state_chain_data.amount == 0 {
         return Err(CError::StateEntityError(String::from(
             "Withdraw: StateChain is already withdrawn.",
@@ -72,7 +72,7 @@ pub fn withdraw(wallet: &mut Wallet, state_chain_id: &Uuid) -> Result<(String, U
     )?;
 
     // Get state chain info
-    let sc_info = get_statechain(&wallet.client_shim, &state_chain_id)?;
+    let sc_info = get_statechain(&wallet.client_shim, &state_chain_id, false)?;
     // Get state entity withdraw fee info
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
 

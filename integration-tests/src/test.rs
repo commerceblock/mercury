@@ -5,6 +5,7 @@ mod tests {
     extern crate client_lib;
     extern crate server_lib;
     extern crate shared_lib;
+    use mockito::{mock, Matcher, Mock};
 
     use shared_lib::mainstay;
     use shared_lib::{mocks::mock_electrum::MockElectrum, structs::Protocol};
@@ -101,13 +102,15 @@ mod tests {
         
         db.expect_reset().returning(|_|Ok(()));
 
-        let handle = spawn_server::<MockDatabase>(Some(mainstay_config), db);
-        thread::sleep(std::time::Duration::from_millis(1000));
-        handle.join().expect("The thread being joined has panicked");
+        //let handle = spawn_server::<MockDatabase>(Some(mainstay_config), db);
+        //thread::sleep(std::time::Duration::from_millis(1000));
+
+        let test_url=String::from(&mockito::server_url());
 
         let mut wallet = gen_wallet();
 
-        let err = state_entity::api::get_statechain(&wallet.client_shim, &Uuid::new_v4());
+        let err = state_entity::api::get_statechain(&wallet.client_shim, &Uuid::new_v4(), true);
+        handle.join().expect("The thread being joined has panicked");
         assert!(err.is_err());
         let deposit = run_deposit(&mut wallet, &10000);
 

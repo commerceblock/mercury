@@ -19,12 +19,22 @@ pub fn get_statechain_fee_info(client_shim: &ClientShim) -> Result<StateEntityFe
     requests::get(client_shim, &format!("info/fee"))
 }
 
+pub fn get_mockdb_route(route: &String, mock_db:bool) -> String{
+    match mock_db {
+        true => format!("{}{}",String::from("mockdb/"), route),
+        false => route.clone()
+    }
+}
+
 /// Get state chain by ID
 pub fn get_statechain(
     client_shim: &ClientShim,
     state_chain_id: &Uuid,
+    use_mockdb: bool
 ) -> Result<StateChainDataAPI> {
-    requests::get(client_shim, &format!("info/statechain/{}", state_chain_id))
+    let route = get_mockdb_route(&format!("info/statechain/{}", state_chain_id), 
+                    use_mockdb);
+    requests::get(client_shim, &route)    
 }
 
 /// Get state entity's sparse merkle tree root

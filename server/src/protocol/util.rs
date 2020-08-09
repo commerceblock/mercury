@@ -310,6 +310,21 @@ pub fn get_statechain(
     sc_entity: State<SCE>,
     state_chain_id: String,
 ) -> Result<Json<StateChainDataAPI>> {
+    get_statechain_inner::<DB>(sc_entity, state_chain_id) 
+}
+
+#[get("/mockdb/info/statechain/<state_chain_id>", format = "json")]
+pub fn mockdb_get_statechain(
+    sc_entity: State<StateChainEntity<MockDatabase>>,
+    state_chain_id: String,
+) -> Result<Json<StateChainDataAPI>> {
+    get_statechain_inner::<MockDatabase>(sc_entity, state_chain_id) 
+}
+
+pub fn get_statechain_inner<T: Database + Send + Sync + 'static> (
+    sc_entity: State<StateChainEntity<T>>,
+    state_chain_id: String,
+) -> Result<Json<StateChainDataAPI>> {
     match sc_entity.get_statechain_data_api(Uuid::from_str(&state_chain_id).unwrap()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -503,7 +518,7 @@ impl SCE {
     }
 }
 
-impl Storage for SCE {
+impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
 
      /// Update the database and the mainstay slot with the SMT root, if applicable
      fn update_root(&self, root: &Root) -> Result<i64> {
@@ -527,21 +542,8 @@ impl Storage for SCE {
         funding_txid: &String,
         proof_key: &String,
     ) -> Result<(Option<Root>, Root)> {
-        //Use the mock database trait if in test mode
-        cfg_if! {
-            if #[cfg(test)]{
-                //Create a new mock database
-                let db = &mut DB::new();
-                // Set the expectations
-                //Current id is 0
-                db.expect_root_get_current_id().returning(|| Ok(0 as i64));
-                //Current root is randomly chosen
-                db.expect_get_root().returning(|_x| Ok(None));
-            } else {
-                let db = &self.database;
-           }
-        }
-
+        let db = &self.database;
+        
         //If mocked out current_root will be randomly chosen
         let current_root = db.get_root(db.root_get_current_id()?)?;
         let new_root_hash = update_statechain_smt(
@@ -569,8 +571,8 @@ impl Storage for SCE {
         
         let db = &self.database;
 
-        fn update_db_from_ci(
-            db: &DB,
+        fn update_db_from_ci<U: Database>(
+            db: &U,
             ci: &CommitmentInfo,
             ) -> Result<Option<Root>> {
                 let mut root = Root::from_commitment_info(ci);
@@ -620,10 +622,10 @@ impl Storage for SCE {
                                     if ci_db == ci {
                                         Ok(Some(cr_db.clone()))
                                     } else {
-                                        update_db_from_ci(&db, ci)
+                                        update_db_from_ci(db, ci)
                                     }
                                 }
-                                None => update_db_from_ci(&db, ci),
+                                None => update_db_from_ci(db, ci),
                             },
                             Err(e) => Err(SEError::SharedLibError(e.to_string())),
                         };
@@ -673,7 +675,7 @@ impl Storage for SCE {
                         }
                     }
                     None => match &CommitmentInfo::from_latest(conf) {
-                        Ok(ci) => update_db_from_ci(&db,ci),
+                        Ok(ci) => update_db_from_ci(db,ci),
                         Err(e) => Err(SEError::SharedLibError(e.to_string())),
                     },
                 }
@@ -684,18 +686,7 @@ impl Storage for SCE {
 
 
     fn get_root(&self, id: i64) -> Result<Option<Root>> {
-        cfg_if! {
-            if #[cfg(test)]{
-                //Create a new mock database
-                let db = &mut DB::new();
-                // Set the expectations
-                //Current id is 1
-                db.expect_get_root().returning(|x| Ok(Some(Root::from_random())));
-            } else {
-                let db = &self.database;
-           }
-        }
-        db.get_root(id)
+        self.database.get_root(id)
     }
 
 
