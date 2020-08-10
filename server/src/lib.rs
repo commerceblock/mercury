@@ -92,6 +92,7 @@ pub trait Database {
     fn update_withdraw_tx_sighash(&self, user_id: &Uuid, sig_hash: Hash, tx: Transaction) -> Result<()>;
     fn update_sighash(&self, user_id: &Uuid, sig_hash: Hash) -> Result<()>;
     fn update_user_backup_tx(&self,user_id: &Uuid, tx: Transaction) -> Result<()>;
+    fn get_user_backup_tx(&self,user_id: Uuid) -> Result<Transaction>;
     fn update_backup_tx(&self,state_chain_id: &Uuid, tx: Transaction) -> Result<()>;
     fn get_withdraw_confirm_data(&self, user_id: Uuid) -> Result<WithdrawConfirmData>;
     /// Update root value in DB. Update root with ID or insert new DB item.

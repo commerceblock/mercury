@@ -16,6 +16,7 @@ pub fn sign(
     protocol: Protocol,
     shared_key_id: &Uuid,
 ) -> Result<Vec<Vec<u8>>> {
+    println!("sign first msg");
     let (eph_key_gen_first_message_party_two, eph_comm_witness, eph_ec_key_pair_party2) =
         MasterKey2::sign_first_message();
 
@@ -42,6 +43,7 @@ pub fn sign(
         },
     };
 
+    println!("sign second msg");
     let signature = requests::postb::<&SignMsg2, Vec<Vec<u8>>>(
         client_shim,
         &format!("ecdsa/sign/second",),

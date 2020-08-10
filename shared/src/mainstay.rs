@@ -397,7 +397,7 @@ impl MainstayConfig {
         Self::mock_from_url(&test_url())
     }
 
-    pub fn from_test() -> Option<Self> {
+    pub fn from_env() -> Option<Self> {
         match (Self::test_slot(), Self::test_token()) {
             (Some(s), Some(t)) => Some(Self {
                 position: s,
@@ -411,14 +411,14 @@ impl MainstayConfig {
     }
 
     pub fn test_slot() -> Option<u64> {
-        match std::env::var("MERC_MS_TEST_SLOT") {
+        match std::env::var("MERC_MS_SLOT") {
             Ok(s) => s.parse::<u64>().ok(),
             Err(_) => None,
         }
     }
 
     pub fn test_token() -> Option<String> {
-        match std::env::var("MERC_MS_TEST_TOKEN") {
+        match std::env::var("MERC_MS_TOKEN") {
             Ok(t) => t.parse::<String>().ok(),
             Err(_) => None,
         }
@@ -432,10 +432,6 @@ impl MainstayConfig {
 impl FromStr for MainstayConfig {
     type Err = Box<dyn error::Error>;
     fn from_str(s: &str) -> Result<Self> {
-        if s == "test" {
-            return MainstayConfig::from_test()
-                .ok_or(ConfigurationError(MainstayConfig::info().to_string()).into());
-        }
         match serde_json::from_str(s) {
             Ok(p) => Ok(p),
             Err(e) => Err(MainstayError::Generic(e.to_string()).into()),
@@ -446,11 +442,11 @@ impl FromStr for MainstayConfig {
 impl Default for MainstayConfig {
     #[cfg(not(test))]
     fn default() -> Self {
-        Self {
-            url: String::from("https://mainstay.xyz/api/v1"),
-            key: None,
-            position: u64::default(),
-            token: String::default(),
+       Self {
+                url: String::from("https://mainstay.xyz/api/v1"),
+                key: None,
+                position: u64::default(),
+                token: String::default(),
         }
     }
 
@@ -1058,7 +1054,7 @@ mod tests {
     fn test_commit() {
         let random_hash = Commitment::from_hash(&monotree::utils::random_hash());
 
-        let mut config = MainstayConfig::from_test().expect(MainstayConfig::info());
+        let mut config = MainstayConfig::mock();
         config.position=1;
 
         let _m = mocks::post_commitment().create();
@@ -1259,7 +1255,7 @@ mod tests {
     }
 
     fn test_get_proof_from_commitment(commitment: &Commitment) -> Result<()> {
-        let mut config = MainstayConfig::from_test().expect(MainstayConfig::info());
+        let mut config = MainstayConfig::mock();
         config.position=1;
         let _m = mocks::commitment_proof().create();
 
@@ -1285,7 +1281,7 @@ mod tests {
 
     #[test]
     fn test_get_commitment_info() {
-        let mut config = MainstayConfig::from_test().expect(MainstayConfig::info());
+        let mut config = MainstayConfig::mock();
         config.position=1;
         let _m = mocks::commitment_proof().create();
 

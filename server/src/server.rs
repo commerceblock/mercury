@@ -118,7 +118,7 @@ pub fn get_mockdb_server<T: Database + Send + Sync + 'static>
                 ecdsa::sign_second,
                 util::get_statechain,
                 util::get_smt_root,
-                // util::get_confirmed_smt_root,
+                //util::get_confirmed_smt_root,
                 util::get_smt_proof,
                 util::get_fees,
                 util::prepare_sign_tx,

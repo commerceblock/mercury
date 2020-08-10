@@ -331,10 +331,11 @@ pub fn get_statechain_inner<T: Database + Send + Sync + 'static> (
     }
 }
 
-#[post("/info/root", format = "json")]
+#[get("/info/root", format = "json")]
 pub fn get_smt_root(
     sc_entity: State<SCE>
 ) -> Result<Json<Option<Root>>> {
+    println!("route get_smt_root");
     match sc_entity.get_smt_root() {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),

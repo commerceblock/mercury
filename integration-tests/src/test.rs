@@ -15,14 +15,13 @@ mod tests {
     use curv::FE;
 
     use mockito;
-    use server_lib::{MockDatabase, PGDatabase};
+    use server_lib::PGDatabase;
 
     #[test]
     #[serial]
     fn test_gen_shared_key() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let mut db = PGDatabase::get_test();
-        let handle = spawn_server::<PGDatabase>(Some(mainstay_config), db);
+        let handle = spawn_server::<PGDatabase>(None, db);
         let mut wallet = gen_wallet();
         let proof_key = wallet.se_proof_keys.get_new_key().unwrap();
         let init_res =
@@ -36,9 +35,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_failed_auth() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let mut db = PGDatabase::get_test();
-        let _ = spawn_server::<PGDatabase>(Some(mainstay_config), db);
+        let _ = spawn_server::<PGDatabase>(None, db);
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
         let secret_key: FE = ECScalar::new_random();
         let invalid_key = Uuid::new_v4();
@@ -55,11 +53,16 @@ mod tests {
     #[test]
     #[serial]
     fn test_deposit() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
+        println!("get test db");
         let mut db = PGDatabase::get_test();
-        let _ = spawn_server::<PGDatabase>(Some(mainstay_config), db);
+        println!("get mainstay config");
+        let mc = mainstay::MainstayConfig::from_env();
+        println!("mainstay config: {:?}", mc);
+        let handle = spawn_server::<PGDatabase>(mc, db);
+        println!("gen wallet with deposit");
         let wallet = gen_wallet_with_deposit(10000);
-
+        //handle.join().expect("The thread being joined has panicked");
+        println!("get sc info deposit");
         let state_chains_info = wallet.get_state_chains_info();
         let (_, funding_txid, proof_key, _, _) = wallet
             .get_shared_key_info(state_chains_info.0.last().unwrap())
@@ -98,9 +101,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_get_statechain() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let mut db = PGDatabase::get_test();
-        let _ = spawn_server::<PGDatabase>(Some(mainstay_config), db);
+        let _ = spawn_server::<PGDatabase>(None, db);
         let mut wallet = gen_wallet();
 
         let err = state_entity::api::get_statechain(&wallet.client_shim, &Uuid::new_v4());
@@ -117,9 +119,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_transfer() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let mut db = PGDatabase::get_test();
-        let _ = spawn_server::<PGDatabase>(Some(mainstay_config), db);
+        let _ = spawn_server::<PGDatabase>(None, db);
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
         wallets.push(gen_wallet()); // receiver
@@ -191,9 +192,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_double_transfer() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let mut db = PGDatabase::get_test();
-        let _ = spawn_server::<PGDatabase>(Some(mainstay_config), db);
+        let _ = spawn_server::<PGDatabase>(None, db);
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
         wallets.push(gen_wallet()); // receiver1
@@ -322,9 +322,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_withdraw() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let mut db = PGDatabase::get_test();
-        let _ = spawn_server::<PGDatabase>(Some(mainstay_config), db);
+        let _ = spawn_server::<PGDatabase>(None, db);
         let mut wallet = gen_wallet();
 
         let deposit_resp = run_deposit(&mut wallet, &10000);
@@ -382,9 +381,8 @@ mod tests {
     #[serial]
     /// Test wallet load from json correctly when shared key present.
     fn test_wallet_load_with_shared_key() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let mut db = PGDatabase::get_test();
-        let _ = spawn_server::<PGDatabase>(Some(mainstay_config), db);
+        let _ = spawn_server::<PGDatabase>(None, db);
 
         let mut wallet = gen_wallet();
         run_deposit(&mut wallet, &10000);
@@ -474,7 +472,7 @@ mod tests {
         let err = state_entity::api::get_statechain(&wallet.client_shim, &invalidSCID);
         assert!(err.is_err());
         
-        //handle.join().expect("The thread being joined has panicked");
+        handle.join().expect("The thread being joined has panicked");
     
     }
 }
