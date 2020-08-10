@@ -81,8 +81,15 @@ impl Withdraw for SCE {
         let user_id = withdraw_msg2.shared_key_id;
         info!("WITHDRAW: Confirm. Shared Key ID: {}", user_id.to_string());
 
-        // Get UserSession data - Checking that withdraw tx and statechain signature exists
+        // Get withdraw data - Checking that withdraw tx and statechain signature exists
         let wcd = self.database.get_withdraw_confirm_data(user_id)?;
+
+        // Ensure withdraw tx has been signed. i,e, that prepare-sign-tx has been completed.
+        if wcd.tx_withdraw.input[0].witness.len() == 0 {
+            return Err(SEError::Generic(String::from(
+                "Signed Back up transaction not found.",
+            )));
+        }
 
         // Get statechain and update with final StateChainSig
         let mut state_chain: StateChain = self.database.get_statechain(wcd.state_chain_id)?;
@@ -142,5 +149,128 @@ pub fn withdraw_confirm(
     match sc_entity.withdraw_confirm(withdraw_msg2.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::MockDatabase;
+    use crate::{
+        error::DBErrorType,
+        protocol::util::{
+            mocks,
+            tests::{test_sc_entity, BACKUP_TX_NOT_SIGNED, BACKUP_TX_SIGNED},
+        },
+        structs::{StateChainOwner, WithdrawConfirmData},
+    };
+    use chrono::{Duration, Utc};
+    use mockall::predicate;
+    use std::str::FromStr;
+    use uuid::Uuid;
+
+    // Data from a run of transfer protocol.
+    static WITHDRAW_MSG_1: &str = "{\"shared_key_id\":\"ad8cb891-ce91-447d-9192-bd105f3de602\",\"state_chain_sig\":{\"purpose\":\"WITHDRAW\",\"data\":\"bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8\",\"sig\":\"3045022100cf280f1b03616d3ab27c485de7fa3931af4f9f0f515811eb6b145d68a47e248d022035931ad9779867fcaf04349bddff7ce30d56b8e001494c9fe3d095ef9eb1f773\"}}";
+    static STATE_CHAIN_ID: &str = "2b41ff74-510d-4fe7-90a6-714a26a137da";
+    static STATE_CHAIN: &str = "{\"chain\":[{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}]}";
+    static STATE_CHAIN_SIG: &str = "{\"purpose\":\"WITHDRAW\",\"data\":\"bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8\",\"sig\":\"3045022100cf280f1b03616d3ab27c485de7fa3931af4f9f0f515811eb6b145d68a47e248d022035931ad9779867fcaf04349bddff7ce30d56b8e001494c9fe3d095ef9eb1f773\"}";
+
+    #[test]
+    fn itegration_test_withdraw_init() {
+        let withdraw_msg_1 =
+            serde_json::from_str::<WithdrawMsg1>(WITHDRAW_MSG_1).unwrap();
+        let shared_key_id = withdraw_msg_1.shared_key_id;
+        let state_chain_id = Uuid::from_str(STATE_CHAIN_ID).unwrap();
+
+        let mut db = MockDatabase::new();
+        db.expect_get_user_auth().returning(move |_| Ok(shared_key_id));
+        db.expect_get_statechain_id()
+            .with(predicate::eq(shared_key_id))
+            .returning(move |_| Ok(state_chain_id));
+        // shared_key_id does not own a state chain (use state chain id as shared key id to test)
+        db.expect_get_statechain_id().with(predicate::eq(state_chain_id))
+            .returning(move |_| {
+                Err(SEError::DBError(DBErrorType::NoDataForID,state_chain_id.to_string()))
+            });
+        db.expect_get_statechain_owner()    // sc locked
+            .with(predicate::eq(state_chain_id))
+            .times(1)
+            .returning(move |_| {
+                Ok(StateChainOwner {
+                    locked_until: Utc::now().naive_utc() + Duration::seconds(5),
+                    owner_id: shared_key_id,
+                    chain: serde_json::from_str::<StateChain>(STATE_CHAIN).unwrap(),
+                })
+            });
+        db.expect_get_statechain_owner()
+            .with(predicate::eq(state_chain_id))
+            .returning(move |_| {
+                Ok(StateChainOwner {
+                    locked_until: Utc::now().naive_utc(),
+                    owner_id: shared_key_id,
+                    chain: serde_json::from_str::<StateChain>(STATE_CHAIN).unwrap(),
+                })
+            });
+        db.expect_update_withdraw_sc_sig().returning(|_,_| Ok(()));
+
+        let sc_entity = test_sc_entity(db);
+
+        // user does not own State Chain
+        let mut msg_1_wrong_shared_key = withdraw_msg_1.clone();
+        msg_1_wrong_shared_key.shared_key_id = state_chain_id;
+        match sc_entity.withdraw_init(msg_1_wrong_shared_key.clone()) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("DB Error: No data for identifier."))
+        }
+        // Sc locked
+        match sc_entity.withdraw_init(withdraw_msg_1.clone()) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("SharedLibError Error: Error: State Chain locked for 1 minutes.")),
+        }
+
+        // Expect successful run
+        assert!(sc_entity.withdraw_init(withdraw_msg_1.clone()).is_ok());
+    }
+
+
+    #[test]
+    fn itegration_test_withdraw_confirm() {
+        let withdraw_msg_1 =
+            serde_json::from_str::<WithdrawMsg1>(WITHDRAW_MSG_1).unwrap();
+        let shared_key_id = withdraw_msg_1.shared_key_id;
+        let withdraw_msg_2 = WithdrawMsg2 {
+            shared_key_id,
+            address: "bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8".to_string(),
+        };
+        let state_chain_id = Uuid::from_str(STATE_CHAIN_ID).unwrap();
+
+        let mut db = MockDatabase::new();
+        db.expect_get_user_auth().returning(move |_| Ok(shared_key_id));
+        db.expect_get_withdraw_confirm_data().times(1).returning(move |_| Ok(WithdrawConfirmData {
+            tx_withdraw: serde_json::from_str(&BACKUP_TX_NOT_SIGNED).unwrap(), // any tx is fine here
+            withdraw_sc_sig: serde_json::from_str::<StateChainSig>(&STATE_CHAIN_SIG.to_string()).unwrap(),
+            state_chain_id,
+        }));
+        db.expect_get_withdraw_confirm_data().returning(move |_| Ok(WithdrawConfirmData {
+            tx_withdraw: serde_json::from_str(&BACKUP_TX_SIGNED).unwrap(), // any tx is fine here
+            withdraw_sc_sig: serde_json::from_str::<StateChainSig>(&STATE_CHAIN_SIG.to_string()).unwrap(),
+            state_chain_id,
+        }));
+        db.expect_get_statechain().returning(move |_| Ok(serde_json::from_str::<StateChain>(STATE_CHAIN).unwrap()));
+        db.expect_update_statechain_amount().returning(|_,_,_| Ok(()));
+        db.expect_remove_statechain_id().returning(|_| Ok(()));
+
+        let sc_entity = test_sc_entity(db);
+        let _m = mocks::ms::post_commitment().create();        //Mainstay post commitment mock
+
+        // Ensure backup tx has been signed
+        match sc_entity.withdraw_confirm(withdraw_msg_2.clone()) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Signed Back up transaction not found.")),
+        }
+
+        // Expect successful run
+        assert!(sc_entity.withdraw_confirm(withdraw_msg_2.clone()).is_ok());
     }
 }

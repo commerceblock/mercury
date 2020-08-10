@@ -168,7 +168,7 @@ pub mod tests {
     use super::*;
     use crate::protocol::util::{
         mocks,
-        tests::{test_sc_entity, BACKUP_TX_NO_SIG},
+        tests::{test_sc_entity, BACKUP_TX_NOT_SIGNED, BACKUP_TX_SIGNED},
     };
     use bitcoin::Transaction;
     use mockall::predicate;
@@ -215,20 +215,8 @@ pub mod tests {
         let user_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
         let proof_key =
             String::from("026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e");
-        let tx_backup: Transaction = serde_json::from_str(&BACKUP_TX_NO_SIG.to_string()).unwrap();
-        let mut tx_backup_signed = tx_backup.clone();
-        tx_backup_signed.input[0].witness = vec![
-            vec![
-                48, 68, 2, 32, 45, 42, 91, 77, 252, 143, 55, 65, 154, 96, 191, 149, 204, 131, 88,
-                79, 80, 161, 231, 209, 234, 229, 217, 100, 28, 99, 48, 148, 136, 194, 204, 98, 2,
-                32, 90, 111, 183, 68, 74, 24, 75, 120, 179, 80, 20, 183, 60, 198, 127, 106, 102,
-                64, 37, 193, 174, 226, 199, 118, 237, 35, 96, 236, 45, 94, 203, 49, 1,
-            ],
-            vec![
-                2, 242, 131, 110, 175, 215, 21, 123, 219, 179, 199, 144, 85, 14, 163, 42, 19, 197,
-                97, 249, 41, 130, 243, 139, 15, 17, 51, 185, 147, 228, 100, 122, 213,
-            ],
-        ];
+        let tx_backup: Transaction = serde_json::from_str(&BACKUP_TX_NOT_SIGNED).unwrap();
+        let tx_backup_signed = serde_json::from_str::<Transaction>(&BACKUP_TX_SIGNED).unwrap();
 
         let mut db = MockDatabase::new();
         db.expect_get_user_auth().returning(move |_| Ok(user_id));
@@ -251,15 +239,11 @@ pub mod tests {
             shared_key_id: user_id,
         }) {
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e
-                .to_string()
-                .contains("Signed Back up transaction not found.")),
+            Err(e) => assert!(e.to_string().contains("Signed Back up transaction not found.")),
         }
 
         // Clean protocol run
-
-        //Mainstay post commitment mock
-        let _m = mocks::ms::post_commitment().create();
+        let _m = mocks::ms::post_commitment().create();         //Mainstay post commitment mock
         assert!(sc_entity
             .deposit_confirm(DepositMsg2 {
                 shared_key_id: user_id

@@ -145,7 +145,7 @@ pub struct SCEAddress {
 }
 
 /// Sender -> SE
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferMsg1 {
     pub shared_key_id: Uuid,
     pub state_chain_sig: StateChainSig,
@@ -217,7 +217,7 @@ pub struct WithdrawMsg1 {
 }
 
 /// Owner -> State Entity
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WithdrawMsg2 {
     pub shared_key_id: Uuid,
     pub address: String,

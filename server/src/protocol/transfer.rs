@@ -318,7 +318,7 @@ mod tests {
         error::DBErrorType,
         protocol::util::{
             mocks,
-            tests::{test_sc_entity, BACKUP_TX_NO_SIG, PARTY_1_PRIVATE, PARTY_2_PUBLIC},
+            tests::{test_sc_entity, BACKUP_TX_NOT_SIGNED, PARTY_1_PRIVATE, PARTY_2_PUBLIC},
         },
         structs::{ECDSAKeypair, StateChainOwner, TransferData, TransferFinalizeBatchData},
     };
@@ -340,40 +340,49 @@ mod tests {
 
     #[test]
     fn itegration_test_transfer_sender() {
-        let user_id = Uuid::from_str("203001c9-93f0-46f9-aaaa-0678c891b2d3").unwrap();
-        let no_sc_user_id = Uuid::from_str("11111111-1111-46f9-aaaa-0678c891b2d3").unwrap();
+        let shared_key_id = Uuid::from_str("203001c9-93f0-46f9-aaaa-0678c891b2d3").unwrap();
+        let no_sc_shared_key_id = Uuid::from_str("11111111-1111-46f9-aaaa-0678c891b2d3").unwrap();
         let state_chain_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
         let sender_proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap(); // Proof key priv part
         let sender_proof_key =
             PublicKey::from_secret_key(&Secp256k1::new(), &sender_proof_key_priv);
         let state_chain_sig: StateChainSig =
-            serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string())
-                .unwrap()
-                .state_chain_sig;
+            serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap().state_chain_sig;
+        let transfer_msg_1 = TransferMsg1 {shared_key_id,state_chain_sig};
 
         let mut db = MockDatabase::new();
-        db.expect_get_user_auth().returning(move |_| Ok(user_id));
+        db.expect_get_user_auth().returning(move |_| Ok(shared_key_id));
         db.expect_get_statechain_id()
-            .with(predicate::eq(user_id))
+            .with(predicate::eq(shared_key_id))
             .returning(move |_| Ok(state_chain_id));
         // userid does not own a state
         db.expect_get_statechain_id()
-            .with(predicate::eq(no_sc_user_id))
+            .with(predicate::eq(no_sc_shared_key_id))
             .returning(move |_| {
                 Err(SEError::DBError(
                     DBErrorType::NoDataForID,
-                    no_sc_user_id.to_string(),
+                    no_sc_shared_key_id.to_string(),
                 ))
             });
         db.expect_transfer_is_completed()
             .with(predicate::eq(state_chain_id))
             .returning(|_| false);
+        db.expect_get_statechain_owner()    // sc locked
+            .with(predicate::eq(state_chain_id))
+            .times(1)
+            .returning(move |_| {
+                Ok(StateChainOwner {
+                    locked_until: Utc::now().naive_utc() + Duration::seconds(5),
+                    owner_id: shared_key_id,
+                    chain: serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap(),
+                })
+            });
         db.expect_get_statechain_owner()
             .with(predicate::eq(state_chain_id))
             .returning(move |_| {
                 Ok(StateChainOwner {
                     locked_until: Utc::now().naive_utc(),
-                    owner_id: user_id,
+                    owner_id: shared_key_id,
                     chain: StateChain::new(sender_proof_key.to_string()),
                 })
             });
@@ -382,19 +391,21 @@ mod tests {
         let sc_entity = test_sc_entity(db);
 
         // user does not own State Chain
-        match sc_entity.transfer_sender(TransferMsg1 {
-            shared_key_id: no_sc_user_id,
-            state_chain_sig: state_chain_sig.clone(),
-        }) {
+        let mut msg_1_wrong_shared_key_id = transfer_msg_1.clone();
+        msg_1_wrong_shared_key_id.shared_key_id = no_sc_shared_key_id;
+        match sc_entity.transfer_sender(msg_1_wrong_shared_key_id) {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("DB Error: No data for identifier.")),
         }
 
+        // Sc locked
+        match sc_entity.transfer_sender(transfer_msg_1.clone()) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("SharedLibError Error: Error: State Chain locked for 1 minutes.")),
+        }
+
         assert!(sc_entity
-            .transfer_sender(TransferMsg1 {
-                shared_key_id: user_id,
-                state_chain_sig
-            })
+            .transfer_sender(transfer_msg_1)
             .is_ok());
     }
 
@@ -459,7 +470,7 @@ mod tests {
                         .state_chain_sig,
                         s2: s2,
                         new_tx_backup: serde_json::from_str::<Transaction>(
-                            &BACKUP_TX_NO_SIG.to_string(),
+                            &BACKUP_TX_NOT_SIGNED.to_string(),
                         )
                         .unwrap(),
                         batch_data: Some(BatchData {
@@ -483,7 +494,7 @@ mod tests {
                     .state_chain_sig,
                     s2: s2,
                     new_tx_backup: serde_json::from_str::<Transaction>(
-                        &BACKUP_TX_NO_SIG.to_string(),
+                        &BACKUP_TX_NOT_SIGNED.to_string(),
                     )
                     .unwrap(),
                     batch_data: Some(BatchData {
@@ -498,8 +509,8 @@ mod tests {
             .returning(|_, _, _| Ok(()));
 
         let sc_entity = test_sc_entity(db);
-        //Mainstay post commitment mock
-        let _m = mocks::ms::post_commitment().create();
+        let _m = mocks::ms::post_commitment().create();        //Mainstay post commitment mock
+
         // Input data to transfer_receiver
         let mut transfer_msg_4 =
             serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap();
@@ -534,7 +545,7 @@ mod tests {
             commitment: String::default(),
         });
 
-        // Batch lifetime passed
+        // Batch lifetime over
         match sc_entity.transfer_receiver(transfer_msg_4.clone()) {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e
