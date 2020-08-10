@@ -67,7 +67,7 @@ tag = "v0.2.1"
 path = "../shared"
 
 [profile.dev]
-use_localhost_cert = "true"
+use_localhost_cert = "false"
 
 [profile.test]
-use_localhost_cert = "true"
+use_localhost_cert = "false"

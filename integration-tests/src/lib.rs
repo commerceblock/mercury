@@ -28,7 +28,6 @@ use std::time::Instant;
 use std::{thread, time};
 use uuid::Uuid;
 
-#[cfg(test)]
 #[macro_use]
 extern crate serial_test;
 
@@ -75,8 +74,7 @@ impl From<RecvTimeoutError> for SpawnError {
 
 /// Spawn a StateChain Entity server in testing mode if there isn't one running already.
 /// Returns Ok(()) if a new server was spawned, otherwise returns an error.
-pub fn spawn_server<T: Database + Send + Sync + 'static>(mainstay_config: Option<mainstay::MainstayConfig>, db: T) 
-//-> Result<(), SpawnError> {
+pub fn spawn_server<T: Database + Send + Sync + 'static>(mainstay_config: Option<mainstay::MainstayConfig>, db: T)
 -> thread::JoinHandle<SpawnError> {
     // Set enviroment variable to testing_mode=true to override Settings.toml
     env::set_var("MERC_TESTING_MODE", "true");
@@ -99,7 +97,7 @@ pub fn gen_wallet() -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
-        ClientShim::new("https://localhost:8000".to_string(), None).unwrap(),
+        ClientShim::new("http://localhost:8000".to_string(), None).unwrap(),
         Box::new(MockElectrum::new()),
     );
 
@@ -114,7 +112,7 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
-        ClientShim::new("https://localhost:8000".to_string(), None).unwrap(),
+        ClientShim::new("http://localhost:8000".to_string(), None).unwrap(),
         Box::new(MockElectrum::new()),
     );
 

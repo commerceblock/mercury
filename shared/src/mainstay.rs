@@ -187,7 +187,6 @@ impl Responder<'static> for MainstayAPIError {
     }
 }
 
-use MainstayError::ConfigurationError;
 use MainstayError::FormatError;
 use MainstayError::NotFoundError;
 
@@ -452,7 +451,7 @@ impl Default for MainstayConfig {
 
     #[cfg(test)]
     fn default() -> Self {
-       MainstayConfig::mock()
+        MainstayConfig::mock()
     }
 }
 
@@ -993,7 +992,6 @@ mod mocks {
                     ,\"timestamp\":1593160486862,
                     \"allowance\":{\"cost\":17954530}
                     }")
-
     }
 }
 
@@ -1019,7 +1017,6 @@ mod tests {
         .to_hash();
         assert_eq!(hash, expected_hash);
     }
-
 
     #[test]
     fn test_commitment() {

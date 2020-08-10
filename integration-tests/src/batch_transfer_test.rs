@@ -1,4 +1,5 @@
-#[cfg(all(test, feature="realdb"))]
+#[cfg(test)]
+#[cfg(not(feature="mockdb"))]
 mod tests {
     use crate::*;
     extern crate bitcoin;
@@ -10,6 +11,7 @@ mod tests {
 
     use bitcoin::PublicKey;
     use client_lib::state_entity;
+    use server_lib::MockDatabase;
     use std::{str::FromStr, thread, time::Duration};
     use server_lib::PGDatabase;
 
@@ -22,11 +24,13 @@ mod tests {
     #[test]
     #[serial]
     fn test_batch_sigs() {
-        let mut db = PGDatabase::get_test();
-        let _ = spawn_server::<PGDatabase>(None, db);
+        let db = PGDatabase::get_test();
+        let mc = mainstay::MainstayConfig::from_env();
+        let _handle = spawn_server::<PGDatabase>(mc, db);
         let mut wallet = gen_wallet();
         let num_state_chains = 3;
         // make deposits
+        println!("make deposits");
         let mut state_chain_ids = vec![];
         for _ in 0..num_state_chains {
             state_chain_ids.push(run_deposit(&mut wallet, &10000).1);
@@ -37,6 +41,7 @@ mod tests {
 
         // Gen valid transfer-batch signatures for each state chain
         let mut transfer_sigs = vec![];
+        println!("transfer batch sigs");
         for i in 0..num_state_chains {
             transfer_sigs.push(
                 state_entity::transfer::transfer_batch_sign(
@@ -48,6 +53,7 @@ mod tests {
             );
         }
 
+        println!("transsfer batch");
         let transfer_batch_init = state_entity::transfer::transfer_batch_init(
             &wallet.client_shim,
             &transfer_sigs,
@@ -55,6 +61,7 @@ mod tests {
         );
         assert!(transfer_batch_init.is_ok());
 
+        println!("transsfer batch sign 2");
         // Gen sigs with one batch id different from the others
         let mut transfer_sigs = vec![];
         for i in 0..num_state_chains {
@@ -70,6 +77,7 @@ mod tests {
                 .unwrap(),
             );
         }
+        println!("transsfer batch init 2");
         let transfer_batch_init = state_entity::transfer::transfer_batch_init(
             &wallet.client_shim,
             &transfer_sigs,
@@ -84,6 +92,7 @@ mod tests {
 
         // Gen sig with regular transfer message
         // First sign state chain
+        println!("get statechain");
         let mut transfer_sigs = vec![];
         for _ in 0..1 {
             let state_chain_data =
@@ -102,6 +111,7 @@ mod tests {
             .unwrap();
             transfer_sigs.push(state_chain_sig);
         }
+        println!("trnasfer batch init 3");
         let transfer_batch_init = state_entity::transfer::transfer_batch_init(
             &wallet.client_shim,
             &transfer_sigs,
@@ -119,9 +129,10 @@ mod tests {
     #[test]
     #[serial]
     fn test_batch_transfer() {
-        let mut db = PGDatabase::get_test();
-        let _ = spawn_server::<PGDatabase>(None, db);
-        
+        let db = PGDatabase::get_test();
+        let mc = mainstay::MainstayConfig::from_env();
+        let _handle = spawn_server::<PGDatabase>(mc, db);
+
         let num_state_chains = 3; // must be > 1
         let mut amounts = vec![];
         for i in 0..num_state_chains {
@@ -227,8 +238,9 @@ mod tests {
     // #[test]
     #[allow(dead_code)]
     fn test_failure_batch_transfer() {
-        let mut db = PGDatabase::get_test();
-        let _ = spawn_server::<PGDatabase>(None, db);
+        let db = PGDatabase::get_test();
+        let mc = mainstay::MainstayConfig::from_env();
+        let _handle = spawn_server::<PGDatabase>(mc, db);
 
         let num_state_chains = 3; // must be > 2
         let mut amounts = vec![];

@@ -18,8 +18,8 @@ rand = "0.6.5"
 env_logger = "0.7.1"
 floating-duration = "0.1.2"
 uuid = { version = "0.5", features = ["v4", "serde"] }
-serial_test = "0.4.0"
 stoppable_thread = "0.2.1"
+serial_test = "0.4.0"
 
 [dev-dependencies]
 mockito = "0.27.0"
@@ -29,18 +29,19 @@ git = "https://github.com/KZen-networks/curv"
 tag = "v0.2.2"
 features =  ["ec_secp256k1"]
 
+#Re-export mockdb to the server package if enabled in this package                                                                                                                                        
+[features]
+mockdb = ["server/mockdb"]
+default = ["mockdb"]
+
 [dependencies.server]
 path = "../server"
-#features = ["mockdb"]
 
 [dependencies.client]
 path = "../client"
 
 [dependencies.shared]
 path = "../shared"
-
-[features]
-realdb = [] 
 
 #[development]
 #tls = { certs = "../utilities/server/certs/localhost.crt" }

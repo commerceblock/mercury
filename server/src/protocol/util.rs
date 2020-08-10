@@ -7,14 +7,13 @@ pub use super::super::Result;
 use super::transfer_batch::{transfer_batch_is_ended, BatchTransfer};
 extern crate shared_lib;
 use shared_lib::{
+    mainstay::Attestable,
     mocks::mock_electrum::MockElectrum,
     state_chain::*,
     structs::*,
     util::{get_sighash, tx_backup_verify, tx_withdraw_verify},
     Root,
-    mainstay::Attestable,
 };
-
 
 use crate::error::{DBErrorType, SEError};
 use crate::storage::Storage;
@@ -22,14 +21,14 @@ use crate::{server::StateChainEntity, Database};
 use cfg_if::cfg_if;
 
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
+#[cfg(test)]
+use mockito::{mock, Matcher, Mock};
 pub use monotree::Proof;
 use rocket::State;
 use rocket_contrib::json::Json;
 use std::str::FromStr;
 use std::{thread, time::Duration};
 use uuid::Uuid;
-#[cfg(test)]
-use mockito::{mock, Matcher, Mock};
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -50,10 +49,7 @@ pub trait Utilities {
     fn get_fees(&self) -> Result<StateEntityFeeInfoAPI>;
 
     /// API: Generates sparse merkle tree inclusion proof for some key in a tree with some root.
-    fn get_smt_proof(
-        &self,
-        smt_proof_msg: SmtProofMsgAPI,
-    ) -> Result<Option<Proof>>;
+    fn get_smt_proof(&self, smt_proof_msg: SmtProofMsgAPI) -> Result<Option<Proof>>;
 
     /// API: Get root of sparse merkle tree. Will be via Mainstay in the future.
     //fn get_smt_root(&self) -> Result<Option<Root>>;
@@ -75,10 +71,7 @@ pub trait Utilities {
     /// honest and error free:
     ///     - Check tx data
     ///     - Calculate and store tx sighash for validation before performing ecdsa::sign
-    fn prepare_sign_tx(
-        &self,
-        prepare_sign_msg: PrepareSignTxMsg,
-    ) -> Result<()>;
+    fn prepare_sign_tx(&self, prepare_sign_msg: PrepareSignTxMsg) -> Result<()>;
 }
 
 impl Utilities for SCE {
@@ -90,10 +83,7 @@ impl Utilities for SCE {
         })
     }
 
-    fn get_smt_proof(
-        &self,
-        smt_proof_msg: SmtProofMsgAPI,
-    ) -> Result<Option<Proof>> {
+    fn get_smt_proof(&self, smt_proof_msg: SmtProofMsgAPI) -> Result<Option<Proof>> {
         // ensure root exists
         match smt_proof_msg.root.id() {
             Some(id) => {
@@ -212,10 +202,7 @@ impl Utilities for SCE {
     //     })
     // }
 
-    fn prepare_sign_tx(
-        &self,
-        prepare_sign_msg: PrepareSignTxMsg,
-    ) -> Result<()> {
+    fn prepare_sign_tx(&self, prepare_sign_msg: PrepareSignTxMsg) -> Result<()> {
         let user_id = prepare_sign_msg.shared_key_id;
         self.check_user_auth(&user_id)?;
 
@@ -223,14 +210,18 @@ impl Utilities for SCE {
         match prepare_sign_msg.protocol {
             Protocol::Withdraw => {
                 // Verify withdrawal has been authorised via presense of withdraw_sc_sig
-                if let Err(_) = self.database.has_withdraw_sc_sig(user_id){
+                if let Err(_) = self.database.has_withdraw_sc_sig(user_id) {
                     return Err(SEError::Generic(String::from(
                         "Withdraw has not been authorised. /withdraw/init must be called first.",
                     )));
                 }
 
                 // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data
-                tx_withdraw_verify(&prepare_sign_msg, &self.config.fee_address, &self.config.fee_withdraw)?;
+                tx_withdraw_verify(
+                    &prepare_sign_msg,
+                    &self.config.fee_address,
+                    &self.config.fee_withdraw,
+                )?;
 
                 let tx_backup = self.database.get_backup_transaction(user_id)?;
 
@@ -259,7 +250,11 @@ impl Utilities for SCE {
                     &self.config.network,
                 );
 
-                self.database.update_withdraw_tx_sighash(&user_id, sig_hash, prepare_sign_msg.tx)?;
+                self.database.update_withdraw_tx_sighash(
+                    &user_id,
+                    sig_hash,
+                    prepare_sign_msg.tx,
+                )?;
 
                 info!(
                     "WITHDRAW: Withdraw tx ready for signing. User ID: {:?}.",
@@ -280,10 +275,10 @@ impl Utilities for SCE {
 
                 self.database.update_sighash(&user_id, sig_hash)?;
 
-
                 // Only in deposit case add backup tx to UserSession
                 if prepare_sign_msg.protocol == Protocol::Deposit {
-                    self.database.update_user_backup_tx(&user_id, prepare_sign_msg.tx)?;
+                    self.database
+                        .update_user_backup_tx(&user_id, prepare_sign_msg.tx)?;
                 }
 
                 info!(
@@ -320,7 +315,6 @@ pub fn get_statechain(
 pub fn get_smt_root(
     sc_entity: State<SCE>
 ) -> Result<Json<Option<Root>>> {
-    println!("route get_smt_root");
     match sc_entity.get_smt_root() {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -412,10 +406,7 @@ impl SCE {
     }
 
     // Set state chain time-out
-    pub fn state_chain_punish(
-        &self,
-        state_chain_id: Uuid,
-    ) -> Result<()> {
+    pub fn state_chain_punish(&self, state_chain_id: Uuid) -> Result<()> {
         let sc_locked_until = self.database.get_sc_locked_until(state_chain_id)?;
 
         if is_locked(sc_locked_until).is_err() {
@@ -424,8 +415,10 @@ impl SCE {
             )));
         }
 
-        self.database.update_locked_until(&state_chain_id,
-            &get_locked_until(self.config.punishment_duration as i64)?)?;
+        self.database.update_locked_until(
+            &state_chain_id,
+            &get_locked_until(self.config.punishment_duration as i64)?,
+        )?;
 
         info!(
             "PUNISHMENT: State Chain ID: {} locked for {}s.",
@@ -443,10 +436,7 @@ impl SCE {
         Ok(())
     }
 
-    fn get_transfer_batch_status(
-        &self,
-        batch_id: Uuid,
-    ) -> Result<TransferBatchDataAPI> {
+    fn get_transfer_batch_status(&self, batch_id: Uuid) -> Result<TransferBatchDataAPI> {
         //let batch_id = Uuid::from_str(&batch_id).unwrap();
 
         let tbd = self.database.get_transfer_batch_data(batch_id)?;
@@ -467,7 +457,6 @@ impl SCE {
                 let mut punished_state_chains: Vec<Uuid> =
                     self.database.get_punished_state_chains(batch_id)?;
 
-
                 if punished_state_chains.len() == 0 {
                     // Punishments not yet set
                     info!("TRANSFER_BATCH: Lifetime reached. ID: {}.", batch_id);
@@ -485,7 +474,8 @@ impl SCE {
                         );
                     }
 
-                    self.database.update_punished(&batch_id, punished_state_chains)?;
+                    self.database
+                        .update_punished(&batch_id, punished_state_chains)?;
 
                     info!(
                         "TRANSFER_BATCH: Punished all state chains in failed batch. ID: {}.",
@@ -519,7 +509,7 @@ impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
 
         let id = db.root_update(root)?;
         Ok(id)
-     }
+    }
 
     // Update SMT with new (key: value) pair and update current root value
     fn update_smt(
@@ -528,7 +518,7 @@ impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
         proof_key: &String,
     ) -> Result<(Option<Root>, Root)> {
         let db = &self.database;
-        
+
         //If mocked out current_root will be randomly chosen
         let current_root = db.get_root(db.root_get_current_id()?)?;
         let new_root_hash = update_statechain_smt(
@@ -545,7 +535,9 @@ impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
     }
 
     fn get_smt_root(&self) -> Result<Option<Root>> {
-        Ok(self.database.get_root(self.database.root_get_current_id()?)?)
+        Ok(self
+            .database
+            .get_root(self.database.root_get_current_id()?)?)
     }
 
     /// Update the database with the latest available mainstay attestation info
@@ -673,26 +665,22 @@ impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
         self.database.get_root(id)
     }
 
+    //    fn save_user_session(&self, id: &Uuid, auth: String, proof_key: String)
+    //-> Result<()>;
 
-
-//    fn save_user_session(&self, id: &Uuid, auth: String, proof_key: String)
-        //-> Result<()>;
-
-
-  // fn save_statechain(&self, statechain_id: &Uuid, statechain: &StateChain,
-                            //amount: i64,
-                            //user_id: &Uuid) -> Result<()>;
+    // fn save_statechain(&self, statechain_id: &Uuid, statechain: &StateChain,
+    //amount: i64,
+    //user_id: &Uuid) -> Result<()>;
 
     //fn save_backup_tx(&self, statechain_id: &Uuid, backup_tx: &Transaction)
-     //   -> Result<()>;
+    //   -> Result<()>;
 
     //Returns: (new_root, current_root)
     //fn update_smt(&self, backup_tx: &Transaction, proof_key: &String)
-     //   -> Result<(Option<Root>, Root)>;
+    //   -> Result<(Option<Root>, Root)>;
 
     //fn save_ecdsa(&self, user_id: &Uuid,
     //    first_msg: party_one::KeyGenFirstMsg) -> Result<()>;
-
 
     //fn get_confirmed_root(&self, id: &i64) -> Result<Option<Root>>;
 
@@ -700,16 +688,11 @@ impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
 
     //fn update_root(&self, root: &Root) -> Result<i64>;
 
-
     fn get_statechain(&self, state_chain_id: Uuid) -> Result<StateChain> {
         self.database.get_statechain(state_chain_id)
     }
 
-    fn get_statechain_data_api(
-        &self,
-        state_chain_id: Uuid,
-    ) -> Result<StateChainDataAPI> {
-
+    fn get_statechain_data_api(&self, state_chain_id: Uuid) -> Result<StateChainDataAPI> {
         //let state_chain_id = Uuid::from_str(&state_chain_id).unwrap();
 
         let state_chain = self.database.get_statechain_amount(state_chain_id)?;
@@ -723,7 +706,6 @@ impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
             }
         })
     }
-
 
     //fn authorise_withdrawal(&self, user_id: &Uuid, signature: StateChainSig) -> Result<()>;
 
@@ -745,31 +727,31 @@ impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
 
     // /transfer/batch/init
     //fn init_batch_transfer(&self, batch_id: &Uuid,
-     //                   state_chains: &HashMap<Uuid, bool>) -> Result<()>;
-
-
-
+    //                   state_chains: &HashMap<Uuid, bool>) -> Result<()>;
 
     // Update the locked until time of a state chain (used for punishment)
     //fn update_locked_until(&self, state_chain_id: &Uuid, time: &NaiveDateTime);
 
     //Update the list of punished state chains
     //fn update_punished(&self, punished: &Vec<Uuid>);
-
 }
 
 #[cfg(test)]
 pub mod mocks {
-    use super::{Mock,Matcher,mock};
+    use super::{mock, Matcher, Mock};
 
     pub mod ms {
         use super::*;
         pub fn commitment_proof_not_found() -> Mock {
-            mock("GET", Matcher::Regex(r"^/commitment/commitment\?commitment=[abcdef\d]{64}".to_string()))
-
-               .with_header("Content-Type", "application/json")
-                .with_body("{\"error\":\"Not found\",\"timestamp\":1596123963077,
-                \"allowance\":{\"cost\":3796208}}")
+            mock(
+                "GET",
+                Matcher::Regex(r"^/commitment/commitment\?commitment=[abcdef\d]{64}".to_string()),
+            )
+            .with_header("Content-Type", "application/json")
+            .with_body(
+                "{\"error\":\"Not found\",\"timestamp\":1596123963077,
+                \"allowance\":{\"cost\":3796208}}",
+            )
         }
 
         pub fn post_commitment() -> Mock {
@@ -815,9 +797,7 @@ pub mod mocks {
                     \"allowance\":{\"cost\":17954530}
                     }")
         }
-
     }
-
 }
 
 #[cfg(test)]
@@ -829,11 +809,9 @@ pub mod tests {
     use std::convert::TryInto;
 
     // Useful data structs for tests throughout codebase
-    pub static BACKUP_TX_NO_SIG: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
+    pub static BACKUP_TX_NOT_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
+    pub static BACKUP_TX_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,68,2,32,45,42,91,77,252,143,55,65,154,96,191,149,204,131,88,79,80,161,231,209,234,229,217,100,28,99,48,148,136,194,204,98,2,32,90,111,183,68,74,24,75,120,179,80,20,183,60,198,127,106,102,64,37,193,174,226,199,118,237,35,96,236,45,94,203,49,1],[2,242,131,110,175,215,21,123,219,179,199,144,85,14,163,42,19,197,97,249,41,130,243,139,15,17,51,185,147,228,100,122,213]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
     pub static STATE_CHAIN_SIG: &str = "{ \"purpose\": \"TRANSFER\", \"data\": \"024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766\", \"sig\": \"3045022100e1171094db96e68392bb2a72695dc7cbce86db7be9d2e943444b6fa08877eec9022036dc63a3b2536d8e2327e0f44ff990f18e6166dce66d87bdcb57f825158a507c\"}";
-    pub static PARTY_1_PRIVATE: &str = "{\"x1\":\"36f0733c49c7c500845ce8c8528700a5766bb2be0afb3dc6a92609bdeb7d77de\",\"paillier_priv\":{\"p\":\"150868972667051630375631289145931811000926269697172215034129550299519830596932237114864076011910332526564014374880702421540181692143893778193268394508356621097793334071789326969733477612737448744970159004363244991682697217411574313037164309131787024001958133617279097706925728557760967475682234607674230244397\",\"q\":\"122604155030420179713896927958393174492845903159909866799286880352148165272070472842234696094969924097112221990618586011682737086679586235795050785989838852426407767438224718505007700566694816217355837730739352784228079347155718834896806259316377005605429791326022985755525955843192908883717457575135889036987\"},\"c_key_randomness\":\"8031148b56d2d9e3323994fb1ca7038083dd86cbd3b41867bdddd8a7b8d95c4e8a0fe5c3be0cf45ebbe3dc637055eecab4f82da9b3071b6302aaf8eed54aaa544822605c849573e1d85a9367fb1a8760958ca5dabd497a642e8dd0286b354a47384dbd10b2aa4a4feeb3b389332029515e61aa1d1c746b2584ef8ebb250b27612e22d184282afdc63773a0b0a40cafb4011fd014c2c189ac016a367012f94eff3e47e77d088f2d7db485b03feecd0d60ffe2837ffe7af54b7fd8636725240c31ccdb9d7dffc1e49f4c480ff30e545cb5b7faa771c211cf9d8e4287cdddba075a85bb95213dec06d9322624872e9d80a41f15cd900118f8b89f16cd5c332ef484\"}";
-    pub static PARTY_2_PUBLIC: &str = "{\"x\":\"5220bc6ebcc83d0a1e4482ab1f2194cb69648100e8be78acde47ca56b996bd9e\",\"y\":\"8dfbb36ef76f2197598738329ffab7d3b3a06d80467db8e739c6b165abc20231\"}";
-
 
     pub fn test_sc_entity(db: MockDatabase) -> SCE {
         let mut sc_entity = SCE::load(db).unwrap();
@@ -853,9 +831,11 @@ pub mod tests {
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
         db.expect_get_root().returning(|_| Ok(None));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
-        db.expect_get_root().returning(|_x| Ok(Some(Root::from_random())));
+        db.expect_get_root()
+            .returning(|_x| Ok(Some(Root::from_random())));
         db.expect_root_update().returning(|_x| Ok(1));
-        db.expect_get_confirmed_smt_root().returning(||Ok(Some(Root::from_random())));
+        db.expect_get_confirmed_smt_root()
+            .returning(|| Ok(Some(Root::from_random())));
 
         let sc_entity = test_sc_entity(db);
 
@@ -865,8 +845,9 @@ pub mod tests {
         assert_eq!(sc_entity.get_smt_root().unwrap(), None, "expected Ok(None)");
 
         let com1 = mainstay::Commitment::from_str(
-            "71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d")
-            .unwrap();
+            "71c7f2f246caf3e4f0b94ea4ad54b6c506687069bf1e17024cd5961b0df78d6d",
+        )
+        .unwrap();
 
         let root1 = Root::from_hash(&com1.to_hash());
 
@@ -896,13 +877,17 @@ pub mod tests {
         //The root should be confirmed now
         let rootc = sc_entity.get_confirmed_smt_root().unwrap().unwrap();
 
-
-
         assert!(rootc.is_confirmed(), "expected the root to be confirmed");
 
         //let root1 = db_root_get(&db_read, &(root1_id as i64)).unwrap().unwrap();
 
-        assert_eq!(rootc.hash(), root1.hash(), "expected equal Root hashes:\n{:?}\n\n{:?}", rootc, root1);
+        assert_eq!(
+            rootc.hash(),
+            root1.hash(),
+            "expected equal Root hashes:\n{:?}\n\n{:?}",
+            rootc,
+            root1
+        );
 
         assert!(rootc.is_confirmed(), "expected root to be confirmed");
     }
@@ -915,28 +900,29 @@ pub mod tests {
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
         db.expect_get_root().returning(|_| Ok(None));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
-        db.expect_get_root().returning(|_x| Ok(Some(Root::from_random())));
+        db.expect_get_root()
+            .returning(|_x| Ok(Some(Root::from_random())));
         db.expect_root_update().returning(|_x| Ok(1));
-        db.expect_get_confirmed_smt_root().returning(||Ok(Some(Root::from_random())));
+        db.expect_get_confirmed_smt_root()
+            .returning(|| Ok(Some(Root::from_random())));
         let sc_entity = test_sc_entity(db);
 
         //Mainstay post commitment mock
         let _m = mocks::ms::post_commitment().create();
 
-        let (_, new_root) = sc_entity.update_smt(
-            &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
-            &"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
-        )
-        .unwrap();
+        let (_, new_root) = sc_entity
+            .update_smt(
+                &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
+                &"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
+            )
+            .unwrap();
 
-        let hash_exp: [u8;32] =
-        hex::decode("bdb8618ea37b27b771da7609b30860568f3e81a2951e62b03f76cd34b14242fc")
-                    .unwrap()[..].try_into().unwrap();
+        let hash_exp: [u8; 32] =
+            hex::decode("bdb8618ea37b27b771da7609b30860568f3e81a2951e62b03f76cd34b14242fc")
+                .unwrap()[..]
+                .try_into()
+                .unwrap();
 
-        assert_eq!(new_root.hash(),
-                hash_exp,
-                "new root incorrect");
-
+        assert_eq!(new_root.hash(), hash_exp, "new root incorrect");
     }
-
 }

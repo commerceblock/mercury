@@ -609,7 +609,7 @@ mod tests {
         let mut wallet = Wallet::new(
             &[0xcd; 32],
             &"regtest".to_string(),
-            ClientShim::new("https://localhost:8000".to_string(), None, ssl_cert()).unwrap(),
+            ClientShim::new("http://localhost:8000".to_string(), None).unwrap(),
             Box::new(MockElectrum::new()),
         );
         let _ = wallet.keys.get_new_address();
@@ -637,7 +637,7 @@ mod tests {
 
         let wallet_rebuilt = super::Wallet::from_json(
             wallet_json,
-            ClientShim::new("https://localhost:8000".to_string(), None, ssl_cert()).unwrap(),
+            ClientShim::new("https://localhost:8000".to_string(), None).unwrap(),
             Box::new(MockElectrum::new()),
         )
         .unwrap();
