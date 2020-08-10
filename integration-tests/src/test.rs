@@ -37,7 +37,7 @@ mod tests {
     fn test_failed_auth() {
         let mut db = PGDatabase::get_test();
         let _ = spawn_server::<PGDatabase>(None, db);
-        let client_shim = ClientShim::new("https://localhost:8000".to_string(), None);
+        let client_shim = ClientShim::new("https://localhost:8000".to_string(), None).unwrap();
         let secret_key: FE = ECScalar::new_random();
         let invalid_key = Uuid::new_v4();
         let err = ecdsa::get_master_key(
@@ -385,7 +385,7 @@ mod tests {
         let wallet_json = wallet.to_json();
         let wallet_rebuilt = wallet::wallet::Wallet::from_json(
             wallet_json,
-            ClientShim::new("https://localhost:8000".to_string(), None),
+            ClientShim::new("https://localhost:8000".to_string(), None).unwrap(),
             Box::new(MockElectrum::new()),
         )
         .unwrap();

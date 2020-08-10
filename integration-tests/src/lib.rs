@@ -2,6 +2,7 @@ pub mod batch_transfer_test;
 pub mod simulation;
 pub mod test;
 
+use std::error::Error;
 use client_lib::state_entity::transfer::TransferFinalizeData;
 use client_lib::wallet::wallet::Wallet;
 use client_lib::*;
@@ -98,7 +99,7 @@ pub fn gen_wallet() -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
-        ClientShim::new("https://localhost:8000".to_string(), None),
+        ClientShim::new("https://localhost:8000".to_string(), None).unwrap(),
         Box::new(MockElectrum::new()),
     );
 
@@ -113,7 +114,7 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
-        ClientShim::new("https://localhost:8000".to_string(), None),
+        ClientShim::new("https://localhost:8000".to_string(), None).unwrap(),
         Box::new(MockElectrum::new()),
     );
 

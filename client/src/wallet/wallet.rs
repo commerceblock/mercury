@@ -11,7 +11,7 @@ use shared_lib::{
 use super::key_paths::{funding_txid_to_int, KeyPath, KeyPathWithAddresses};
 use crate::error::{CError, WalletErrorType};
 use crate::wallet::shared_key::SharedKey;
-use crate::ClientShim;
+use crate::{ClientShim, ssl_cert};
 
 use bitcoin::{
     hashes::sha256d,
@@ -597,6 +597,7 @@ pub fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -608,7 +609,7 @@ mod tests {
         let mut wallet = Wallet::new(
             &[0xcd; 32],
             &"regtest".to_string(),
-            ClientShim::new("https://localhost:8000".to_string(), None),
+            ClientShim::new("https://localhost:8000".to_string(), None, ssl_cert()).unwrap(),
             Box::new(MockElectrum::new()),
         );
         let _ = wallet.keys.get_new_address();
@@ -636,7 +637,7 @@ mod tests {
 
         let wallet_rebuilt = super::Wallet::from_json(
             wallet_json,
-            ClientShim::new("https://localhost:8000".to_string(), None),
+            ClientShim::new("https://localhost:8000".to_string(), None, ssl_cert()).unwrap(),
             Box::new(MockElectrum::new()),
         )
         .unwrap();

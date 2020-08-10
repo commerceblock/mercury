@@ -67,7 +67,7 @@ tag = "v0.2.1"
 path = "../shared"
 
 [profile.dev]
-root_cert = "../utilities/server/certs/localhost.crt"
+use_localhost_cert = "true"
 
 [profile.test]
-root_cert = "../utilities/server/certs/localhost.crt"
+use_localhost_cert = "true"
