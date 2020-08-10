@@ -23,7 +23,7 @@ use cfg_if::cfg_if;
 use std::str::FromStr;
 
 cfg_if! {
-    if #[cfg(test)]{
+    if #[cfg(any(test,feature="mockdb"))]{
         use crate::MockDatabase as DB;
         type SCE = StateChainEntity::<DB>;
     } else {
@@ -389,7 +389,7 @@ mod tests {
             chain: state_chain
         };
 
-        let backup_tx = serde_json::from_str(&BACKUP_TX_NO_SIG.to_string()).unwrap();
+        let backup_tx :Transaction = serde_json::from_str(&BACKUP_TX_NO_SIG.to_string()).unwrap();
 
         let mut db = MockDatabase::new();
         db.expect_get_user_auth().returning(move |_| Ok(user_id));

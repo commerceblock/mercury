@@ -4,6 +4,7 @@ version = "0.1.2"
 authors = ["oleiba <oded@kzencorp.com>"]
 edition = "2018"
 
+
 [dependencies]
 rocket = { version = "0.4.5", default-features = false }
 serde = "1.0"
@@ -30,9 +31,13 @@ features =  ["ec_secp256k1"]
 
 [dependencies.server]
 path = "../server"
+#features = ["mockdb"]
 
 [dependencies.client]
 path = "../client"
 
 [dependencies.shared]
 path = "../shared"
+
+[features]
+realdb = [] 

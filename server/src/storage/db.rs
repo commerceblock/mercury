@@ -486,9 +486,9 @@ impl PGDatabase {
 
         let rows = statement.query(&[&id])?;
 
-        //if rows.is_empty() {
-        //    return Err(SEError::DBError(NoDataForID, id.to_string()));
-        //};
+        if rows.is_empty() {
+            return Err(SEError::DBError(NoDataForID, id.to_string()));
+        };
 
         let row = rows.get(0);
 
@@ -665,6 +665,14 @@ impl Database for PGDatabase {
             vec![Column::TxBackup],
             vec![&Self::ser(tx)?],
         )
+    }
+
+    fn get_user_backup_tx(&self,user_id: Uuid) -> Result<Transaction> {
+        Self::deser(self.get_1(
+            user_id,
+            Table::UserSession,
+            vec![Column::TxBackup]
+        )?)
     }
 
     fn update_backup_tx(&self,state_chain_id: &Uuid, tx: Transaction) -> Result<()> {

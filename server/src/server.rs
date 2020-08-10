@@ -58,7 +58,19 @@ fn not_found(req: &Request) -> String {
 use std::marker::{Send, Sync};
 
 /// Start Rocket Server. mainsta_config parameter overrides Settings.toml and env var settings.
-pub fn get_server<T: Database + Send + Sync + 'static>
+pub fn get_server<T: Database + Send + Sync + 'static> 
+    (mainstay_config: Option<mainstay::MainstayConfig>,
+        db: T) -> Result<Rocket> {
+    Ok(
+        get_mockdb_server::<T>(mainstay_config, db)?
+        .attach(DatabaseR::fairing()) 
+        .attach(DatabaseW::fairing())
+    )
+}
+
+// Get a rocket test server - this does not have the database read/write servings
+// attached as the databasse is mocked out
+pub fn get_mockdb_server<T: Database + Send + Sync + 'static>
     (mainstay_config: Option<mainstay::MainstayConfig>,
         db: T) -> Result<Rocket> {
 
@@ -103,7 +115,7 @@ pub fn get_server<T: Database + Send + Sync + 'static>
                 ecdsa::sign_second,
                 util::get_statechain,
                 util::get_smt_root,
-                // util::get_confirmed_smt_root,
+                //util::get_confirmed_smt_root,
                 util::get_smt_proof,
                 util::get_fees,
                 util::prepare_sign_tx,
@@ -118,9 +130,8 @@ pub fn get_server<T: Database + Send + Sync + 'static>
                 withdraw::withdraw_confirm
             ],
         )
-        .manage(sc_entity)
-        .attach(DatabaseR::fairing()) // read
-        .attach(DatabaseW::fairing()); // write
+        .manage(sc_entity);
+    
     Ok(rock)
 }
 

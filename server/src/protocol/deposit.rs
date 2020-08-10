@@ -20,7 +20,7 @@ use std::str::FromStr;
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
 cfg_if! {
-    if #[cfg(test)]{
+    if #[cfg(any(test,feature="mockdb"))]{
         use crate::MockDatabase;
         type SCE = StateChainEntity::<MockDatabase>;
     } else {

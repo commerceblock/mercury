@@ -15,7 +15,7 @@ use crate::{server::StateChainEntity, storage::Storage};
 use cfg_if::cfg_if;
 
 cfg_if! {
-    if #[cfg(test)]{
+    if #[cfg(any(test,feature="mockdb"))]{
         use crate::MockDatabase;
         type SCE = StateChainEntity::<MockDatabase>;
     } else {

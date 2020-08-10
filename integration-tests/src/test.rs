@@ -1,10 +1,12 @@
 #[cfg(test)]
+#[cfg(feature="realdb")]
 mod tests {
     use crate::*;
     extern crate bitcoin;
     extern crate client_lib;
     extern crate server_lib;
     extern crate shared_lib;
+    use mockito::{mock, Matcher, Mock};
 
     use shared_lib::mainstay;
     use shared_lib::{mocks::mock_electrum::MockElectrum, structs::Protocol};
@@ -13,19 +15,18 @@ mod tests {
     use curv::FE;
 
     use mockito;
-    use server_lib::{MockDatabase};
+    use server_lib::PGDatabase;
 
     #[test]
     #[serial]
     fn test_gen_shared_key() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
-        let mut db = MockDatabase::new();
-        let _ = spawn_server::<MockDatabase>(Some(mainstay_config), db);
-
+        let mut db = PGDatabase::get_test();
+        let handle = spawn_server::<PGDatabase>(None, db);
         let mut wallet = gen_wallet();
         let proof_key = wallet.se_proof_keys.get_new_key().unwrap();
         let init_res =
             client_lib::state_entity::deposit::session_init(&mut wallet, &proof_key.to_string());
+        handle.join().expect("The thread being joined has panicked");
         assert!(init_res.is_ok());
         let key_res = wallet.gen_shared_key(&init_res.unwrap(), &1000);
         assert!(key_res.is_ok());
@@ -34,9 +35,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_failed_auth() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
-        let mut db = MockDatabase::new();
-        let _ = spawn_server::<MockDatabase>(Some(mainstay_config), db);
+        let mut db = PGDatabase::get_test();
+        let _ = spawn_server::<PGDatabase>(None, db);
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
         let secret_key: FE = ECScalar::new_random();
         let invalid_key = Uuid::new_v4();
@@ -53,11 +53,11 @@ mod tests {
     #[test]
     #[serial]
     fn test_deposit() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
-        let mut db = MockDatabase::new();
-        let _ = spawn_server::<MockDatabase>(Some(mainstay_config), db);
+        let mut db = PGDatabase::get_test();
+        let mc = mainstay::MainstayConfig::from_env();
+        let handle = spawn_server::<PGDatabase>(mc, db);
         let wallet = gen_wallet_with_deposit(10000);
-
+        //handle.join().expect("The thread being joined has panicked");
         let state_chains_info = wallet.get_state_chains_info();
         let (_, funding_txid, proof_key, _, _) = wallet
             .get_shared_key_info(state_chains_info.0.last().unwrap())
@@ -96,17 +96,15 @@ mod tests {
     #[test]
     #[serial]
     fn test_get_statechain() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
-        let mut db = MockDatabase::new();
-        let _ = spawn_server::<MockDatabase>(Some(mainstay_config), db);
+        let mut db = PGDatabase::get_test();
+        let _ = spawn_server::<PGDatabase>(None, db);
         let mut wallet = gen_wallet();
 
         let err = state_entity::api::get_statechain(&wallet.client_shim, &Uuid::new_v4());
         assert!(err.is_err());
         let deposit = run_deposit(&mut wallet, &10000);
 
-        let state_chain =
-            state_entity::api::get_statechain(&wallet.client_shim, &deposit.1.clone()).unwrap();
+        let state_chain =           state_entity::api::get_statechain(&wallet.client_shim, &deposit.1.clone()).unwrap();
         assert_eq!(
             state_chain.chain.last().unwrap().data,
             deposit.5.to_string()
@@ -116,9 +114,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_transfer() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
-        let mut db = MockDatabase::new();
-        let _ = spawn_server::<MockDatabase>(Some(mainstay_config), db);
+        let mut db = PGDatabase::get_test();
+        let _ = spawn_server::<PGDatabase>(None, db);
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
         wallets.push(gen_wallet()); // receiver
@@ -190,9 +187,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_double_transfer() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
-        let mut db = MockDatabase::new();
-        let _ = spawn_server::<MockDatabase>(Some(mainstay_config), db);
+        let mut db = PGDatabase::get_test();
+        let _ = spawn_server::<PGDatabase>(None, db);
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
         wallets.push(gen_wallet()); // receiver1
@@ -321,9 +317,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_withdraw() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
-        let mut db = MockDatabase::new();
-        let _ = spawn_server::<MockDatabase>(Some(mainstay_config), db);
+        let mut db = PGDatabase::get_test();
+        let _ = spawn_server::<PGDatabase>(None, db);
         let mut wallet = gen_wallet();
 
         let deposit_resp = run_deposit(&mut wallet, &10000);
@@ -381,9 +376,8 @@ mod tests {
     #[serial]
     /// Test wallet load from json correctly when shared key present.
     fn test_wallet_load_with_shared_key() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
-        let mut db = MockDatabase::new();
-        let _ = spawn_server::<MockDatabase>(Some(mainstay_config), db);
+        let mut db = PGDatabase::get_test();
+        let _ = spawn_server::<PGDatabase>(None, db);
 
         let mut wallet = gen_wallet();
         run_deposit(&mut wallet, &10000);
@@ -410,5 +404,70 @@ mod tests {
             shared_key.smt_proof.clone().unwrap().proof,
             shared_key_rebuilt.smt_proof.clone().unwrap().proof
         );
+    }
+}
+
+#[cfg(test)]
+#[cfg(not(feature="realdb"))]
+mod tests {
+    use crate::*;
+    extern crate bitcoin;
+    extern crate client_lib;
+    extern crate server_lib;
+    extern crate shared_lib;
+    use mockito::{mock, Matcher, Mock};
+
+    use shared_lib::mainstay;
+    use shared_lib::{mocks::mock_electrum::MockElectrum, structs::Protocol};
+
+    use curv::elliptic::curves::traits::ECScalar;
+    use curv::FE;
+
+    use mockito;
+    use server_lib::{MockDatabase};
+
+    #[test]
+    #[serial]
+    fn test_get_statechain() {
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(
+            &mockito::server_url());
+        let mut db = MockDatabase::new();
+        let mut wallet = gen_wallet();
+        db.expect_reset().returning(|_|Ok(()));
+        let invalidSCID = Uuid::new_v4();
+        let invalidSCIDStr = invalidSCID.to_string().clone();
+        db.expect_get_statechain_amount().
+        returning(|_x|Err(server_lib::error::SEError::DBError(server_lib::error::DBErrorType::NoDataForID, "".to_string())));
+        db.expect_create_user_session().
+        returning(|_user_id, _auth, _proof_key| Ok(()));
+        db.expect_get_user_auth().
+        returning(|_user_id| Ok(Uuid::new_v4()));
+        //Key generation not completed for this ID yet
+        db.expect_get_ecdsa_master().
+        returning(|_user_id| Ok(None));
+        db.expect_update_keygen_first_msg()
+        .returning(|_user_id, _fm, _cw, _ec_kp| Ok(()));
+
+        let (_key_gen_first_msg, comm_witness, ec_key_pair) =
+            server_lib::protocol::ecdsa::MasterKey1::key_gen_first_message();
+        
+
+        db.expect_get_ecdsa_witness_keypair()
+        .returning(move |_user_id| Ok((
+            comm_witness.clone(), 
+            ec_key_pair.clone()
+        )));
+
+        db.expect_update_keygen_second_msg()
+        .returning(|_,_,_,_|Ok(()));
+
+        let handle = spawn_server::<MockDatabase>(Some(mainstay_config), db);
+        thread::sleep(std::time::Duration::from_millis(1000));
+     
+        let err = state_entity::api::get_statechain(&wallet.client_shim, &invalidSCID);
+        assert!(err.is_err());
+        
+        handle.join().expect("The thread being joined has panicked");
+    
     }
 }
