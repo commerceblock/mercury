@@ -18,3 +18,12 @@ To build the software use Dockerfile provided.
 2. Build: ```cd mercury && docker build -t commerceblock/mercury:my_build .```
 3. Run: ```docker run --rm -it -p 8000:8000 commerceblock/mercury:my_build server```
 4. Test: ```curl -vk localhost:8000/ping```
+
+Tests
+-------
+
+To run the tests:
+1. ```cargo test```
+
+To run integration tests with a real database
+1. ```(cd integration-tests && cargo test --features "realdb")```
