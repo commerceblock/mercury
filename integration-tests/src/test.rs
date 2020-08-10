@@ -53,16 +53,11 @@ mod tests {
     #[test]
     #[serial]
     fn test_deposit() {
-        println!("get test db");
         let mut db = PGDatabase::get_test();
-        println!("get mainstay config");
         let mc = mainstay::MainstayConfig::from_env();
-        println!("mainstay config: {:?}", mc);
         let handle = spawn_server::<PGDatabase>(mc, db);
-        println!("gen wallet with deposit");
         let wallet = gen_wallet_with_deposit(10000);
         //handle.join().expect("The thread being joined has panicked");
-        println!("get sc info deposit");
         let state_chains_info = wallet.get_state_chains_info();
         let (_, funding_txid, proof_key, _, _) = wallet
             .get_shared_key_info(state_chains_info.0.last().unwrap())

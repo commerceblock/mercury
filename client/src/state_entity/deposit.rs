@@ -44,7 +44,6 @@ pub fn deposit(
     amount: &u64,
 ) -> Result<(Uuid, Uuid, String, Transaction, PrepareSignTxMsg, PublicKey)> {
     // Get state entity fee info
-    println!("get fee info");
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
 
     // Ensure funds cover fees before initiating protocol
@@ -63,10 +62,8 @@ pub fn deposit(
     let shared_key_id: Uuid = session_init(wallet, &proof_key.to_string())?;
 
     // 2P-ECDSA with state entity to create a Shared key
-    println!("gen shared key");
     let shared_key = wallet.gen_shared_key(&shared_key_id, amount)?;
 
-    println!("gen shared key done");
     // Create funding tx
     let pk = shared_key.share.public.q.get_element(); // co-owned key address to send funds to (P_addr)
     let p_addr = bitcoin::Address::p2wpkh(&to_bitcoin_public_key(pk), wallet.get_bitcoin_network());
@@ -81,7 +78,7 @@ pub fn deposit(
         &change_addr,
         &change_amount,
     )?;
-    println!("sign funding tx");
+    
     let tx_funding_signed = wallet.sign_tx(
         &tx_0,
         &(0..inputs.len()).collect(), // inputs to sign are all inputs is this case
@@ -103,9 +100,9 @@ pub fn deposit(
         input_amounts: vec![*amount],
         proof_key: Some(proof_key.to_string()),
     };
-    println!("cosign tx input");
+    
     let witness = cosign_tx_input(wallet, &tx_backup_psm)?;
-    println!("finished cosign tx input");
+    
     
     // Add witness to back up tx
     let mut tx_backup_signed = tx_backup_unsigned.clone();
@@ -114,14 +111,13 @@ pub fn deposit(
     // TODO: check signature is valid?
 
     // Broadcast funding transcation
-    println!("boradcast funding tx");
+    
     let funding_txid = wallet
         .electrumx_client
         .broadcast_transaction(hex::encode(consensus::serialize(&tx_funding_signed)))?;
     debug!("Deposit: Funding tx broadcast. txid: {}", funding_txid);
 
     // Wait for server confirmation of funding tx and receive new StateChain's id
-    println!("get server confirmation");
     let state_chain_id: Uuid = requests::postb(
         &wallet.client_shim,
         &format!("deposit/confirm"),
@@ -131,9 +127,7 @@ pub fn deposit(
     )?;
 
     // Verify proof key inclusion in SE sparse merkle tree
-    println!("get smt root");
     let root = get_smt_root(&wallet.client_shim)?.unwrap();
-    println!("get smt proof");
     let proof = get_smt_proof(&wallet.client_shim, &root, &funding_txid)?;
     assert!(verify_statechain_smt(
         &Some(root.hash()),
@@ -141,7 +135,6 @@ pub fn deposit(
         &proof
     ));
 
-    println!("add proof and state chain id to shared key");
     // Add proof and state chain id to Shared key
     {
         let shared_key = wallet.get_shared_key_mut(&shared_key_id)?;
@@ -150,7 +143,6 @@ pub fn deposit(
         shared_key.add_proof_data(&proof_key.to_string(), &root, &proof, &funding_txid);
     }
 
-    println!("done");
 
     Ok((
         shared_key_id,

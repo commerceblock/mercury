@@ -28,7 +28,6 @@ pub fn cosign_tx_input(
     prepare_sign_msg: &PrepareSignTxMsg,
 ) -> Result<Vec<Vec<u8>>> {
     // message 1 - send tx data for validation.
-    println!("send tx data for validation");
     requests::postb(
         &wallet.client_shim,
         &format!("prepare-sign/"),
@@ -48,7 +47,6 @@ pub fn cosign_tx_input(
     let mk = &shared_key.share;
 
     // co-sign transaction
-    println!("cosign tx");
     let witness = ecdsa::sign(
         &wallet.client_shim,
         BigInt::from_hex(&hex::encode(&sig_hash[..])),
