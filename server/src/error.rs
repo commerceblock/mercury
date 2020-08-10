@@ -6,9 +6,9 @@ use shared_lib::error::SharedLibError;
 
 use crate::storage::db::Column;
 use bitcoin::secp256k1::Error as SecpError;
+use config_rs::ConfigError;
 use monotree::Errors as MonotreeErrors;
 use postgres::Error as PostgresError;
-use config_rs::ConfigError;
 use rocket::http::{ContentType, Status};
 use rocket::response::Responder;
 use rocket::{Request, Response};

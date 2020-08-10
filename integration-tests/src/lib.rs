@@ -74,8 +74,7 @@ impl From<RecvTimeoutError> for SpawnError {
 
 /// Spawn a StateChain Entity server in testing mode if there isn't one running already.
 /// Returns Ok(()) if a new server was spawned, otherwise returns an error.
-pub fn spawn_server<T: Database + Send + Sync + 'static>(mainstay_config: Option<mainstay::MainstayConfig>, db: T) 
-//-> Result<(), SpawnError> {
+pub fn spawn_server<T: Database + Send + Sync + 'static>(mainstay_config: Option<mainstay::MainstayConfig>, db: T)
 -> thread::JoinHandle<SpawnError> {
     // Set enviroment variable to testing_mode=true to override Settings.toml
     env::set_var("MERC_TESTING_MODE", "true");

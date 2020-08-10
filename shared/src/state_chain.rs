@@ -119,6 +119,7 @@ pub struct StateChainSig {
     pub data: String,    // proof key, state chain id or address
     sig: String,
 }
+
 impl StateChainSig {
     /// Create message to be signed
     fn to_message(purpose: &String, data: &String) -> Result<Message> {

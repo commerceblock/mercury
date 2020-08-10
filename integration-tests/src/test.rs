@@ -1,5 +1,5 @@
 #[cfg(test)]
-#[cfg(feature="realdb")]
+#[cfg(not(feature="mockdb"))]
 mod tests {
     use crate::*;
     extern crate bitcoin;
@@ -20,7 +20,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_gen_shared_key() {
-        let mut db = PGDatabase::get_test();
+        let db = PGDatabase::get_test();
         let handle = spawn_server::<PGDatabase>(None, db);
         let mut wallet = gen_wallet();
         let proof_key = wallet.se_proof_keys.get_new_key().unwrap();
@@ -35,7 +35,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_failed_auth() {
-        let mut db = PGDatabase::get_test();
+        let db = PGDatabase::get_test();
         let _ = spawn_server::<PGDatabase>(None, db);
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None);
         let secret_key: FE = ECScalar::new_random();
@@ -53,7 +53,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_deposit() {
-        let mut db = PGDatabase::get_test();
+        let db = PGDatabase::get_test();
         let mc = mainstay::MainstayConfig::from_env();
         let handle = spawn_server::<PGDatabase>(mc, db);
         let wallet = gen_wallet_with_deposit(10000);
@@ -96,7 +96,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_get_statechain() {
-        let mut db = PGDatabase::get_test();
+        let db = PGDatabase::get_test();
         let _ = spawn_server::<PGDatabase>(None, db);
         let mut wallet = gen_wallet();
 
@@ -114,7 +114,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_transfer() {
-        let mut db = PGDatabase::get_test();
+        let db = PGDatabase::get_test();
         let _ = spawn_server::<PGDatabase>(None, db);
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
@@ -187,7 +187,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_double_transfer() {
-        let mut db = PGDatabase::get_test();
+        let db = PGDatabase::get_test();
         let _ = spawn_server::<PGDatabase>(None, db);
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
@@ -317,7 +317,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_withdraw() {
-        let mut db = PGDatabase::get_test();
+        let db = PGDatabase::get_test();
         let _ = spawn_server::<PGDatabase>(None, db);
         let mut wallet = gen_wallet();
 
@@ -376,7 +376,7 @@ mod tests {
     #[serial]
     /// Test wallet load from json correctly when shared key present.
     fn test_wallet_load_with_shared_key() {
-        let mut db = PGDatabase::get_test();
+        let db = PGDatabase::get_test();
         let _ = spawn_server::<PGDatabase>(None, db);
 
         let mut wallet = gen_wallet();
@@ -408,7 +408,7 @@ mod tests {
 }
 
 #[cfg(test)]
-#[cfg(not(feature="realdb"))]
+#[cfg(feature="mockdb")]
 mod tests {
     use crate::*;
     extern crate bitcoin;
@@ -424,7 +424,7 @@ mod tests {
     use curv::FE;
 
     use mockito;
-    use server_lib::{MockDatabase};
+    use server_lib::MockDatabase;
 
     #[test]
     #[serial]
@@ -450,24 +450,23 @@ mod tests {
 
         let (_key_gen_first_msg, comm_witness, ec_key_pair) =
             server_lib::protocol::ecdsa::MasterKey1::key_gen_first_message();
-        
+
 
         db.expect_get_ecdsa_witness_keypair()
         .returning(move |_user_id| Ok((
-            comm_witness.clone(), 
+            comm_witness.clone(),
             ec_key_pair.clone()
         )));
 
         db.expect_update_keygen_second_msg()
         .returning(|_,_,_,_|Ok(()));
 
-        let handle = spawn_server::<MockDatabase>(Some(mainstay_config), db);
+        let _handle = spawn_server::<MockDatabase>(Some(mainstay_config), db);
         thread::sleep(std::time::Duration::from_millis(1000));
-     
+
         let err = state_entity::api::get_statechain(&wallet.client_shim, &invalidSCID);
         assert!(err.is_err());
+
         
-        handle.join().expect("The thread being joined has panicked");
-    
     }
 }

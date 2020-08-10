@@ -1,4 +1,5 @@
-#[cfg(all(test, feature="realdb"))]
+#[cfg(test)]
+#[cfg(not(feature="mockdb"))]
 mod tests {
     use crate::*;
     extern crate bitcoin;
@@ -10,6 +11,7 @@ mod tests {
 
     use bitcoin::PublicKey;
     use client_lib::state_entity;
+    use server_lib::MockDatabase;
     use std::{str::FromStr, thread, time::Duration};
     use server_lib::PGDatabase;
 
@@ -121,7 +123,7 @@ mod tests {
     fn test_batch_transfer() {
         let mut db = PGDatabase::get_test();
         let _ = spawn_server::<PGDatabase>(None, db);
-        
+
         let num_state_chains = 3; // must be > 1
         let mut amounts = vec![];
         for i in 0..num_state_chains {

@@ -2,35 +2,35 @@
 //!
 //! Postgres DB access and update tools.
 
-use bitcoin::Transaction;
 use super::super::Result;
+use bitcoin::Transaction;
 pub type Hash = bitcoin::hashes::sha256d::Hash;
 
+use crate::protocol::transfer::TransferFinalizeData;
+use crate::server::get_postgres_url;
 use crate::{
     error::{
         DBErrorType::{NoDataForID, UpdateFailed},
         SEError,
     },
-    DatabaseR, DatabaseW, Database, PGDatabase,
     structs::*,
+    Database, DatabaseR, DatabaseW, PGDatabase,
 };
-use crate::server::get_postgres_url;
-use crate::protocol::transfer::TransferFinalizeData;
-use rocksdb::{Options, DB};
-use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
-use mainstay::CommitmentInfo;
-use rocket_contrib::databases::postgres::{rows::Row, types::ToSql};
-use shared_lib::{Root, mainstay};
-use uuid::Uuid;
-use shared_lib::state_chain::*;
-use rocket_contrib::databases::r2d2;
+use bitcoin::hashes::sha256d;
 use chrono::NaiveDateTime;
-use std::collections::HashMap;
+use curv::{BigInt, FE, GE};
+use kms::ecdsa::two_party::*;
+use mainstay::CommitmentInfo;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
-use kms::ecdsa::two_party::*;
-use curv::{BigInt, FE, GE};
-use bitcoin::hashes::sha256d;
+use rocket_contrib::databases::postgres::{rows::Row, types::ToSql};
+use rocket_contrib::databases::r2d2;
+use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
+use rocksdb::{Options, DB};
+use shared_lib::state_chain::*;
+use shared_lib::{mainstay, Root};
+use std::collections::HashMap;
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Alpha {
@@ -44,13 +44,12 @@ pub struct HDPos {
 
 #[derive(Debug)]
 pub enum Schema {
-
     StateChainEntity,
     Watcher,
 }
 impl Schema {
     pub fn to_string(&self) -> String {
-    format!("{:?}", self)
+        format!("{:?}", self)
     }
 }
 
@@ -151,7 +150,6 @@ impl Column {
 }
 
 impl PGDatabase {
-
     fn database_r(&self) -> DatabaseR {
         DatabaseR((self.db_connection)())
     }
@@ -172,7 +170,7 @@ impl PGDatabase {
         r2d2::Pool::new(manager).unwrap().get().unwrap()
     }
 
-    pub fn init(&self) -> Result<()>{
+    pub fn init(&self) -> Result<()> {
         self.make_tables()
     }
 
@@ -480,7 +478,8 @@ impl PGDatabase {
         let fmt_str = format!(
             "SELECT {} FROM {} WHERE id = $1",
             self.get_columns_str(&column),
-            table.to_string());
+            table.to_string()
+        );
 
         let statement = dbr.prepare(&fmt_str)?;
 
@@ -527,7 +526,13 @@ impl PGDatabase {
         str
     }
 
-    fn get_item_from_row<T>(&self, row: &Row, index: usize, id: &String, column: Column) -> Result<T>
+    fn get_item_from_row<T>(
+        &self,
+        row: &Row,
+        index: usize,
+        id: &String,
+        column: Column,
+    ) -> Result<T>
     where
         T: rocket_contrib::databases::postgres::types::FromSql,
     {
@@ -546,15 +551,10 @@ impl PGDatabase {
         T: rocket_contrib::databases::postgres::types::FromSql,
     {
         let (res, _, _, _) = self.get::<T, T, T, T>(id, table, column)?;
-        Ok(res.unwrap())  //  err returned from db_get if desired item is None
+        Ok(res.unwrap()) //  err returned from db_get if desired item is None
     }
     /// Get 2 items from row in table. Err if ID not found. Return None if data item empty.
-    pub fn get_2<T, U>(
-        &self,
-        id: Uuid,
-        table: Table,
-        column: Vec<Column>,
-    ) -> Result<(T, U)>
+    pub fn get_2<T, U>(&self, id: Uuid, table: Table, column: Vec<Column>) -> Result<(T, U)>
     where
         T: rocket_contrib::databases::postgres::types::FromSql,
         U: rocket_contrib::databases::postgres::types::FromSql,
@@ -563,12 +563,7 @@ impl PGDatabase {
         Ok((res1.unwrap(), res2.unwrap()))
     }
     /// Get 3 items from row in table. Err if ID not found. Return None if data item empty.
-    pub fn get_3<T, U, V>(
-        &self,
-        id: Uuid,
-        table: Table,
-        column: Vec<Column>,
-    ) -> Result<(T, U, V)>
+    pub fn get_3<T, U, V>(&self, id: Uuid, table: Table, column: Vec<Column>) -> Result<(T, U, V)>
     where
         T: rocket_contrib::databases::postgres::types::FromSql,
         U: rocket_contrib::databases::postgres::types::FromSql,
@@ -593,32 +588,27 @@ impl PGDatabase {
         let (res1, res2, res3, res4) = self.get::<T, U, V, W>(id, table, column)?;
         Ok((res1.unwrap(), res2.unwrap(), res3.unwrap(), res4.unwrap()))
     }
-
 }
 
 impl Database for PGDatabase {
-
-    fn from_conn(con_fun: fn()->r2d2::PooledConnection<PostgresConnectionManager>)
-        -> Self {
-        Self{ db_connection: con_fun}
+    fn from_conn(con_fun: fn() -> r2d2::PooledConnection<PostgresConnectionManager>) -> Self {
+        Self {
+            db_connection: con_fun,
+        }
     }
 
     fn get_test() -> Self {
         Self::from_conn(Self::get_test_postgres_connection)
     }
 
-    fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid>{
+    fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid> {
         self.get_1::<Uuid>(user_id, Table::UserSession, vec![Column::Id])
     }
 
     fn has_withdraw_sc_sig(&self, user_id: Uuid) -> Result<()> {
-        match self.get_1::<String>(
-            user_id,
-            Table::UserSession,
-            vec![Column::WithdrawScSig],
-        ) {
+        match self.get_1::<String>(user_id, Table::UserSession, vec![Column::WithdrawScSig]) {
             Ok(_) => Ok(()),
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
 
@@ -631,7 +621,12 @@ impl Database for PGDatabase {
         )
     }
 
-    fn update_withdraw_tx_sighash(&self, user_id: &Uuid, sig_hash: Hash, tx: Transaction) -> Result<()>{
+    fn update_withdraw_tx_sighash(
+        &self,
+        user_id: &Uuid,
+        sig_hash: Hash,
+        tx: Transaction,
+    ) -> Result<()> {
         self.update(
             user_id,
             Table::UserSession,
@@ -650,15 +645,12 @@ impl Database for PGDatabase {
     }
 
     fn get_sighash(&self, user_id: Uuid) -> Result<sha256d::Hash> {
-        let sig_hash: sha256d::Hash = Self::deser(self.get_1(
-            user_id,
-            Table::UserSession,
-            vec![Column::SigHash],
-        )?)?;
+        let sig_hash: sha256d::Hash =
+            Self::deser(self.get_1(user_id, Table::UserSession, vec![Column::SigHash])?)?;
         Ok(sig_hash)
     }
 
-    fn update_user_backup_tx(&self,user_id: &Uuid, tx: Transaction) -> Result<()> {
+    fn update_user_backup_tx(&self, user_id: &Uuid, tx: Transaction) -> Result<()> {
         self.update(
             user_id,
             Table::UserSession,
@@ -685,196 +677,202 @@ impl Database for PGDatabase {
     }
 
     fn get_withdraw_confirm_data(&self, user_id: Uuid) -> Result<WithdrawConfirmData> {
-        let (tx_withdraw_str, withdraw_sc_sig_str, state_chain_id) =
-        self.get_3::<String, String, Uuid>(
-            user_id,
-            Table::UserSession,
-            vec![
-                Column::TxWithdraw,
-                Column::WithdrawScSig,
-                Column::StateChainId,
-            ],
-        )?;
+        let (tx_withdraw_str, withdraw_sc_sig_str, state_chain_id) = self
+            .get_3::<String, String, Uuid>(
+                user_id,
+                Table::UserSession,
+                vec![
+                    Column::TxWithdraw,
+                    Column::WithdrawScSig,
+                    Column::StateChainId,
+                ],
+            )?;
         let tx_withdraw: Transaction = Self::deser(tx_withdraw_str)?;
         let withdraw_sc_sig: StateChainSig = Self::deser(withdraw_sc_sig_str)?;
-        Ok(WithdrawConfirmData{tx_withdraw, withdraw_sc_sig, state_chain_id})
+        Ok(WithdrawConfirmData {
+            tx_withdraw,
+            withdraw_sc_sig,
+            state_chain_id,
+        })
     }
 
-/// Update root value in DB. Update root with ID or insert new DB item.
-fn root_update(&self, rt: &Root) -> Result<i64> {
-    let mut root = rt.clone();
-    // Get previous ID, or use the one specified in root to update an existing root with mainstay proof
-    let id = match root.id() {
-        //This will update an existing root in the db
-        Some(id) => {
-            let existing_root = self.get_root(id as i64)?;
-            match existing_root {
-                None => {
-                    return Err(SEError::Generic(format!(
-                        "error updating existing root - root not found with id {}",
-                        id
-                    )))
-                }
-                Some(r) => {
-                    if r.hash() != root.hash() {
-                        return Err(SEError::Generic(format!("error updating existing root - hashes do not match: existing: {} update: {}", r, root)));
+    /// Update root value in DB. Update root with ID or insert new DB item.
+    fn root_update(&self, rt: &Root) -> Result<i64> {
+        let mut root = rt.clone();
+        // Get previous ID, or use the one specified in root to update an existing root with mainstay proof
+        let id = match root.id() {
+            //This will update an existing root in the db
+            Some(id) => {
+                let existing_root = self.get_root(id as i64)?;
+                match existing_root {
+                    None => {
+                        return Err(SEError::Generic(format!(
+                            "error updating existing root - root not found with id {}",
+                            id
+                        )))
                     }
-                    id
+                    Some(r) => {
+                        if r.hash() != root.hash() {
+                            return Err(SEError::Generic(format!("error updating existing root - hashes do not match: existing: {} update: {}", r, root)));
+                        }
+                        id
+                    }
                 }
             }
-        }
-        //new root, update id
-        None => {
-            match self.root_get_current_id() {
-                Ok(id) => id + 1,
-                Err(_) => 1, // No roots in DB
+            //new root, update id
+            None => {
+                match self.root_get_current_id() {
+                    Ok(id) => id + 1,
+                    Err(_) => 1, // No roots in DB
+                }
             }
+        };
+
+        // Insert new root
+        root.set_id(&id);
+        self.root_insert(root.clone())?;
+
+        debug!("Updated root at id {} with value: {:?}", id, root);
+        Ok(id)
+    }
+
+    /// Insert a Root into root table
+    fn root_insert(&self, root: Root) -> Result<u64> {
+        let dbw = self.database_w();
+        let statement = dbw.prepare(&format!(
+            "INSERT INTO {} (value, commitmentinfo) VALUES ($1,$2)",
+            Table::Root.to_string()
+        ))?;
+        let ci = root.commitment_info().clone();
+        Ok(statement.execute(&[&Self::ser(root.hash())?, &Self::ser(ci)?])?)
+    }
+
+    /// Get Id of current Root
+    fn root_get_current_id(&self) -> Result<i64> {
+        let dbr = self.database_r();
+        let statement =
+            dbr.prepare(&format!("SELECT MAX(id) FROM {}", Table::Root.to_string(),))?;
+        let rows = statement.query(&[])?;
+        if rows.is_empty() {
+            return Err(SEError::DBError(NoDataForID, String::from("Current Root")));
+        };
+        let row = rows.get(0);
+        match row.get_opt::<usize, i64>(0) {
+            None => return Ok(0),
+            Some(data) => match data {
+                Ok(v) => return Ok(v),
+                Err(_) => return Ok(0),
+            },
         }
-    };
-
-    // Insert new root
-    root.set_id(&id);
-    self.root_insert(root.clone())?;
-
-    debug!("Updated root at id {} with value: {:?}", id, root);
-    Ok(id)
-}
-
-/// Insert a Root into root table
-fn root_insert(&self, root: Root) -> Result<u64> {
-    let dbw = self.database_w();
-    let statement = dbw.prepare(&format!(
-        "INSERT INTO {} (value, commitmentinfo) VALUES ($1,$2)",
-        Table::Root.to_string()
-    ))?;
-    let ci = root.commitment_info().clone();
-    Ok(statement.execute(&[&Self::ser(root.hash())?, &Self::ser(ci)?])?)
-}
-
-/// Get Id of current Root
-fn root_get_current_id(&self) -> Result<i64> {
-    let dbr = self.database_r();
-    let statement =
-        dbr.prepare(&format!("SELECT MAX(id) FROM {}", Table::Root.to_string(),))?;
-    let rows = statement.query(&[])?;
-    if rows.is_empty() {
-        return Err(SEError::DBError(NoDataForID, String::from("Current Root")));
-    };
-    let row = rows.get(0);
-    match row.get_opt::<usize, i64>(0) {
-        None => return Ok(0),
-        Some(data) => match data {
-            Ok(v) => return Ok(v),
-            Err(_) => return Ok(0),
-        },
     }
-}
 
-/// Get root with given ID
-fn get_root(&self, id: i64) -> Result<Option<Root>> {
-    if id == 0 {
-        return Ok(None);
-    }
-    let dbr = self.database_r();
-    let statement = dbr.prepare(&format!(
-        "SELECT * FROM {} WHERE id = $1",
-        Table::Root.to_string(),
-    ))?;
-    let rows = statement.query(&[&id])?;
-    if rows.is_empty() {
-        return Err(SEError::DBError(NoDataForID, format!("Root id: {}", id)));
-    };
-    let row = rows.get(0);
-
-    let id = match self.get_item_from_row::<i64>(&row, 0, &id.to_string(), Column::Id) {
-        Ok(v) => v,
-        Err(_) => {
-            // No root in table yet. Return None
+    /// Get root with given ID
+    fn get_root(&self, id: i64) -> Result<Option<Root>> {
+        if id == 0 {
             return Ok(None);
         }
-    };
-    let root = Root::from(
-        Some(id),
-        Self::deser(self.get_item_from_row::<String>(
-            &row,
-            1,
-            &id.to_string(),
-            Column::Value,
-        )?)?,
-        &Self::deser::<Option<CommitmentInfo>>(self.get_item_from_row::<String>(
-            &row,
-            2,
-            &id.to_string(),
-            Column::CommitmentInfo,
-        )?)?,
-    )?;
-    Ok(Some(root))
-}
-
-/// Find the latest confirmed root
-fn get_confirmed_smt_root(&self) -> Result<Option<Root>> {
-    let current_id = self.root_get_current_id()?;
-    for i in 0..=current_id - 1 {
-        let id = current_id - i;
-        let root = self.get_root(id)?;
-        match root {
-            Some(r) => {
-                if r.is_confirmed() {
-                    return Ok(Some(r));
-                }
-                ()
-            }
-            None => (),
+        let dbr = self.database_r();
+        let statement = dbr.prepare(&format!(
+            "SELECT * FROM {} WHERE id = $1",
+            Table::Root.to_string(),
+        ))?;
+        let rows = statement.query(&[&id])?;
+        if rows.is_empty() {
+            return Err(SEError::DBError(NoDataForID, format!("Root id: {}", id)));
         };
+        let row = rows.get(0);
+
+        let id = match self.get_item_from_row::<i64>(&row, 0, &id.to_string(), Column::Id) {
+            Ok(v) => v,
+            Err(_) => {
+                // No root in table yet. Return None
+                return Ok(None);
+            }
+        };
+        let root = Root::from(
+            Some(id),
+            Self::deser(self.get_item_from_row::<String>(
+                &row,
+                1,
+                &id.to_string(),
+                Column::Value,
+            )?)?,
+            &Self::deser::<Option<CommitmentInfo>>(self.get_item_from_row::<String>(
+                &row,
+                2,
+                &id.to_string(),
+                Column::CommitmentInfo,
+            )?)?,
+        )?;
+        Ok(Some(root))
     }
-    Ok(None)
-}
 
-fn get_statechain_id(&self, user_id: Uuid) -> Result<Uuid>{
-    self.get_1::<Uuid>(
-        user_id,
-        Table::UserSession,
-        vec![Column::StateChainId],
-    )
-}
+    /// Find the latest confirmed root
+    fn get_confirmed_smt_root(&self) -> Result<Option<Root>> {
+        let current_id = self.root_get_current_id()?;
+        for i in 0..=current_id - 1 {
+            let id = current_id - i;
+            let root = self.get_root(id)?;
+            match root {
+                Some(r) => {
+                    if r.is_confirmed() {
+                        return Ok(Some(r));
+                    }
+                    ()
+                }
+                None => (),
+            };
+        }
+        Ok(None)
+    }
 
-fn update_statechain_id(&self, user_id: &Uuid, state_chain_id: &Uuid)
-->Result<()> {
-    self.update(
-        user_id,
-        Table::UserSession,
-        vec![Column::StateChainId],
-        vec![state_chain_id],
-    )
-}
+    fn get_statechain_id(&self, user_id: Uuid) -> Result<Uuid> {
+        self.get_1::<Uuid>(user_id, Table::UserSession, vec![Column::StateChainId])
+    }
 
-fn get_statechain_amount(
-    &self,
-    state_chain_id: Uuid,
-) -> Result<StateChainAmount> {
-    let (amount, state_chain_str) = self.get_2::<i64, String>(
-        state_chain_id,
-        Table::StateChain,
-        vec![Column::Amount, Column::Chain],
-    )?;
-    let state_chain: StateChain = Self::deser(state_chain_str)?;
-    Ok(StateChainAmount{chain: state_chain, amount})
-}
+    fn update_statechain_id(&self, user_id: &Uuid, state_chain_id: &Uuid) -> Result<()> {
+        self.update(
+            user_id,
+            Table::UserSession,
+            vec![Column::StateChainId],
+            vec![state_chain_id],
+        )
+    }
 
-fn update_statechain_amount(&self, state_chain_id: &Uuid, state_chain: StateChain, amount: u64) -> Result<()> {
-    self.update(
-        &state_chain_id,
-        Table::StateChain,
-        vec![Column::Chain, Column::Amount],
-        vec![&Self::ser(state_chain)?, &(amount as i64)], // signals withdrawn funds
-    )
-}
+    fn get_statechain_amount(&self, state_chain_id: Uuid) -> Result<StateChainAmount> {
+        let (amount, state_chain_str) = self.get_2::<i64, String>(
+            state_chain_id,
+            Table::StateChain,
+            vec![Column::Amount, Column::Chain],
+        )?;
+        let state_chain: StateChain = Self::deser(state_chain_str)?;
+        Ok(StateChainAmount {
+            chain: state_chain,
+            amount,
+        })
+    }
 
-fn create_statechain(&self,
-    state_chain_id: &Uuid,
-    user_id: &Uuid,
-    state_chain: &StateChain,
-    amount: &i64) -> Result<()>{
+    fn update_statechain_amount(
+        &self,
+        state_chain_id: &Uuid,
+        state_chain: StateChain,
+        amount: u64,
+    ) -> Result<()> {
+        self.update(
+            &state_chain_id,
+            Table::StateChain,
+            vec![Column::Chain, Column::Amount],
+            vec![&Self::ser(state_chain)?, &(amount as i64)], // signals withdrawn funds
+        )
+    }
+
+    fn create_statechain(
+        &self,
+        state_chain_id: &Uuid,
+        user_id: &Uuid,
+        state_chain: &StateChain,
+        amount: &i64,
+    ) -> Result<()> {
         self.insert(&state_chain_id, Table::StateChain)?;
         self.update(
             &state_chain_id,
@@ -892,48 +890,47 @@ fn create_statechain(&self,
                 &user_id.to_owned(),
             ],
         )
-}
+    }
 
-fn get_statechain(
-    &self,
-    state_chain_id: Uuid,
-) -> Result<StateChain> {
-    let (_, state_chain_str) = self.get_2::<i64, String>(
-        state_chain_id,
-        Table::StateChain,
-        vec![Column::Amount, Column::Chain],
-    )?;
-    let state_chain: StateChain = Self::deser(state_chain_str)?;
-    Ok(state_chain)
-}
+    fn get_statechain(&self, state_chain_id: Uuid) -> Result<StateChain> {
+        let (_, state_chain_str) = self.get_2::<i64, String>(
+            state_chain_id,
+            Table::StateChain,
+            vec![Column::Amount, Column::Chain],
+        )?;
+        let state_chain: StateChain = Self::deser(state_chain_str)?;
+        Ok(state_chain)
+    }
 
-fn update_statechain_owner(&self, state_chain_id: &Uuid,
-                        state_chain: StateChain, new_user_id: &Uuid)
-                        -> Result<()> {
-    self.update(
-        &state_chain_id,
-        Table::StateChain,
-        vec![Column::Chain, Column::OwnerId],
-        vec![
-            &Self::ser(state_chain)?,
-            &new_user_id,
-        ],
-    )
-}
+    fn update_statechain_owner(
+        &self,
+        state_chain_id: &Uuid,
+        state_chain: StateChain,
+        new_user_id: &Uuid,
+    ) -> Result<()> {
+        self.update(
+            &state_chain_id,
+            Table::StateChain,
+            vec![Column::Chain, Column::OwnerId],
+            vec![&Self::ser(state_chain)?, &new_user_id],
+        )
+    }
 
- // Remove state_chain_id from user session to signal end of session
-fn remove_statechain_id(&self, user_id: &Uuid) -> Result<()> {
-    self.update(
-        user_id,
-        Table::UserSession,
-        vec![Column::StateChainId],
-        vec![&Uuid::nil()],
-    )
-}
+    // Remove state_chain_id from user session to signal end of session
+    fn remove_statechain_id(&self, user_id: &Uuid) -> Result<()> {
+        self.update(
+            user_id,
+            Table::UserSession,
+            vec![Column::StateChainId],
+            vec![&Uuid::nil()],
+        )
+    }
 
-fn create_backup_transaction(&self,
-    state_chain_id: &Uuid,
-    tx_backup: &Transaction) -> Result<()> {
+    fn create_backup_transaction(
+        &self,
+        state_chain_id: &Uuid,
+        tx_backup: &Transaction,
+    ) -> Result<()> {
         self.insert(state_chain_id, Table::BackupTxs)?;
         self.update(
             state_chain_id,
@@ -941,61 +938,58 @@ fn create_backup_transaction(&self,
             vec![Column::TxBackup],
             vec![&Self::ser(tx_backup.clone())?],
         )
-}
-
-fn get_backup_transaction(&self, state_chain_id: Uuid) -> Result<Transaction> {
-    let (tx_backup_str) = self.get_1::<String>(
-        state_chain_id,
-        Table::BackupTxs,
-        vec![Column::TxBackup],
-    )?;
-    let tx_backup: Transaction = Self::deser(tx_backup_str)?;
-    Ok(tx_backup)
-}
-
-fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
--> Result<(Transaction, String)> {
-
-    let (tx_backup_str, proof_key) = self.get_2::<String, String>(
-        user_id,
-        Table::UserSession,
-        vec![Column::TxBackup, Column::ProofKey],
-    )?;
-    let tx_backup: Transaction = Self::deser(tx_backup_str)?;
-    Ok((tx_backup, proof_key))
-}
-
-    fn get_sc_locked_until(&self, state_chain_id: Uuid) -> Result<NaiveDateTime>{
-        self.get_1::<NaiveDateTime>(
-            state_chain_id,
-            Table::StateChain,
-            vec![Column::LockedUntil],
-        )
     }
 
-    fn update_locked_until(&self, state_chain_id: &Uuid,
-                                time: &NaiveDateTime)->Result<()>{
+    fn get_backup_transaction(&self, state_chain_id: Uuid) -> Result<Transaction> {
+        let (tx_backup_str) =
+            self.get_1::<String>(state_chain_id, Table::BackupTxs, vec![Column::TxBackup])?;
+        let tx_backup: Transaction = Self::deser(tx_backup_str)?;
+        Ok(tx_backup)
+    }
+
+    fn get_backup_transaction_and_proof_key(&self, user_id: Uuid) -> Result<(Transaction, String)> {
+        let (tx_backup_str, proof_key) = self.get_2::<String, String>(
+            user_id,
+            Table::UserSession,
+            vec![Column::TxBackup, Column::ProofKey],
+        )?;
+        let tx_backup: Transaction = Self::deser(tx_backup_str)?;
+        Ok((tx_backup, proof_key))
+    }
+
+    fn get_sc_locked_until(&self, state_chain_id: Uuid) -> Result<NaiveDateTime> {
+        self.get_1::<NaiveDateTime>(state_chain_id, Table::StateChain, vec![Column::LockedUntil])
+    }
+
+    fn update_locked_until(&self, state_chain_id: &Uuid, time: &NaiveDateTime) -> Result<()> {
         self.update(
             state_chain_id,
             Table::StateChain,
             vec![Column::LockedUntil],
-            vec![time]
+            vec![time],
         )
     }
 
     fn get_transfer_batch_data(&self, batch_id: Uuid) -> Result<TransferBatchData> {
-        let (state_chains_str, start_time, finalized, punished_state_chains_str) =
-        self.get_4::<String, NaiveDateTime, bool, String>(
+        let (state_chains_str, start_time, finalized, punished_state_chains_str) = self
+            .get_4::<String, NaiveDateTime, bool, String>(
             batch_id,
             Table::TransferBatch,
-            vec![Column::StateChains,
+            vec![
+                Column::StateChains,
                 Column::StartTime,
                 Column::Finalized,
-                Column::PunishedStateChains],
+                Column::PunishedStateChains,
+            ],
         )?;
         let state_chains: HashMap<Uuid, bool> = Self::deser(state_chains_str)?;
         let punished_state_chains: Vec<Uuid> = Self::deser(punished_state_chains_str)?;
-        Ok(TransferBatchData{state_chains, start_time, finalized, punished_state_chains})
+        Ok(TransferBatchData {
+            state_chains,
+            start_time,
+            finalized,
+            punished_state_chains,
+        })
     }
 
     fn has_transfer_batch_id(&self, batch_id: Uuid) -> bool {
@@ -1003,12 +997,10 @@ fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
     }
 
     fn get_transfer_batch_id(&self, batch_id: Uuid) -> Result<Uuid> {
-        self.get_1::<Uuid>(batch_id,
-            Table::TransferBatch,
-            vec![Column::Id])
+        self.get_1::<Uuid>(batch_id, Table::TransferBatch, vec![Column::Id])
     }
 
-    fn get_punished_state_chains(&self, batch_id: Uuid) -> Result<Vec<Uuid>>{
+    fn get_punished_state_chains(&self, batch_id: Uuid) -> Result<Vec<Uuid>> {
         Self::deser(self.get_1(
             batch_id,
             Table::TransferBatch,
@@ -1016,26 +1008,30 @@ fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
         )?)
     }
 
-    fn create_transfer(&self, state_chain_id: &Uuid,
+    fn create_transfer(
+        &self,
+        state_chain_id: &Uuid,
         state_chain_sig: &StateChainSig,
-        x1: &FE) -> Result<()> {
-          // Create Transfer table entry
-          self.insert(&state_chain_id, Table::Transfer)?;
-          self.update(
-              &state_chain_id,
-              Table::Transfer,
-              vec![Column::StateChainSig, Column::X1],
-              vec![
-                  &Self::ser(state_chain_sig.to_owned())?,
-                  &Self::ser(x1.to_owned())?,
-              ],
-          )
+        x1: &FE,
+    ) -> Result<()> {
+        // Create Transfer table entry
+        self.insert(&state_chain_id, Table::Transfer)?;
+        self.update(
+            &state_chain_id,
+            Table::Transfer,
+            vec![Column::StateChainSig, Column::X1],
+            vec![
+                &Self::ser(state_chain_sig.to_owned())?,
+                &Self::ser(x1.to_owned())?,
+            ],
+        )
     }
 
-    fn create_transfer_batch_data(&self,
+    fn create_transfer_batch_data(
+        &self,
         batch_id: &Uuid,
-        state_chains: HashMap<Uuid, bool>) -> Result<()> {
-
+        state_chains: HashMap<Uuid, bool>,
+    ) -> Result<()> {
         self.insert(&batch_id, Table::TransferBatch)?;
         self.update(
             &batch_id,
@@ -1067,30 +1063,28 @@ fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
         let state_chain_sig: StateChainSig = Self::deser(state_chain_sig_str)?;
         let x1: FE = Self::deser(x1_str)?;
 
-        return Ok(TransferData{state_chain_id, state_chain_sig, x1})
+        return Ok(TransferData {
+            state_chain_id,
+            state_chain_sig,
+            x1,
+        });
     }
 
-    fn remove_transfer_data(&self, state_chain_id: &Uuid) -> Result<()>{
+    fn remove_transfer_data(&self, state_chain_id: &Uuid) -> Result<()> {
         self.remove(state_chain_id, Table::Transfer)
     }
 
     fn transfer_is_completed(&self, state_chain_id: Uuid) -> bool {
-        self.get_1::<Uuid>(
-            state_chain_id,
-            Table::Transfer,
-            vec![Column::Id]).is_ok()
+        self.get_1::<Uuid>(state_chain_id, Table::Transfer, vec![Column::Id])
+            .is_ok()
     }
 
-    fn get_ecdsa_master(&self, user_id: Uuid) -> Result<Option<String>>{
-        self.get_1::<Option<String>>(
-            user_id,
-            Table::Ecdsa,
-            vec![Column::Party1MasterKey],
-        )
+    fn get_ecdsa_master(&self, user_id: Uuid) -> Result<Option<String>> {
+        self.get_1::<Option<String>>(user_id, Table::Ecdsa, vec![Column::Party1MasterKey])
     }
 
     //kms::ecdsa::two_party::MasterKey1
-    fn update_ecdsa_master(&self, user_id: &Uuid, master_key: MasterKey1) -> Result<()>{
+    fn update_ecdsa_master(&self, user_id: &Uuid, master_key: MasterKey1) -> Result<()> {
         self.update(
             user_id,
             Table::Ecdsa,
@@ -1117,13 +1111,19 @@ fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
         let party_one_private: party_one::Party1Private = Self::deser(party_one_private_str)?;
         let comm_witness: party_one::CommWitness = Self::deser(comm_witness_str)?;
 
-        Ok(ECDSAMasterKeyInput{party2_public, paillier_key_pair, party_one_private, comm_witness})
+        Ok(ECDSAMasterKeyInput {
+            party2_public,
+            paillier_key_pair,
+            party_one_private,
+            comm_witness,
+        })
     }
 
-    fn get_ecdsa_witness_keypair(&self, user_id: Uuid)
-        -> Result<(party_one::CommWitness, party_one::EcKeyPair)>{
-        let (comm_witness_str, ec_key_pair_str) =
-        self.get_2::<String, String>(
+    fn get_ecdsa_witness_keypair(
+        &self,
+        user_id: Uuid,
+    ) -> Result<(party_one::CommWitness, party_one::EcKeyPair)> {
+        let (comm_witness_str, ec_key_pair_str) = self.get_2::<String, String>(
             user_id,
             Table::Ecdsa,
             vec![Column::CommWitness, Column::EcKeyPair],
@@ -1134,47 +1134,45 @@ fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
     }
 
     fn get_ecdsa_s2(&self, user_id: Uuid) -> Result<FE> {
-        let s2_str = self.get_1(
-            user_id,
-            Table::UserSession,
-            vec![Column::S2])?;
+        let s2_str = self.get_1(user_id, Table::UserSession, vec![Column::S2])?;
         let s2: FE = Self::deser(s2_str)?;
         Ok(s2)
     }
 
-    fn update_keygen_first_msg(&self,
+    fn update_keygen_first_msg(
+        &self,
         user_id: &Uuid,
         key_gen_first_msg: &party_one::KeyGenFirstMsg,
         comm_witness: party_one::CommWitness,
-        ec_key_pair: party_one::EcKeyPair)
-            ->Result<()>{
-
-                self.update(
-                    &user_id,
-                    Table::Ecdsa,
-                    vec![
-                        Column::POS,
-                        Column::KeyGenFirstMsg,
-                        Column::CommWitness,
-                        Column::EcKeyPair,
-                    ],
-                    vec![
-                        &Self::ser(HDPos { pos: 0u32 })?,
-                        &Self::ser(key_gen_first_msg.to_owned())?,
-                        &Self::ser(comm_witness)?,
-                        &Self::ser(ec_key_pair)?,
-                    ],
-                )?;
+        ec_key_pair: party_one::EcKeyPair,
+    ) -> Result<()> {
+        self.update(
+            &user_id,
+            Table::Ecdsa,
+            vec![
+                Column::POS,
+                Column::KeyGenFirstMsg,
+                Column::CommWitness,
+                Column::EcKeyPair,
+            ],
+            vec![
+                &Self::ser(HDPos { pos: 0u32 })?,
+                &Self::ser(key_gen_first_msg.to_owned())?,
+                &Self::ser(comm_witness)?,
+                &Self::ser(ec_key_pair)?,
+            ],
+        )?;
 
         Ok(())
     }
 
-    fn update_keygen_second_msg(&self,
+    fn update_keygen_second_msg(
+        &self,
         user_id: &Uuid,
         party2_public: GE,
         paillier_key_pair: party_one::PaillierKeyPair,
-        party_one_private: party_one::Party1Private
-    ) ->Result<()>{
+        party_one_private: party_one::Party1Private,
+    ) -> Result<()> {
         self.update(
             &user_id,
             Table::Ecdsa,
@@ -1192,13 +1190,13 @@ fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
         Ok(())
     }
 
-    fn update_keygen_third_msg(&self,
+    fn update_keygen_third_msg(
+        &self,
         user_id: &Uuid,
         party_one_pdl_decommit: party_one::PDLdecommit,
         party_two_pdl_first_message: party_two::PDLFirstMessage,
-        alpha: BigInt
-    ) ->Result<()>{
-
+        alpha: BigInt,
+    ) -> Result<()> {
         self.update(
             &user_id,
             Table::Ecdsa,
@@ -1209,7 +1207,9 @@ fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
             ],
             vec![
                 &Self::ser(party_one_pdl_decommit)?,
-                &Self::ser(Alpha { value: alpha.to_owned() })?,
+                &Self::ser(Alpha {
+                    value: alpha.to_owned(),
+                })?,
                 &Self::ser(party_two_pdl_first_message)?,
             ],
         )?;
@@ -1221,45 +1221,45 @@ fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
         self.insert(user_id, Table::Ecdsa)
     }
 
-    fn get_ecdsa_party_1_private(&self, user_id: Uuid)
-        -> Result<party_one::Party1Private> {
-            Self::deser(self.get_1(
-                user_id,
-                Table::Ecdsa,
-                vec![Column::Party1Private],
-            )?)
+    fn get_ecdsa_party_1_private(&self, user_id: Uuid) -> Result<party_one::Party1Private> {
+        Self::deser(self.get_1(user_id, Table::Ecdsa, vec![Column::Party1Private])?)
     }
 
-    fn get_ecdsa_fourth_message_input(&self, user_id: Uuid)
-        ->  Result<ECDSAFourthMessageInput> {
-            let (
-                party_one_private_str,
-                party_one_pdl_decommit_str,
-                party_two_pdl_first_message_str,
-                alpha_str,
-            ) = self.get_4::<String, String, String, String>(
-                user_id,
-                Table::Ecdsa,
-                vec![
-                    Column::Party1Private,
-                    Column::PDLDecommit,
-                    Column::Party2PDLFirstMsg,
-                    Column::Alpha,
-                ],
-            )?;
+    fn get_ecdsa_fourth_message_input(&self, user_id: Uuid) -> Result<ECDSAFourthMessageInput> {
+        let (
+            party_one_private_str,
+            party_one_pdl_decommit_str,
+            party_two_pdl_first_message_str,
+            alpha_str,
+        ) = self.get_4::<String, String, String, String>(
+            user_id,
+            Table::Ecdsa,
+            vec![
+                Column::Party1Private,
+                Column::PDLDecommit,
+                Column::Party2PDLFirstMsg,
+                Column::Alpha,
+            ],
+        )?;
 
-            let party_one_private: party_one::Party1Private = Self::deser(party_one_private_str)?;
-            let party_one_pdl_decommit: party_one::PDLdecommit = Self::deser(party_one_pdl_decommit_str)?;
-            let party_two_pdl_first_message: party_two::PDLFirstMessage =
-                Self::deser(party_two_pdl_first_message_str)?;
-            let alpha: Alpha = Self::deser(alpha_str)?;
+        let party_one_private: party_one::Party1Private = Self::deser(party_one_private_str)?;
+        let party_one_pdl_decommit: party_one::PDLdecommit =
+            Self::deser(party_one_pdl_decommit_str)?;
+        let party_two_pdl_first_message: party_two::PDLFirstMessage =
+            Self::deser(party_two_pdl_first_message_str)?;
+        let alpha: Alpha = Self::deser(alpha_str)?;
 
-            Ok({ECDSAFourthMessageInput{party_one_private, party_one_pdl_decommit,
-                party_two_pdl_first_message, alpha}})
+        Ok({
+            ECDSAFourthMessageInput {
+                party_one_private,
+                party_one_pdl_decommit,
+                party_two_pdl_first_message,
+                alpha,
+            }
+        })
     }
 
     fn get_ecdsa_keypair(&self, user_id: Uuid) -> Result<ECDSAKeypair> {
-
         let (party_1_private_str, party_2_public_str) = self.get_2::<String, String>(
             user_id,
             Table::Ecdsa,
@@ -1268,10 +1268,13 @@ fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
 
         let party_1_private: Party1Private = Self::deser(party_1_private_str)?;
         let party_2_public: GE = Self::deser(party_2_public_str)?;
-        Ok(ECDSAKeypair{party_1_private, party_2_public})
+        Ok(ECDSAKeypair {
+            party_1_private,
+            party_2_public,
+        })
     }
 
-    fn update_punished(&self, batch_id: &Uuid, punished_state_chains: Vec<Uuid>) -> Result<()>{
+    fn update_punished(&self, batch_id: &Uuid, punished_state_chains: Vec<Uuid>) -> Result<()> {
         self.update(
             batch_id,
             Table::TransferBatch,
@@ -1280,30 +1283,42 @@ fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
         )
     }
 
-    fn get_finalize_batch_data(&self, batch_id: Uuid)-> Result<TransferFinalizeBatchData> {
-        let (state_chains_str, finalized_data_vec_str, start_time) = self.get_3::<String, String, NaiveDateTime>(
-            batch_id,
-            Table::TransferBatch,
-            vec![Column::StateChains, Column::FinalizedData, Column::StartTime],
-        )?;
+    fn get_finalize_batch_data(&self, batch_id: Uuid) -> Result<TransferFinalizeBatchData> {
+        let (state_chains_str, finalized_data_vec_str, start_time) = self
+            .get_3::<String, String, NaiveDateTime>(
+                batch_id,
+                Table::TransferBatch,
+                vec![
+                    Column::StateChains,
+                    Column::FinalizedData,
+                    Column::StartTime,
+                ],
+            )?;
 
         let state_chains: HashMap<Uuid, bool> = Self::deser(state_chains_str)?;
         let finalized_data_vec: Vec<TransferFinalizeData> = Self::deser(finalized_data_vec_str)?;
-        Ok(TransferFinalizeBatchData{state_chains, finalized_data_vec, start_time})
+        Ok(TransferFinalizeBatchData {
+            state_chains,
+            finalized_data_vec,
+            start_time,
+        })
     }
 
-    fn update_finalize_batch_data(&self, batch_id: &Uuid,
-            state_chains:HashMap<Uuid, bool>,
-            finalized_data_vec: Vec<TransferFinalizeData>) -> Result<()>{
-                self.update(
-                    &batch_id,
-                    Table::TransferBatch,
-                    vec![Column::StateChains, Column::FinalizedData],
-                    vec![&Self::ser(state_chains)?, &Self::ser(finalized_data_vec)?],
-                )
+    fn update_finalize_batch_data(
+        &self,
+        batch_id: &Uuid,
+        state_chains: HashMap<Uuid, bool>,
+        finalized_data_vec: Vec<TransferFinalizeData>,
+    ) -> Result<()> {
+        self.update(
+            &batch_id,
+            Table::TransferBatch,
+            vec![Column::StateChains, Column::FinalizedData],
+            vec![&Self::ser(state_chains)?, &Self::ser(finalized_data_vec)?],
+        )
     }
 
-    fn update_transfer_batch_finalized(&self, batch_id: &Uuid, b_finalized: &bool) -> Result<()>{
+    fn update_transfer_batch_finalized(&self, batch_id: &Uuid, b_finalized: &bool) -> Result<()> {
         self.update(
             batch_id,
             Table::TransferBatch,
@@ -1313,40 +1328,39 @@ fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
     }
 
     fn get_statechain_owner(&self, state_chain_id: Uuid) -> Result<StateChainOwner> {
-        let (locked_until, owner_id, state_chain_str) =
-            self.get_3::<NaiveDateTime, Uuid, String>(
-                state_chain_id,
-                Table::StateChain,
-                vec![Column::LockedUntil, Column::OwnerId, Column::Chain],
-            )?;
+        let (locked_until, owner_id, state_chain_str) = self.get_3::<NaiveDateTime, Uuid, String>(
+            state_chain_id,
+            Table::StateChain,
+            vec![Column::LockedUntil, Column::OwnerId, Column::Chain],
+        )?;
 
-        let  chain: StateChain = Self::deser(state_chain_str)?;
-        Ok(StateChainOwner{locked_until, owner_id, chain})
+        let chain: StateChain = Self::deser(state_chain_str)?;
+        Ok(StateChainOwner {
+            locked_until,
+            owner_id,
+            chain,
+        })
     }
 
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
-    fn create_user_session(&self, user_id: &Uuid, auth: &String,
-        proof_key: &String) -> Result<()> {
-            self.insert(user_id, Table::UserSession)?;
-            self.update(
-                &user_id,
-                Table::UserSession,
-                vec![Column::Authentication, Column::ProofKey],
-                vec![
-                    &auth.clone(),
-                    &proof_key.to_owned(),
-                ],
-            )
+    fn create_user_session(&self, user_id: &Uuid, auth: &String, proof_key: &String) -> Result<()> {
+        self.insert(user_id, Table::UserSession)?;
+        self.update(
+            &user_id,
+            Table::UserSession,
+            vec![Column::Authentication, Column::ProofKey],
+            vec![&auth.clone(), &proof_key.to_owned()],
+        )
     }
 
-
-
     // Create new UserSession to allow new owner to generate shared wallet
-    fn transfer_init_user_session(&self, new_user_id: &Uuid,
+    fn transfer_init_user_session(
+        &self,
+        new_user_id: &Uuid,
         state_chain_id: &Uuid,
-        finalized_data: TransferFinalizeData) -> Result<()> {
-
+        finalized_data: TransferFinalizeData,
+    ) -> Result<()> {
         self.insert(new_user_id, Table::UserSession)?;
         self.update(
             &new_user_id,
@@ -1368,15 +1382,16 @@ fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
         )
     }
 
-    fn update_ecdsa_sign_first(&self, user_id: Uuid,
+    fn update_ecdsa_sign_first(
+        &self,
+        user_id: Uuid,
         eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg,
-        eph_ec_key_pair_party1: party_one::EphEcKeyPair) -> Result<()> {
-
-    //    user_id,
-    //    sign_msg1.eph_key_gen_first_message_party_two,
-    //    eph_ec_key_pair_party1
-    //) -> Result<()> {
-
+        eph_ec_key_pair_party1: party_one::EphEcKeyPair,
+    ) -> Result<()> {
+        //    user_id,
+        //    sign_msg1.eph_key_gen_first_message_party_two,
+        //    eph_ec_key_pair_party1
+        //) -> Result<()> {
 
         self.update(
             &user_id,
@@ -1388,47 +1403,44 @@ fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
             ],
         )?;
 
-    //}
+        //}
 
         Ok(())
     }
 
-    fn get_ecdsa_sign_second_input(&self, user_id: Uuid)
-        -> Result<ECDSASignSecondInput> {
-
+    fn get_ecdsa_sign_second_input(&self, user_id: Uuid) -> Result<ECDSASignSecondInput> {
         let (shared_key_str, eph_ec_key_pair_party1_str, eph_key_gen_first_message_party_two_str) =
-        self.get_3::<String, String, String>(
-            user_id,
-            Table::Ecdsa,
-            vec![
-                Column::Party1MasterKey,
-                Column::EphEcKeyPair,
-                Column::EphKeyGenFirstMsg,
-            ],
-        )?;
+            self.get_3::<String, String, String>(
+                user_id,
+                Table::Ecdsa,
+                vec![
+                    Column::Party1MasterKey,
+                    Column::EphEcKeyPair,
+                    Column::EphKeyGenFirstMsg,
+                ],
+            )?;
 
         let shared_key: MasterKey1 = Self::deser(shared_key_str)?;
-        let eph_ec_key_pair_party1: party_one::EphEcKeyPair = Self::deser(eph_ec_key_pair_party1_str)?;
+        let eph_ec_key_pair_party1: party_one::EphEcKeyPair =
+            Self::deser(eph_ec_key_pair_party1_str)?;
         let eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg =
-        Self::deser(eph_key_gen_first_message_party_two_str)?;
+            Self::deser(eph_key_gen_first_message_party_two_str)?;
 
-       // pub struct ECDSASignSecondInput {
-       //     pub shared_key: MasterKey1,
-       //     pub eph_ec_key_pair_party1: party_one::EphEcKeyPair,
-       //     pub eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg,
-       // }
+        // pub struct ECDSASignSecondInput {
+        //     pub shared_key: MasterKey1,
+        //     pub eph_ec_key_pair_party1: party_one::EphEcKeyPair,
+        //     pub eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg,
+        // }
 
-
-        Ok(ECDSASignSecondInput{shared_key, eph_ec_key_pair_party1,
-            eph_key_gen_first_message_party_two})
+        Ok(ECDSASignSecondInput {
+            shared_key,
+            eph_ec_key_pair_party1,
+            eph_key_gen_first_message_party_two,
+        })
     }
 
-    fn get_tx_withdraw(&self, user_id: Uuid) -> Result<Transaction>{
-        Self::deser(self.get_1(
-            user_id,
-            Table::UserSession,
-            vec![Column::TxWithdraw],
-        )?)
+    fn get_tx_withdraw(&self, user_id: Uuid) -> Result<Transaction> {
+        Self::deser(self.get_1(user_id, Table::UserSession, vec![Column::TxWithdraw])?)
     }
 
     fn update_tx_withdraw(&self, user_id: Uuid, tx: Transaction) -> Result<()> {

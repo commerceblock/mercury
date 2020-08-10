@@ -29,15 +29,16 @@ git = "https://github.com/KZen-networks/curv"
 tag = "v0.2.2"
 features =  ["ec_secp256k1"]
 
+#Re-export mockdb to the server package if enabled in this package                                                                                                                                        
+[features]
+mockdb = ["server/mockdb"]
+default = ["mockdb"]
+
 [dependencies.server]
 path = "../server"
-#features = ["mockdb"]
 
 [dependencies.client]
 path = "../client"
 
 [dependencies.shared]
 path = "../shared"
-
-[features]
-realdb = [] 
