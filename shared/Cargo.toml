@@ -17,7 +17,7 @@ hex = "0.3.2"
 libsecp256k1 = "0.3.5"
 bitcoin = { version = "0.20", features = [ "use-serde" ] }
 bitcoin_hashes = "0.7"
-rocket = { version = "0.4.5", default-features = false }
+rocket = { version = "0.4.5", default-features = false, features=["tls"] }
 rocket_contrib = { version = "0.4.5", default-features = false,features = ["json"] }
 uuid = { version = "0.5", features = ["v4", "serde"] }
 serde = "1.0"
@@ -49,3 +49,7 @@ tag = "v0.2.0"
 [dependencies.multi-party-ecdsa]
 git = "https://github.com/KZen-networks/multi-party-ecdsa"
 tag = "v0.2.5"
+
+
+#[development]
+#tls = { certs = "../utilities/server/certs/localhost.crt", key = "../utilities/server/certs/localhost.key" }

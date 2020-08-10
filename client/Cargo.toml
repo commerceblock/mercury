@@ -65,3 +65,9 @@ tag = "v0.2.1"
 
 [dependencies.shared]
 path = "../shared"
+
+[profile.dev]
+root_cert = "../utilities/server/certs/localhost.crt"
+
+[profile.test]
+root_cert = "../utilities/server/certs/localhost.crt"

@@ -43,12 +43,17 @@ pub struct ClientShim {
 }
 
 impl ClientShim {
-    pub fn new(endpoint: String, auth_token: Option<String>) -> ClientShim {
-        let client = reqwest::Client::new();
-        ClientShim {
+    pub fn new(endpoint: String, auth_token: Option<String>, certificate: Option<reqwest::Certificate>) -> Result<ClientShim> {
+        let mut cb = reqwest::ClientBuilder::new();
+        cb = match certificate {
+            Some(c) => cb.add_root_certificate(c),
+            None => cb
+        };
+        let client = cb.build()?;
+        Ok(ClientShim {
             client,
             auth_token,
             endpoint,
-        }
+        })
     }
 }

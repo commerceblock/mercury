@@ -83,4 +83,7 @@ git = "https://github.com/KZen-networks/serde_dynamodb"
 path = "../shared"
 
 [features]
-mockdb = [] 
+mockdb = []
+
+[development]
+tls = { certs = "../utilities/server/certs/localhost.crt", key = "../utilities/server/certs/localhost.key" }

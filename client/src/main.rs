@@ -27,7 +27,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Config {
         Config {
-            endpoint: "http://localhost:8000".to_string(),
+            endpoint: "https://localhost:8000".to_string(),
             electrum_server: "127.0.0.1:60401".to_string(),
             testing_mode: true
         }
@@ -56,6 +56,8 @@ fn main() {
 
     // TODO: random generating of seed and allow input of mnemonic phrase
     let seed = [0xcd; 32];
+    #[cfg(root_cert)]
+    let cert = Some()
     let client_shim = ClientShim::new(se_endpoint.to_string(), None);
 
     let electrum: Box<dyn Electrumx> = if testing_mode {
