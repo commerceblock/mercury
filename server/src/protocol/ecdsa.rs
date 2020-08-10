@@ -1,18 +1,12 @@
 pub use super::super::Result;
 
-use crate::error::{DBErrorType, SEError};
-use crate::{
-    storage::db::{
-        //db_deser, db_get_1, db_get_2, db_get_3, db_get_4, db_insert, db_ser, db_update,
-        Column,
-        Table,
-    },
-    Database,
-};
 use shared_lib::{
     structs::{KeyGenMsg1, KeyGenMsg2, KeyGenMsg3, KeyGenMsg4, Protocol, SignMsg1, SignMsg2},
     util::reverse_hex_str,
 };
+use crate::error::{DBErrorType, SEError};
+use crate::Database;
+use crate::{server::StateChainEntity, structs::*};
 
 use bitcoin::{hashes::sha256d, secp256k1::Signature, Transaction};
 use curv::{
@@ -20,27 +14,21 @@ use curv::{
     elliptic::curves::traits::ECPoint,
     {BigInt, FE, GE},
 };
-
-use crate::storage::db::{Alpha, HDPos};
-use crate::{server::StateChainEntity, structs::*};
-
 pub use kms::ecdsa::two_party::*;
 pub use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
 use rocket::State;
 use rocket_contrib::json::Json;
-
-use crate::{MockDatabase, PGDatabase};
 use cfg_if::cfg_if;
 use std::string::ToString;
 use uuid::Uuid;
 
 cfg_if! {
-    if #[cfg(test)]{
-        use MockDatabase as DB;
-        type SCE = StateChainEntity::<MockDatabase>;
+    if #[cfg(any(test,feature="mockdb"))]{
+        use crate::MockDatabase as DB;
+        type SCE = StateChainEntity::<DB>;
     } else {
-        use PGDatabase as DB;
-        type SCE = StateChainEntity::<PGDatabase>;
+        use crate::PGDatabase as DB;
+        type SCE = StateChainEntity::<DB>;
     }
 }
 
@@ -202,7 +190,7 @@ impl Ecdsa for SCE {
             //(i64, i64) =
             MasterKey1::sign_first_message();
 
-        self.database.update_ecdsa_sign_first(
+        db.update_ecdsa_sign_first(
             user_id,
             sign_msg1.eph_key_gen_first_message_party_two,
             eph_ec_key_pair_party1,
@@ -240,9 +228,11 @@ impl Ecdsa for SCE {
         }
 
         // Get 2P-Ecdsa data
+        println!("get ecdsa sign second input");
         let ssi: ECDSASignSecondInput = db.get_ecdsa_sign_second_input(user_id)?;
 
         let signature;
+        println!("sign second message");
         match ssi.shared_key.sign_second_message(
             &sign_msg2.sign_second_msg_request.party_two_sign_message,
             &ssi.eph_key_gen_first_message_party_two,
@@ -258,9 +248,15 @@ impl Ecdsa for SCE {
         };
 
         // Get transaction which is being signed.
+        println!("get withdraw or backup tx");
         let mut tx: Transaction = match sign_msg2.sign_second_msg_request.protocol {
-            Protocol::Withdraw => db.get_tx_withdraw(user_id)?,
-            _ => db.get_backup_transaction(user_id)?,
+            Protocol::Withdraw => {
+                db.get_tx_withdraw(user_id)?
+            },
+            _ => {
+                println!("getting backup tx");
+                db.get_user_backup_tx(user_id)?
+            }
         };
 
         // Make signature witness
@@ -288,6 +284,7 @@ impl Ecdsa for SCE {
         // Add signature to tx
         tx.input[0].witness = witness.clone();
 
+        println!("update withdraw or backup tx");
         match sign_msg2.sign_second_msg_request.protocol {
             Protocol::Withdraw => {
                 // Store signed withdraw tx in UserSession DB object

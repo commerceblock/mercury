@@ -8,7 +8,7 @@ use super::transfer::Transfer;
 
 extern crate shared_lib;
 use crate::error::SEError;
-use crate::{server::StateChainEntity, Database, MockDatabase, PGDatabase};
+use crate::{server::StateChainEntity, Database};
 use shared_lib::{commitment::verify_commitment, state_chain::*, structs::*};
 
 use cfg_if::cfg_if;
@@ -21,12 +21,12 @@ use uuid::Uuid;
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
 cfg_if! {
-    if #[cfg(test)]{
+    if #[cfg(any(test,feature="mockdb"))]{
         use crate::MockDatabase as DB;
-        type SCE = StateChainEntity::<MockDatabase>;
+        type SCE = StateChainEntity::<DB>;
     } else {
         use crate::PGDatabase as DB;
-        type SCE = StateChainEntity::<PGDatabase>;
+        type SCE = StateChainEntity::<DB>;
     }
 }
 

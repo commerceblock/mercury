@@ -15,7 +15,7 @@ use crate::{server::StateChainEntity, storage::Storage};
 use cfg_if::cfg_if;
 
 cfg_if! {
-    if #[cfg(test)]{
+    if #[cfg(any(test,feature="mockdb"))]{
         use crate::MockDatabase;
         type SCE = StateChainEntity::<MockDatabase>;
     } else {
@@ -260,6 +260,9 @@ mod tests {
         db.expect_get_statechain().returning(move |_| Ok(serde_json::from_str::<StateChain>(STATE_CHAIN).unwrap()));
         db.expect_update_statechain_amount().returning(|_,_,_| Ok(()));
         db.expect_remove_statechain_id().returning(|_| Ok(()));
+        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
+        db.expect_get_root().returning(|_| Ok(None));
+        db.expect_root_update().returning(|_| Ok(1));
 
         let sc_entity = test_sc_entity(db);
         let _m = mocks::ms::post_commitment().create();        //Mainstay post commitment mock

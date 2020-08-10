@@ -4,8 +4,8 @@
 
 pub use super::super::Result;
 extern crate shared_lib;
-use super::transfer_batch::transfer_batch_is_ended;
 use shared_lib::{state_chain::*, structs::*};
+use super::transfer_batch::transfer_batch_is_ended;
 
 use crate::error::SEError;
 use crate::Database;
@@ -19,11 +19,10 @@ use curv::{
 };
 use rocket::State;
 use rocket_contrib::json::Json;
-use std::str::FromStr;
 use uuid::Uuid;
 
 cfg_if! {
-    if #[cfg(test)]{
+    if #[cfg(any(test,feature="mockdb"))]{
         use crate::MockDatabase as DB;
         type SCE = StateChainEntity::<DB>;
     } else {
@@ -328,7 +327,7 @@ mod tests {
     use std::str::FromStr;
 
     // Data from a run of transfer protocol.
-    static TRANSFER_MSG_1: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"state_chain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"}}";
+    // static TRANSFER_MSG_1: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"state_chain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"}}";
     static TRANSFER_MSG_2: &str =
         "{\"x1\":\"d9d6cf19fd3416f8d5dd0590eaa729718507049d0f545b3cb228b3ca1a3eba69\"}";
     static TRANSFER_MSG_2_INVALID_X1: &str =
@@ -455,6 +454,9 @@ mod tests {
             .returning(|_, _, _| Ok(()));
         db.expect_update_backup_tx().returning(|_, _| Ok(()));
         db.expect_remove_transfer_data().returning(|_| Ok(()));
+        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
+        db.expect_get_root().returning(|_| Ok(None));
+        db.expect_root_update().returning(|_| Ok(1));
         db.expect_get_finalize_batch_data() // batch time up
             .times(1)
             .returning(move |_| {

@@ -1,22 +1,23 @@
 use super::protocol::*;
 use crate::DatabaseR;
-use crate::{Database, DatabaseW};
-use mockall::predicate::*;
-use mockall::*;
+use crate::{DatabaseW,Database};
 
 use crate::config::SMT_DB_LOC_TESTING;
 use shared_lib::mainstay;
 
 use crate::config::Config;
 use rocket;
-use rocket::config::{Config as RocketConfig, Environment, Value};
-use rocket::{Request, Rocket};
+use rocket::{Rocket, Request, config::{Config as RocketConfig, Environment, Value}};
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config as LogConfig, Root as LogRoot};
 use log4rs::encode::pattern::PatternEncoder;
+
+use mockall::*;
 use std::collections::HashMap;
+use uuid::Uuid;
+
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -55,10 +56,22 @@ fn not_found(req: &Request) -> String {
 use std::marker::{Send, Sync};
 
 /// Start Rocket Server. mainsta_config parameter overrides Settings.toml and env var settings.
-pub fn get_server<T: Database + Send + Sync + 'static>(
-    mainstay_config: Option<mainstay::MainstayConfig>,
-    db: T,
-) -> Result<Rocket> {
+pub fn get_server<T: Database + Send + Sync + 'static>
+    (mainstay_config: Option<mainstay::MainstayConfig>,
+        db: T) -> Result<Rocket> {
+    Ok(
+        get_mockdb_server::<T>(mainstay_config, db)?
+        .attach(DatabaseR::fairing())
+        .attach(DatabaseW::fairing())
+    )
+}
+
+// Get a rocket test server - this does not have the database read/write servings
+// attached as the databasse is mocked out
+pub fn get_mockdb_server<T: Database + Send + Sync + 'static>
+    (mainstay_config: Option<mainstay::MainstayConfig>,
+        db: T) -> Result<Rocket> {
+
     let mut sc_entity = StateChainEntity::<T>::load(db)?;
 
     match mainstay_config {
@@ -100,7 +113,7 @@ pub fn get_server<T: Database + Send + Sync + 'static>(
                 ecdsa::sign_second,
                 util::get_statechain,
                 util::get_smt_root,
-                // util::get_confirmed_smt_root,
+                //util::get_confirmed_smt_root,
                 util::get_smt_proof,
                 util::get_fees,
                 util::prepare_sign_tx,
@@ -115,9 +128,8 @@ pub fn get_server<T: Database + Send + Sync + 'static>(
                 withdraw::withdraw_confirm
             ],
         )
-        .manage(sc_entity)
-        .attach(DatabaseR::fairing()) // read
-        .attach(DatabaseW::fairing()); // write
+        .manage(sc_entity);
+
     Ok(rock)
 }
 
@@ -206,7 +218,6 @@ use crate::protocol::withdraw::Withdraw;
 use crate::storage;
 use crate::storage::Storage;
 use shared_lib::structs::*;
-use uuid::Uuid;
 
 mock! {
     StateChainEntity{}

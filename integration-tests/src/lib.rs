@@ -74,19 +74,14 @@ impl From<RecvTimeoutError> for SpawnError {
 
 /// Spawn a StateChain Entity server in testing mode if there isn't one running already.
 /// Returns Ok(()) if a new server was spawned, otherwise returns an error.
-pub fn spawn_server<T: Database + Send + Sync + 'static>(
-    mainstay_config: Option<mainstay::MainstayConfig>,
-    db: T,
-) -> Result<(), SpawnError> {
-    let (tx, rx) = mpsc::channel::<SpawnError>();
-
+pub fn spawn_server<T: Database + Send + Sync + 'static>(mainstay_config: Option<mainstay::MainstayConfig>, db: T)
+-> thread::JoinHandle<SpawnError> {
     // Set enviroment variable to testing_mode=true to override Settings.toml
     env::set_var("MERC_TESTING_MODE", "true");
 
     // Rocket server is blocking, so we spawn a new thread.
-    thread::spawn(move || {
-        tx.send({
-            match server::get_server::<T>(mainstay_config, db) {
+    thread::spawn(||{
+            match server::get_mockdb_server::<T>(mainstay_config, db) {
                 Ok(s) => {
                     let try_launch = s.launch();
                     let _ = try_launch.kind(); // LaunchError needs to be accessed here for this to work. Be carfeul modifying this code.
@@ -94,17 +89,7 @@ pub fn spawn_server<T: Database + Send + Sync + 'static>(
                 }
                 Err(_) => SpawnError::GetServer,
             }
-        })
-    });
-
-    //If we haven't received an error within 5 secs then assume server running.
-    match rx.recv_timeout(time::Duration::from_millis(5000)) {
-        Ok(e) => Err(e),
-        Err(e) => match e {
-            RecvTimeoutError::Timeout => Ok(()),
-            RecvTimeoutError::Disconnected => Err(e.into()),
-        },
-    }
+    })
 }
 
 /// Create a wallet and generate some addresses

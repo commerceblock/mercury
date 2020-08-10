@@ -1,4 +1,4 @@
-#[cfg(test)]
+#[cfg(all(test, feature="realdb"))]
 mod tests {
     use crate::*;
     extern crate bitcoin;
@@ -12,6 +12,9 @@ mod tests {
     use client_lib::state_entity;
     use server_lib::MockDatabase;
     use std::{str::FromStr, thread, time::Duration};
+    use server_lib::PGDatabase;
+
+
 
     #[cfg(test)]
     use mockito;
@@ -20,9 +23,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_batch_sigs() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
-        let mut db = MockDatabase::new();
-        let _ = spawn_server::<MockDatabase>(Some(mainstay_config), db);
+        let mut db = PGDatabase::get_test();
+        let _ = spawn_server::<PGDatabase>(None, db);
         let mut wallet = gen_wallet();
         let num_state_chains = 3;
         // make deposits
@@ -118,9 +120,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_batch_transfer() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
-        let mut db = MockDatabase::new();
-        let _ = spawn_server::<MockDatabase>(Some(mainstay_config), db);
+        let mut db = PGDatabase::get_test();
+        let _ = spawn_server::<PGDatabase>(None, db);
 
         let num_state_chains = 3; // must be > 1
         let mut amounts = vec![];
@@ -227,9 +228,8 @@ mod tests {
     // #[test]
     #[allow(dead_code)]
     fn test_failure_batch_transfer() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
-        let mut db = MockDatabase::new();
-        let _ = spawn_server::<MockDatabase>(Some(mainstay_config), db);
+        let mut db = PGDatabase::get_test();
+        let _ = spawn_server::<PGDatabase>(None, db);
 
         let num_state_chains = 3; // must be > 2
         let mut amounts = vec![];

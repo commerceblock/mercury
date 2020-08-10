@@ -33,7 +33,7 @@ use uuid::Uuid;
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
 cfg_if! {
-    if #[cfg(test)]{
+    if #[cfg(any(test,feature="mockdb"))]{
         use crate::MockDatabase as DB;
         type SCE = StateChainEntity::<DB>;
     } else {
@@ -311,8 +311,10 @@ pub fn get_statechain(
     }
 }
 
-#[post("/info/root", format = "json")]
-pub fn get_smt_root(sc_entity: State<SCE>) -> Result<Json<Option<Root>>> {
+#[get("/info/root", format = "json")]
+pub fn get_smt_root(
+    sc_entity: State<SCE>
+) -> Result<Json<Option<Root>>> {
     match sc_entity.get_smt_root() {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -492,18 +494,10 @@ impl SCE {
     }
 }
 
-impl Storage for SCE {
-    /// Update the database and the mainstay slot with the SMT root, if applicable
-    fn update_root(&self, root: &Root) -> Result<i64> {
-        cfg_if! {
-            if #[cfg(test)]{
-                //Create a new mock database
-                let db = &mut DB::new();
-                db.expect_root_update().returning(|_| Ok((1)));
-            } else {
-                let db = &self.database;
-           }
-        }
+impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
+     /// Update the database and the mainstay slot with the SMT root, if applicable
+     fn update_root(&self, root: &Root) -> Result<i64> {
+         let db = &self.database;
 
         match &self.config.mainstay {
             Some(c) => match root.attest(&c) {
@@ -523,20 +517,7 @@ impl Storage for SCE {
         funding_txid: &String,
         proof_key: &String,
     ) -> Result<(Option<Root>, Root)> {
-        //Use the mock database trait if in test mode
-        cfg_if! {
-            if #[cfg(test)]{
-                //Create a new mock database
-                let db = &mut DB::new();
-                // Set the expectations
-                //Current id is 0
-                db.expect_root_get_current_id().returning(|| Ok(0 as i64));
-                //Current root is randomly chosen
-                db.expect_get_root().returning(|_x| Ok(None));
-            } else {
-                let db = &self.database;
-           }
-        }
+        let db = &self.database;
 
         //If mocked out current_root will be randomly chosen
         let current_root = db.get_root(db.root_get_current_id()?)?;
@@ -561,47 +542,53 @@ impl Storage for SCE {
 
     /// Update the database with the latest available mainstay attestation info
     fn get_confirmed_smt_root(&self) -> Result<Option<Root>> {
-        use crate::shared_lib::mainstay::{
-            Commitment, CommitmentIndexed, CommitmentInfo, MainstayAPIError,
-        };
+        use crate::shared_lib::mainstay::{Commitment, CommitmentIndexed,
+            CommitmentInfo, MainstayAPIError};
 
         let db = &self.database;
 
-        fn update_db_from_ci(db: &DB, ci: &CommitmentInfo) -> Result<Option<Root>> {
-            let mut root = Root::from_commitment_info(ci);
-            let current_id = db.root_get_current_id()?;
-            let mut id;
-            for x in 0..=current_id - 1 {
-                id = current_id - x;
-                let root_get = db.get_root(id)?;
-                match root_get {
-                    Some(r) => {
-                        if r.hash() == ci.commitment().to_hash() {
-                            match r.id() {
-                                Some(r_id) => {
-                                    root.set_id(&r_id);
-                                    break;
+        fn update_db_from_ci<U: Database>(
+            db: &U,
+            ci: &CommitmentInfo,
+            ) -> Result<Option<Root>> {
+                let mut root = Root::from_commitment_info(ci);
+                let current_id = db.root_get_current_id()?;
+                let mut id;
+                for x in 0..=current_id - 1 {
+                    id = current_id - x;
+                    let root_get = db.get_root(id)?;
+                    match root_get {
+                        Some(r) => {
+                            if r.hash() == ci.commitment().to_hash() {
+                                match r.id() {
+                                    Some(r_id) => {
+                                        root.set_id(&r_id);
+                                        break;
+                                    }
+                                    None => (),
                                 }
-                                None => (),
                             }
                         }
+                        None => (),
+                    };
+                }
+
+                let root = root;
+
+                match db.root_update(&root) {
+                    Ok(_) => {
+                        Ok(Some(root))
                     }
-                    None => (),
-                };
+                    Err(e) => Err(e),
+                }
             }
 
-            let root = root;
 
-            match db.root_update(&root) {
-                Ok(_) => Ok(Some(root)),
-                Err(e) => Err(e),
-            }
-        }
+            match &self.config.mainstay {
+                Some(conf) => {
 
-        match &self.config.mainstay {
-            Some(conf) => {
-                match &db.get_confirmed_smt_root()? {
-                    Some(cr_db) => {
+                    match &db.get_confirmed_smt_root()? {
+                        Some(cr_db) => {
                         //Search for update
 
                         //First try to find the latest root in the latest commitment
@@ -611,10 +598,10 @@ impl Storage for SCE {
                                     if ci_db == ci {
                                         Ok(Some(cr_db.clone()))
                                     } else {
-                                        update_db_from_ci(&db, ci)
+                                        update_db_from_ci(db, ci)
                                     }
                                 }
-                                None => update_db_from_ci(&db, ci),
+                                None => update_db_from_ci(db, ci),
                             },
                             Err(e) => Err(SEError::SharedLibError(e.to_string())),
                         };
@@ -643,25 +630,17 @@ impl Storage for SCE {
                                                 }
 
                                                 //MainStay::NotFoundRrror is acceptable - continue the search. Otherwise return the error
-                                                Err(e) => {
-                                                    match e.downcast_ref::<MainstayAPIError>() {
-                                                        Some(e) => match e {
-                                                            MainstayAPIError::NotFoundError(_) => {
-                                                                ()
-                                                            }
-                                                            _ => {
-                                                                return Err(SEError::Generic(
-                                                                    e.to_string(),
-                                                                ))
-                                                            }
-                                                        },
-                                                        None => {
-                                                            return Err(SEError::Generic(
-                                                                e.to_string(),
-                                                            ))
+                                                Err(e) => match e.downcast_ref::<MainstayAPIError>() {
+                                                    Some(e) => match e {
+                                                        MainstayAPIError::NotFoundError(_) => (),
+                                                        _ => {
+                                                            return Err(SEError::Generic(e.to_string()))
                                                         }
+                                                    },
+                                                    None => {
+                                                        return Err(SEError::Generic(e.to_string()))
                                                     }
-                                                }
+                                                },
                                             };
                                         }
                                         None => (),
@@ -672,7 +651,7 @@ impl Storage for SCE {
                         }
                     }
                     None => match &CommitmentInfo::from_latest(conf) {
-                        Ok(ci) => update_db_from_ci(&db, ci),
+                        Ok(ci) => update_db_from_ci(db,ci),
                         Err(e) => Err(SEError::SharedLibError(e.to_string())),
                     },
                 }
@@ -681,19 +660,9 @@ impl Storage for SCE {
         }
     }
 
+
     fn get_root(&self, id: i64) -> Result<Option<Root>> {
-        cfg_if! {
-            if #[cfg(test)]{
-                //Create a new mock database
-                let db = &mut DB::new();
-                // Set the expectations
-                //Current id is 1
-                db.expect_get_root().returning(|_| Ok(Some(Root::from_random())));
-            } else {
-                let db = &self.database;
-           }
-        }
-        db.get_root(id)
+        self.database.get_root(id)
     }
 
     //    fn save_user_session(&self, id: &Uuid, auth: String, proof_key: String)
@@ -836,14 +805,14 @@ pub mod tests {
     use super::*;
     use crate::shared_lib::mainstay;
     use crate::MockDatabase;
-    use std::convert::TryInto;
     use std::str::FromStr;
+    use std::convert::TryInto;
 
     // Useful data structs for tests throughout codebase
     pub static BACKUP_TX_NOT_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
     pub static BACKUP_TX_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,68,2,32,45,42,91,77,252,143,55,65,154,96,191,149,204,131,88,79,80,161,231,209,234,229,217,100,28,99,48,148,136,194,204,98,2,32,90,111,183,68,74,24,75,120,179,80,20,183,60,198,127,106,102,64,37,193,174,226,199,118,237,35,96,236,45,94,203,49,1],[2,242,131,110,175,215,21,123,219,179,199,144,85,14,163,42,19,197,97,249,41,130,243,139,15,17,51,185,147,228,100,122,213]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
     pub static STATE_CHAIN_SIG: &str = "{ \"purpose\": \"TRANSFER\", \"data\": \"024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766\", \"sig\": \"3045022100e1171094db96e68392bb2a72695dc7cbce86db7be9d2e943444b6fa08877eec9022036dc63a3b2536d8e2327e0f44ff990f18e6166dce66d87bdcb57f825158a507c\"}";
-    
+
     pub fn test_sc_entity(db: MockDatabase) -> SCE {
         let mut sc_entity = SCE::load(db).unwrap();
         sc_entity.config.mainstay = Some(mainstay::MainstayConfig::mock_from_url(&test_url()));

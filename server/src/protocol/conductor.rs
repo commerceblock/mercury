@@ -4,10 +4,10 @@
 
 pub use super::super::Result;
 
-extern crate shared_lib;
 use shared_lib::{structs::*, util::keygen::Message};
+extern crate shared_lib;
+use crate::server::StateChainEntity;
 
-use crate::{server::StateChainEntity, MockDatabase, PGDatabase};
 use bitcoin::{
     hashes::{sha256d, Hash},
     secp256k1::{PublicKey, Secp256k1, SecretKey, Signature},
@@ -15,19 +15,19 @@ use bitcoin::{
 use rocket::State;
 use rocket_contrib::json::Json;
 use uuid::Uuid;
-
 use mockall::predicate::*;
 use mockall::*;
-
 use cfg_if::cfg_if;
 use std::str::FromStr;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
 cfg_if! {
-    if #[cfg(test)]{
+    if #[cfg(any(test,feature="mockdb"))]{
+        use crate::MockDatabase;
         type SCE = StateChainEntity::<MockDatabase>;
     } else {
+        use crate::PGDatabase;
         type SCE = StateChainEntity::<PGDatabase>;
     }
 }

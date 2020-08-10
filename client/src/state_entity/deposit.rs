@@ -78,6 +78,7 @@ pub fn deposit(
         &change_addr,
         &change_amount,
     )?;
+    
     let tx_funding_signed = wallet.sign_tx(
         &tx_0,
         &(0..inputs.len()).collect(), // inputs to sign are all inputs is this case
@@ -99,8 +100,10 @@ pub fn deposit(
         input_amounts: vec![*amount],
         proof_key: Some(proof_key.to_string()),
     };
+    
     let witness = cosign_tx_input(wallet, &tx_backup_psm)?;
-
+    
+    
     // Add witness to back up tx
     let mut tx_backup_signed = tx_backup_unsigned.clone();
     tx_backup_signed.input[0].witness = witness;
@@ -108,6 +111,7 @@ pub fn deposit(
     // TODO: check signature is valid?
 
     // Broadcast funding transcation
+    
     let funding_txid = wallet
         .electrumx_client
         .broadcast_transaction(hex::encode(consensus::serialize(&tx_funding_signed)))?;
@@ -138,6 +142,7 @@ pub fn deposit(
         shared_key.tx_backup_psm = Some(tx_backup_psm.to_owned());
         shared_key.add_proof_data(&proof_key.to_string(), &root, &proof, &funding_txid);
     }
+
 
     Ok((
         shared_key_id,

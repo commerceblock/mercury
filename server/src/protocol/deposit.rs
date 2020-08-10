@@ -20,7 +20,7 @@ use uuid::Uuid;
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
 cfg_if! {
-    if #[cfg(test)]{
+    if #[cfg(any(test,feature="mockdb"))]{
         use crate::MockDatabase;
         type SCE = StateChainEntity::<MockDatabase>;
     } else {
@@ -171,7 +171,6 @@ pub mod tests {
         tests::{test_sc_entity, BACKUP_TX_NOT_SIGNED, BACKUP_TX_SIGNED},
     };
     use bitcoin::Transaction;
-    use mockall::predicate;
     use std::str::FromStr;
 
     #[test]
@@ -220,6 +219,9 @@ pub mod tests {
 
         let mut db = MockDatabase::new();
         db.expect_get_user_auth().returning(move |_| Ok(user_id));
+        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
+        db.expect_get_root().returning(|_| Ok(None));
+        db.expect_root_update().returning(|_| Ok(1));
         // First return unsigned back up tx
         db.expect_get_backup_transaction_and_proof_key()
             .times(1)

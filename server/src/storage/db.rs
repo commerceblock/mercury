@@ -357,7 +357,7 @@ impl PGDatabase {
     }
 
     #[allow(dead_code)]
-    fn reset(&self, smt_db_loc: &String) -> Result<()> {
+    fn reset(&self, smt_db_loc: &String) -> Result<()>{
         self.reset_dbs(smt_db_loc)
     }
 
@@ -485,9 +485,9 @@ impl PGDatabase {
 
         let rows = statement.query(&[&id])?;
 
-        //if rows.is_empty() {
-        //    return Err(SEError::DBError(NoDataForID, id.to_string()));
-        //};
+        if rows.is_empty() {
+            return Err(SEError::DBError(NoDataForID, id.to_string()));
+        };
 
         let row = rows.get(0);
 
@@ -659,7 +659,15 @@ impl Database for PGDatabase {
         )
     }
 
-    fn update_backup_tx(&self, state_chain_id: &Uuid, tx: Transaction) -> Result<()> {
+    fn get_user_backup_tx(&self,user_id: Uuid) -> Result<Transaction> {
+        Self::deser(self.get_1(
+            user_id,
+            Table::UserSession,
+            vec![Column::TxBackup]
+        )?)
+    }
+
+    fn update_backup_tx(&self,state_chain_id: &Uuid, tx: Transaction) -> Result<()> {
         self.update(
             &state_chain_id,
             Table::BackupTxs,

@@ -96,8 +96,9 @@ pub trait Database {
         tx: Transaction,
     ) -> Result<()>;
     fn update_sighash(&self, user_id: &Uuid, sig_hash: Hash) -> Result<()>;
-    fn update_user_backup_tx(&self, user_id: &Uuid, tx: Transaction) -> Result<()>;
-    fn update_backup_tx(&self, state_chain_id: &Uuid, tx: Transaction) -> Result<()>;
+    fn update_user_backup_tx(&self,user_id: &Uuid, tx: Transaction) -> Result<()>;
+    fn get_user_backup_tx(&self,user_id: Uuid) -> Result<Transaction>;
+    fn update_backup_tx(&self,state_chain_id: &Uuid, tx: Transaction) -> Result<()>;
     fn get_withdraw_confirm_data(&self, user_id: Uuid) -> Result<WithdrawConfirmData>;
     /// Update root value in DB. Update root with ID or insert new DB item.
     fn root_update(&self, rt: &Root) -> Result<i64>;
@@ -223,7 +224,7 @@ pub trait Database {
 
     fn get_tx_withdraw(&self, user_id: Uuid) -> Result<Transaction>;
     fn update_tx_withdraw(&self, user_id: Uuid, tx: Transaction) -> Result<()>;
-    fn reset(&self, smt_db_loc: &String) -> Result<()> {
+    fn reset(&self, _smt_db_loc: &String) -> Result<()> {
         Ok(())
     }
     fn init(&self) -> Result<()> {
