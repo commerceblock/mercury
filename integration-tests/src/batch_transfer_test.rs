@@ -1,4 +1,5 @@
-#[cfg(all(test, feature="realdb"))]
+#[cfg(test)]
+#[cfg(not(feature="mockdb"))]
 mod tests {
     use crate::*;
     extern crate bitcoin;

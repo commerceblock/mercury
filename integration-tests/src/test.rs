@@ -1,5 +1,5 @@
 #[cfg(test)]
-#[cfg(feature="realdb")]
+#[cfg(not(feature="mockdb"))]
 mod tests {
     use crate::*;
     extern crate bitcoin;
@@ -408,7 +408,7 @@ mod tests {
 }
 
 #[cfg(test)]
-#[cfg(not(feature="realdb"))]
+#[cfg(feature="mockdb")]
 mod tests {
     use crate::*;
     extern crate bitcoin;
@@ -461,13 +461,12 @@ mod tests {
         db.expect_update_keygen_second_msg()
         .returning(|_,_,_,_|Ok(()));
 
-        let handle = spawn_server::<MockDatabase>(Some(mainstay_config), db);
+        let _handle = spawn_server::<MockDatabase>(Some(mainstay_config), db);
         thread::sleep(std::time::Duration::from_millis(1000));
 
         let err = state_entity::api::get_statechain(&wallet.client_shim, &invalidSCID);
         assert!(err.is_err());
 
-        handle.join().expect("The thread being joined has panicked");
-
+        
     }
 }
