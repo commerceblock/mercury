@@ -30,9 +30,14 @@ features =  ["ec_secp256k1"]
 
 [dependencies.server]
 path = "../server"
+#[cfg(not(feature="realdb"))]
+features = ["mockdb"]
 
 [dependencies.client]
 path = "../client"
 
 [dependencies.shared]
 path = "../shared"
+
+[features]
+realdb = [] 

@@ -24,7 +24,7 @@ use uuid::Uuid;
 use cfg_if::cfg_if;
 
 cfg_if! {
-    if #[cfg(test)]{
+    if #[cfg(any(test,feature="mockdb"))]{
         use MockDatabase as DB;
         type SCE = StateChainEntity::<MockDatabase>;
     } else {

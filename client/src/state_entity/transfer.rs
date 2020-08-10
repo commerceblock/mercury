@@ -52,7 +52,7 @@ pub fn transfer_sender(
     }
 
     // First sign state chain
-    let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id, false)?;
+    let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id)?;
     let state_chain = state_chain_data.chain;
     // Get proof key for signing
     let proof_key_derivation = wallet
@@ -121,7 +121,7 @@ pub fn transfer_receiver(
 ) -> Result<TransferFinalizeData> {
     // Get statechain data (will Err if statechain not yet finalized)
     let state_chain_data: StateChainDataAPI =
-        get_statechain(&wallet.client_shim, &transfer_msg3.state_chain_id, false)?;
+        get_statechain(&wallet.client_shim, &transfer_msg3.state_chain_id)?;
 
     let tx_backup = transfer_msg3.tx_backup_psm.tx.clone();
     // Ensure backup tx funds are sent to address owned by this wallet
@@ -332,7 +332,7 @@ pub fn transfer_batch_sign(
     batch_id: &Uuid,
 ) -> Result<StateChainSig> {
     // First sign state chain
-    let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id, false)?;
+    let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id)?;
     let state_chain = state_chain_data.chain;
     // Get proof key for signing
     let proof_key_derivation = wallet
