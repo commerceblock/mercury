@@ -4,23 +4,27 @@
 
 pub use super::super::Result;
 extern crate shared_lib;
+use shared_lib::{state_chain::*, structs::*, util::FEE};
 use crate::error::SEError;
 use crate::server::StateChainEntity;
-use shared_lib::{state_chain::*, structs::*, util::FEE};
+use crate::storage::Storage;
+use crate::Database;
 
 use rocket::State;
 use rocket_contrib::json::Json;
 use uuid::Uuid;
-use crate::storage::Storage;
-use crate::{Database, MockDatabase, PGDatabase};
 use cfg_if::cfg_if;
+use bitcoin::PublicKey;
+use std::str::FromStr;
 
-//Generics cannot be used in Rocket State, therefore we define the concrete 
+//Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
+        use crate::MockDatabase;
         type SCE = StateChainEntity::<MockDatabase>;
     } else {
+        use crate::PGDatabase;
         type SCE = StateChainEntity::<PGDatabase>;
     }
 }
@@ -52,6 +56,11 @@ impl Deposit for SCE {
         //      Err(SEError::AuthError)
         //  }
 
+        // Check proof key is valid public key
+        if let Err(_) = PublicKey::from_str(&deposit_msg1.proof_key) {
+            return Err(SEError::Generic(String::from("Proof key not in correct format.")))
+        };
+
         // Create DB entry for newly generated ID signalling that user has passed some
         // verification. For now use ID as 'password' to interact with state entity
         self.database.create_user_session(&user_id, &deposit_msg1.auth,
@@ -76,11 +85,12 @@ impl Deposit for SCE {
     ) -> Result<Uuid> {
         // let shared_key_id = deposit_msg2.shared_key_id.clone();
         let user_id = deposit_msg2.shared_key_id;
+        self.check_user_auth(&user_id)?;
 
         // Get back up tx and proof key
         let (tx_backup, proof_key) = self.database.get_backup_transaction_and_proof_key(user_id)?;
 
-        // Ensure backup tx exists is signed
+        // Ensure backup tx exists and is signed
         if tx_backup.input[0].witness.len() == 0 {
             return Err(SEError::Generic(String::from(
                 "Signed Back up transaction not found.",
@@ -153,5 +163,89 @@ pub fn deposit_confirm(
     match sc_entity.deposit_confirm(deposit_msg2.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
+    }
+}
+
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use std::str::FromStr;
+    use bitcoin::Transaction;
+    use crate::protocol::util::{
+        tests::{test_sc_entity, BACKUP_TX_NO_SIG},
+        mocks};
+    use mockall::predicate;
+
+    #[test]
+    fn integration_test_deposit_init() {
+        let mut db = MockDatabase::new();
+        db.expect_create_user_session()
+            .returning(|_,_,_| Ok(()));
+
+        let sc_entity = test_sc_entity(db);
+
+        // Invalid proof key
+        match sc_entity.deposit_init(DepositMsg1{
+            auth: String::from("auth"),
+            proof_key: String::from("")
+        }) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Proof key not in correct format."))
+        }
+        // Invalid proof key
+        match sc_entity.deposit_init(DepositMsg1{
+            auth: String::from("auth"),
+            proof_key: String::from("65aab40995d3ed5d03a0567b04819ff12641b84c17f5e9d5dd075571e18346")
+        }) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Proof key not in correct format."))
+        }
+
+        assert!(sc_entity.deposit_init(DepositMsg1{
+            auth: String::from("auth"),
+            proof_key: String::from("026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e")
+        }).is_ok());
+    }
+
+    #[test]
+    fn integration_test_deposit_confirm() {
+        let user_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let proof_key = String::from("026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e");
+        let tx_backup: Transaction = serde_json::from_str(&BACKUP_TX_NO_SIG.to_string()).unwrap();
+        let mut tx_backup_signed = tx_backup.clone();
+        tx_backup_signed.input[0].witness = vec!(vec!(48,68,2,32,45,42,91,77,252,143,55,65,154,96,191,149,204,131,88,79,80,161,231,209,234,229,217,100,28,99,48,148,136,194,204,98,2,32,90,111,183,68,74,24,75,120,179,80,20,183,60,198,127,106,102,64,37,193,174,226,199,118,237,35,96,236,45,94,203,49,1),vec!(2,242,131,110,175,215,21,123,219,179,199,144,85,14,163,42,19,197,97,249,41,130,243,139,15,17,51,185,147,228,100,122,213));
+
+        let mut db = MockDatabase::new();
+        db.expect_get_user_auth().returning(move |_| Ok(user_id));
+        // First return unsigned back up tx
+        db.expect_get_backup_transaction_and_proof_key()
+            .times(1)
+            .returning(move |_| Ok((tx_backup.clone(), "".to_string())));
+        // Second time return signed back up tx
+        db.expect_get_backup_transaction_and_proof_key()
+            .returning(move |_| Ok((tx_backup_signed.clone(), proof_key.clone())));
+        db.expect_create_statechain().returning(|_,_,_,_| Ok(()));
+        db.expect_create_backup_transaction().returning(|_,_| Ok(()));
+        db.expect_root_update().returning(|_| Ok((1)));
+        db.expect_update_statechain_id().returning(|_,_| Ok(()));
+
+        let sc_entity = test_sc_entity(db);
+
+        // Backup tx not signed error
+        match sc_entity.deposit_confirm(DepositMsg2{
+            shared_key_id: user_id
+        }) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Signed Back up transaction not found."))
+        }
+
+        // Clean protocol run
+
+        //Mainstay post commitment mock
+        let _m = mocks::ms::post_commitment().create();
+        assert!(sc_entity.deposit_confirm(DepositMsg2{
+            shared_key_id: user_id
+        }).is_ok());
     }
 }

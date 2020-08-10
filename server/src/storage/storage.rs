@@ -82,36 +82,36 @@ impl Responder<'static> for StorageError {
 }
 
 
-type Result<T> = std::result::Result<T, StorageError>;
+pub type Result<T> = std::result::Result<T, StorageError>;
 
 
 pub trait Storage {
    // fn insert<T,U>(&self, id: &T, data: U) -> Result<>;
    // fn remove<T,U>&self, id: &T, data: U) -> Result<()>;
 
-   //Create a new user session or update an existing one 
+   //Create a new user session or update an existing one
    //If Uuid is not None, that session is updated. Otherwise, a new one is created.
-   fn save_user_session(&self, id: Uuid, auth: String, proof_key: String) 
+   fn save_user_session(&self, id: Uuid, auth: String, proof_key: String)
         -> Result<()>;
 
-   fn create_user_session(&self, auth: String, proof_key: String) 
+   fn create_user_session(&self, auth: String, proof_key: String)
         -> Result<()>{
      let id = Uuid::new_v4();
      self.save_user_session(&id, auth, proof_key)
    }
 
-   fn save_statechain(&self, statechain_id: Uuid, statechain: &StateChain, 
-                            amount: i64, 
+   fn save_statechain(&self, statechain_id: Uuid, statechain: &StateChain,
+                            amount: i64,
                             user_id: &Uuid) -> Result<()>;
 
-    fn save_backup_tx(&self, statechain_id: Uuid, backup_tx: &Transaction) 
+    fn save_backup_tx(&self, statechain_id: Uuid, backup_tx: &Transaction)
         -> Result<()>;
 
     //Returns: (new_root, current_root)
     fn update_smt(&self, backup_tx: &Transaction, proof_key: &String)
         -> Result<(Option<Root>, Root)>;
 
-    fn save_ecdsa(&self, user_id: Uuid, 
+    fn save_ecdsa(&self, user_id: Uuid,
         first_msg: party_one::KeyGenFirstMsg) -> Result<()>;
 
     fn get_confirmed_smt_root(&self) -> Result<Option<Root>>;
@@ -141,17 +141,17 @@ pub trait Storage {
     //Returns party1_private_str, party2_public_str
     fn get_transfer_ecdsa_pair(&self, user_id: Uuid) -> Result<Party1Private, GE>;
 
-    fn finalize_transfer(&self, &Option<BatchData>, tf_data: &TransferFinalizeData);
+    fn finalize_transfer(&self, batch_data: &Option<BatchData>, tf_data: &TransferFinalizeData);
 
     fn batch_transfer_exists(&self, batch_id: Uuid, sig: &StateChainSig)-> bool;
 
     // /transfer/batch/init
-    fn init_batch_transfer(&self, batch_id: Uuid, 
+    fn init_batch_transfer(&self, batch_id: Uuid,
                         state_chains: &HashMap<Uuid, bool>) -> Result<()>;
 
 
     // Returns: finalized, start_time, state_chains, punished
-    fn get_transfer_batch_status(&self, batch_id: Uuid) 
+    fn get_transfer_batch_status(&self, batch_id: Uuid)
         -> Result<TransferBatchDataAPI>;
 
     // Update the locked until time of a state chain (used for punishment)

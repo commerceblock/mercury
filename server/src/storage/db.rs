@@ -358,6 +358,7 @@ impl PGDatabase {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn reset(&self, smt_db_loc: &String) -> Result<()>{
         self.reset_dbs(smt_db_loc)
     }
@@ -1115,7 +1116,7 @@ fn get_backup_transaction_and_proof_key(&self, user_id: Uuid)
         let paillier_key_pair: party_one::PaillierKeyPair = Self::deser(paillier_key_pair_str)?;
         let party_one_private: party_one::Party1Private = Self::deser(party_one_private_str)?;
         let comm_witness: party_one::CommWitness = Self::deser(comm_witness_str)?;
-       
+
         Ok(ECDSAMasterKeyInput{party2_public, paillier_key_pair, party_one_private, comm_witness})
     }
 

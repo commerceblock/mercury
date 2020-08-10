@@ -18,7 +18,7 @@ use shared_lib::{
 
 use crate::error::{DBErrorType, SEError};
 use crate::storage::Storage;
-use crate::{server::StateChainEntity, Database, MockDatabase, PGDatabase};
+use crate::{server::StateChainEntity, Database};
 use cfg_if::cfg_if;
 
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
@@ -31,15 +31,15 @@ use uuid::Uuid;
 #[cfg(test)]
 use mockito::{mock, Matcher, Mock};
 
-//Generics cannot be used in Rocket State, therefore we define the concrete 
+//Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
         use crate::MockDatabase as DB;
-        type SCE = StateChainEntity::<MockDatabase>;
+        type SCE = StateChainEntity::<DB>;
     } else {
         use crate::PGDatabase as DB;
-        type SCE = StateChainEntity::<PGDatabase>;
+        type SCE = StateChainEntity::<DB>;
     }
 }
 
@@ -310,21 +310,6 @@ pub fn get_statechain(
     sc_entity: State<SCE>,
     state_chain_id: String,
 ) -> Result<Json<StateChainDataAPI>> {
-    get_statechain_inner::<DB>(sc_entity, state_chain_id) 
-}
-
-#[get("/mockdb/info/statechain/<state_chain_id>", format = "json")]
-pub fn mockdb_get_statechain(
-    sc_entity: State<StateChainEntity<MockDatabase>>,
-    state_chain_id: String,
-) -> Result<Json<StateChainDataAPI>> {
-    get_statechain_inner::<MockDatabase>(sc_entity, state_chain_id) 
-}
-
-pub fn get_statechain_inner<T: Database + Send + Sync + 'static> (
-    sc_entity: State<StateChainEntity<T>>,
-    state_chain_id: String,
-) -> Result<Json<StateChainDataAPI>> {
     match sc_entity.get_statechain_data_api(Uuid::from_str(&state_chain_id).unwrap()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -520,11 +505,10 @@ impl SCE {
 }
 
 impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
-
      /// Update the database and the mainstay slot with the SMT root, if applicable
      fn update_root(&self, root: &Root) -> Result<i64> {
          let db = &self.database;
-    
+
         match &self.config.mainstay {
             Some(c) => match root.attest(&c) {
                 Ok(_) => (),
@@ -555,7 +539,6 @@ impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
         )?;
 
         let new_root = Root::from_hash(&new_root_hash.unwrap());
-        println!("new root: {}", hex::encode(new_root.hash()));
         self.update_root(&new_root)?; // Update current root
 
         Ok((current_root, new_root))
@@ -569,7 +552,7 @@ impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
     fn get_confirmed_smt_root(&self) -> Result<Option<Root>> {
         use crate::shared_lib::mainstay::{Commitment, CommitmentIndexed,
             CommitmentInfo, MainstayAPIError};
-        
+
         let db = &self.database;
 
         fn update_db_from_ci<U: Database>(
@@ -776,7 +759,7 @@ impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
 }
 
 #[cfg(test)]
-mod mocks {
+pub mod mocks {
     use super::{Mock,Matcher,mock};
 
     pub mod ms {
@@ -792,8 +775,7 @@ mod mocks {
         pub fn post_commitment() -> Mock {
             mock("POST", "/commitment/send")
             .match_header("content-type", "application/json")
-            .with_body(serde_json::json!({"response":"Commitment added","timestamp":1541761540,
-            "allowance":{"cost":4832691}}).to_string())
+            .with_body(serde_json::json!({"response":"Commitment added","timestamp":1541761540,"allowance":{"cost":4832691}}).to_string())
             .with_header("content-type", "application/json")
         }
 
@@ -832,7 +814,6 @@ mod mocks {
                     ,\"timestamp\":1593160486862,
                     \"allowance\":{\"cost\":17954530}
                     }")
-
         }
 
     }
@@ -840,16 +821,21 @@ mod mocks {
 }
 
 #[cfg(test)]
-mod tests {
-
-    use std::str::FromStr;
+pub mod tests {
     use super::*;
-    //use super::super::super::server::get_settings_as_map;
-    //use super::super::super::StateChainEntity;
-    use std::convert::TryInto;
     use crate::shared_lib::mainstay;
+    use crate::MockDatabase;
+    use std::str::FromStr;
+    use std::convert::TryInto;
 
-    fn test_sc_entity(db: MockDatabase) -> SCE {
+    // Useful data structs for tests throughout codebase
+    pub static BACKUP_TX_NO_SIG: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
+    pub static STATE_CHAIN_SIG: &str = "{ \"purpose\": \"TRANSFER\", \"data\": \"024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766\", \"sig\": \"3045022100e1171094db96e68392bb2a72695dc7cbce86db7be9d2e943444b6fa08877eec9022036dc63a3b2536d8e2327e0f44ff990f18e6166dce66d87bdcb57f825158a507c\"}";
+    pub static PARTY_1_PRIVATE: &str = "{\"x1\":\"36f0733c49c7c500845ce8c8528700a5766bb2be0afb3dc6a92609bdeb7d77de\",\"paillier_priv\":{\"p\":\"150868972667051630375631289145931811000926269697172215034129550299519830596932237114864076011910332526564014374880702421540181692143893778193268394508356621097793334071789326969733477612737448744970159004363244991682697217411574313037164309131787024001958133617279097706925728557760967475682234607674230244397\",\"q\":\"122604155030420179713896927958393174492845903159909866799286880352148165272070472842234696094969924097112221990618586011682737086679586235795050785989838852426407767438224718505007700566694816217355837730739352784228079347155718834896806259316377005605429791326022985755525955843192908883717457575135889036987\"},\"c_key_randomness\":\"8031148b56d2d9e3323994fb1ca7038083dd86cbd3b41867bdddd8a7b8d95c4e8a0fe5c3be0cf45ebbe3dc637055eecab4f82da9b3071b6302aaf8eed54aaa544822605c849573e1d85a9367fb1a8760958ca5dabd497a642e8dd0286b354a47384dbd10b2aa4a4feeb3b389332029515e61aa1d1c746b2584ef8ebb250b27612e22d184282afdc63773a0b0a40cafb4011fd014c2c189ac016a367012f94eff3e47e77d088f2d7db485b03feecd0d60ffe2837ffe7af54b7fd8636725240c31ccdb9d7dffc1e49f4c480ff30e545cb5b7faa771c211cf9d8e4287cdddba075a85bb95213dec06d9322624872e9d80a41f15cd900118f8b89f16cd5c332ef484\"}";
+    pub static PARTY_2_PUBLIC: &str = "{\"x\":\"5220bc6ebcc83d0a1e4482ab1f2194cb69648100e8be78acde47ca56b996bd9e\",\"y\":\"8dfbb36ef76f2197598738329ffab7d3b3a06d80467db8e739c6b165abc20231\"}";
+
+
+    pub fn test_sc_entity(db: MockDatabase) -> SCE {
         let mut sc_entity = SCE::load(db).unwrap();
         sc_entity.config.mainstay = Some(mainstay::MainstayConfig::mock_from_url(&test_url()));
         sc_entity
@@ -872,7 +858,6 @@ mod tests {
         db.expect_get_confirmed_smt_root().returning(||Ok(Some(Root::from_random())));
 
         let sc_entity = test_sc_entity(db);
-        let mc = Some(mainstay::MainstayConfig::mock_from_url(&test_url()));
 
         //No commitments initially
         let _m = mocks::ms::commitment_proof_not_found();
@@ -925,7 +910,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_update_root_smt() {
-        let mut db = MockDatabase::new();  
+        let mut db = MockDatabase::new();
         db.expect_root_update().returning(|_| Ok(1 as i64));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
         db.expect_get_root().returning(|_| Ok(None));
@@ -944,17 +929,14 @@ mod tests {
         )
         .unwrap();
 
-        let hash_exp: [u8;32] = 
+        let hash_exp: [u8;32] =
         hex::decode("bdb8618ea37b27b771da7609b30860568f3e81a2951e62b03f76cd34b14242fc")
                     .unwrap()[..].try_into().unwrap();
 
-        assert_eq!(new_root.hash(), 
-                hash_exp, 
+        assert_eq!(new_root.hash(),
+                hash_exp,
                 "new root incorrect");
 
     }
 
 }
-
-
-

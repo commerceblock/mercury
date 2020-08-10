@@ -3,15 +3,13 @@
 //! StateEntity Transfer protocol trait and implementation.
 
 pub use super::super::Result;
+extern crate shared_lib;
+use shared_lib::{state_chain::*, structs::*};
 use super::transfer_batch::transfer_batch_is_ended;
 
-
-extern crate shared_lib;
 use crate::error::SEError;
 use crate::Database;
-use shared_lib::{state_chain::*, structs::*};
 use crate::{server::StateChainEntity, storage::Storage};
-use crate::{MockDatabase, PGDatabase};
 
 use bitcoin::Transaction;
 use curv::{
@@ -22,14 +20,15 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use uuid::Uuid;
 use cfg_if::cfg_if;
+use std::str::FromStr;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
-        use MockDatabase as DB;
-        type SCE = StateChainEntity::<MockDatabase>;
+        use crate::MockDatabase as DB;
+        type SCE = StateChainEntity::<DB>;
     } else {
-        use PGDatabase as DB;
-        type SCE = StateChainEntity::<PGDatabase>;
+        use crate::PGDatabase as DB;
+        type SCE = StateChainEntity::<DB>;
     }
 }
 
@@ -142,7 +141,6 @@ impl Transfer for SCE {
         }
 
         let kp = self.database.get_ecdsa_keypair(user_id)?;
-
 
         // TODO: decrypt t2
 
@@ -319,5 +317,137 @@ pub fn transfer_receiver(
     match sc_entity.transfer_receiver(transfer_msg4.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{MockDatabase, PGDatabase};
+    use crate::{protocol::{ecdsa::party_one::Party1Private, util::tests::{STATE_CHAIN_SIG, test_sc_entity, PARTY_1_PRIVATE, PARTY_2_PUBLIC, BACKUP_TX_NO_SIG}}, structs::{TransferData, StateChainOwner, ECDSAKeypair}, error::DBErrorType, storage::db};
+    use std::str::FromStr;
+    use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
+    use chrono::Utc;
+    use mockall::predicate;
+
+    #[test]
+    fn itegration_test_transfer_sender() {
+        let user_id = Uuid::from_str("203001c9-93f0-46f9-aaaa-0678c891b2d3").unwrap();
+        let no_sc_user_id = Uuid::from_str("11111111-1111-46f9-aaaa-0678c891b2d3").unwrap();
+        let state_chain_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let sender_proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap(); // Proof key priv part
+        let sender_proof_key = PublicKey::from_secret_key(&Secp256k1::new(), &sender_proof_key_priv);
+        let receiver_proof_key_priv = SecretKey::from_slice(&[2; 32]).unwrap(); // Proof key priv part
+        let state_chain_sig: StateChainSig = serde_json::from_str(&STATE_CHAIN_SIG.to_string()).unwrap();
+
+        let mut db = MockDatabase::new();
+        db.expect_get_user_auth().returning(move |_| Ok(user_id));
+        db.expect_get_statechain_id().with(predicate::eq(user_id)).returning(move |_| Ok(state_chain_id));
+        // userid does nto own a state
+        db.expect_get_statechain_id().with(predicate::eq(no_sc_user_id)).returning(move |_| Err(SEError::DBError(DBErrorType::NoDataForID, no_sc_user_id.to_string())));
+        db.expect_transfer_is_completed().with(predicate::eq(state_chain_id)).returning(|_| false);
+        db.expect_get_statechain_owner().with(predicate::eq(state_chain_id))
+            .returning(move |_| Ok(StateChainOwner{
+                    locked_until: Utc::now().naive_utc(),
+                    owner_id: user_id,
+                    chain: StateChain::new(sender_proof_key.to_string())
+                }));
+        db.expect_create_transfer().returning(|_,_,_| Ok(()));
+
+        let sc_entity = test_sc_entity(db);
+
+        // user does not own State Chain
+        match sc_entity.transfer_sender(TransferMsg1{
+            shared_key_id: no_sc_user_id,
+            state_chain_sig: state_chain_sig.clone()
+        }) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("DB Error: No data for identifier."))
+        }
+
+        assert!(sc_entity.transfer_sender(TransferMsg1{
+            shared_key_id: user_id,
+            state_chain_sig
+        }).is_ok());
+    }
+
+    #[test]
+    fn itegration_test_transfer_receiver() {
+        let user_id = Uuid::from_str("203001c9-93f0-46f9-aaaa-0678c891b2d3").unwrap();
+        let state_chain_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let x1: FE = ECScalar::new_random();
+        let sender_proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap(); // Proof key priv part
+        let sender_proof_key = PublicKey::from_secret_key(&Secp256k1::new(), &sender_proof_key_priv);
+        let receiver_proof_key_priv = SecretKey::from_slice(&[2; 32]).unwrap(); // Proof key priv part
+        let receiver_proof_key = PublicKey::from_secret_key(&Secp256k1::new(), &receiver_proof_key_priv);
+
+        let state_chain = StateChain::new(sender_proof_key_priv.to_string());
+        let state_chain_owner = StateChainOwner{
+            locked_until: Utc::now().naive_utc(),
+            owner_id: user_id,
+            chain: state_chain
+        };
+
+        let backup_tx :Transaction = serde_json::from_str(&BACKUP_TX_NO_SIG.to_string()).unwrap();
+
+        let mut db = MockDatabase::new();
+        db.expect_get_user_auth().returning(move |_| Ok(user_id));
+        db.expect_get_transfer_data()
+            .with(predicate::eq(state_chain_id))
+            .returning(move |_| Ok(TransferData {
+                state_chain_id,
+                state_chain_sig: serde_json::from_str::<StateChainSig>(&STATE_CHAIN_SIG.to_string()).unwrap(),
+                x1,
+            }));
+        db.expect_get_ecdsa_keypair()
+            .with(predicate::eq(user_id))
+            .returning(|_| Ok(ECDSAKeypair {
+                party_1_private: serde_json::from_str(&PARTY_1_PRIVATE.to_string()).unwrap(),
+                party_2_public: serde_json::from_str(&PARTY_2_PUBLIC.to_string()).unwrap()
+            }));
+        // db.expect_get_finalize_batch_data()
+        //     .returning(|_| Ok(TransferFinalizeData {
+        //         new_shared_key_id: user_id,
+        //         o2: FE::zero(),
+        //         s2_pub: GE::base_point2(),
+        //         state_chain_data: StateChainDataAPI {
+        //             amount: 1000 as u64,
+        //             utxo: tx_backup.input.get(0).unwrap().previous_output,
+        //             chain: state_chain.chain.chain,
+        //         },
+        //         proof_key: sender_proof_key,
+        //         state_chain_id: state_chain_id,
+        //         tx_backup_psm: PrepareSignTxMsg {
+        //             state_chain_sig: serde_json::from_str::<StateChainSig>(&STATE_CHAIN_SIG.to_string()).unwrap(),
+        //             s2: FE::zero(),
+        //             new_tx_backup: backup_tx.clone(),
+        //             batch_data: BatchData{id: user_id, commitment: String::default()},
+        //         },
+        //     }));
+
+        let sc_entity = test_sc_entity(db);
+
+        // Test regaular transfer (no batch)
+        assert!(sc_entity.transfer_receiver(TransferMsg4 {
+            shared_key_id: user_id,
+            state_chain_id: state_chain_id,
+            t2: FE::zero(),
+            state_chain_sig: serde_json::from_str::<StateChainSig>(&STATE_CHAIN_SIG.to_string()).unwrap(),
+            o2_pub: GE::base_point2(),
+            tx_backup: backup_tx.clone(),
+            batch_data: None,
+        }).is_ok());
+
+        // Test transfer involved in batch
+        assert!(sc_entity.transfer_receiver(TransferMsg4 {
+            shared_key_id: user_id,
+            state_chain_id: state_chain_id,
+            t2: FE::zero(),
+            state_chain_sig: serde_json::from_str::<StateChainSig>(&STATE_CHAIN_SIG.to_string()).unwrap(),
+            o2_pub: GE::base_point2(),
+            tx_backup: backup_tx,
+            batch_data: Some(BatchData{id: user_id, commitment: String::default()}),
+        }).is_ok());
     }
 }

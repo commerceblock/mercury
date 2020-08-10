@@ -107,16 +107,9 @@ pub trait Database {
     fn get_confirmed_smt_root(&self) -> Result<Option<Root>>;
     fn get_statechain_id(&self, user_id: Uuid) -> Result<Uuid>;
     fn update_statechain_id(&self, user_id: &Uuid, state_chain_id: &Uuid)->Result<()>;
-    fn get_statechain_amount(
-    &self,
-    state_chain_id: Uuid,
-    ) -> Result<StateChainAmount>;
+    fn get_statechain_amount(&self, state_chain_id: Uuid,) -> Result<StateChainAmount>;
     fn update_statechain_amount(&self, state_chain_id: &Uuid, state_chain: StateChain, amount: u64) -> Result<()>;
-    fn create_statechain(&self,
-        state_chain_id: &Uuid,
-        user_id: &Uuid,
-        state_chain: &StateChain,
-        amount: &i64) -> Result<()>;
+    fn create_statechain(&self,state_chain_id: &Uuid, user_id: &Uuid, state_chain: &StateChain, amount: &i64) -> Result<()>;
     fn get_statechain(
         &self,
         state_chain_id: Uuid,
@@ -227,6 +220,7 @@ pub mod structs {
         pub start_time: NaiveDateTime,
     }
 
+    #[derive(Debug)]
     pub struct StateChainOwner {
         pub locked_until: NaiveDateTime,
         pub owner_id: Uuid,

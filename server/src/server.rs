@@ -3,24 +3,21 @@ use mockall::*;
 use mockall::predicate::*;
 use crate::DatabaseR;
 use crate::{
-    //storage::{db_make_tables, db_reset_dbs, get_test_postgres_connection},
     DatabaseW,
     Database,
-    PGDatabase
 };
 
-use crate::{config::SMT_DB_LOC_TESTING, PGDatabase as DB};
+use crate::config::SMT_DB_LOC_TESTING;
 use shared_lib::mainstay;
 
 use crate::config::Config;
 use rocket;
 use rocket::{Request, Rocket};
 use rocket::config::{Config as RocketConfig, Environment, Value};
-use crate::MockDatabase;
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
-use log4rs::config::{Appender, Config as LogConfig, Root};
+use log4rs::config::{Appender, Config as LogConfig, Root as LogRoot};
 use log4rs::encode::pattern::PatternEncoder;
 use std::collections::HashMap;
 
@@ -35,12 +32,12 @@ impl<T: Database + Send + Sync + 'static> StateChainEntity<T> {
     pub fn load(db: T) -> Result<StateChainEntity<T>> {
     // Get config as defaults, Settings.toml and env vars
         let config_rs = Config::load()?;
-       
+
         Ok(Self {
             config: config_rs,
             database: db
         })
-    }  
+    }
 }
 
 #[catch(500)]
@@ -76,9 +73,9 @@ pub fn get_server<T: Database + Send + Sync + 'static>
 pub fn get_mockdb_server<T: Database + Send + Sync + 'static>
     (mainstay_config: Option<mainstay::MainstayConfig>,
         db: T) -> Result<Rocket> {
-    
+
     let mut sc_entity = StateChainEntity::<T>::load(db)?;
-    
+
     match mainstay_config {
         Some(c) => sc_entity.config.mainstay = Some(c),
         None => ()
@@ -150,7 +147,7 @@ fn set_logging_config(log_file: &String) {
             .unwrap();
         let log_config = LogConfig::builder()
             .appender(Appender::builder().build("logfile", Box::new(logfile)))
-            .build(Root::builder().appender("logfile").build(LevelFilter::Info))
+            .build(LogRoot::builder().appender("logfile").build(LevelFilter::Info))
             .unwrap();
         let _ = log4rs::init_config(log_config);
     }
@@ -210,7 +207,6 @@ use crate::protocol::withdraw::Withdraw;
 use crate::storage::Storage;
 use crate::storage;
 use shared_lib::structs::*;
-use kms::ecdsa::two_party::*;
 
 mock!{
     StateChainEntity{}
@@ -228,27 +224,27 @@ mock!{
             &self,
             key_gen_msg1: KeyGenMsg1,
         ) -> ecdsa::Result<(Uuid, ecdsa::party_one::KeyGenFirstMsg)>;
-    
+
         fn second_message(
             &self,
             key_gen_msg2: KeyGenMsg2,
         ) -> ecdsa::Result<ecdsa::party1::KeyGenParty1Message2>;
-    
+
         fn third_message(
             &self,
             key_gen_msg3: KeyGenMsg3,
         ) -> ecdsa::Result<ecdsa::party_one::PDLFirstMessage>;
-    
+
         fn fourth_message(
             &self,
             key_gen_msg4: KeyGenMsg4,
         ) -> ecdsa::Result<ecdsa::party_one::PDLSecondMessage>;
-    
+
         fn sign_first(
             &self,
             sign_msg1: SignMsg1,
         ) -> ecdsa::Result<ecdsa::party_one::EphKeyGenFirstMsg>;
-    
+
         fn sign_second(
             &self,
             sign_msg2: SignMsg2,

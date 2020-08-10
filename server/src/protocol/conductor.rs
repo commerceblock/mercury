@@ -14,8 +14,7 @@ use bitcoin::{
 use rocket::State;
 use rocket_contrib::json::Json;
 use uuid::Uuid;
-use crate::server::StateChainEntity;
-use crate::{PGDatabase, MockDatabase};
+use crate::{PGDatabase, MockDatabase, server::StateChainEntity};
 
 use mockall::predicate::*;
 use mockall::*;
@@ -23,7 +22,7 @@ use mockall::*;
 use std::str::FromStr;
 use cfg_if::cfg_if;
 
-//Generics cannot be used in Rocket State, therefore we define the concrete 
+//Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -219,6 +218,7 @@ mod tests {
     use shared_lib::state_chain::StateChainSig;
     use std::str::FromStr;
     use std::{thread, time::Duration};
+    use mockall::predicate;
 
     #[test]
     fn test_swap_token_sig_verify() {
