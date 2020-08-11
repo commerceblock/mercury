@@ -74,10 +74,7 @@ pub struct DatabaseW(postgres::Connection);
 pub struct DatabaseR(postgres::Connection);
 
 pub struct PGDatabase {
-    //pub con_man: PostgresConnectionManager,
     pub pool: r2d2::Pool<PostgresConnectionManager>,
-    //pub rocket_url: String,
-    //pub db_connection: fn(&String) -> r2d2::PooledConnection<PostgresConnectionManager>,
 }
 
 use structs::*;

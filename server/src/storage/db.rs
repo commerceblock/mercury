@@ -159,12 +159,10 @@ impl PGDatabase {
 
     fn database_r(&self) -> DatabaseR {
         DatabaseR(self.pool.get().unwrap())
-        //DatabaseR((self.db_connection)(&self.rocket_url))
     }
 
     fn database_w(&self) -> DatabaseW {
         DatabaseW(self.pool.get().unwrap())
-        //DatabaseW((self.db_connection)(&self.rocket_url))
     }
     pub fn init(&self) -> Result<()> {
         self.make_tables()
