@@ -97,7 +97,7 @@ fn spawn_server(self, mainstay_config: Option<mainstay::MainstayConfig>)
                 Err(_) => SpawnError::GetServer,
             }
     });
-    std::thread::sleep(std::time::Duration::from_secs(1));
+    std::thread::sleep(std::time::Duration::from_secs(5));
     handle
     }
 }
@@ -121,7 +121,7 @@ impl SpawnServer for MockDatabase {
                     Err(_) => SpawnError::GetServer,
                 }
         });
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::thread::sleep(std::time::Duration::from_secs(5));
         handle
     }
 }
