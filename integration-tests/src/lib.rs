@@ -21,10 +21,9 @@ use shared_lib::{
 use std::env;
 use std::error;
 use std::fmt;
-use std::sync::mpsc;
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::Instant;
-use std::{thread, time};
+use std::thread;
 use uuid::Uuid;
 
 #[cfg(test)]

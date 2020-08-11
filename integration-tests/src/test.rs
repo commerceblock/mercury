@@ -104,7 +104,7 @@ mod tests {
         assert!(err.is_err());
         let deposit = run_deposit(&mut wallet, &10000);
 
-        let state_chain =           state_entity::api::get_statechain(&wallet.client_shim, &deposit.1.clone()).unwrap();
+        let state_chain = state_entity::api::get_statechain(&wallet.client_shim, &deposit.1.clone()).unwrap();
         assert_eq!(
             state_chain.chain.last().unwrap().data,
             deposit.5.to_string()
