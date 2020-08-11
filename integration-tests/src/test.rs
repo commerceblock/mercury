@@ -6,17 +6,13 @@ mod tests {
     extern crate client_lib;
     extern crate server_lib;
     extern crate shared_lib;
-    use mockito::{mock, Matcher, Mock};
 
-    use shared_lib::mainstay;
     use shared_lib::{mocks::mock_electrum::MockElectrum, structs::Protocol};
 
     use curv::elliptic::curves::traits::ECScalar;
     use curv::FE;
 
-    use mockito;
-    use server_lib::PGDatabase;
-
+        
     #[test]
     #[serial]
     fn test_gen_shared_key() {

@@ -7,18 +7,12 @@ mod tests {
     extern crate server_lib;
     extern crate shared_lib;
 
-    use shared_lib::{commitment::verify_commitment, mainstay, state_chain::StateChainSig};
+    use shared_lib::{commitment::verify_commitment, state_chain::StateChainSig};
 
     use bitcoin::PublicKey;
     use client_lib::state_entity;
-    use server_lib::MockDatabase;
     use std::{str::FromStr, thread, time::Duration};
-    use server_lib::PGDatabase;
 
-
-
-    #[cfg(test)]
-    use mockito;
 
     /// Test batch transfer signature generation
     #[test]
