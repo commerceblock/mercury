@@ -54,7 +54,6 @@ pub fn cosign_tx_input(
         prepare_sign_msg.protocol,
         &shared_key.id,
     )?;
-
     Ok(witness)
 }
 

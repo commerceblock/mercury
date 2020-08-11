@@ -43,12 +43,29 @@ pub struct ClientShim {
 }
 
 impl ClientShim {
-    pub fn new(endpoint: String, auth_token: Option<String>) -> ClientShim {
-        let client = reqwest::Client::new();
-        ClientShim {
+    pub fn new(endpoint: String, auth_token: Option<String>) -> Result<ClientShim> {
+        let mut cb = reqwest::ClientBuilder::new();
+        cb = match ssl_cert()? {
+            Some(c) => cb.add_root_certificate(c),
+            None => cb
+        };
+        let client = cb.build()?;
+        Ok(ClientShim {
             client,
             auth_token,
             endpoint,
-        }
+        })
     }
+}
+
+fn ssl_cert() -> Result<Option<reqwest::Certificate>> {
+    #[cfg(use_localhost_cert = "true")]
+    {
+        let mut buf = Vec::new();
+        File::open("../utilities/server/certs/localhost.crt")?
+            .read_to_end(&mut buf)?;
+        Ok(Some(reqwest::Certificate::from_pem(&buf)?))
+    }
+    #[cfg(not(use_localhost_cert = "true"))]
+    Ok(None)
 }

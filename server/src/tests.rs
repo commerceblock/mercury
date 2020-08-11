@@ -26,13 +26,11 @@ mod tests {
 
 
         // get ID
-        println!("get id");
         let deposit_msg1 = DepositMsg1 {
             auth: String::from("auth"),
             proof_key: String::from("proof key"),
         };
         let body = serde_json::to_string(&deposit_msg1).unwrap();
-        println!("init");
         let mut response = client
             .post("/deposit/init")
             .body(body)
@@ -45,22 +43,18 @@ mod tests {
             protocol: Protocol::Deposit,
         };
 
-        println!("first: {}", serde_json::to_string(&key_gen_msg1).unwrap());
         let mut response = client
             .post(format!("/ecdsa/keygen/first"))
             .body(serde_json::to_string(&key_gen_msg1).unwrap())
             .header(ContentType::JSON)
             .dispatch();
-        println!("got first");
         assert_eq!(response.status(), Status::Ok);
 
         let (res, _): (String, party_one::KeyGenFirstMsg) =
             serde_json::from_str(&response.body_string().unwrap()).unwrap();
         assert_eq!(res, id_str);
-        println!("finished first");
         // use incorrect ID
         key_gen_msg1.shared_key_id = Uuid::new_v4();
-        println!("first incorrect");
         let mut response = client
             .post(format!("/ecdsa/keygen/first"))
             .body(serde_json::to_string(&key_gen_msg1).unwrap())
@@ -83,14 +77,11 @@ mod tests {
 
         // get_statechain invalid id
         let invalid_id = Uuid::new_v4();
-        println!("statechain");
         let mut response = client
             .post(format!("/info/statechain/{}", invalid_id))
             .header(ContentType::JSON)
             .dispatch();
-        println!("unwrapping response");
         let res = response.body_string().unwrap();
-        println!("response: {}", res);
         assert_eq!(
             res,
             format!("DB Error: No data for identifier. (id: {})", invalid_id)

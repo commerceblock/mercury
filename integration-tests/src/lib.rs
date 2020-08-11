@@ -10,7 +10,7 @@ use bitcoin::{PublicKey, Transaction};
 use floating_duration::TimeFormat;
 use rocket;
 use rocket::error::LaunchError;
-use server_lib::{server, Database};
+use server_lib::{server, Database, PGDatabase, MockDatabase};
 use shared_lib::{
     commitment::make_commitment,
     mainstay,
@@ -21,17 +21,16 @@ use shared_lib::{
 use std::env;
 use std::error;
 use std::fmt;
-use std::sync::mpsc;
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::Instant;
-use std::{thread, time};
+use std::thread;
 use uuid::Uuid;
+
+extern crate stoppable_thread;
 
 #[cfg(test)]
 #[macro_use]
 extern crate serial_test;
-
-extern crate stoppable_thread;
 
 #[derive(Debug)]
 pub enum SpawnError {
@@ -72,16 +71,24 @@ impl From<RecvTimeoutError> for SpawnError {
     }
 }
 
+pub trait SpawnServer {
+    /// Spawn a StateChain Entity server in testing mode if there isn't one running already.
+    /// Returns Ok(()) if a new server was spawned, otherwise returns an error.
+    fn spawn_server(self, mainstay_config: Option<mainstay::MainstayConfig>)
+        -> thread::JoinHandle<SpawnError>; 
+}
+
+impl SpawnServer for PGDatabase {
 /// Spawn a StateChain Entity server in testing mode if there isn't one running already.
 /// Returns Ok(()) if a new server was spawned, otherwise returns an error.
-pub fn spawn_server<T: Database + Send + Sync + 'static>(mainstay_config: Option<mainstay::MainstayConfig>, db: T)
+fn spawn_server(self, mainstay_config: Option<mainstay::MainstayConfig>)
 -> thread::JoinHandle<SpawnError> {
     // Set enviroment variable to testing_mode=true to override Settings.toml
     env::set_var("MERC_TESTING_MODE", "true");
 
     // Rocket server is blocking, so we spawn a new thread.
-    thread::spawn(||{
-            match server::get_mockdb_server::<T>(mainstay_config, db) {
+    let handle = thread::spawn(||{
+            match server::get_server::<Self>(mainstay_config, self) {
                 Ok(s) => {
                     let try_launch = s.launch();
                     let _ = try_launch.kind(); // LaunchError needs to be accessed here for this to work. Be carfeul modifying this code.
@@ -89,7 +96,34 @@ pub fn spawn_server<T: Database + Send + Sync + 'static>(mainstay_config: Option
                 }
                 Err(_) => SpawnError::GetServer,
             }
-    })
+    });
+    std::thread::sleep(std::time::Duration::from_secs(5));
+    handle
+    }
+}
+
+impl SpawnServer for MockDatabase {
+    /// Spawn a StateChain Entity server in testing mode if there isn't one running already.
+    /// Returns Ok(()) if a new server was spawned, otherwise returns an error.
+    fn spawn_server(self, mainstay_config: Option<mainstay::MainstayConfig>)
+    -> thread::JoinHandle<SpawnError> {
+        // Set enviroment variable to testing_mode=true to override Settings.toml
+        env::set_var("MERC_TESTING_MODE", "true");
+    
+        // Rocket server is blocking, so we spawn a new thread.
+        let handle = thread::spawn(||{
+                match server::get_mockdb_server::<Self>(mainstay_config, self) {
+                    Ok(s) => {
+                        let try_launch = s.launch();
+                        let _ = try_launch.kind(); // LaunchError needs to be accessed here for this to work. Be carfeul modifying this code.
+                        try_launch.into()
+                    }
+                    Err(_) => SpawnError::GetServer,
+                }
+        });
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        handle
+    }
 }
 
 /// Create a wallet and generate some addresses
@@ -97,7 +131,7 @@ pub fn gen_wallet() -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
-        ClientShim::new("http://localhost:8000".to_string(), None),
+        ClientShim::new("http://localhost:8000".to_string(), None).unwrap(),
         Box::new(MockElectrum::new()),
     );
 
@@ -112,7 +146,7 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
-        ClientShim::new("http://localhost:8000".to_string(), None),
+        ClientShim::new("http://localhost:8000".to_string(), None).unwrap(),
         Box::new(MockElectrum::new()),
     );
 
@@ -349,4 +383,18 @@ pub fn batch_transfer_verify_amounts(
         // check amount of state chain at index is correctß
         assert!(bals[index.unwrap()].confirmed == amounts[swap_map[i].0])
     }
+}
+
+use server_lib::{config::SMT_DB_LOC_DEFAULT};
+
+pub fn init_db() -> PGDatabase {
+    let db = PGDatabase::get_test();
+    db.reset(&SMT_DB_LOC_DEFAULT.to_string()).unwrap();
+    db.init().unwrap();
+    db
+}
+
+pub fn start_server(db: PGDatabase) -> thread::JoinHandle<SpawnError>{
+    let mc = mainstay::MainstayConfig::from_env();
+    db.spawn_server(mc)
 }
