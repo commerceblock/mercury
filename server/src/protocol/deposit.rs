@@ -175,7 +175,7 @@ pub mod tests {
     use std::str::FromStr;
 
     #[test]
-    fn integration_test_deposit_init() {
+    fn test_deposit_init() {
         let mut db = MockDatabase::new();
         db.expect_create_user_session().returning(|_, _, _| Ok(()));
 
@@ -211,7 +211,7 @@ pub mod tests {
     }
 
     #[test]
-    fn integration_test_deposit_confirm() {
+    fn test_deposit_confirm() {
         let user_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
         let proof_key =
             String::from("026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e");
