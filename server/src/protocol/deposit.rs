@@ -140,6 +140,7 @@ impl Deposit for SCE {
         // Update UserSession with StateChain's ID
         self.database
             .update_statechain_id(&user_id, &state_chain_id)?;
+
         Ok(state_chain_id)
     }
 }

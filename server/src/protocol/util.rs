@@ -223,7 +223,8 @@ impl Utilities for SCE {
                     &self.config.fee_withdraw,
                 )?;
 
-                let tx_backup = self.database.get_backup_transaction(user_id)?;
+                let state_chain_id = self.database.get_statechain_id(user_id)?;
+                let tx_backup = self.database.get_backup_transaction(state_chain_id)?;
 
                 // Check funding txid UTXO info
                 let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
@@ -520,14 +521,16 @@ impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
         let db = &self.database;
 
         //If mocked out current_root will be randomly chosen
-        let current_root = db.get_root(db.root_get_current_id()?)?;
+        let current_root_id = db.root_get_current_id()?;
+        let current_root = db.get_root(current_root_id)?;
+  
         let new_root_hash = update_statechain_smt(
             &self.config.smt_db_loc,
             &current_root.clone().map(|r| r.hash()),
             funding_txid,
             proof_key,
         )?;
-
+        
         let new_root = Root::from_hash(&new_root_hash.unwrap());
         self.update_root(&new_root)?; // Update current root
 

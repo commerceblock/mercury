@@ -83,4 +83,4 @@ git = "https://github.com/KZen-networks/serde_dynamodb"
 path = "../shared"
 
 [features]
-mockdb = [] 
+mockdb = []

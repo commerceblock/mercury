@@ -18,9 +18,6 @@ extern crate failure;
 extern crate error_chain;
 
 #[macro_use]
-extern crate unborrow;
-
-#[macro_use]
 extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
@@ -77,14 +74,14 @@ pub struct DatabaseW(postgres::Connection);
 pub struct DatabaseR(postgres::Connection);
 
 pub struct PGDatabase {
-    pub db_connection: fn() -> r2d2::PooledConnection<PostgresConnectionManager>,
+    pub pool: r2d2::Pool<PostgresConnectionManager>,
 }
 
 use structs::*;
 
 #[automock]
 pub trait Database {
-    fn from_conn(con_fun: fn() -> r2d2::PooledConnection<PostgresConnectionManager>) -> Self;
+    fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self;
     fn get_test() -> Self;
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid>;
     fn has_withdraw_sc_sig(&self, user_id: Uuid) -> Result<()>;
