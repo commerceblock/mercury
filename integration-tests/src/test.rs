@@ -403,14 +403,8 @@ mod tests {
     extern crate client_lib;
     extern crate server_lib;
     extern crate shared_lib;
-    use mockito::{mock, Matcher, Mock};
 
     use shared_lib::mainstay;
-    use shared_lib::{mocks::mock_electrum::MockElectrum, structs::Protocol};
-
-    use curv::elliptic::curves::traits::ECScalar;
-    use curv::FE;
-
     use mockito;
     use server_lib::MockDatabase;
 
@@ -420,10 +414,9 @@ mod tests {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(
             &mockito::server_url());
         let mut db = MockDatabase::new();
-        let mut wallet = gen_wallet();
+        let wallet = gen_wallet();
         db.expect_reset().returning(|_|Ok(()));
-        let invalidSCID = Uuid::new_v4();
-        let invalidSCIDStr = invalidSCID.to_string().clone();
+        let invalid_scid = Uuid::new_v4();
         db.expect_get_statechain_amount().
         returning(|_x|Err(server_lib::error::SEError::DBError(server_lib::error::DBErrorType::NoDataForID, "".to_string())));
         db.expect_create_user_session().
@@ -451,7 +444,7 @@ mod tests {
 
         let _handle = db.spawn_server(Some(mainstay_config));
 
-        let err = state_entity::api::get_statechain(&wallet.client_shim, &invalidSCID);
+        let err = state_entity::api::get_statechain(&wallet.client_shim, &invalid_scid);
         assert!(err.is_err());
     }
 }

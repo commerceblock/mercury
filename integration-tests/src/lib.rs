@@ -75,7 +75,7 @@ pub trait SpawnServer {
     /// Spawn a StateChain Entity server in testing mode if there isn't one running already.
     /// Returns Ok(()) if a new server was spawned, otherwise returns an error.
     fn spawn_server(self, mainstay_config: Option<mainstay::MainstayConfig>)
-        -> thread::JoinHandle<SpawnError>; 
+        -> thread::JoinHandle<SpawnError>;
 }
 
 impl SpawnServer for PGDatabase {
@@ -109,7 +109,7 @@ impl SpawnServer for MockDatabase {
     -> thread::JoinHandle<SpawnError> {
         // Set enviroment variable to testing_mode=true to override Settings.toml
         env::set_var("MERC_TESTING_MODE", "true");
-    
+
         // Rocket server is blocking, so we spawn a new thread.
         let handle = thread::spawn(||{
                 match server::get_mockdb_server::<Self>(mainstay_config, self) {
@@ -385,7 +385,7 @@ pub fn batch_transfer_verify_amounts(
     }
 }
 
-use server_lib::{config::SMT_DB_LOC_DEFAULT};
+use server_lib::config::SMT_DB_LOC_DEFAULT;
 
 pub fn init_db() -> PGDatabase {
     let db = PGDatabase::get_test();
