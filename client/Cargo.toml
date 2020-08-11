@@ -65,9 +65,3 @@ tag = "v0.2.1"
 
 [dependencies.shared]
 path = "../shared"
-
-[profile.dev]
-use_localhost_cert = "false"
-
-[profile.test]
-use_localhost_cert = "false"

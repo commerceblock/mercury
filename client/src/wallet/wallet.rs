@@ -11,7 +11,7 @@ use shared_lib::{
 use super::key_paths::{funding_txid_to_int, KeyPath, KeyPathWithAddresses};
 use crate::error::{CError, WalletErrorType};
 use crate::wallet::shared_key::SharedKey;
-use crate::{ClientShim, ssl_cert};
+use crate::ClientShim;
 
 use bitcoin::{
     hashes::sha256d,

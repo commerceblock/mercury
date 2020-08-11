@@ -84,6 +84,3 @@ path = "../shared"
 
 [features]
 mockdb = []
-
-[development]
-tls = { certs = "../utilities/server/certs/localhost.crt", key = "../utilities/server/certs/localhost.key" }

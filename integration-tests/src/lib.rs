@@ -2,7 +2,6 @@ pub mod batch_transfer_test;
 pub mod simulation;
 pub mod test;
 
-use std::error::Error;
 use client_lib::state_entity::transfer::TransferFinalizeData;
 use client_lib::wallet::wallet::Wallet;
 use client_lib::*;
@@ -22,14 +21,10 @@ use shared_lib::{
 use std::env;
 use std::error;
 use std::fmt;
-use std::sync::mpsc;
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::Instant;
-use std::{thread, time};
+use std::thread;
 use uuid::Uuid;
-
-#[macro_use]
-extern crate serial_test;
 
 extern crate stoppable_thread;
 
