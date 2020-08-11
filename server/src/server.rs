@@ -97,7 +97,7 @@ pub fn get_mockdb_server<T: Database + Send + Sync + 'static>
         if let Err(_) = sc_entity.database.reset(&smt_db_loc) {
             sc_entity.database.init()?;
         }
-    }
+    } 
 
     let rock = rocket::custom(rocket_config)
         .register(catchers![internal_error, not_found, bad_request])

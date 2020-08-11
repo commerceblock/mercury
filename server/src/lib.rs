@@ -77,14 +77,17 @@ pub struct DatabaseW(postgres::Connection);
 pub struct DatabaseR(postgres::Connection);
 
 pub struct PGDatabase {
-    pub db_connection: fn() -> r2d2::PooledConnection<PostgresConnectionManager>,
+    //pub con_man: PostgresConnectionManager,
+    pub pool: r2d2::Pool<PostgresConnectionManager>,
+    //pub rocket_url: String,
+    //pub db_connection: fn(&String) -> r2d2::PooledConnection<PostgresConnectionManager>,
 }
 
 use structs::*;
 
 #[automock]
 pub trait Database {
-    fn from_conn(con_fun: fn() -> r2d2::PooledConnection<PostgresConnectionManager>) -> Self;
+    fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self;
     fn get_test() -> Self;
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid>;
     fn has_withdraw_sc_sig(&self, user_id: Uuid) -> Result<()>;

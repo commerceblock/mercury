@@ -63,7 +63,7 @@ pub fn deposit(
 
     // 2P-ECDSA with state entity to create a Shared key
     let shared_key = wallet.gen_shared_key(&shared_key_id, amount)?;
-
+    
     // Create funding tx
     let pk = shared_key.share.public.q.get_element(); // co-owned key address to send funds to (P_addr)
     let p_addr = bitcoin::Address::p2wpkh(&to_bitcoin_public_key(pk), wallet.get_bitcoin_network());
@@ -78,7 +78,8 @@ pub fn deposit(
         &change_addr,
         &change_amount,
     )?;
-    
+
+
     let tx_funding_signed = wallet.sign_tx(
         &tx_0,
         &(0..inputs.len()).collect(), // inputs to sign are all inputs is this case
@@ -111,7 +112,6 @@ pub fn deposit(
     // TODO: check signature is valid?
 
     // Broadcast funding transcation
-    
     let funding_txid = wallet
         .electrumx_client
         .broadcast_transaction(hex::encode(consensus::serialize(&tx_funding_signed)))?;

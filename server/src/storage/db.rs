@@ -149,27 +149,23 @@ impl Column {
     }
 }
 
+
 impl PGDatabase {
+    fn get_postgres_connection_pool(rocket_url: &String) -> r2d2::Pool<PostgresConnectionManager> {
+        let url : String = rocket_url.clone().to_string();
+        let manager = PostgresConnectionManager::new(url, TlsMode::None).unwrap();
+        r2d2::Pool::new(manager).unwrap()
+    }
+
     fn database_r(&self) -> DatabaseR {
-        DatabaseR((self.db_connection)())
+        DatabaseR(self.pool.get().unwrap())
+        //DatabaseR((self.db_connection)(&self.rocket_url))
     }
 
     fn database_w(&self) -> DatabaseW {
-        DatabaseW((self.db_connection)())
+        DatabaseW(self.pool.get().unwrap())
+        //DatabaseW((self.db_connection)(&self.rocket_url))
     }
-
-    pub fn get_test_postgres_connection() -> r2d2::PooledConnection<PostgresConnectionManager> {
-        let rocket_url = get_postgres_url(
-            std::env::var("MERC_DB_HOST_W").unwrap(),
-            std::env::var("MERC_DB_PORT_W").unwrap(),
-            std::env::var("MERC_DB_USER_W").unwrap(),
-            std::env::var("MERC_DB_PASS_W").unwrap(),
-            std::env::var("MERC_DB_DATABASE_W").unwrap(),
-        );
-        let manager = PostgresConnectionManager::new(rocket_url, TlsMode::None).unwrap();
-        r2d2::Pool::new(manager).unwrap().get().unwrap()
-    }
-
     pub fn init(&self) -> Result<()> {
         self.make_tables()
     }
@@ -356,12 +352,7 @@ impl PGDatabase {
         Ok(())
     }
 
-    #[allow(dead_code)]
-    fn reset(&self, smt_db_loc: &String) -> Result<()>{
-        self.reset_dbs(smt_db_loc)
-    }
-
-    pub fn reset_dbs(&self, smt_db_loc: &String) -> Result<()> {
+    pub fn reset(&self, smt_db_loc: &String) -> Result<()>{
         // truncate all postgres tables
         self.truncate_tables()?;
 
@@ -591,14 +582,21 @@ impl PGDatabase {
 }
 
 impl Database for PGDatabase {
-    fn from_conn(con_fun: fn() -> r2d2::PooledConnection<PostgresConnectionManager>) -> Self {
+    fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self {
         Self {
-            db_connection: con_fun,
+           pool
         }
     }
 
     fn get_test() -> Self {
-        Self::from_conn(Self::get_test_postgres_connection)
+        let rocket_url = get_postgres_url(
+            std::env::var("MERC_DB_HOST_W").unwrap(),
+            std::env::var("MERC_DB_PORT_W").unwrap(),
+            std::env::var("MERC_DB_USER_W").unwrap(),
+            std::env::var("MERC_DB_PASS_W").unwrap(),
+            std::env::var("MERC_DB_DATABASE_W").unwrap(),
+        );
+        Self::from_pool(Self::get_postgres_connection_pool(&rocket_url))
     }
 
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid> {
@@ -669,7 +667,7 @@ impl Database for PGDatabase {
 
     fn update_backup_tx(&self,state_chain_id: &Uuid, tx: Transaction) -> Result<()> {
         self.update(
-            &state_chain_id,
+            state_chain_id,
             Table::BackupTxs,
             vec![Column::TxBackup],
             vec![&Self::ser(tx)?],
@@ -859,7 +857,7 @@ impl Database for PGDatabase {
         amount: u64,
     ) -> Result<()> {
         self.update(
-            &state_chain_id,
+            state_chain_id,
             Table::StateChain,
             vec![Column::Chain, Column::Amount],
             vec![&Self::ser(state_chain)?, &(amount as i64)], // signals withdrawn funds
@@ -873,9 +871,9 @@ impl Database for PGDatabase {
         state_chain: &StateChain,
         amount: &i64,
     ) -> Result<()> {
-        self.insert(&state_chain_id, Table::StateChain)?;
+        self.insert(state_chain_id, Table::StateChain)?;
         self.update(
-            &state_chain_id,
+            state_chain_id,
             Table::StateChain,
             vec![
                 Column::Chain,
@@ -909,7 +907,7 @@ impl Database for PGDatabase {
         new_user_id: &Uuid,
     ) -> Result<()> {
         self.update(
-            &state_chain_id,
+            state_chain_id,
             Table::StateChain,
             vec![Column::Chain, Column::OwnerId],
             vec![&Self::ser(state_chain)?, &new_user_id],
@@ -1017,7 +1015,7 @@ impl Database for PGDatabase {
         // Create Transfer table entry
         self.insert(&state_chain_id, Table::Transfer)?;
         self.update(
-            &state_chain_id,
+            state_chain_id,
             Table::Transfer,
             vec![Column::StateChainSig, Column::X1],
             vec![
@@ -1034,7 +1032,7 @@ impl Database for PGDatabase {
     ) -> Result<()> {
         self.insert(&batch_id, Table::TransferBatch)?;
         self.update(
-            &batch_id,
+            batch_id,
             Table::TransferBatch,
             vec![
                 Column::StartTime,
@@ -1147,7 +1145,7 @@ impl Database for PGDatabase {
         ec_key_pair: party_one::EcKeyPair,
     ) -> Result<()> {
         self.update(
-            &user_id,
+            user_id,
             Table::Ecdsa,
             vec![
                 Column::POS,
@@ -1174,7 +1172,7 @@ impl Database for PGDatabase {
         party_one_private: party_one::Party1Private,
     ) -> Result<()> {
         self.update(
-            &user_id,
+            user_id,
             Table::Ecdsa,
             vec![
                 Column::Party2Public,
@@ -1198,7 +1196,7 @@ impl Database for PGDatabase {
         alpha: BigInt,
     ) -> Result<()> {
         self.update(
-            &user_id,
+            user_id,
             Table::Ecdsa,
             vec![
                 Column::PDLDecommit,
@@ -1311,7 +1309,7 @@ impl Database for PGDatabase {
         finalized_data_vec: Vec<TransferFinalizeData>,
     ) -> Result<()> {
         self.update(
-            &batch_id,
+            batch_id,
             Table::TransferBatch,
             vec![Column::StateChains, Column::FinalizedData],
             vec![&Self::ser(state_chains)?, &Self::ser(finalized_data_vec)?],
@@ -1347,7 +1345,7 @@ impl Database for PGDatabase {
     fn create_user_session(&self, user_id: &Uuid, auth: &String, proof_key: &String) -> Result<()> {
         self.insert(user_id, Table::UserSession)?;
         self.update(
-            &user_id,
+            user_id,
             Table::UserSession,
             vec![Column::Authentication, Column::ProofKey],
             vec![&auth.clone(), &proof_key.to_owned()],
@@ -1363,7 +1361,7 @@ impl Database for PGDatabase {
     ) -> Result<()> {
         self.insert(new_user_id, Table::UserSession)?;
         self.update(
-            &new_user_id,
+            new_user_id,
             Table::UserSession,
             vec![
                 Column::Authentication,

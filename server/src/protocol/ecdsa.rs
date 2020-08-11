@@ -228,11 +228,9 @@ impl Ecdsa for SCE {
         }
 
         // Get 2P-Ecdsa data
-        println!("get ecdsa sign second input");
         let ssi: ECDSASignSecondInput = db.get_ecdsa_sign_second_input(user_id)?;
 
         let signature;
-        println!("sign second message");
         match ssi.shared_key.sign_second_message(
             &sign_msg2.sign_second_msg_request.party_two_sign_message,
             &ssi.eph_key_gen_first_message_party_two,
@@ -248,13 +246,11 @@ impl Ecdsa for SCE {
         };
 
         // Get transaction which is being signed.
-        println!("get withdraw or backup tx");
         let mut tx: Transaction = match sign_msg2.sign_second_msg_request.protocol {
             Protocol::Withdraw => {
                 db.get_tx_withdraw(user_id)?
             },
             _ => {
-                println!("getting backup tx");
                 db.get_user_backup_tx(user_id)?
             }
         };
@@ -284,7 +280,6 @@ impl Ecdsa for SCE {
         // Add signature to tx
         tx.input[0].witness = witness.clone();
 
-        println!("update withdraw or backup tx");
         match sign_msg2.sign_second_msg_request.protocol {
             Protocol::Withdraw => {
                 // Store signed withdraw tx in UserSession DB object
