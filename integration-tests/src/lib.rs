@@ -28,6 +28,10 @@ use uuid::Uuid;
 
 extern crate stoppable_thread;
 
+#[cfg(test)]
+#[macro_use]
+extern crate serial_test;
+
 #[derive(Debug)]
 pub enum SpawnError {
     GetServer,
@@ -93,7 +97,7 @@ fn spawn_server(self, mainstay_config: Option<mainstay::MainstayConfig>)
                 Err(_) => SpawnError::GetServer,
             }
     });
-    std::thread::sleep(std::time::Duration::from_secs(5));
+    std::thread::sleep(std::time::Duration::from_secs(1));
     handle
     }
 }
@@ -117,7 +121,7 @@ impl SpawnServer for MockDatabase {
                     Err(_) => SpawnError::GetServer,
                 }
         });
-        std::thread::sleep(std::time::Duration::from_secs(5));
+        std::thread::sleep(std::time::Duration::from_secs(1));
         handle
     }
 }
