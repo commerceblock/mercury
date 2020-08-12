@@ -391,8 +391,8 @@ mod tests {
     }
 }
 
-#[cfg(test)]
 #[cfg(feature="mockdb")]
+#[cfg(test)]
 mod tests {
     use crate::*;
     extern crate bitcoin;
@@ -401,14 +401,20 @@ mod tests {
     extern crate shared_lib;
 
     use shared_lib::mainstay;
-    use mockito;
+    use mockito::{mock};
     use server_lib::MockDatabase;
 
     #[test]
+    //This test starts a rocket server so is ignored by default
+    //If this test is run, the 'accept incoming connection dialog' can be ignored, or click 'Deny'
+    #[ignore]
     #[serial]
     fn test_get_statechain() {
+        let mockito_server_url = mockito::server_url();
+        let _m = mock("GET", "/ping").create();
+        println!("mockito server url: {}", mockito_server_url);
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(
-            &mockito::server_url());
+            &mockito_server_url);
         let mut db = MockDatabase::new();
         let wallet = gen_wallet();
         db.expect_reset().returning(|_|Ok(()));
