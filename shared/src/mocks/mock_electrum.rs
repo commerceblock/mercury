@@ -101,8 +101,19 @@ impl Electrumx for MockElectrum {
                 confirmed: 100,
             });
         }
-
+        if addr == "tb1qghtup486tj8vgz2l5pkh8hqw8wzdudralnw74e" {
+            return Ok(GetBalanceResponse {
+                unconfirmed: 0,
+                confirmed: 100,
+            });
+        }
         if addr == "bcrt1qsuqsurhgfduhqw6ejquw54482sqpkfc22gytyh" {
+            return Ok(GetBalanceResponse {
+                unconfirmed: 0,
+                confirmed: 10000000,
+            });
+        }
+        if addr == "tb1qsuqsurhgfduhqw6ejquw54482sqpkfc2gpaxn7" {
             return Ok(GetBalanceResponse {
                 unconfirmed: 0,
                 confirmed: 10000000,
@@ -126,7 +137,25 @@ impl Electrumx for MockElectrum {
                 value: 100,
             }]);
         }
+        if addr == "tb1qghtup486tj8vgz2l5pkh8hqw8wzdudralnw74e" {
+            return Ok(vec![GetListUnspentResponse {
+                height: 123,
+                tx_hash: "e0a97cb38e7e73617ef75a57eaf2841eb06833407c0eae08029bd04ea7e6115a"
+                    .to_string(),
+                tx_pos: 0,
+                value: 100,
+            }]);
+        }
         if addr == "bcrt1qsuqsurhgfduhqw6ejquw54482sqpkfc22gytyh" {
+            return Ok(vec![GetListUnspentResponse {
+                height: 1234,
+                tx_hash: "40bf39ffdf4322e4d30ed783feec5bd9eb2804b81f23ebd5e24ea2aa2365a326"
+                    .to_string(),
+                tx_pos: 1,
+                value: 10000000,
+            }]);
+        }
+        if addr == "tb1qsuqsurhgfduhqw6ejquw54482sqpkfc2gpaxn7" {
             return Ok(vec![GetListUnspentResponse {
                 height: 1234,
                 tx_hash: "40bf39ffdf4322e4d30ed783feec5bd9eb2804b81f23ebd5e24ea2aa2365a326"
