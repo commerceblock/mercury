@@ -71,18 +71,6 @@ impl error::Error for StorageError {
     }
 }
 
-pub fn get_test_postgres_connection() -> r2d2::PooledConnection<PostgresConnectionManager> {
-    let rocket_url = get_postgres_url(
-        std::env::var("MERC_DB_HOST_W").unwrap(),
-        std::env::var("MERC_DB_PORT_W").unwrap(),
-        std::env::var("MERC_DB_USER_W").unwrap(),
-        std::env::var("MERC_DB_PASS_W").unwrap(),
-        std::env::var("MERC_DB_DATABASE_W").unwrap(),
-    );
-    let manager = PostgresConnectionManager::new(rocket_url, TlsMode::None).unwrap();
-    r2d2::Pool::new(manager).unwrap().get().unwrap()
-}
-
 impl Responder<'static> for StorageError {
     fn respond_to(
         self,

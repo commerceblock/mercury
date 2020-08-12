@@ -388,7 +388,7 @@ pub fn batch_transfer_verify_amounts(
 use server_lib::config::SMT_DB_LOC_DEFAULT;
 
 pub fn init_db() -> PGDatabase {
-    let db = PGDatabase::get_test().unwrap();
+    let db = PGDatabase::from_env().unwrap();
     db.reset(&SMT_DB_LOC_DEFAULT.to_string()).unwrap();
     db.init().unwrap();
     db

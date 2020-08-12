@@ -831,6 +831,7 @@ pub mod tests {
     #[serial]
     fn test_verify_root() {
         let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_root_update().returning(|_| Ok(1 as i64));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
         db.expect_get_root().returning(|_| Ok(None));
@@ -900,6 +901,7 @@ pub mod tests {
     #[serial]
     fn test_update_root_smt() {
         let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_root_update().returning(|_| Ok(1 as i64));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
         db.expect_get_root().returning(|_| Ok(None));

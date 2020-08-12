@@ -411,6 +411,7 @@ mod tests {
             &mockito::server_url());
         let mut db = MockDatabase::new();
         let wallet = gen_wallet();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_reset().returning(|_|Ok(()));
         let invalid_scid = Uuid::new_v4();
         db.expect_get_statechain_amount().

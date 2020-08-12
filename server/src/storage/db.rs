@@ -163,32 +163,29 @@ impl PGDatabase {
     }
 
     fn database_r(&self) -> Result<DatabaseR> {
-        let n_attempts=3;
-        let mut n = 0;
-        loop {
-            match self.pool.get() {
-                Ok(c) => return Ok(DatabaseR(c)),
-                Err(e) => if (n == n_attempts) {return Err(SEError::DBError(ConnectionFailed, 
-                    format!("Failed to get pooled connection: {}", e)))},
-            };
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            n = n + 1;
+        match &self.pool {
+            Some(p) => match p.get() {
+                        Ok(c) => Ok(DatabaseR(c)),
+                        Err(e) => Err(SEError::DBError(ConnectionFailed, 
+                        format!("Failed to get pooled connection for read: {}", e))),
+                    },
+            None =>  Err(SEError::DBError(ConnectionFailed, 
+                        "Failed to get pooled connection for read: pool not set".to_string())),
         }
     }
 
     fn database_w(&self) -> Result<DatabaseW> {
-        let n_attempts=3;
-        let mut n = 0;
-        loop {
-            match self.pool.get() {
-                Ok(c) => return Ok(DatabaseW(c)),
-                Err(e) => if (n == n_attempts) {return Err(SEError::DBError(ConnectionFailed, 
-                    format!("Failed to get pooled connection: {}", e)))},
-            };
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            n = n + 1;
+        match &self.pool {
+            Some(p) => match p.get() {
+                        Ok(c) => Ok(DatabaseW(c)),
+                        Err(e) => Err(SEError::DBError(ConnectionFailed, 
+                        format!("Failed to get pooled connection for write: {}", e))),
+                    },
+            None =>  Err(SEError::DBError(ConnectionFailed, 
+                        "Failed to get pooled connection for write: pool not set".to_string())),
         }
     }
+    
     pub fn init(&self) -> Result<()> {
         self.make_tables()
     }
@@ -607,11 +604,21 @@ impl PGDatabase {
 impl Database for PGDatabase {
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self {
         Self {
-           pool
+           pool: Some(pool)
         }
     }
 
-    fn get_test() -> Result<Self> {
+    fn get_new() -> Self {
+        Self { pool : None }
+    }
+
+    fn from_env() -> Result<Self> {
+        let mut db = Self::get_new();
+        db.set_connection_from_env()?;
+        Ok(db)
+    }
+
+    fn set_connection_from_env(&mut self) -> Result<()> {
         let rocket_url = get_postgres_url(
             std::env::var("MERC_DB_HOST_W").unwrap(),
             std::env::var("MERC_DB_PORT_W").unwrap(),
@@ -619,28 +626,29 @@ impl Database for PGDatabase {
             std::env::var("MERC_DB_PASS_W").unwrap(),
             std::env::var("MERC_DB_DATABASE_W").unwrap(),
         );
+        self.set_connection(&rocket_url)
+    }
 
-        let mut err = Err(SEError::DBError(ConnectionFailed, 
-            format!("Error obtaining pool address for url {}",&rocket_url)));
-        let n_max_attempts = 60;
-        let n_wait_milliseconds =500;
-        let mut n_attempts=0;
-        
-        //Try a number of times to get a connection pool
-        while (n_attempts < n_max_attempts){
-            match Self::get_postgres_connection_pool(&rocket_url){
-                Ok(p) => return Ok(Self::from_pool(p.clone())),
-                Err(e) => {
-                    err = Err(SEError::DBError(ConnectionFailed, 
-                        format!("Error obtaining pool address for url {}: {}",&rocket_url, e)));
-                    ()
-                }
-            };
-            std::thread::sleep(std::time::Duration::from_millis(n_wait_milliseconds));
-            n_attempts = n_attempts + 1;
+    fn set_connection_from_config(&mut self, config: &crate::config::Config) -> Result<()> {
+        let rocket_url = get_postgres_url(
+            config.storage.db_host_w.clone(),
+            config.storage.db_port_w.clone(),
+            config.storage.db_user_w.clone(),
+            config.storage.db_pass_w.clone(),
+            config.storage.db_database_w.clone()            
+        );
+        self.set_connection(&rocket_url)
+    }
+
+    fn set_connection(&mut self, url: &String) -> Result<()>{
+        match Self::get_postgres_connection_pool(url){
+            Ok(p) => {
+                self.pool = Some(p.clone());
+                Ok(())
+            },
+            Err(e) => Err(SEError::DBError(ConnectionFailed, 
+                        format!("Error obtaining pool address for url {}: {}",url, e)))
         }
-        //Finally give up
-        err
     }
 
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid> {

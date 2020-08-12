@@ -349,6 +349,7 @@ mod tests {
         let transfer_msg_1 = TransferMsg1 {shared_key_id,state_chain_sig};
 
         let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth().returning(move |_| Ok(shared_key_id));
         db.expect_get_statechain_id()
             .with(predicate::eq(shared_key_id))
@@ -421,6 +422,7 @@ mod tests {
             .x1;
 
         let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth()
             .returning(move |_| Ok(shared_key_id));
         db.expect_get_transfer_data()
