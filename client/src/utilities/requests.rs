@@ -10,13 +10,6 @@ use super::super::ClientShim;
 use super::super::Result;
 use crate::error::CError;
 
-pub fn post<V>(client_shim: &ClientShim, path: &str) -> Result<V>
-where
-    V: serde::de::DeserializeOwned,
-{
-    _postb(client_shim, path, "{}")
-}
-
 pub fn postb<T, V>(client_shim: &ClientShim, path: &str, body: T) -> Result<V>
 where
     T: serde::ser::Serialize,
@@ -42,6 +35,36 @@ where
 
     // catch reqwest errors
     let value = match b.json(&body).send() {
+        Ok(mut v) => v.text().unwrap(),
+        Err(e) => return Err(CError::from(e)),
+    };
+
+    info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
+
+    // catch State entity errors
+    if value.contains(&String::from("Error: ")) {
+        return Err(CError::StateEntityError(value));
+    }
+
+    Ok(serde_json::from_str(value.as_str()).unwrap())
+}
+
+pub fn get<V>(client_shim: &ClientShim, path: &str) -> Result<V>
+where
+    V: serde::de::DeserializeOwned,
+{
+    let start = Instant::now();
+
+    let mut b = client_shim
+        .client
+        .get(&format!("{}/{}", client_shim.endpoint, path));
+
+    if client_shim.auth_token.is_some() {
+        b = b.bearer_auth(client_shim.auth_token.clone().unwrap());
+    }
+
+    // catch reqwest errors
+    let value = match b.send() {
         Ok(mut v) => v.text().unwrap(),
         Err(e) => return Err(CError::from(e)),
     };

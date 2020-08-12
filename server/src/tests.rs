@@ -23,6 +23,8 @@ mod tests {
     fn test_auth_token() {
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
         let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
+
+
         // get ID
         let deposit_msg1 = DepositMsg1 {
             auth: String::from("auth"),
@@ -51,7 +53,6 @@ mod tests {
         let (res, _): (String, party_one::KeyGenFirstMsg) =
             serde_json::from_str(&response.body_string().unwrap()).unwrap();
         assert_eq!(res, id_str);
-
         // use incorrect ID
         key_gen_msg1.shared_key_id = Uuid::new_v4();
         let mut response = client
@@ -67,6 +68,7 @@ mod tests {
         );
     }
 
+    //moved into protocol/util.rs
     #[test]
     #[serial]
     fn test_err_get_statechain() {
@@ -184,7 +186,7 @@ mod tests {
         // get_transfer_batch_status invalid id
         let invalid_id = Uuid::new_v4();
         let mut response = client
-            .post(format!("/info/transfer-batch/{}", invalid_id))
+            .get(format!("/info/transfer-batch/{}", invalid_id))
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();
@@ -195,7 +197,7 @@ mod tests {
 
         // get_transfer_batch_status no ID
         let mut response = client
-            .post(format!("/info/transfer-batch/"))
+            .get(format!("/info/transfer-batch/"))
             .header(ContentType::JSON)
             .dispatch();
         let res = response.body_string().unwrap();

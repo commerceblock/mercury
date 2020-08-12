@@ -1,4 +1,5 @@
 #[cfg(test)]
+#[cfg(not(feature="mockdb"))]
 mod tests {
     use crate::*;
     extern crate bitcoin;
@@ -6,21 +7,18 @@ mod tests {
     extern crate server_lib;
     extern crate shared_lib;
 
-    use shared_lib::{commitment::verify_commitment, mainstay, state_chain::StateChainSig};
+    use shared_lib::{commitment::verify_commitment, state_chain::StateChainSig};
 
     use bitcoin::PublicKey;
     use client_lib::state_entity;
     use std::{str::FromStr, thread, time::Duration};
 
-    #[cfg(test)]
-    use mockito;
 
     /// Test batch transfer signature generation
     #[test]
     #[serial]
     fn test_batch_sigs() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
-        let _ = spawn_server(Some(mainstay_config));
+        let _handle = start_server(init_db());
         let mut wallet = gen_wallet();
         let num_state_chains = 3;
         // make deposits
@@ -116,8 +114,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_batch_transfer() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
-        let _ = spawn_server(Some(mainstay_config));
+        let _handle = start_server(init_db());
 
         let num_state_chains = 3; // must be > 1
         let mut amounts = vec![];
@@ -224,8 +221,7 @@ mod tests {
     // #[test]
     #[allow(dead_code)]
     fn test_failure_batch_transfer() {
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
-        let _ = spawn_server(Some(mainstay_config));
+        let _handle = start_server(init_db());
 
         let num_state_chains = 3; // must be > 2
         let mut amounts = vec![];

@@ -11,25 +11,25 @@ use shared_lib::{
 };
 
 use bitcoin::consensus;
-use serde::{Deserialize, Serialize};
+use config::Config as ConfigRs;
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use uuid::Uuid;
-use config::Config as ConfigRs;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     pub endpoint: String,
     pub electrum_server: String,
-    pub testing_mode: bool
+    pub testing_mode: bool,
 }
 
 impl Default for Config {
     fn default() -> Config {
         Config {
-            endpoint: "http://localhost:8000".to_string(),
+            endpoint: "https://localhost:8000".to_string(),
             electrum_server: "127.0.0.1:60401".to_string(),
-            testing_mode: true
+            testing_mode: true,
         }
     }
 }
@@ -41,7 +41,8 @@ fn main() {
     let mut conf_rs = ConfigRs::new();
     let _ = conf_rs
         // First merge struct default config
-        .merge(ConfigRs::try_from(&Config::default()).unwrap()).unwrap();
+        .merge(ConfigRs::try_from(&Config::default()).unwrap())
+        .unwrap();
     conf_rs
         // Add in `./Settings.toml`
         .merge(config::File::with_name("Settings").required(false))
@@ -56,7 +57,7 @@ fn main() {
 
     // TODO: random generating of seed and allow input of mnemonic phrase
     let seed = [0xcd; 32];
-    let client_shim = ClientShim::new(se_endpoint.to_string(), None);
+    let client_shim = ClientShim::new(se_endpoint.to_string(), None).unwrap();
 
     let electrum: Box<dyn Electrumx> = if testing_mode {
         Box::new(MockElectrum::new())
