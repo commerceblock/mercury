@@ -10,7 +10,7 @@ use crate::protocol::transfer::TransferFinalizeData;
 use crate::server::get_postgres_url;
 use crate::{
     error::{
-        DBErrorType::{NoDataForID, UpdateFailed},
+        DBErrorType::{NoDataForID, UpdateFailed, ConnectionFailed},
         SEError,
     },
     structs::*,
@@ -151,10 +151,15 @@ impl Column {
 
 
 impl PGDatabase {
-    fn get_postgres_connection_pool(rocket_url: &String) -> r2d2::Pool<PostgresConnectionManager> {
+    fn get_postgres_connection_pool(rocket_url: &String) -> Result<r2d2::Pool<PostgresConnectionManager>> {
         let url : String = rocket_url.clone().to_string();
-        let manager = PostgresConnectionManager::new(url, TlsMode::None).unwrap();
-        r2d2::Pool::new(manager).unwrap()
+        let manager = PostgresConnectionManager::new(url.clone(), TlsMode::None)?;
+        match r2d2::Pool::new(manager){
+            Ok(m) => Ok(m),
+            Err(e) => Err(SEError::DBError(ConnectionFailed, 
+                format!("Failed to get postgres connection managerfor rocket url {}: {}",
+                        url, e)))
+        }
     }
 
     fn database_r(&self) -> DatabaseR {
@@ -586,7 +591,7 @@ impl Database for PGDatabase {
         }
     }
 
-    fn get_test() -> Self {
+    fn get_test() -> Result<Self> {
         let rocket_url = get_postgres_url(
             std::env::var("MERC_DB_HOST_W").unwrap(),
             std::env::var("MERC_DB_PORT_W").unwrap(),
@@ -594,7 +599,28 @@ impl Database for PGDatabase {
             std::env::var("MERC_DB_PASS_W").unwrap(),
             std::env::var("MERC_DB_DATABASE_W").unwrap(),
         );
-        Self::from_pool(Self::get_postgres_connection_pool(&rocket_url))
+
+        let mut err = Err(SEError::DBError(ConnectionFailed, 
+            format!("Error obtaining pool address for url {}",&rocket_url)));
+        let n_max_attempts = 60;
+        let n_wait_milliseconds =500;
+        let mut n_attempts=0;
+        
+        //Try a number of times to get a connection pool
+        while (n_attempts < n_max_attempts){
+            match Self::get_postgres_connection_pool(&rocket_url){
+                Ok(p) => return Ok(Self::from_pool(p)),
+                Err(e) => {
+                    err = Err(SEError::DBError(ConnectionFailed, 
+                        format!("Error obtaining pool address for url {}: {}",&rocket_url, e)));
+                    ()
+                }
+            };
+            std::thread::sleep(std::time::Duration::from_millis(n_wait_milliseconds));
+            n_attempts = n_attempts + 1;
+        }
+        //Finally give up
+        err
     }
 
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid> {

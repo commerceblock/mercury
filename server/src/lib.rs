@@ -82,7 +82,7 @@ use structs::*;
 #[automock]
 pub trait Database {
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self;
-    fn get_test() -> Self;
+    fn get_test() -> Result<Self> where Self: std::marker::Sized;
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid>;
     fn has_withdraw_sc_sig(&self, user_id: Uuid) -> Result<()>;
     fn update_withdraw_sc_sig(&self, user_id: &Uuid, sig: StateChainSig) -> Result<()>;
