@@ -163,11 +163,29 @@ impl PGDatabase {
     }
 
     fn database_r(&self) -> DatabaseR {
-        DatabaseR(self.pool.get().unwrap())
+        let n_attempts=10;
+        let mut n = 0;
+        loop {
+            match self.pool.get() {
+                Ok(c) => return DatabaseR(c),
+                Err(e) => if (n == n_attempts) {panic!(e)},
+            };
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            n = n + 1;
+        }
     }
 
     fn database_w(&self) -> DatabaseW {
-        DatabaseW(self.pool.get().unwrap())
+        let n_attempts=10;
+        let mut n = 0;
+        loop {
+            match self.pool.get() {
+                Ok(c) => return DatabaseW(c),
+                Err(e) => if (n == n_attempts) {panic!(e)},
+            };
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            n = n + 1;
+        }
     }
     pub fn init(&self) -> Result<()> {
         self.make_tables()
