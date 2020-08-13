@@ -1,5 +1,0 @@
-[development]
-address = "localhost"
-port = 8000
-keep_alive = 100
-log = "normal"
