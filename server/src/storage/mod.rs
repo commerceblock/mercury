@@ -3,16 +3,12 @@ pub use super::Result;
 
 use rocket::http::{ContentType, Status};
 use rocket::response::Responder;
-use rocket_contrib::databases::r2d2;
-use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
 pub use shared_lib::state_chain::StateChain;
 use shared_lib::structs::*;
 pub use shared_lib::Root;
 use std::io::Cursor;
 use std::{error, fmt};
 use uuid::Uuid;
-
-use crate::server::get_postgres_url;
 
 #[derive(Debug, Deserialize)]
 pub enum StorageError {

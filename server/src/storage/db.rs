@@ -612,23 +612,6 @@ impl Database for PGDatabase {
         Self { pool : None }
     }
 
-    fn from_env() -> Result<Self> {
-        let mut db = Self::get_new();
-        db.set_connection_from_env()?;
-        Ok(db)
-    }
-
-    fn set_connection_from_env(&mut self) -> Result<()> {
-        let rocket_url = get_postgres_url(
-            std::env::var("MERC_DB_HOST_W").unwrap(),
-            std::env::var("MERC_DB_PORT_W").unwrap(),
-            std::env::var("MERC_DB_USER_W").unwrap(),
-            std::env::var("MERC_DB_PASS_W").unwrap(),
-            std::env::var("MERC_DB_DATABASE_W").unwrap(),
-        );
-        self.set_connection(&rocket_url)
-    }
-
     fn set_connection_from_config(&mut self, config: &crate::config::Config) -> Result<()> {
         let rocket_url = get_postgres_url(
             config.storage.db_host_w.clone(),

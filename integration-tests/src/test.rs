@@ -16,7 +16,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_gen_shared_key() {
-        let _handle = start_server(init_db());
+        let _handle = start_server();
         let mut wallet = gen_wallet();
         let proof_key = wallet.se_proof_keys.get_new_key().unwrap();
         let init_res =
@@ -29,7 +29,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_failed_auth() {
-        let _handle = start_server(init_db());
+        let _handle = start_server();
         let client_shim = ClientShim::new("https://localhost:8000".to_string(), None).unwrap();
         let secret_key: FE = ECScalar::new_random();
         let invalid_key = Uuid::new_v4();
@@ -46,7 +46,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_deposit() {
-        let _handle = start_server(init_db());
+        let _handle = start_server();
         let wallet = gen_wallet_with_deposit(10000);
         //handle.join().expect("The thread being joined has panicked");
         let state_chains_info = wallet.get_state_chains_info();
@@ -87,7 +87,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_get_statechain() {
-        let _handle = start_server(init_db());
+        let _handle = start_server();
         let mut wallet = gen_wallet();
 
         let err = state_entity::api::get_statechain(&wallet.client_shim, &Uuid::new_v4());
@@ -104,7 +104,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_transfer() {
-        let _handle = start_server(init_db());
+        let _handle = start_server();
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
         wallets.push(gen_wallet()); // receiver
@@ -174,7 +174,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_double_transfer() {
-        let _handle = start_server(init_db());
+        let _handle = start_server();
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
         wallets.push(gen_wallet()); // receiver1
@@ -303,7 +303,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_withdraw() {
-        let _handle = start_server(init_db());
+        let _handle = start_server();
         let mut wallet = gen_wallet();
 
         let deposit_resp = run_deposit(&mut wallet, &10000);
@@ -361,7 +361,7 @@ mod tests {
     #[serial]
     /// Test wallet load from json correctly when shared key present.
     fn test_wallet_load_with_shared_key() {
-        let _handle = start_server(init_db());
+        let _handle = start_server();
 
         let mut wallet = gen_wallet();
         run_deposit(&mut wallet, &10000);

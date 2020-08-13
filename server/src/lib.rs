@@ -83,10 +83,8 @@ use structs::*;
 pub trait Database {
     fn get_new() -> Self;
     fn set_connection_from_config(&mut self, config: &crate::config::Config) -> Result<()>;
-    fn set_connection_from_env(&mut self) -> Result<()>;
     fn set_connection(&mut self, url: &String) -> Result<()>;
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self;
-    fn from_env() -> Result<Self> where Self: std::marker::Sized;
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid>;
     fn has_withdraw_sc_sig(&self, user_id: Uuid) -> Result<()>;
     fn update_withdraw_sc_sig(&self, user_id: &Uuid, sig: StateChainSig) -> Result<()>;

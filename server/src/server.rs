@@ -29,7 +29,6 @@ impl<T: Database + Send + Sync + 'static> StateChainEntity<T> {
     pub fn load(mut db: T) -> Result<StateChainEntity<T>> {
         // Get config as defaults, Settings.toml and env vars
         let config_rs = Config::load()?;
-
         db.set_connection_from_config(&config_rs)?;
 
         Ok(Self {

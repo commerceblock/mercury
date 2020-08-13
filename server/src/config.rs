@@ -163,13 +163,14 @@ impl Config {
             let _ = conf_rs.set("storage.db_database_r", v)?;
         }
 
-        if let Ok(v) = env::var("MERC_MS_TEST_SLOT") {
-            let _ = conf_rs.set("mainstay.postition", v)?;
-        }
-        if let Ok(v) = env::var("MERC_MS_TEST_TOKEN") {
-            let _ = conf_rs.set("mainstay.token", v)?;
+        if let Ok(v) = env::var("MERC_MS_SLOT") {
+            let _ = conf_rs.set("mainstay.position", v)?;
         }
 
+        if let Ok(v) = env::var("MERC_MS_TOKEN") {
+            let _ = conf_rs.set("mainstay.token", v)?;
+        }
+        
         // Type checks
         let fee_address = conf_rs.get_str("fee_address")?;
         if let Err(e) = bitcoin::Address::from_str(&fee_address) {
