@@ -112,7 +112,7 @@ impl SpawnServer for MockDatabase {
 
         // Rocket server is blocking, so we spawn a new thread.
         let handle = thread::spawn(||{
-                match server::get_mockdb_server::<Self>(mainstay_config, self) {
+                match server::get_server::<Self>(mainstay_config, self) {
                     Ok(s) => {
                         let try_launch = s.launch();
                         let _ = try_launch.kind(); // LaunchError needs to be accessed here for this to work. Be carfeul modifying this code.
