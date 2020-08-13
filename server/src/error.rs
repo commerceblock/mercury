@@ -79,12 +79,15 @@ pub enum DBErrorType {
     NoDataForID,
     /// No update made
     UpdateFailed,
+    // Connection to db failed
+    ConnectionFailed,
 }
 impl DBErrorType {
     fn as_str(&self) -> &'static str {
         match *self {
             DBErrorType::NoDataForID => "No data for identifier.",
             DBErrorType::UpdateFailed => "No update made.",
+            DBErrorType::ConnectionFailed => "Connection failed.",
         }
     }
 }

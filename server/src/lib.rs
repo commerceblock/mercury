@@ -74,15 +74,17 @@ pub struct DatabaseW(postgres::Connection);
 pub struct DatabaseR(postgres::Connection);
 
 pub struct PGDatabase {
-    pub pool: r2d2::Pool<PostgresConnectionManager>,
+    pub pool: Option<r2d2::Pool<PostgresConnectionManager>>,
 }
 
 use structs::*;
 
 #[automock]
 pub trait Database {
+    fn get_new() -> Self;
+    fn set_connection_from_config(&mut self, config: &crate::config::Config) -> Result<()>;
+    fn set_connection(&mut self, url: &String) -> Result<()>;
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self;
-    fn get_test() -> Self;
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid>;
     fn has_withdraw_sc_sig(&self, user_id: Uuid) -> Result<()>;
     fn update_withdraw_sc_sig(&self, user_id: &Uuid, sig: StateChainSig) -> Result<()>;
