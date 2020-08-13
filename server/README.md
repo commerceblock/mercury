@@ -39,20 +39,15 @@ cd mercury/server
 cargo run --release
 ```
 
-* By default, the server will use a local [RocksDB](https://rocksdb.org/).<br>
-
-* By default, the server will use no authentication (PASSTHROUGH).<br>
 
 ### Running tests
-Ensure a testing DB connection has been specified with environment variables `MERC_DB_HOST_W`,
-`MERC_DB_PORT_W`, `MERC_DB_USER_W`, `MERC_DB_PASS_W`, `MERC_DB_DATABASE_W`.
 
 #### Without timing output
 ```bash
-RUST_TEST_THREADS=1 cargo test
+cargo test
 ```
 
 #### With timing output
 ```bash
-RUST_TEST_THREADS=1  cargo test -- --nocapture
+cargo test -- --nocapture
 ```
