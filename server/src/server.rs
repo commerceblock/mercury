@@ -26,9 +26,10 @@ pub struct StateChainEntity<T: Database + Send + Sync + 'static> {
 }
 
 impl<T: Database + Send + Sync + 'static> StateChainEntity<T> {
-    pub fn load(db: T) -> Result<StateChainEntity<T>> {
+    pub fn load(mut db: T) -> Result<StateChainEntity<T>> {
         // Get config as defaults, Settings.toml and env vars
         let config_rs = Config::load()?;
+        db.set_connection_from_config(&config_rs)?;
 
         Ok(Self {
             config: config_rs,
@@ -54,19 +55,20 @@ fn not_found(req: &Request) -> String {
 
 use std::marker::{Send, Sync};
 
-/// Start Rocket Server. mainsta_config parameter overrides Settings.toml and env var settings.
+/// Start Rocket Server. mainstay_config parameter overrides Settings.toml and env var settings.
+/// If no db provided then use mock
 pub fn get_server<T: Database + Send + Sync + 'static>
     (mainstay_config: Option<mainstay::MainstayConfig>,
         db: T) -> Result<Rocket> {
     Ok(
         get_mockdb_server::<T>(mainstay_config, db)?
-        .attach(DatabaseR::fairing())
         .attach(DatabaseW::fairing())
+        .attach(DatabaseR::fairing())
     )
 }
 
 // Get a rocket test server - this does not have the database read/write servings
-// attached as the databasse is mocked out
+// attached as the database is mocked out
 pub fn get_mockdb_server<T: Database + Send + Sync + 'static>
     (mainstay_config: Option<mainstay::MainstayConfig>,
         db: T) -> Result<Rocket> {
@@ -187,6 +189,9 @@ fn get_rocket_config(config: &Config) -> RocketConfig {
 
     RocketConfig::build(Environment::Staging)
         .extra("databases", databases)
+        .keep_alive(config.rocket.keep_alive.clone())
+        .address(config.rocket.address.clone())
+        .port(config.rocket.port.clone())
         .finalize()
         .unwrap()
 }

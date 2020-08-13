@@ -3,16 +3,12 @@ pub use super::Result;
 
 use rocket::http::{ContentType, Status};
 use rocket::response::Responder;
-use rocket_contrib::databases::r2d2;
-use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
 pub use shared_lib::state_chain::StateChain;
 use shared_lib::structs::*;
 pub use shared_lib::Root;
 use std::io::Cursor;
 use std::{error, fmt};
 use uuid::Uuid;
-
-use crate::server::get_postgres_url;
 
 #[derive(Debug, Deserialize)]
 pub enum StorageError {
@@ -69,18 +65,6 @@ impl error::Error for StorageError {
             _ => None,
         }
     }
-}
-
-pub fn get_test_postgres_connection() -> r2d2::PooledConnection<PostgresConnectionManager> {
-    let rocket_url = get_postgres_url(
-        std::env::var("MERC_DB_HOST_W").unwrap(),
-        std::env::var("MERC_DB_PORT_W").unwrap(),
-        std::env::var("MERC_DB_USER_W").unwrap(),
-        std::env::var("MERC_DB_PASS_W").unwrap(),
-        std::env::var("MERC_DB_DATABASE_W").unwrap(),
-    );
-    let manager = PostgresConnectionManager::new(rocket_url, TlsMode::None).unwrap();
-    r2d2::Pool::new(manager).unwrap().get().unwrap()
 }
 
 impl Responder<'static> for StorageError {

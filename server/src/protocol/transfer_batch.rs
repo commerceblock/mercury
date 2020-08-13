@@ -246,6 +246,7 @@ mod tests {
         let already_active_batch_id = Uuid::from_str(&"deadb33f-1725-445e-9e08-0d15865cc844").unwrap();
 
         let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_has_transfer_batch_id().with(predicate::eq(already_active_batch_id)).returning(|_| true);
         db.expect_has_transfer_batch_id().with(predicate::eq(batch_id)).returning(|_| false);
         db.expect_create_transfer_batch_data().returning(|_,_| Ok(()));
@@ -298,6 +299,7 @@ mod tests {
         let batch_id = serde_json::from_str::<TransferBatchInitMsg>(TRANSFER_BATCH_INIT).unwrap().id;
 
         let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
         // simply test for state_chains.len() != finalized_data.len()
         db.expect_get_finalize_batch_data()
             .times(1)
@@ -330,6 +332,7 @@ mod tests {
 
 
         let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
         // state chain id not involved in batch
         db.expect_get_transfer_batch_data().times(1)
             .returning(|_| Ok(TransferBatchData {

@@ -18,7 +18,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_batch_sigs() {
-        let _handle = start_server(init_db());
+        let _handle = start_server();
         let mut wallet = gen_wallet();
         let num_state_chains = 3;
         // make deposits
@@ -114,7 +114,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_batch_transfer() {
-        let _handle = start_server(init_db());
+        let _handle = start_server();
 
         let num_state_chains = 3; // must be > 1
         let mut amounts = vec![];
@@ -221,7 +221,7 @@ mod tests {
     // #[test]
     #[allow(dead_code)]
     fn test_failure_batch_transfer() {
-        let _handle = start_server(init_db());
+        let _handle = start_server();
 
         let num_state_chains = 3; // must be > 2
         let mut amounts = vec![];
