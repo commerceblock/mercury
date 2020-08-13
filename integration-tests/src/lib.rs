@@ -10,7 +10,7 @@ use bitcoin::{PublicKey, Transaction};
 use floating_duration::TimeFormat;
 use rocket;
 use rocket::error::LaunchError;
-use server_lib::{server, Database, PGDatabase, MockDatabase};
+use server_lib::{server, PGDatabase, Database, MockDatabase};
 use shared_lib::{
     commitment::make_commitment,
     mainstay,
@@ -385,16 +385,6 @@ pub fn batch_transfer_verify_amounts(
     }
 }
 
-use server_lib::config::SMT_DB_LOC_DEFAULT;
-
-pub fn init_db() -> PGDatabase {
-    let db = PGDatabase::get_test();
-    db.reset(&SMT_DB_LOC_DEFAULT.to_string()).unwrap();
-    db.init().unwrap();
-    db
-}
-
-pub fn start_server(db: PGDatabase) -> thread::JoinHandle<SpawnError>{
-    let mc = mainstay::MainstayConfig::from_env();
-    db.spawn_server(mc)
+pub fn start_server() -> thread::JoinHandle<SpawnError>{
+    PGDatabase::get_new().spawn_server(None)
 }

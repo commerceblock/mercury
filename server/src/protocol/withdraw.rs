@@ -184,6 +184,7 @@ mod tests {
         let state_chain_id = Uuid::from_str(STATE_CHAIN_ID).unwrap();
 
         let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth().returning(move |_| Ok(shared_key_id));
         db.expect_get_statechain_id()
             .with(predicate::eq(shared_key_id))
@@ -246,6 +247,7 @@ mod tests {
         let state_chain_id = Uuid::from_str(STATE_CHAIN_ID).unwrap();
 
         let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth().returning(move |_| Ok(shared_key_id));
         db.expect_get_withdraw_confirm_data().times(1).returning(move |_| Ok(WithdrawConfirmData {
             tx_withdraw: serde_json::from_str(&BACKUP_TX_NOT_SIGNED).unwrap(), // any tx is fine here

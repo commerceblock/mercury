@@ -395,37 +395,6 @@ impl MainstayConfig {
     fn mock() -> Self {
         Self::mock_from_url(&test_url())
     }
-
-    pub fn from_env() -> Option<Self> {
-        match (Self::test_slot(), Self::test_token()) {
-            (Some(s), Some(t)) => Some(Self {
-                position: s,
-                token: t,
-                ..Default::default()
-            }),
-            (Some(_), None) => None,
-            (None, Some(_)) => None,
-            (None, None) => None,
-        }
-    }
-
-    pub fn test_slot() -> Option<u64> {
-        match std::env::var("MERC_MS_SLOT") {
-            Ok(s) => s.parse::<u64>().ok(),
-            Err(_) => None,
-        }
-    }
-
-    pub fn test_token() -> Option<String> {
-        match std::env::var("MERC_MS_TOKEN") {
-            Ok(t) => t.parse::<String>().ok(),
-            Err(_) => None,
-        }
-    }
-
-    pub fn info() -> &'static str {
-        "To configure mainstay tests set the following environment variables: MERC_MS_TEST_SLOT=<slot> MERC_MS_TEST_TOKEN=<token>"
-    }
 }
 
 impl FromStr for MainstayConfig {

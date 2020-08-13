@@ -189,10 +189,11 @@ impl Config {
             let _ = conf_rs.set("storage.db_database_r", v)?;
         }
 
-        if let Ok(v) = env::var("MERC_MS_TEST_SLOT") {
-            let _ = conf_rs.set("mainstay.postition", v)?;
+        if let Ok(v) = env::var("MERC_MS_SLOT") {
+            let _ = conf_rs.set("mainstay.position", v)?;
         }
-        if let Ok(v) = env::var("MERC_MS_TEST_TOKEN") {
+
+        if let Ok(v) = env::var("MERC_MS_TOKEN") {
             let _ = conf_rs.set("mainstay.token", v)?;
         }
 

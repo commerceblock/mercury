@@ -22,7 +22,8 @@ use server_lib::MockDatabase;
 #[serial]
 pub fn run_simulation() {
     let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
-    let db = MockDatabase::new();
+    let mut db = MockDatabase::new();
+    db.expect_set_connection_from_config().returning(|_| Ok(()));
     let _ = db.spawn_server(Some(mainstay_config));
 
     // Begin with a few clients

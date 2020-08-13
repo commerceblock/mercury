@@ -10,7 +10,7 @@ use crate::protocol::transfer::TransferFinalizeData;
 use crate::server::get_postgres_url;
 use crate::{
     error::{
-        DBErrorType::{NoDataForID, UpdateFailed},
+        DBErrorType::{NoDataForID, UpdateFailed, ConnectionFailed},
         SEError,
     },
     structs::*,
@@ -151,19 +151,41 @@ impl Column {
 
 
 impl PGDatabase {
-    fn get_postgres_connection_pool(rocket_url: &String) -> r2d2::Pool<PostgresConnectionManager> {
+    fn get_postgres_connection_pool(rocket_url: &String) -> Result<r2d2::Pool<PostgresConnectionManager>> {
         let url : String = rocket_url.clone().to_string();
-        let manager = PostgresConnectionManager::new(url, TlsMode::None).unwrap();
-        r2d2::Pool::new(manager).unwrap()
+        let manager = PostgresConnectionManager::new(url.clone(), TlsMode::None)?;
+        match r2d2::Pool::new(manager){
+            Ok(m) => Ok(m),
+            Err(e) => Err(SEError::DBError(ConnectionFailed, 
+                format!("Failed to get postgres connection managerfor rocket url {}: {}",
+                        url, e)))
+        }
     }
 
-    fn database_r(&self) -> DatabaseR {
-        DatabaseR(self.pool.get().unwrap())
+    fn database_r(&self) -> Result<DatabaseR> {
+        match &self.pool {
+            Some(p) => match p.get() {
+                        Ok(c) => Ok(DatabaseR(c)),
+                        Err(e) => Err(SEError::DBError(ConnectionFailed, 
+                        format!("Failed to get pooled connection for read: {}", e))),
+                    },
+            None =>  Err(SEError::DBError(ConnectionFailed, 
+                        "Failed to get pooled connection for read: pool not set".to_string())),
+        }
     }
 
-    fn database_w(&self) -> DatabaseW {
-        DatabaseW(self.pool.get().unwrap())
+    fn database_w(&self) -> Result<DatabaseW> {
+        match &self.pool {
+            Some(p) => match p.get() {
+                        Ok(c) => Ok(DatabaseW(c)),
+                        Err(e) => Err(SEError::DBError(ConnectionFailed, 
+                        format!("Failed to get pooled connection for write: {}", e))),
+                    },
+            None =>  Err(SEError::DBError(ConnectionFailed, 
+                        "Failed to get pooled connection for write: pool not set".to_string())),
+        }
     }
+    
     pub fn init(&self) -> Result<()> {
         self.make_tables()
     }
@@ -171,14 +193,14 @@ impl PGDatabase {
     /// Build DB tables and Schemas
     pub fn make_tables(&self) -> Result<()> {
         // Create Schemas if they do not already exist
-        let _ = self.database_w().execute(
+        let _ = self.database_w()?.execute(
             &format!(
                 "
             CREATE SCHEMA IF NOT EXISTS statechainentity;",
             ),
             &[],
         )?;
-        let _ = self.database_w().execute(
+        let _ = self.database_w()?.execute(
             &format!(
                 "
             CREATE SCHEMA IF NOT EXISTS watcher;",
@@ -187,7 +209,7 @@ impl PGDatabase {
         )?;
 
         // Create tables if they do not already exist
-        self.database_w().execute(
+        self.database_w()?.execute(
             &format!(
                 "
             CREATE TABLE IF NOT EXISTS {} (
@@ -207,7 +229,7 @@ impl PGDatabase {
             &[],
         )?;
 
-        self.database_w().execute(
+        self.database_w()?.execute(
             &format!(
                 "
             CREATE TABLE IF NOT EXISTS {} (
@@ -233,7 +255,7 @@ impl PGDatabase {
             &[],
         )?;
 
-        self.database_w().execute(
+        self.database_w()?.execute(
             &format!(
                 "
             CREATE TABLE IF NOT EXISTS {} (
@@ -249,7 +271,7 @@ impl PGDatabase {
             &[],
         )?;
 
-        self.database_w().execute(
+        self.database_w()?.execute(
             &format!(
                 "
             CREATE TABLE IF NOT EXISTS {} (
@@ -263,7 +285,7 @@ impl PGDatabase {
             &[],
         )?;
 
-        self.database_w().execute(
+        self.database_w()?.execute(
             &format!(
                 "
             CREATE TABLE IF NOT EXISTS {} (
@@ -280,7 +302,7 @@ impl PGDatabase {
             &[],
         )?;
 
-        self.database_w().execute(
+        self.database_w()?.execute(
             &format!(
                 "
             CREATE TABLE IF NOT EXISTS {} (
@@ -294,7 +316,7 @@ impl PGDatabase {
             &[],
         )?;
 
-        self.database_w().execute(
+        self.database_w()?.execute(
             &format!(
                 "
             CREATE TABLE IF NOT EXISTS {} (
@@ -313,14 +335,14 @@ impl PGDatabase {
     #[allow(dead_code)]
     /// Drop all DB tables and Schemas.
     fn drop_tables(&self) -> Result<()> {
-        let _ = self.database_w().execute(
+        let _ = self.database_w()?.execute(
             &format!(
                 "
             DROP SCHEMA statechainentity CASCADE;",
             ),
             &[],
         )?;
-        let _ = self.database_w().execute(
+        let _ = self.database_w()?.execute(
             &format!(
                 "
             DROP SCHEMA watcher CASCADE;",
@@ -333,7 +355,7 @@ impl PGDatabase {
 
     /// Drop all DB tables and schemas.
     fn truncate_tables(&self) -> Result<()> {
-        self.database_w().execute(
+        self.database_w()?.execute(
             &format!(
                 "
             TRUNCATE {},{},{},{},{},{},{} RESTART IDENTITY;",
@@ -385,7 +407,7 @@ impl PGDatabase {
 
     /// Create new item in table
     pub fn insert(&self, id: &Uuid, table: Table) -> Result<u64> {
-        let dbw = self.database_w();
+        let dbw = self.database_w()?;
         let statement = dbw.prepare(&format!(
             "INSERT INTO {} (id) VALUES ($1)",
             table.to_string()
@@ -396,7 +418,7 @@ impl PGDatabase {
 
     /// Remove row in table
     pub fn remove(&self, id: &Uuid, table: Table) -> Result<()> {
-        let dbw = self.database_w();
+        let dbw = self.database_w()?;
         let statement =
             dbw.prepare(&format!("DELETE FROM {} WHERE id = $1;", table.to_string()))?;
         if statement.execute(&[&id])? == 0 {
@@ -429,7 +451,7 @@ impl PGDatabase {
         data: Vec<&'a dyn ToSql>,
     ) -> Result<()> {
         let num_items = column.len();
-        let dbw = self.database_w();
+        let dbw = self.database_w()?;
         let statement = dbw.prepare(&format!(
             "UPDATE {} SET {} WHERE id = ${}",
             table.to_string(),
@@ -462,7 +484,7 @@ impl PGDatabase {
         W: rocket_contrib::databases::postgres::types::FromSql,
     {
         let num_items = column.len();
-        let dbr = self.database_r();
+        let dbr = self.database_r()?;
 
         let fmt_str = format!(
             "SELECT {} FROM {} WHERE id = $1",
@@ -582,19 +604,34 @@ impl PGDatabase {
 impl Database for PGDatabase {
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self {
         Self {
-           pool
+           pool: Some(pool)
         }
     }
 
-    fn get_test() -> Self {
+    fn get_new() -> Self {
+        Self { pool : None }
+    }
+
+    fn set_connection_from_config(&mut self, config: &crate::config::Config) -> Result<()> {
         let rocket_url = get_postgres_url(
-            std::env::var("MERC_DB_HOST_W").unwrap(),
-            std::env::var("MERC_DB_PORT_W").unwrap(),
-            std::env::var("MERC_DB_USER_W").unwrap(),
-            std::env::var("MERC_DB_PASS_W").unwrap(),
-            std::env::var("MERC_DB_DATABASE_W").unwrap(),
+            config.storage.db_host_w.clone(),
+            config.storage.db_port_w.clone(),
+            config.storage.db_user_w.clone(),
+            config.storage.db_pass_w.clone(),
+            config.storage.db_database_w.clone()            
         );
-        Self::from_pool(Self::get_postgres_connection_pool(&rocket_url))
+        self.set_connection(&rocket_url)
+    }
+
+    fn set_connection(&mut self, url: &String) -> Result<()>{
+        match Self::get_postgres_connection_pool(url){
+            Ok(p) => {
+                self.pool = Some(p.clone());
+                Ok(())
+            },
+            Err(e) => Err(SEError::DBError(ConnectionFailed, 
+                        format!("Error obtaining pool address for url {}: {}",url, e)))
+        }
     }
 
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid> {
@@ -734,7 +771,7 @@ impl Database for PGDatabase {
 
     /// Insert a Root into root table
     fn root_insert(&self, root: Root) -> Result<u64> {
-        let dbw = self.database_w();
+        let dbw = self.database_w()?;
         let statement = dbw.prepare(&format!(
             "INSERT INTO {} (value, commitmentinfo) VALUES ($1,$2)",
             Table::Root.to_string()
@@ -745,7 +782,7 @@ impl Database for PGDatabase {
 
     /// Get Id of current Root
     fn root_get_current_id(&self) -> Result<i64> {
-        let dbr = self.database_r();
+        let dbr = self.database_r()?;
         let statement =
             dbr.prepare(&format!("SELECT MAX(id) FROM {}", Table::Root.to_string(),))?;
         let rows = statement.query(&[])?;
@@ -767,7 +804,7 @@ impl Database for PGDatabase {
         if id == 0 {
             return Ok(None);
         }
-        let dbr = self.database_r();
+        let dbr = self.database_r()?;
         let statement = dbr.prepare(&format!(
             "SELECT * FROM {} WHERE id = $1",
             Table::Root.to_string(),
