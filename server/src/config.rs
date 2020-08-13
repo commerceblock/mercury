@@ -52,6 +52,27 @@ impl Default for StorageConfig {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Rocket specific config
+pub struct RocketConfig {
+    /// Rocket keep alive parameter
+    pub keep_alive: u32,
+    /// Rocket address
+    pub address: String,
+    /// Rocket port
+    pub port: u16,
+}
+
+impl Default for RocketConfig {
+    fn default() -> RocketConfig {
+        RocketConfig {
+            keep_alive: 100,
+            address: "0.0.0.0".to_string(),
+            port: 8000
+        }
+    }
+}
+
 /// Config struct storing all StataChain Entity config
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
@@ -81,6 +102,8 @@ pub struct Config {
     pub storage: StorageConfig,
     /// Mainstay config
     pub mainstay: Option<MainstayConfig>,
+    /// Rocket config
+    pub rocket: RocketConfig
 }
 
 /// Config default variable definitons
@@ -103,6 +126,7 @@ impl Default for Config {
             punishment_duration: 360, // 1 minute
             storage: StorageConfig::default(),
             mainstay: Some(MainstayConfig::default()),
+            rocket: RocketConfig::default()
         }
     }
 }
@@ -117,6 +141,8 @@ impl Config {
             .merge(ConfigRs::try_from(&Config::default())?)?;
         // Override with settings in file Settings.toml if exists
         conf_rs.merge(File::with_name("Settings").required(false))?;
+        // Override with settings in file Rocket.toml if exists
+        conf_rs.merge(File::with_name("Rocket").required(false))?;
         // Override any config from env using MERC prefix
         conf_rs.merge(Environment::with_prefix("MERC"))?;
 
@@ -169,6 +195,17 @@ impl Config {
         if let Ok(v) = env::var("MERC_MS_TEST_TOKEN") {
             let _ = conf_rs.set("mainstay.token", v)?;
         }
+
+        if let Ok(v) = env::var("MERC_ROCKET_KEEP_ALIVE") {
+            let _ = conf_rs.set("rocket.keep_alive", v)?;
+        }
+        if let Ok(v) = env::var("MERC_ROCKET_ADDERSS") {
+            let _ = conf_rs.set("rocket.address", v)?;
+        }
+        if let Ok(v) = env::var("MERC_ROCKET_PORT") {
+            let _ = conf_rs.set("rocket.port", v)?;
+        }
+
 
         // Type checks
         let fee_address = conf_rs.get_str("fee_address")?;
