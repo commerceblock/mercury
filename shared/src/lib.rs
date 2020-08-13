@@ -10,9 +10,6 @@ extern crate rocket_contrib;
 extern crate uuid;
 
 #[macro_use]
-extern crate error_chain;
-
-#[macro_use]
 extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;

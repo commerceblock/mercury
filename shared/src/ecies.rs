@@ -6,7 +6,7 @@ use rocket::http::{Status, ContentType};
 //use rocket::{Request, Response, Responder};
 use std::{fmt, error};
 use std::io::Cursor;
-use rocket::{Request, response::{Responder, Response}};
+use rocket::{response::{Responder}};
 
 pub type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 
