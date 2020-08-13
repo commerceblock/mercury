@@ -1,13 +1,12 @@
 use super::protocol::*;
-use crate::DatabaseR;
-use crate::{DatabaseW,Database};
+use crate::Database;
 
 use crate::config::SMT_DB_LOC_TESTING;
 use shared_lib::mainstay;
 
 use crate::config::Config;
 use rocket;
-use rocket::{Rocket, Request, config::{Config as RocketConfig, Environment, Value}};
+use rocket::{Rocket, Request, config::{Config as RocketConfig, Environment}};
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
@@ -15,7 +14,6 @@ use log4rs::config::{Appender, Config as LogConfig, Root as LogRoot};
 use log4rs::encode::pattern::PatternEncoder;
 
 use mockall::*;
-use std::collections::HashMap;
 use uuid::Uuid;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -58,18 +56,6 @@ use std::marker::{Send, Sync};
 /// Start Rocket Server. mainstay_config parameter overrides Settings.toml and env var settings.
 /// If no db provided then use mock
 pub fn get_server<T: Database + Send + Sync + 'static>
-    (mainstay_config: Option<mainstay::MainstayConfig>,
-        db: T) -> Result<Rocket> {
-    Ok(
-        get_mockdb_server::<T>(mainstay_config, db)?
-        .attach(DatabaseW::fairing())
-        .attach(DatabaseR::fairing())
-    )
-}
-
-// Get a rocket test server - this does not have the database read/write servings
-// attached as the database is mocked out
-pub fn get_mockdb_server<T: Database + Send + Sync + 'static>
     (mainstay_config: Option<mainstay::MainstayConfig>,
         db: T) -> Result<Rocket> {
 
@@ -156,39 +142,7 @@ fn set_logging_config(log_file: &String) {
 }
 
 fn get_rocket_config(config: &Config) -> RocketConfig {
-    let mut database_config = HashMap::new();
-
-    // Make postgres URL.
-    let mut databases = HashMap::new();
-    // write DB
-    database_config.insert(
-        "url",
-        Value::from(get_postgres_url(
-            config.storage.db_host_w.clone(),
-            config.storage.db_port_w.clone(),
-            config.storage.db_user_w.clone(),
-            config.storage.db_pass_w.clone(),
-            config.storage.db_database_w.clone(),
-        )),
-    );
-    databases.insert("postgres_w", Value::from(database_config));
-
-    // read DB
-    let mut database_config = HashMap::new();
-    database_config.insert(
-        "url",
-        Value::from(get_postgres_url(
-            config.storage.db_host_r.clone(),
-            config.storage.db_port_r.clone(),
-            config.storage.db_user_r.clone(),
-            config.storage.db_pass_r.clone(),
-            config.storage.db_database_r.clone(),
-        )),
-    );
-    databases.insert("postgres_r", Value::from(database_config));
-
     RocketConfig::build(Environment::Staging)
-        .extra("databases", databases)
         .keep_alive(config.rocket.keep_alive.clone())
         .address(config.rocket.address.clone())
         .port(config.rocket.port.clone())

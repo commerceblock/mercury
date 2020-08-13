@@ -12,7 +12,7 @@ mod tests {
     use curv::elliptic::curves::traits::ECScalar;
     use curv::FE;
 
-        
+
     #[test]
     #[serial]
     fn test_gen_shared_key() {
@@ -401,7 +401,7 @@ mod tests {
     extern crate shared_lib;
 
     use shared_lib::mainstay;
-    use mockito::{mock};
+    use mockito::mock;
     use server_lib::MockDatabase;
 
     #[test]
