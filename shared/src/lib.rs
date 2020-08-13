@@ -10,6 +10,9 @@ extern crate rocket_contrib;
 extern crate uuid;
 
 #[macro_use]
+extern crate error_chain;
+
+#[macro_use]
 extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
@@ -29,6 +32,7 @@ pub mod mainstay;
 pub mod state_chain;
 pub mod structs;
 pub mod util;
+pub mod ecies;
 
 type Result<T> = std::result::Result<T, error::SharedLibError>;
 
