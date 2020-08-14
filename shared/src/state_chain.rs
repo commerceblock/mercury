@@ -12,6 +12,7 @@
 
 use super::Result;
 use crate::error::SharedLibError;
+use crate::ecies::{Encryptable, SelfEncryptable};
 
 use bitcoin::{
     hashes::{sha256d, Hash},
@@ -118,6 +119,17 @@ pub struct StateChainSig {
     pub purpose: String, // "TRANSFER", "TRANSFER-BATCH" or "WITHDRAW"
     pub data: String,    // proof key, state chain id or address
     sig: String,
+}
+
+impl Encryptable for StateChainSig{}
+impl SelfEncryptable for StateChainSig {
+    fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) -> crate::ecies::Result<()>{
+       self.sig.decrypt(privkey)
+    } 
+
+    fn encrypt(&mut self, pubkey: &crate::ecies::PublicKey) -> crate::ecies::Result<()>{
+        self.sig.encrypt(pubkey)
+    }
 }
 
 impl StateChainSig {

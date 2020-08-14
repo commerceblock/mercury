@@ -1,5 +1,6 @@
 extern crate ecies;
-use bitcoin::util::key::{ PublicKey, PrivateKey };
+pub use bitcoin::util::key::PrivateKey as PrivateKey;
+pub use bitcoin::util::key::PublicKey as PublicKey;
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 
 use rocket::http::{Status, ContentType};
