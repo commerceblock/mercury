@@ -12,7 +12,7 @@
 
 use super::Result;
 use crate::error::SharedLibError;
-use crate::ecies::{Encryptable, SelfEncryptable};
+use crate::ecies::{Encryptable, SelfEncryptable, WalletDecryptable};
 
 use bitcoin::{
     hashes::{sha256d, Hash},
@@ -129,6 +129,12 @@ impl SelfEncryptable for StateChainSig {
 
     fn encrypt(&mut self, pubkey: &crate::ecies::PublicKey) -> crate::ecies::Result<()>{
         self.sig.encrypt(pubkey)
+    }
+}
+impl WalletDecryptable for StateChainSig {
+    fn get_public_key(&self) 
+    -> crate::ecies::Result<Option<crate::ecies::PublicKey>> {
+        Ok(Some(crate::ecies::PublicKey::from_str(&self.data)?))
     }
 }
 

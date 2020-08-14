@@ -6,6 +6,7 @@ use super::super::Result;
 use shared_lib::{
     structs::{Protocol, SCEAddress},
     util::get_sighash,
+    ecies::WalletDecryptable
 };
 
 use super::key_paths::{funding_txid_to_int, KeyPath, KeyPathWithAddresses};
@@ -367,6 +368,21 @@ impl Wallet {
                 .push(pk.serialize().to_vec());
         }
         return signed_transaction;
+    }
+
+    pub fn decrypt<T: WalletDecryptable>(&self, val: &mut T) -> shared_lib::ecies::Result<()>{
+        match val.get_public_key()? {
+            Some(k) => {
+                match self.se_proof_keys.get_key_derivation(&k){
+                    Some(p) => {
+                        let priv_k = p.private_key;
+                        val.decrypt(&priv_k)
+                    },
+                    None =>  Err(CError::WalletError(WalletErrorType::KeyNotFound).into())
+                }
+            },
+            None => Err(CError::Generic("WalletDecryptable has no public key".to_string()).into())
+        }
     }
 
     /// create new 2P-ECDSA key with state entity

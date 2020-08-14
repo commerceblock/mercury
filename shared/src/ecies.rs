@@ -97,6 +97,14 @@ impl SelfEncryptable for String{
     }
 }
 
+//WalletDecryptable things are able to supply a public key
+//and are SelfEncryptable
+pub trait WalletDecryptable: SelfEncryptable {
+    fn get_public_key(&self) -> Result<Option<PublicKey>> {
+        Ok(None)
+    }
+}
+
 //Encrypted serialization/deserialization
 pub trait Encryptable: Serialize + Sized + DeserializeOwned{
     fn to_encrypted_bytes(&self, pubkey: &PublicKey) -> Result<Vec<u8>>{
