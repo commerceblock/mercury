@@ -81,6 +81,21 @@ impl Responder<'static> for ECIESError {
 use ECIESError::EncryptError;
 use ECIESError::DecryptError;
 
+impl Encryptable for String{}
+
+impl SelfEncryptable for String{
+    fn decrypt(&mut self, privkey: &PrivateKey) -> Result<()> {
+        let sb = hex::decode(self.clone())?;
+        *self = Self::from_encrypted_bytes(privkey, &sb)?;
+        Ok(())
+    }
+    fn encrypt(&mut self, pubkey: &PublicKey) -> Result<()>{
+        let eb = self.to_encrypted_bytes(pubkey)?;
+        *self = hex::encode(eb);
+        Ok(())
+    }
+}
+
 //Encrypted serialization/deserialization
 pub trait Encryptable: Serialize + Sized + DeserializeOwned{
     fn to_encrypted_bytes(&self, pubkey: &PublicKey) -> Result<Vec<u8>>{
@@ -95,7 +110,8 @@ pub trait Encryptable: Serialize + Sized + DeserializeOwned{
 
     fn from_encrypted_bytes(privkey: &PrivateKey, ec: &[u8]) ->Result<Self>{
         let key_bytes = privkey.to_bytes();
-        let serialized = String::from_utf8(ecies::decrypt(&key_bytes, ec)?)?;
+        let db = ecies::decrypt(&key_bytes, ec)?;
+        let serialized = std::str::from_utf8(&db)?;
         match serde_json::from_str(&serialized){
             Ok(v) => Ok(v),
             Err(e) => Err(DecryptError(e.to_string()).into()),
@@ -103,18 +119,37 @@ pub trait Encryptable: Serialize + Sized + DeserializeOwned{
     }
 }
 
+pub trait SelfEncryptable : Encryptable {
+    fn decrypt(&mut self, privkey: &PrivateKey) -> Result<()>; 
+    fn encrypt(&mut self, pubkey: &PublicKey) -> Result<()>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::util::keygen::generate_keypair;
 
-    #[derive(Deserialize, Serialize, Debug, PartialEq)]
+    #[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
     struct TestStruct {
         first_item: String,
         second_item: u32,
     }
 
     impl Encryptable for TestStruct{}
+
+    //Encryptable modified to only encrypt selected members of a struct
+    //In this example first_item is encrypted
+    impl SelfEncryptable for TestStruct {
+        fn decrypt(&mut self, privkey: &PrivateKey) -> Result<()> {
+            self.first_item.decrypt(privkey)?;
+            Ok(())
+        }
+
+        fn encrypt(&mut self, pubkey: &PublicKey) -> Result<()>{
+            self.first_item.encrypt(pubkey)?;
+            Ok(())
+        }
+    }
 
     #[test]
     fn test_encrypt_decrypt_struct() {
@@ -138,5 +173,28 @@ mod tests {
                 None => assert!(false, "expected secp256k1::Error"),
             }
         }
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_string() {
+        let mut str1 = String::from("str1");
+        let str1_clone = str1.clone();
+        let (sk, pk) = generate_keypair();
+        str1.encrypt(&pk).unwrap();
+        assert_ne!(str1, str1_clone);
+        str1.decrypt(&sk).unwrap();
+        assert_eq!(str1, str1_clone);
+    }
+
+    #[test]
+    fn test_self_encrypt_decrypt_struct() {
+        let mut ts = TestStruct{first_item: "test message".to_string(), second_item: 42};
+        let ts_clone = ts.clone();
+        let (sk, pk) = generate_keypair();
+        ts.encrypt(&pk).unwrap();
+        assert_ne!(ts.first_item, ts_clone.first_item, "first item should have changed");
+        assert_eq!(ts.second_item, ts_clone.second_item, "second item should not have changed");
+        ts.decrypt(&sk).unwrap();
+        assert_eq!(ts, ts_clone, "decrypted struct should equal original struct");
     }
 }
