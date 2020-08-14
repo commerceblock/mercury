@@ -23,6 +23,7 @@ where
     T: serde::ser::Serialize,
     V: serde::de::DeserializeOwned,
 {
+    std::thread::sleep(std::time::Duration::from_millis(100));
     let start = Instant::now();
 
     let mut b = client_shim
