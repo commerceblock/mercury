@@ -236,6 +236,7 @@ mod tests {
     use super::*;
     use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
     pub static DB_LOC: &str = "./db-test";
+    use crate::util::keygen::generate_keypair;
 
     #[test]
     fn test_add_to_state_chain() {
@@ -262,6 +263,39 @@ mod tests {
         // try add again (signature no longer valid for proof key "03b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3")
         let fail = state_chain.add(new_state_sig);
         assert!(fail.is_err());
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_statechainsig(){
+           // StateChainSig.verify called in function below
+            let (priv_k, pub_k) = generate_keypair();
+
+           let mut new_state_sig = StateChainSig::new(
+                &priv_k.key,
+                &String::from("TRANSFER"),
+                &pub_k.to_string()
+            )
+            .unwrap();
+            let new_state_sig_clone=new_state_sig.clone();
+            assert_eq!(new_state_sig, new_state_sig_clone);
+            new_state_sig.encrypt(&pub_k).unwrap();
+            assert_ne!(new_state_sig, new_state_sig_clone);
+            new_state_sig.decrypt(&priv_k).unwrap();
+            assert_eq!(new_state_sig, new_state_sig_clone);
+    }
+
+    #[test]
+    fn test_statechainsig_wallet_encryptable(){
+        let (priv_k, pub_k) = generate_keypair();
+
+        let new_state_sig = StateChainSig::new(
+             &priv_k.key,
+             &String::from("TRANSFER"),
+             &pub_k.to_string()
+        ).unwrap();
+
+        let pk = new_state_sig.get_public_key().unwrap().unwrap();
+        assert_eq!(pk, pub_k);
     }
 
     #[test]
