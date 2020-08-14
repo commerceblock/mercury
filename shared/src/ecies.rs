@@ -90,7 +90,7 @@ impl SelfEncryptable for String{
         *self = Self::from_encrypted_bytes(privkey, &sb)?;
         Ok(())
     }
-    fn encrypt(&mut self, pubkey: &PublicKey) -> Result<()>{
+    fn encrypt_with_pubkey(&mut self, pubkey: &PublicKey) -> Result<()>{
         let eb = self.to_encrypted_bytes(pubkey)?;
         *self = hex::encode(eb);
         Ok(())
@@ -102,6 +102,12 @@ impl SelfEncryptable for String{
 pub trait WalletDecryptable: SelfEncryptable {
     fn get_public_key(&self) -> Result<Option<PublicKey>> {
         Ok(None)
+    }
+    fn encrypt(&mut self) -> Result<()>{
+        match self.get_public_key()?{
+            Some(k)=>self.encrypt_with_pubkey(&k),
+            None=>Err(EncryptError("struct does not have a public key for encryption".to_string()).into()),
+        }
     }
 }
 
@@ -130,7 +136,7 @@ pub trait Encryptable: Serialize + Sized + DeserializeOwned{
 
 pub trait SelfEncryptable : Encryptable {
     fn decrypt(&mut self, privkey: &PrivateKey) -> Result<()>; 
-    fn encrypt(&mut self, pubkey: &PublicKey) -> Result<()>;
+    fn encrypt_with_pubkey(&mut self, pubkey: &PublicKey) -> Result<()>;
 }
 
 #[cfg(test)]
@@ -154,8 +160,8 @@ mod tests {
             Ok(())
         }
 
-        fn encrypt(&mut self, pubkey: &PublicKey) -> Result<()>{
-            self.first_item.encrypt(pubkey)?;
+        fn encrypt_with_pubkey(&mut self, pubkey: &PublicKey) -> Result<()>{
+            self.first_item.encrypt_with_pubkey(pubkey)?;
             Ok(())
         }
     }
@@ -189,7 +195,7 @@ mod tests {
         let mut str1 = String::from("str1");
         let str1_clone = str1.clone();
         let (sk, pk) = generate_keypair();
-        str1.encrypt(&pk).unwrap();
+        str1.encrypt_with_pubkey(&pk).unwrap();
         assert_ne!(str1, str1_clone);
         str1.decrypt(&sk).unwrap();
         assert_eq!(str1, str1_clone);
@@ -200,7 +206,7 @@ mod tests {
         let mut ts = TestStruct{first_item: "test message".to_string(), second_item: 42};
         let ts_clone = ts.clone();
         let (sk, pk) = generate_keypair();
-        ts.encrypt(&pk).unwrap();
+        ts.encrypt_with_pubkey(&pk).unwrap();
         assert_ne!(ts.first_item, ts_clone.first_item, "first item should have changed");
         assert_eq!(ts.second_item, ts_clone.second_item, "second item should not have changed");
         ts.decrypt(&sk).unwrap();

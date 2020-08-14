@@ -127,8 +127,8 @@ impl SelfEncryptable for StateChainSig {
        self.sig.decrypt(privkey)
     } 
 
-    fn encrypt(&mut self, pubkey: &crate::ecies::PublicKey) -> crate::ecies::Result<()>{
-        self.sig.encrypt(pubkey)
+    fn encrypt_with_pubkey(&mut self, pubkey: &crate::ecies::PublicKey) -> crate::ecies::Result<()>{
+        self.sig.encrypt_with_pubkey(pubkey)
     }
 }
 impl WalletDecryptable for StateChainSig {
@@ -278,7 +278,7 @@ mod tests {
             .unwrap();
             let new_state_sig_clone=new_state_sig.clone();
             assert_eq!(new_state_sig, new_state_sig_clone);
-            new_state_sig.encrypt(&pub_k).unwrap();
+            new_state_sig.encrypt_with_pubkey(&pub_k).unwrap();
             assert_ne!(new_state_sig, new_state_sig_clone);
             new_state_sig.decrypt(&priv_k).unwrap();
             assert_eq!(new_state_sig, new_state_sig_clone);

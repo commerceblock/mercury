@@ -27,7 +27,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Config {
         Config {
-            endpoint: "https://localhost:8000".to_string(),
+            endpoint: "http://localhost:8000".to_string(),
             electrum_server: "127.0.0.1:60401".to_string(),
             testing_mode: true,
         }
