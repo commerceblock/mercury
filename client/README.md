@@ -19,7 +19,7 @@ The wallet is currently exposed to a Mock Electrum server. The first 2 addresses
 
 Export mercury endpoint:
 ```bash
-MERC_ENDPOINT="https://fakeapi.mercurywallet.io"
+export MERC_ENDPOINT="https://fakeapi.mercurywallet.io"
 ```
 
 ```bash
