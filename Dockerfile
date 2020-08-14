@@ -64,7 +64,8 @@ COPY ./docker-entrypoint.sh /docker-entrypoint.sh
 
 RUN set -ex \
     && apt update \
-    && apt install -y libssl-dev \
+    && apt install -y libssl-dev apt-transport-https ca-certificates \
+    && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
