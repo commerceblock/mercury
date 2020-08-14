@@ -17,6 +17,11 @@ cargo build --release
 ## Using the CLI
 The wallet is currently exposed to a Mock Electrum server. The first 2 addresses generated have funds.
 
+Export mercury endpoint:
+```bash
+MERC_ENDPOINT="https://fakeapi.mercurywallet.io"
+```
+
 ```bash
 ../target/release/cli --help            
 ```
