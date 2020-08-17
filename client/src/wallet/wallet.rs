@@ -659,7 +659,7 @@ mod tests {
 
         let wallet_rebuilt = super::Wallet::from_json(
             wallet_json,
-            ClientShim::new("https://localhost:8000".to_string(), None).unwrap(),
+            ClientShim::new("http://localhost:8000".to_string(), None).unwrap(),
             Box::new(MockElectrum::new()),
         )
         .unwrap();

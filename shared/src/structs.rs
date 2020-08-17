@@ -364,15 +364,23 @@ impl SelfEncryptable for TransferMsg3 {
             self.t1.encrypt_with_pubkey(pubkey)
         }
 }
+
 impl SelfEncryptable for &TransferMsg3 {
+    //This is not unconditional recurssion because struct and &struct are seen
+    //as seperate types
+    #[allow(unconditional_recursion)]
     fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) 
     -> crate::ecies::Result<()>{
         (*self).decrypt(privkey)
     } 
+    //This is not unconditional recurssion because struct and &struct are seen
+    //as seperate types
+    #[allow(unconditional_recursion)]
     fn encrypt_with_pubkey(&mut self, pubkey: &crate::ecies::PublicKey) -> crate::ecies::Result<()>{
         (*self).encrypt_with_pubkey(pubkey)
     }
 }
+
 
 use std::str::FromStr;
 impl WalletDecryptable for TransferMsg3 {
@@ -381,12 +389,14 @@ impl WalletDecryptable for TransferMsg3 {
         Ok(Some(crate::ecies::PublicKey::from_str(&self.state_chain_sig.data)?))
     }
 }
+
 impl WalletDecryptable for &TransferMsg3 {
    fn get_public_key(&self) 
     -> crate::ecies::Result<Option<crate::ecies::PublicKey>> {
         (*self).get_public_key()
     }
 }
+
 
 #[cfg(test)]
 mod tests{
@@ -432,6 +442,14 @@ mod tests{
         println!("decrypt");
         msg.decrypt(&priv_k).unwrap();
         assert_eq!(msg, msg_clone);
+
+        let msg_ref = &mut msg;
+        assert_eq!(msg_ref, &msg_clone);
+        msg_ref.encrypt_with_pubkey(&pub_k).unwrap();
+        assert_ne!(msg_ref, &msg_clone);
+        msg_ref.decrypt(&priv_k).unwrap();
+        assert_eq!(msg_ref, &msg_clone);
+
     }
     
 
