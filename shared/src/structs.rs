@@ -209,9 +209,10 @@ pub struct TransferMsg1 {
     pub state_chain_sig: StateChainSig,
 }
 /// SE -> Sender
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct TransferMsg2 {
-    pub x1: FE,
+    pub x1: FESer,
+    pub proof_key: ecies::PublicKey
 }
 /// Sender -> Receiver
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
@@ -333,7 +334,7 @@ impl SelfEncryptable for SK {
     }
 }
 
-use curv::elliptic::curves::traits::{ECScalar, ECPoint};
+use curv::elliptic::curves::traits::ECScalar;
 impl Encryptable for FESer {}
 impl SelfEncryptable for FESer{
 
@@ -354,6 +355,40 @@ impl SelfEncryptable for FESer{
      }
 }
 
+impl Encryptable for TransferMsg2{}
+impl SelfEncryptable for TransferMsg2 {
+        fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) -> crate::ecies::Result<()>{
+            self.x1.decrypt(privkey)
+        } 
+    
+        fn encrypt_with_pubkey(&mut self, pubkey: &crate::ecies::PublicKey) -> crate::ecies::Result<()>{
+            self.x1.encrypt_with_pubkey(pubkey)
+        }
+}
+use std::str::FromStr;
+impl WalletDecryptable for TransferMsg2 {
+    fn get_public_key(&self) 
+        -> crate::ecies::Result<Option<crate::ecies::PublicKey>> {
+        Ok(Some(self.proof_key))
+    }
+}
+
+impl SelfEncryptable for &mut TransferMsg2 {
+    fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) 
+    -> crate::ecies::Result<()>{
+        (**self).decrypt(privkey)
+    } 
+    fn encrypt_with_pubkey(&mut self, pubkey: &crate::ecies::PublicKey) -> crate::ecies::Result<()>{
+        (**self).encrypt_with_pubkey(pubkey)
+    }
+}
+impl WalletDecryptable for &mut TransferMsg2 {
+    fn get_public_key(&self) 
+        -> crate::ecies::Result<Option<crate::ecies::PublicKey>> {
+            (**self).get_public_key()
+    }
+}
+
 impl Encryptable for TransferMsg3{}
 impl SelfEncryptable for TransferMsg3 {
         fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) -> crate::ecies::Result<()>{
@@ -365,24 +400,6 @@ impl SelfEncryptable for TransferMsg3 {
         }
 }
 
-impl SelfEncryptable for &TransferMsg3 {
-    //This is not unconditional recurssion because struct and &struct are seen
-    //as seperate types
-    #[allow(unconditional_recursion)]
-    fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) 
-    -> crate::ecies::Result<()>{
-        (*self).decrypt(privkey)
-    } 
-    //This is not unconditional recurssion because struct and &struct are seen
-    //as seperate types
-    #[allow(unconditional_recursion)]
-    fn encrypt_with_pubkey(&mut self, pubkey: &crate::ecies::PublicKey) -> crate::ecies::Result<()>{
-        (*self).encrypt_with_pubkey(pubkey)
-    }
-}
-
-
-use std::str::FromStr;
 impl WalletDecryptable for TransferMsg3 {
     fn get_public_key(&self) 
         -> crate::ecies::Result<Option<crate::ecies::PublicKey>> {
@@ -390,13 +407,21 @@ impl WalletDecryptable for TransferMsg3 {
     }
 }
 
-impl WalletDecryptable for &TransferMsg3 {
-   fn get_public_key(&self) 
-    -> crate::ecies::Result<Option<crate::ecies::PublicKey>> {
-        (*self).get_public_key()
+impl SelfEncryptable for &mut TransferMsg3 {
+    fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) 
+    -> crate::ecies::Result<()>{
+        (**self).decrypt(privkey)
+    } 
+    fn encrypt_with_pubkey(&mut self, pubkey: &crate::ecies::PublicKey) -> crate::ecies::Result<()>{
+        (**self).encrypt_with_pubkey(pubkey)
     }
 }
-
+impl WalletDecryptable for &mut TransferMsg3 {
+    fn get_public_key(&self) 
+        -> crate::ecies::Result<Option<crate::ecies::PublicKey>> {
+            (**self).get_public_key()
+    }
+}
 
 #[cfg(test)]
 mod tests{
@@ -434,6 +459,36 @@ mod tests{
         msg.t1 = t1;
 
         let msg_clone = msg.clone();
+        assert_eq!(msg, msg_clone);
+        let (priv_k, pub_k) = generate_keypair();
+        println!("encrypt");
+        msg.encrypt_with_pubkey(&pub_k).unwrap();
+        assert_ne!(msg, msg_clone);
+        println!("decrypt");
+        msg.decrypt(&priv_k).unwrap();
+        assert_eq!(msg, msg_clone);
+
+        let msg_ref = &mut msg;
+        assert_eq!(msg_ref, &msg_clone);
+        msg_ref.encrypt_with_pubkey(&pub_k).unwrap();
+        assert_ne!(msg_ref, &msg_clone);
+        msg_ref.decrypt(&priv_k).unwrap();
+        assert_eq!(msg_ref, &msg_clone);
+
+    }
+
+    #[test]
+    fn test_encrypt_transfer_msg2(){
+        let x1 = FESer::new_random();
+        let (priv_k, proof_key) = generate_keypair();
+
+        let mut msg = TransferMsg2{
+            x1, 
+            proof_key,
+        };
+
+        let msg_clone = msg.clone();
+        
         assert_eq!(msg, msg_clone);
         let (priv_k, pub_k) = generate_keypair();
         println!("encrypt");

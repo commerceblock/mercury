@@ -4,7 +4,7 @@
 
 pub use super::super::Result;
 extern crate shared_lib;
-use shared_lib::{state_chain::*, structs::*};
+use shared_lib::{state_chain::*, structs::*, ecies, ecies::WalletDecryptable};
 use super::transfer_batch::transfer_batch_is_ended;
 
 use crate::error::SEError;
@@ -20,6 +20,7 @@ use curv::{
 use rocket::State;
 use rocket_contrib::json::Json;
 use uuid::Uuid;
+use std::str::FromStr;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -92,6 +93,7 @@ impl Transfer for SCE {
 
         // Generate x1
         let x1: FE = ECScalar::new_random();
+        let x1_ser = FESer::from_fe(&x1);
 
         self.database
             .create_transfer(&state_chain_id, &transfer_msg1.state_chain_sig, &x1)?;
@@ -103,9 +105,22 @@ impl Transfer for SCE {
         );
         debug!("TRANSFER: Sender side complete. State Chain ID: {}. State Chain Signature: {:?}. x1: {:?}.", state_chain_id, transfer_msg1.state_chain_sig, x1);
 
-        // TODO encrypt x1 with Senders proof key
+        // encrypt x1 with Senders proof key
+        let proof_key = match ecies::PublicKey::from_str(&self.database.get_proof_key(user_id)?){
+            Ok(k) => k,
+            Err(e) => return Err(SEError::SharedLibError(format!("error deserialising proof key: {}", e))),
+        };
+        println!("proof key {}", proof_key);
 
-        Ok(TransferMsg2 { x1 })
+        let mut msg2 = TransferMsg2 {
+            x1: x1_ser,
+            proof_key
+        };
+
+        msg2.encrypt();
+        let msg2 = msg2;
+
+        Ok(msg2)
     }
 
     fn transfer_receiver(&self, transfer_msg4: TransferMsg4) -> Result<TransferMsg5> {
@@ -127,10 +142,10 @@ impl Transfer for SCE {
 
         let kp = self.database.get_ecdsa_keypair(user_id)?;
 
-        // TODO: decrypt t2
 
         // let x1 = transfer_data.x1;
         let t2 = transfer_msg4.t2;
+
         let s1 = kp.party_1_private.get_private_key();
 
         // Note:
@@ -435,7 +450,7 @@ mod tests {
                     )
                     .unwrap()
                     .state_chain_sig,
-                    x1,
+                    x1: x1.get_fe().expect("invalid x1"),
                 })
             });
         db.expect_get_ecdsa_keypair()
@@ -523,7 +538,7 @@ mod tests {
         msg_4_incorrect_t2.t2 =
             serde_json::from_str::<TransferMsg2>(&TRANSFER_MSG_2_INVALID_X1.to_string())
                 .unwrap()
-                .x1;
+                .x1.get_fe().expect("invalid x1");
         match sc_entity.transfer_receiver(msg_4_incorrect_t2) {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("Transfer protocol error: P1 != P2")),

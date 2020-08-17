@@ -980,6 +980,15 @@ impl Database for PGDatabase {
         Ok(tx_backup)
     }
 
+    fn get_proof_key(&self, user_id: Uuid) -> Result<String> {
+        let proof_key = self.get_1::<String>(
+            user_id,
+            Table::UserSession,
+            vec![Column::ProofKey],
+        )?;
+        Ok(proof_key)
+    }
+
     fn get_backup_transaction_and_proof_key(&self, user_id: Uuid) -> Result<(Transaction, String)> {
         let (tx_backup_str, proof_key) = self.get_2::<String, String>(
             user_id,
