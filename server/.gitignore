@@ -11,4 +11,5 @@ Cargo.lock
 .idea
 db/
 db-smt/
+db-smt-testing/
 log/
