@@ -2,7 +2,6 @@
 //!
 //! Struct definitions used in State entity protocols
 
-use secp256k1::util::SECRET_KEY_SIZE;
 use crate::state_chain::{State, StateChainSig};
 use crate::Root;
 use bitcoin::{OutPoint, Transaction, TxIn, TxOut};
@@ -15,9 +14,6 @@ use uuid::Uuid;
 
 use crate::ecies::{WalletDecryptable, Encryptable, SelfEncryptable};
 use crate::ecies;
-use serde::de::DeserializeOwned;
-
-use std::convert::TryInto;
 
 /// State Entity protocols
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -47,7 +43,6 @@ impl FESer {
 
     pub fn from_fe(fe_in: &FE) -> Self {
         let sbs = fe_in.get_element().to_string();
-        //println!("key length: {}",sbs.as_bytes().len());
         let secret_bytes = hex::decode(&sbs)
         .expect("hex decode error");
         FESer{secret_bytes}
@@ -347,9 +342,7 @@ impl SelfEncryptable for FESer{
  
      fn encrypt_with_pubkey(&mut self, pubkey: &crate::ecies::PublicKey) 
      -> ecies::Result<()>{
-        println!("len byts = {}", self.secret_bytes.len());
         let sb_enc = ecies::ecies::encrypt(&pubkey.to_bytes(), &self.secret_bytes[..])?;
-        println!("len sb enc bytes = {}", sb_enc.len());
         self.secret_bytes = sb_enc;
         Ok(())
      }
@@ -434,10 +427,8 @@ mod tests{
         let fe_ser_clone = fe_ser.clone();
         assert_eq!(fe_ser, fe_ser_clone);
         let (priv_k, pub_k) = generate_keypair();
-        println!("encrypt");
         fe_ser.encrypt_with_pubkey(&pub_k).unwrap();
         assert_ne!(fe_ser, fe_ser_clone);
-        println!("decrypt");
         fe_ser.decrypt(&priv_k).unwrap();
         assert_eq!(fe_ser, fe_ser_clone);
     }
@@ -461,10 +452,8 @@ mod tests{
         let msg_clone = msg.clone();
         assert_eq!(msg, msg_clone);
         let (priv_k, pub_k) = generate_keypair();
-        println!("encrypt");
         msg.encrypt_with_pubkey(&pub_k).unwrap();
         assert_ne!(msg, msg_clone);
-        println!("decrypt");
         msg.decrypt(&priv_k).unwrap();
         assert_eq!(msg, msg_clone);
 
@@ -490,17 +479,15 @@ mod tests{
         let msg_clone = msg.clone();
         
         assert_eq!(msg, msg_clone);
-        let (priv_k, pub_k) = generate_keypair();
-        println!("encrypt");
-        msg.encrypt_with_pubkey(&pub_k).unwrap();
+        msg.encrypt().unwrap();
+
         assert_ne!(msg, msg_clone);
-        println!("decrypt");
         msg.decrypt(&priv_k).unwrap();
         assert_eq!(msg, msg_clone);
 
         let msg_ref = &mut msg;
         assert_eq!(msg_ref, &msg_clone);
-        msg_ref.encrypt_with_pubkey(&pub_k).unwrap();
+        msg_ref.encrypt_with_pubkey(&proof_key).unwrap();
         assert_ne!(msg_ref, &msg_clone);
         msg_ref.decrypt(&priv_k).unwrap();
         assert_eq!(msg_ref, &msg_clone);

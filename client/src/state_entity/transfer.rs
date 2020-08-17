@@ -26,7 +26,7 @@ use crate::state_entity::{
 use crate::wallet::{key_paths::funding_txid_to_int, wallet::Wallet};
 use crate::{utilities::requests, ClientShim};
 use shared_lib::{state_chain::StateChainSig, structs::*, 
-    ecies::{WalletDecryptable, Encryptable, SelfEncryptable}};
+    ecies::WalletDecryptable};
 
 use bitcoin::{Address, PublicKey};
 use curv::elliptic::curves::traits::{ECPoint, ECScalar};
@@ -78,7 +78,7 @@ pub fn transfer_sender(
         },
     )?;
 
-    wallet.decrypt(&mut transfer_msg2);
+    wallet.decrypt(&mut transfer_msg2)?;
 
     // Update prepare_sign_msg with new owners address, proof key
     prepare_sign_msg.protocol = Protocol::Transfer;
@@ -256,8 +256,7 @@ pub fn try_o2(
     let t1 = transfer_msg3.t1.get_fe()?;
     let t2 = t1 * (o2.invert());
 
-    //Encrypt t2
-    let mut t2_ser = FESer::from_fe(&t2);
+
     // encrypt t2 with SE key and sign with Receiver proof key (se_addr.proof_key)
 
     let msg4 = &mut TransferMsg4 {
@@ -269,8 +268,6 @@ pub fn try_o2(
         tx_backup: transfer_msg3.tx_backup_psm.tx.clone(),
         batch_data: batch_data.to_owned(),
     };
-
-    //msg4.encrypt()?;
 
     let transfer_msg5: TransferMsg5 = requests::postb(
         &wallet.client_shim,

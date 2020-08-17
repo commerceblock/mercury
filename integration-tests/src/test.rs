@@ -412,7 +412,6 @@ mod tests {
     fn test_get_statechain() {
         let mockito_server_url = mockito::server_url();
         let _m = mock("GET", "/ping").create();
-        println!("mockito server url: {}", mockito_server_url);
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(
             &mockito_server_url);
         let mut db = MockDatabase::new();

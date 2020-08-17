@@ -187,13 +187,11 @@ mod tests {
         let (sk2, _) = generate_keypair();
         let tse = ts.to_encrypted_bytes(&pk).unwrap();
 
-        let expected_err = ECIESError::DecryptError("Invalid message".to_string());
-
         match TestStruct::from_encrypted_bytes(&sk2, &tse){
             Ok(_) => assert!(false, "decryption should have failed"),
-            Err(e) => match e {
-                expected_err => assert!(true),
-                _ => assert!(false, "expected {}", expected_err),
+            Err(e) => match e.downcast_ref::<ECIESError>() {
+                Some(_) => assert!(true),
+                None => assert!(false, format!("wrong error: {}",e)),
             }
         }
     }

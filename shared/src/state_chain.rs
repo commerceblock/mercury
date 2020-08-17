@@ -12,7 +12,6 @@
 
 use super::Result;
 use crate::error::SharedLibError;
-use crate::ecies::{Encryptable, SelfEncryptable, WalletDecryptable};
 
 use bitcoin::{
     hashes::{sha256d, Hash},
@@ -219,7 +218,6 @@ mod tests {
     use super::*;
     use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
     pub static DB_LOC: &str = "./db-test";
-    use crate::util::keygen::generate_keypair;
 
     #[test]
     fn test_add_to_state_chain() {
