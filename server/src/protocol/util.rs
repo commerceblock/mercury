@@ -17,7 +17,7 @@ use shared_lib::{
 
 use crate::error::{DBErrorType, SEError};
 use crate::storage::Storage;
-use crate::{server::StateChainEntity, Database};
+use crate::{server::StateChainEntity, Database, config::SMT_DB_LOC_TESTING};
 use cfg_if::cfg_if;
 
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
@@ -355,6 +355,19 @@ pub fn prepare_sign_tx(
     }
 }
 
+#[post("/test/reset-db", format = "json")]
+pub fn reset_test_dbs(
+    sc_entity: State<SCE>,
+) -> Result<Json<()>> {
+    if sc_entity.config.testing_mode {
+        match sc_entity.database.reset(&SMT_DB_LOC_TESTING.to_string()) {
+            Ok(res) => return Ok(Json(res)),
+            Err(e) => return Err(e),
+        }
+    }
+    return Err(SEError::Generic(String::from("Cannot reset Databases when not in testing mode.")))
+}
+
 // Utily functions for StateChainEntity to be used throughout codebase.
 impl SCE {
     /// Query an Electrum Server for a transaction's confirmation status.
@@ -523,14 +536,14 @@ impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
         //If mocked out current_root will be randomly chosen
         let current_root_id = db.root_get_current_id()?;
         let current_root = db.get_root(current_root_id)?;
-  
+
         let new_root_hash = update_statechain_smt(
             &self.config.smt_db_loc,
             &current_root.clone().map(|r| r.hash()),
             funding_txid,
             proof_key,
         )?;
-        
+
         let new_root = Root::from_hash(&new_root_hash.unwrap());
         self.update_root(&new_root)?; // Update current root
 
