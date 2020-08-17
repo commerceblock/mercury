@@ -114,28 +114,11 @@ pub struct State {
     pub next_state: Option<StateChainSig>, // signature representing passing of ownership
 }
 /// Data necessary to create ownership transfer signatures
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub struct StateChainSig {
     pub purpose: String, // "TRANSFER", "TRANSFER-BATCH" or "WITHDRAW"
     pub data: String,    // proof key, state chain id or address
     sig: String,
-}
-
-impl Encryptable for StateChainSig{}
-impl SelfEncryptable for StateChainSig {
-    fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) -> crate::ecies::Result<()>{
-       self.sig.decrypt(privkey)
-    } 
-
-    fn encrypt_with_pubkey(&mut self, pubkey: &crate::ecies::PublicKey) -> crate::ecies::Result<()>{
-        self.sig.encrypt_with_pubkey(pubkey)
-    }
-}
-impl WalletDecryptable for StateChainSig {
-    fn get_public_key(&self) 
-    -> crate::ecies::Result<Option<crate::ecies::PublicKey>> {
-        Ok(Some(crate::ecies::PublicKey::from_str(&self.data)?))
-    }
 }
 
 impl StateChainSig {
@@ -263,39 +246,6 @@ mod tests {
         // try add again (signature no longer valid for proof key "03b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3")
         let fail = state_chain.add(new_state_sig);
         assert!(fail.is_err());
-    }
-
-    #[test]
-    fn test_encrypt_decrypt_statechainsig(){
-           // StateChainSig.verify called in function below
-            let (priv_k, pub_k) = generate_keypair();
-
-           let mut new_state_sig = StateChainSig::new(
-                &priv_k.key,
-                &String::from("TRANSFER"),
-                &pub_k.to_string()
-            )
-            .unwrap();
-            let new_state_sig_clone=new_state_sig.clone();
-            assert_eq!(new_state_sig, new_state_sig_clone);
-            new_state_sig.encrypt_with_pubkey(&pub_k).unwrap();
-            assert_ne!(new_state_sig, new_state_sig_clone);
-            new_state_sig.decrypt(&priv_k).unwrap();
-            assert_eq!(new_state_sig, new_state_sig_clone);
-    }
-
-    #[test]
-    fn test_statechainsig_wallet_encryptable(){
-        let (priv_k, pub_k) = generate_keypair();
-
-        let new_state_sig = StateChainSig::new(
-             &priv_k.key,
-             &String::from("TRANSFER"),
-             &pub_k.to_string()
-        ).unwrap();
-
-        let pk = new_state_sig.get_public_key().unwrap().unwrap();
-        assert_eq!(pk, pub_k);
     }
 
     #[test]

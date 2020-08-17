@@ -2,15 +2,22 @@
 //!
 //! Struct definitions used in State entity protocols
 
+use secp256k1::util::SECRET_KEY_SIZE;
 use crate::state_chain::{State, StateChainSig};
 use crate::Root;
-use bitcoin::{OutPoint, Transaction};
+use bitcoin::{OutPoint, Transaction, TxIn, TxOut};
 use curv::{cryptographic_primitives::proofs::sigma_dlog::DLogProof, BigInt, FE, GE, PK};
 use kms::ecdsa::two_party::party2;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_two;
 
 use std::{collections::HashMap, fmt};
 use uuid::Uuid;
+
+use crate::ecies::{WalletDecryptable, Encryptable, SelfEncryptable};
+use crate::ecies;
+use serde::de::DeserializeOwned;
+
+use std::convert::TryInto;
 
 /// State Entity protocols
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -21,6 +28,36 @@ pub enum Protocol {
 }
 
 // API structs
+
+//Encryptable version of FE
+//Secret key is stored as raw bytes
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+pub struct FESer{
+    secret_bytes: Vec<u8>
+}
+
+impl FESer {
+    pub fn get_fe(&self) -> ecies::Result<FE>{
+        let secret = SK::from_slice(&self.secret_bytes)?;
+        let mut fe = FE::zero();
+        fe.set_element(secret);
+        let fe = fe;
+        Ok(fe)
+    }
+
+    pub fn from_fe(fe_in: &FE) -> Self {
+        let sbs = fe_in.get_element().to_string();
+        //println!("key length: {}",sbs.as_bytes().len());
+        let secret_bytes = hex::decode(&sbs)
+        .expect("hex decode error");
+        FESer{secret_bytes}
+    }
+
+    pub fn new_random() -> Self {
+        let fe = FE::new_random();
+        Self::from_fe(&fe)
+    }
+}
 
 /// /info/info return struct
 #[derive(Serialize, Deserialize, Debug)]
@@ -65,7 +102,7 @@ pub struct SmtProofMsgAPI {
 
 /// Struct contains data necessary to caluculate backup tx's input sighash('s). This is required
 /// by Server before co-signing is performed for validation of tx.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct PrepareSignTxMsg {
     pub shared_key_id: Uuid,
     pub protocol: Protocol,
@@ -73,6 +110,27 @@ pub struct PrepareSignTxMsg {
     pub input_addrs: Vec<PK>, // pub keys being spent from
     pub input_amounts: Vec<u64>,
     pub proof_key: Option<String>,
+}
+
+impl Default for PrepareSignTxMsg {
+
+    fn default() -> Self {
+        let default_tx = Transaction{
+            version: u32::default(), 
+            lock_time: u32::default(), 
+            input: Vec::<TxIn>::default(), 
+            output: Vec::<TxOut>::default()
+        };
+
+        Self{
+            shared_key_id: Uuid::default(),
+            protocol: Protocol::Transfer,
+            tx: default_tx, 
+            input_addrs: Vec::<PK>::default(),
+            input_amounts: Vec::<u64>::default(),
+            proof_key: None,
+        }
+    }
 }
 
 // 2P-ECDSA Co-signing algorithm structs
@@ -138,7 +196,7 @@ pub struct DepositMsg2 {
 // Transfer algorithm structs
 
 /// Address generated for State Entity transfer protocol
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 pub struct SCEAddress {
     pub tx_backup_addr: String,
     pub proof_key: String,
@@ -156,10 +214,10 @@ pub struct TransferMsg2 {
     pub x1: FE,
 }
 /// Sender -> Receiver
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 pub struct TransferMsg3 {
     pub shared_key_id: Uuid,
-    pub t1: FE, // t1 = o1x1
+    pub t1: FESer, // t1 = o1x1
     pub state_chain_sig: StateChainSig,
     pub state_chain_id: Uuid,
     pub tx_backup_psm: PrepareSignTxMsg,
@@ -253,3 +311,129 @@ impl Default for TransferMsg5 {
         }
     }
 }
+
+use curv::elliptic::curves::secp256_k1::SK;
+impl SelfEncryptable for SK {
+    fn encrypt_with_pubkey(&mut self, pubkey: &ecies::PublicKey) 
+        -> ecies::Result<()>{
+        let ss = self.to_string();
+        let esb = ecies::ecies::encrypt(&pubkey.to_bytes(), ss.as_bytes())?;
+        let esk = SK::from_slice(&esb[..])?;
+        *self = esk;
+        Ok(())
+    }
+
+    fn decrypt(&mut self, privkey: &ecies::PrivateKey) 
+        -> ecies::Result<()>{
+        let ess = self.to_string();
+        let sb = ecies::ecies::decrypt(&privkey.to_bytes(), ess.as_bytes())?;
+        let sk = SK::from_slice(&sb[..])?;
+        *self = sk;
+        Ok(())
+    }
+}
+
+use curv::elliptic::curves::traits::{ECScalar, ECPoint};
+impl Encryptable for FESer {}
+impl SelfEncryptable for FESer{
+
+    fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) 
+    -> ecies::Result<()>{
+        let sb_plain = ecies::ecies::decrypt(&privkey.to_bytes(), &self.secret_bytes[..])?;
+        self.secret_bytes = sb_plain;
+        Ok(())
+     } 
+ 
+     fn encrypt_with_pubkey(&mut self, pubkey: &crate::ecies::PublicKey) 
+     -> ecies::Result<()>{
+        println!("len byts = {}", self.secret_bytes.len());
+        let sb_enc = ecies::ecies::encrypt(&pubkey.to_bytes(), &self.secret_bytes[..])?;
+        println!("len sb enc bytes = {}", sb_enc.len());
+        self.secret_bytes = sb_enc;
+        Ok(())
+     }
+}
+
+impl Encryptable for TransferMsg3{}
+impl SelfEncryptable for TransferMsg3 {
+        fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) -> crate::ecies::Result<()>{
+            self.t1.decrypt(privkey)
+        } 
+    
+        fn encrypt_with_pubkey(&mut self, pubkey: &crate::ecies::PublicKey) -> crate::ecies::Result<()>{
+            self.t1.encrypt_with_pubkey(pubkey)
+        }
+}
+impl SelfEncryptable for &TransferMsg3 {
+    fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) 
+    -> crate::ecies::Result<()>{
+        (*self).decrypt(privkey)
+    } 
+    fn encrypt_with_pubkey(&mut self, pubkey: &crate::ecies::PublicKey) -> crate::ecies::Result<()>{
+        (*self).encrypt_with_pubkey(pubkey)
+    }
+}
+
+use std::str::FromStr;
+impl WalletDecryptable for TransferMsg3 {
+    fn get_public_key(&self) 
+        -> crate::ecies::Result<Option<crate::ecies::PublicKey>> {
+        Ok(Some(crate::ecies::PublicKey::from_str(&self.state_chain_sig.data)?))
+    }
+}
+impl WalletDecryptable for &TransferMsg3 {
+   fn get_public_key(&self) 
+    -> crate::ecies::Result<Option<crate::ecies::PublicKey>> {
+        (*self).get_public_key()
+    }
+}
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+    use crate::util::keygen::generate_keypair;
+    
+    #[test]
+    fn test_encrypt_fe_ser(){
+        let mut fe_ser = FESer::new_random();
+        let fe_ser_clone = fe_ser.clone();
+        assert_eq!(fe_ser, fe_ser_clone);
+        let (priv_k, pub_k) = generate_keypair();
+        println!("encrypt");
+        fe_ser.encrypt_with_pubkey(&pub_k).unwrap();
+        assert_ne!(fe_ser, fe_ser_clone);
+        println!("decrypt");
+        fe_ser.decrypt(&priv_k).unwrap();
+        assert_eq!(fe_ser, fe_ser_clone);
+    }
+
+    #[test]
+    fn test_to_from_fe_ser() {
+        let fe_ser = FESer::new_random();
+        let _ = fe_ser.get_fe().expect("failed to get fe");
+        let fe = FE::new_random();
+        let fe_ser = FESer::from_fe(&fe);
+        let _ = fe_ser.get_fe().expect("failed to get fe");
+    }
+
+    
+    #[test]
+    fn test_encrypt_transfer_msg3(){
+        let t1 = FESer::new_random();
+        let mut msg = TransferMsg3::default();
+        msg.t1 = t1;
+
+        let msg_clone = msg.clone();
+        assert_eq!(msg, msg_clone);
+        let (priv_k, pub_k) = generate_keypair();
+        println!("encrypt");
+        msg.encrypt_with_pubkey(&pub_k).unwrap();
+        assert_ne!(msg, msg_clone);
+        println!("decrypt");
+        msg.decrypt(&priv_k).unwrap();
+        assert_eq!(msg, msg_clone);
+    }
+    
+
+}
+

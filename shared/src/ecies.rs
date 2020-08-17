@@ -1,4 +1,4 @@
-extern crate ecies;
+pub extern crate ecies;
 pub use bitcoin::util::key::PrivateKey as PrivateKey;
 pub use bitcoin::util::key::PublicKey as PublicKey;
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
@@ -112,29 +112,38 @@ pub trait WalletDecryptable: SelfEncryptable {
 }
 
 //Encrypted serialization/deserialization
-pub trait Encryptable: Serialize + Sized + DeserializeOwned{
+pub trait Encryptable: Serialize + Sized + DeserializeOwned {
     fn to_encrypted_bytes(&self, pubkey: &PublicKey) -> Result<Vec<u8>>{
         let str_self = serde_json::to_string(self)?;
         let serialized = str_self.as_bytes();
-        let key_bytes = pubkey.to_bytes();
-        match ecies::encrypt(&key_bytes, serialized){
+        Self::encrypt_with_pubkey(pubkey, serialized)
+    }
+
+    fn encrypt_with_pubkey(key: &PublicKey, msg: &[u8]) -> Result<Vec<u8>>{
+        let key_bytes = &key.to_bytes();
+        match ecies::encrypt(key_bytes, msg){
             Ok(v) => Ok(v),
             Err(e) => Err(EncryptError(e.to_string()).into())
         }
     }
 
-    fn from_encrypted_bytes(privkey: &PrivateKey, ec: &[u8]) ->Result<Self>{
-        let key_bytes = privkey.to_bytes();
-        let db = ecies::decrypt(&key_bytes, ec)?;
-        let serialized = std::str::from_utf8(&db)?;
-        match serde_json::from_str(&serialized){
+    fn decrypt_with_privkey(key: &PrivateKey, msg: &[u8]) -> Result<Vec<u8>>{
+        let key_bytes = &key.to_bytes();
+        match ecies::decrypt(key_bytes, msg){
             Ok(v) => Ok(v),
             Err(e) => Err(DecryptError(e.to_string()).into()),
         }
     }
+
+    fn from_encrypted_bytes(privkey: &PrivateKey, ec: &[u8]) ->Result<Self>{   
+        let db = Self::decrypt_with_privkey(privkey, ec)?;
+        let serialized = std::str::from_utf8(&db)?;
+        let deser: Self = serde_json::from_str(&serialized)?;
+        Ok(deser)
+    }
 }
 
-pub trait SelfEncryptable : Encryptable {
+pub trait SelfEncryptable {
     fn decrypt(&mut self, privkey: &PrivateKey) -> Result<()>; 
     fn encrypt_with_pubkey(&mut self, pubkey: &PublicKey) -> Result<()>;
 }
@@ -178,14 +187,13 @@ mod tests {
         let (sk2, _) = generate_keypair();
         let tse = ts.to_encrypted_bytes(&pk).unwrap();
 
+        let expected_err = ECIESError::DecryptError("Invalid message".to_string());
+
         match TestStruct::from_encrypted_bytes(&sk2, &tse){
             Ok(_) => assert!(false, "decryption should have failed"),
-            Err(e) => match e.downcast_ref::<secp256k1::Error>() {
-                Some(e) => match e {
-                    secp256k1::Error::InvalidMessage => assert!(true),
-                    _ => assert!(false, "unexpected error enum: {}", e),
-                }
-                None => assert!(false, "expected secp256k1::Error"),
+            Err(e) => match e {
+                expected_err => assert!(true),
+                _ => assert!(false, "expected {}", expected_err),
             }
         }
     }
