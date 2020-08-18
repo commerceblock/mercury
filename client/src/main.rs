@@ -27,7 +27,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Config {
         Config {
-            endpoint: "https://localhost:8000".to_string(),
+            endpoint: "http://localhost:8000".to_string(),
             electrum_server: "127.0.0.1:60401".to_string(),
             testing_mode: true,
         }
@@ -191,10 +191,10 @@ fn main() {
             }
         } else if matches.is_present("transfer-receiver") {
             if let Some(matches) = matches.subcommand_matches("transfer-receiver") {
-                let transfer_msg: TransferMsg3 =
+                let mut transfer_msg: TransferMsg3 =
                     serde_json::from_str(matches.value_of("message").unwrap()).unwrap();
                 let finalized_data =
-                    state_entity::transfer::transfer_receiver(&mut wallet, &transfer_msg, &None)
+                    state_entity::transfer::transfer_receiver(&mut wallet, &mut transfer_msg, &None)
                         .unwrap();
                 wallet.save();
                 println!(

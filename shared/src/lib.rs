@@ -29,6 +29,7 @@ pub mod mainstay;
 pub mod state_chain;
 pub mod structs;
 pub mod util;
+pub mod ecies;
 
 type Result<T> = std::result::Result<T, error::SharedLibError>;
 

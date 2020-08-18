@@ -1,3 +1,4 @@
+
 use bitcoin::secp256k1::Error as SecpError;
 use bitcoin::util::address::Error as AddressError;
 use monotree::Errors as MonotreeErrors;
@@ -13,6 +14,8 @@ use rocket::Response;
 
 use std::fmt;
 use std::io::Cursor;
+
+
 
 /// Shared library specific errors
 #[derive(Debug, Deserialize)]

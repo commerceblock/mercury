@@ -113,7 +113,7 @@ pub struct State {
     pub next_state: Option<StateChainSig>, // signature representing passing of ownership
 }
 /// Data necessary to create ownership transfer signatures
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub struct StateChainSig {
     pub purpose: String, // "TRANSFER", "TRANSFER-BATCH" or "WITHDRAW"
     pub data: String,    // proof key, state chain id or address
