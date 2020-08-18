@@ -54,6 +54,7 @@ pub fn get<V>(client_shim: &ClientShim, path: &str) -> Result<V>
 where
     V: serde::de::DeserializeOwned,
 {
+    std::thread::sleep(std::time::Duration::from_millis(100));
     let start = Instant::now();
 
     let mut b = client_shim

@@ -75,13 +75,11 @@ pub fn get_server<T: Database + Send + Sync + 'static>
 
     let rocket_config = get_rocket_config(&sc_entity.config);
 
-    let smt_db_loc: String;
-
     if sc_entity.config.testing_mode {
         // Use test SMT DB
-        smt_db_loc = SMT_DB_LOC_TESTING.to_string();
+        sc_entity.config.smt_db_loc = SMT_DB_LOC_TESTING.to_string();
         // reset dbs
-        if let Err(_) = sc_entity.database.reset(&smt_db_loc) {
+        if let Err(_) = sc_entity.database.reset(&sc_entity.config.smt_db_loc) {
             sc_entity.database.init()?;
         }
     }
@@ -105,6 +103,7 @@ pub fn get_server<T: Database + Send + Sync + 'static>
                 util::get_fees,
                 util::prepare_sign_tx,
                 util::get_transfer_batch_status,
+                util::reset_test_dbs, // !!
                 deposit::deposit_init,
                 deposit::deposit_confirm,
                 transfer::transfer_sender,
