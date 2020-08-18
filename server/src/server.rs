@@ -76,6 +76,7 @@ pub fn get_server<T: Database + Send + Sync + 'static>
     let rocket_config = get_rocket_config(&sc_entity.config);
 
     if sc_entity.config.testing_mode {
+        info!("Server running in testing mode.");
         // Use test SMT DB
         sc_entity.config.smt_db_loc = SMT_DB_LOC_TESTING.to_string();
         // reset dbs

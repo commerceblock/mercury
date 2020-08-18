@@ -4,7 +4,7 @@
 
 pub use super::super::Result;
 extern crate shared_lib;
-use shared_lib::{state_chain::*, structs::*};
+use shared_lib::{state_chain::*, structs::*, ecies, ecies::{WalletDecryptable}};
 use super::transfer_batch::transfer_batch_is_ended;
 
 use crate::error::SEError;
@@ -20,6 +20,7 @@ use curv::{
 use rocket::State;
 use rocket_contrib::json::Json;
 use uuid::Uuid;
+use std::str::FromStr;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -92,6 +93,7 @@ impl Transfer for SCE {
 
         // Generate x1
         let x1: FE = ECScalar::new_random();
+        let x1_ser = FESer::from_fe(&x1);
 
         self.database
             .create_transfer(&state_chain_id, &transfer_msg1.state_chain_sig, &x1)?;
@@ -103,9 +105,25 @@ impl Transfer for SCE {
         );
         debug!("TRANSFER: Sender side complete. State Chain ID: {}. State Chain Signature: {:?}. x1: {:?}.", state_chain_id, transfer_msg1.state_chain_sig, x1);
 
-        // TODO encrypt x1 with Senders proof key
+        // encrypt x1 with Senders proof key
+        let proof_key = match ecies::PublicKey::from_str(&self.database.get_proof_key(user_id)?){
+            Ok(k) => k,
+            Err(e) => return Err(SEError::SharedLibError(format!("error deserialising proof key: {}", e))),
+        };
 
-        Ok(TransferMsg2 { x1 })
+        let mut msg2 = TransferMsg2 {
+            x1: x1_ser,
+            proof_key
+        };
+
+        match msg2.encrypt() {
+            Ok(_) => (),
+            Err(e) => return Err(SEError::SharedLibError(format!("{}",e))),
+        };
+
+        let msg2 = msg2;
+
+        Ok(msg2)
     }
 
     fn transfer_receiver(&self, transfer_msg4: TransferMsg4) -> Result<TransferMsg5> {
@@ -127,10 +145,10 @@ impl Transfer for SCE {
 
         let kp = self.database.get_ecdsa_keypair(user_id)?;
 
-        // TODO: decrypt t2
 
         // let x1 = transfer_data.x1;
         let t2 = transfer_msg4.t2;
+
         let s1 = kp.party_1_private.get_private_key();
 
         // Note:
@@ -328,10 +346,8 @@ mod tests {
 
     // Data from a run of transfer protocol.
     // static TRANSFER_MSG_1: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"state_chain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"}}";
-    static TRANSFER_MSG_2: &str =
-        "{\"x1\":\"d9d6cf19fd3416f8d5dd0590eaa729718507049d0f545b3cb228b3ca1a3eba69\"}";
-    static TRANSFER_MSG_2_INVALID_X1: &str =
-        "{\"x1\":\"2d9558a1a21cd6d2c327372b449189b329c1e868ae46181ff181822fb3526c8e\"}";
+    static TRANSFER_MSG_2: &str = "{\"x1\":{\"secret_bytes\":[217,214,207,25,253,52,22,248,213,221,5,144,234,167,41,113,133,7,4,157,15,84,91,60,178,40,179,202,26,62,186,105]},\"proof_key\":\"04b42845b4e8477af2133ea5b5c15a4e8864e48d553c018a20ef6fa54526b8879c87306264ad3b4d1525ecf863734f6145a59cc940bb0a8813bedd9a8f6d816814\"}";
+
     // static TRANSFER_MSG_3: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"t1\":\"34c9a329617b8dd3cdeb3d491fa09f023f84f28005bdf40f0682eb020969183b\",\"state_chain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"},\"state_chain_id\":\"9b0ba36b-406a-499c-8c83-696b77f003a9\",\"tx_backup_psm\":{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"protocol\":\"Transfer\",\"tx\":{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"53e1d67d837fdaddb016c5de85d8903bc033f7f2208d3ff40430fc42edeab4cb:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,69,2,33,0,177,248,103,71,170,95,47,217,222,7,130,181,12,9,254,115,96,166,180,164,162,4,14,110,145,113,106,97,155,231,190,22,2,32,63,119,90,178,253,249,43,242,42,177,250,25,29,251,156,37,12,61,70,252,201,155,252,188,56,242,36,211,50,136,203,95,1],[2,108,195,112,80,86,19,121,166,106,134,63,140,162,115,194,178,158,147,92,173,6,188,127,94,107,131,160,62,11,191,241,230]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"0014a5c378a7de7311e6836253a28830b48cc6b9e252\"}]},\"input_addrs\":[\"026cc37050561379a66a863f8ca273c2b29e935cad06bc7f5e6b83a03e0bbff1e6\"],\"input_amounts\":[10000],\"proof_key\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\"},\"rec_addr\":{\"tx_backup_addr\":\"bcrt1q5hph3f77wvg7dqmz2w3gsv953nrtncjjzyj3m9\",\"proof_key\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\"}}";
     static TRANSFER_MSG_4: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"state_chain_id\":\"9b0ba36b-406a-499c-8c83-696b77f003a9\",\"t2\":\"a1563a0006e1dac1cdb89d592327f7c5e292193365a0f15ebf805900261f9bb2\",\"state_chain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"},\"o2_pub\":{\"x\":\"e60171f570be0c6b673acbb5df775001b634e474e7ad329ab07b0fb50fead479\",\"y\":\"1ef781c8cde5310eb748a305dcab6b3ee302160d49d83b7ae8e7fde67979eb13\"},\"tx_backup\":{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"53e1d67d837fdaddb016c5de85d8903bc033f7f2208d3ff40430fc42edeab4cb:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,69,2,33,0,177,248,103,71,170,95,47,217,222,7,130,181,12,9,254,115,96,166,180,164,162,4,14,110,145,113,106,97,155,231,190,22,2,32,63,119,90,178,253,249,43,242,42,177,250,25,29,251,156,37,12,61,70,252,201,155,252,188,56,242,36,211,50,136,203,95,1],[2,108,195,112,80,86,19,121,166,106,134,63,140,162,115,194,178,158,147,92,173,6,188,127,94,107,131,160,62,11,191,241,230]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"0014a5c378a7de7311e6836253a28830b48cc6b9e252\"}]},\"batch_data\":null}";
     static FINALIZED_DATA: &str = "{\"new_shared_key_id\":\"22f73737-efde-49a0-977a-ffaf8ba1e0f0\",\"state_chain_id\":\"9b0ba36b-406a-499c-8c83-696b77f003a9\",\"state_chain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"},\"s2\":\"28d85004c2a896df7f205882930ead6c7a95d84b3978174c51ebd06a4bd1589a\",\"new_tx_backup\":{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"53e1d67d837fdaddb016c5de85d8903bc033f7f2208d3ff40430fc42edeab4cb:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,69,2,33,0,177,248,103,71,170,95,47,217,222,7,130,181,12,9,254,115,96,166,180,164,162,4,14,110,145,113,106,97,155,231,190,22,2,32,63,119,90,178,253,249,43,242,42,177,250,25,29,251,156,37,12,61,70,252,201,155,252,188,56,242,36,211,50,136,203,95,1],[2,108,195,112,80,86,19,121,166,106,134,63,140,162,115,194,178,158,147,92,173,6,188,127,94,107,131,160,62,11,191,241,230]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"0014a5c378a7de7311e6836253a28830b48cc6b9e252\"}]},\"batch_data\":null}";
@@ -349,6 +365,8 @@ mod tests {
         let transfer_msg_1 = TransferMsg1 {shared_key_id,state_chain_sig};
 
         let mut db = MockDatabase::new();
+        let (_privkey, pubkey) = shared_lib::util::keygen::generate_keypair();
+        db.expect_get_proof_key().returning(move |_| Ok(pubkey.to_string()));
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth().returning(move |_| Ok(shared_key_id));
         db.expect_get_statechain_id()
@@ -417,9 +435,8 @@ mod tests {
         let s2 = serde_json::from_str::<TransferFinalizeData>(&FINALIZED_DATA.to_string())
             .unwrap()
             .s2;
-        let x1 = serde_json::from_str::<TransferMsg2>(&TRANSFER_MSG_2.to_string())
-            .unwrap()
-            .x1;
+        let msg2: TransferMsg2 = serde_json::from_str(&TRANSFER_MSG_2.to_string()).unwrap();
+        let x1 = msg2.x1.get_fe().expect("failed to get fe");
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
@@ -520,10 +537,12 @@ mod tests {
 
         // Incorrect x1, t1 or t2 => t2 is incorrect
         let mut msg_4_incorrect_t2 = transfer_msg_4.clone();
-        msg_4_incorrect_t2.t2 =
-            serde_json::from_str::<TransferMsg2>(&TRANSFER_MSG_2_INVALID_X1.to_string())
-                .unwrap()
-                .x1;
+
+        //Generate an invalid x1 by adding x1 to itself
+        let sk = x1.get_element();
+        let x1_invalid = x1.add(&sk);
+        msg_4_incorrect_t2.t2 = x1_invalid;
+            
         match sc_entity.transfer_receiver(msg_4_incorrect_t2) {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("Transfer protocol error: P1 != P2")),
