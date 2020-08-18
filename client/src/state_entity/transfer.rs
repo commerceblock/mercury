@@ -25,7 +25,8 @@ use crate::state_entity::{
 };
 use crate::wallet::{key_paths::funding_txid_to_int, wallet::Wallet};
 use crate::{utilities::requests, ClientShim};
-use shared_lib::{state_chain::StateChainSig, structs::*};
+use shared_lib::{state_chain::StateChainSig, structs::*, 
+    ecies::WalletDecryptable};
 
 use bitcoin::{Address, PublicKey};
 use curv::elliptic::curves::traits::{ECPoint, ECScalar};
@@ -68,7 +69,7 @@ pub fn transfer_sender(
     )?;
 
     // Init transfer: Send statechain signature or batch data
-    let transfer_msg2: TransferMsg2 = requests::postb(
+    let mut transfer_msg2: TransferMsg2 = requests::postb(
         &wallet.client_shim,
         &format!("transfer/sender"),
         &TransferMsg1 {
@@ -76,6 +77,8 @@ pub fn transfer_sender(
             state_chain_sig: state_chain_sig.clone(),
         },
     )?;
+
+    wallet.decrypt(&mut transfer_msg2)?;
 
     // Update prepare_sign_msg with new owners address, proof key
     prepare_sign_msg.protocol = Protocol::Transfer;
@@ -93,16 +96,22 @@ pub fn transfer_sender(
     let o1 = shared_key.share.private.get_private_key();
 
     // t1 = o1x1
-    let t1 = o1 * transfer_msg2.x1;
+    let x1 = transfer_msg2.x1.get_fe()?;
+    let t1 = o1 * x1;
+    let t1_encryptable = FESer::from_fe(&t1);
 
-    let transfer_msg3 = TransferMsg3 {
+    let mut transfer_msg3 = TransferMsg3 {
         shared_key_id: shared_key_id.to_owned(),
-        t1, // should be encrypted
+        t1: t1_encryptable, 
         state_chain_sig,
         state_chain_id: state_chain_id.to_owned(),
         tx_backup_psm: prepare_sign_msg.to_owned(),
         rec_addr: receiver_addr,
     };
+
+    //encrypt then make immutable
+    transfer_msg3.encrypt()?;
+    let transfer_msg3 = transfer_msg3;
 
     // Mark funds as spent in wallet
     {
@@ -116,9 +125,13 @@ pub fn transfer_sender(
 /// Receiver side of Transfer protocol.
 pub fn transfer_receiver(
     wallet: &mut Wallet,
-    transfer_msg3: &TransferMsg3,
+    transfer_msg3: &mut TransferMsg3,
     batch_data: &Option<BatchData>,
 ) -> Result<TransferFinalizeData> {
+    //Decrypt the message on receipt
+    wallet.decrypt(transfer_msg3)?;
+    //Mae immutable 
+    let transfer_msg3 = &*transfer_msg3;
     // Get statechain data (will Err if statechain not yet finalized)
     let state_chain_data: StateChainDataAPI =
         get_statechain(&wallet.client_shim, &transfer_msg3.state_chain_id)?;
@@ -164,7 +177,7 @@ pub fn transfer_receiver(
         match try_o2(
             wallet,
             &state_chain_data,
-            transfer_msg3,
+            &transfer_msg3,
             &num_tries,
             batch_data,
         ) {
@@ -238,25 +251,28 @@ pub fn try_o2(
     let g: GE = ECPoint::generator();
     let o2_pub: GE = g * o2;
 
-    // decrypt t1
 
     // t2 = t1*o2_inv = o1*x1*o2_inv
-    let t2 = transfer_msg3.t1 * (o2.invert());
+    let t1 = transfer_msg3.t1.get_fe()?;
+    let t2 = t1 * (o2.invert());
+
 
     // encrypt t2 with SE key and sign with Receiver proof key (se_addr.proof_key)
+
+    let msg4 = &mut TransferMsg4 {
+        shared_key_id: transfer_msg3.shared_key_id,
+        state_chain_id: transfer_msg3.state_chain_id,
+        t2: t2, 
+        state_chain_sig: transfer_msg3.state_chain_sig.clone(),
+        o2_pub,
+        tx_backup: transfer_msg3.tx_backup_psm.tx.clone(),
+        batch_data: batch_data.to_owned(),
+    };
 
     let transfer_msg5: TransferMsg5 = requests::postb(
         &wallet.client_shim,
         &format!("transfer/receiver"),
-        &TransferMsg4 {
-            shared_key_id: transfer_msg3.shared_key_id,
-            state_chain_id: transfer_msg3.state_chain_id,
-            t2, // should be encrypted
-            state_chain_sig: transfer_msg3.state_chain_sig.clone(),
-            o2_pub,
-            tx_backup: transfer_msg3.tx_backup_psm.tx.clone(),
-            batch_data: batch_data.to_owned(),
-        },
+        msg4,
     )?;
     Ok((o2, transfer_msg5))
 }
