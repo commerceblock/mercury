@@ -85,7 +85,7 @@ pub trait Conductor {
 }
 
 #[allow(dead_code)]
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum SwapStatus {
     Phase1,
     Phase2,
@@ -202,6 +202,7 @@ pub fn swap_second_message(
     }
 }
 
+#[allow(dead_code)]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,8 +211,9 @@ mod tests {
     use shared_lib::state_chain::StateChainSig;
     use std::str::FromStr;
     use std::{thread, time::Duration};
+    use crate::protocol::util::tests::test_sc_entity;
 
-    #[test]
+    // #[test]
     fn test_swap_token_sig_verify() {
         let swap_token = SwapToken {
             id: Uuid::from_str("637203c9-37ab-46f9-abda-0678c891b2d3").unwrap(),
@@ -226,7 +228,194 @@ mod tests {
         assert!(swap_token.verify_sig(&proof_key.to_string(), sig).is_ok());
     }
 
-    #[allow(dead_code)]
+    // #[test]
+    fn test_poll_utxo() {
+        let uxto_waiting_for_swap = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let uxto_invited_to_swap = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
+
+        let db = MockDatabase::new();
+        let sc_entity = test_sc_entity(db);
+
+        match sc_entity.poll_utxo(uxto_waiting_for_swap)
+        {
+            Ok(no_swap_id) => assert!(no_swap_id.is_none()),
+            Err(_) => assert!(false, "Expected Ok(())."),
+        }
+
+        match sc_entity.poll_utxo(uxto_invited_to_swap)
+        {
+            Ok(swap_id) => assert!(swap_id.is_some()),
+            Err(_) => assert!(false, "Expected Ok((swap_id))."),
+        }
+    }
+
+    // #[test]
+    fn test_poll_swap() {
+        let swap_id_doesnt_exist = Uuid::from_str("deadb33f-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let swap_id_valid = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
+
+        let db = MockDatabase::new();
+        let sc_entity = test_sc_entity(db);
+
+        match sc_entity.poll_swap(swap_id_doesnt_exist)
+        {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Swap does not exist.")),
+        }
+
+
+        match sc_entity.poll_swap(swap_id_valid)
+        {
+            Ok(swap_info) => {
+                assert_eq!(swap_info.status, SwapStatus::Phase1);
+                assert_eq!(swap_info.swap_token.id, swap_id_valid);
+                assert!(swap_info.swap_token.time_out > 0);
+                assert!(swap_info.swap_token.state_chain_ids.len() > 0);
+                assert_eq!(swap_info.blinded_spend_token, None);
+            },
+            Err(_) => assert!(false, "Expected Ok((swap_info))."),
+        }
+    }
+
+    // #[test]
+    fn test_register_utxo() {
+        // Check signature verified correctly
+        let state_chain_id = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap(); // Proof key priv part
+        let proof_key = PublicKey::from_secret_key(&Secp256k1::new(), &proof_key_priv); // proof key
+        let invalid_proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap();
+
+        let db = MockDatabase::new();
+        let sc_entity = test_sc_entity(db);
+
+        // Try invalid signature for proof key
+        let invalid_signature =
+            StateChainSig::new(&invalid_proof_key_priv, &"SWAP".to_string(), &proof_key.to_string()).unwrap();
+        match sc_entity.register_utxo(RegisterUtxo {
+            state_chain_id,
+            signature: invalid_signature,
+        }){
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Swap Error: Invalid signaute for state chain.")),
+        }
+        // Valid signature for proof key
+        let signature =
+            StateChainSig::new(&proof_key_priv, &"SWAP".to_string(), &proof_key.to_string()).unwrap();
+        assert!(sc_entity.register_utxo(RegisterUtxo {
+            state_chain_id,
+            signature: signature,
+        }).is_ok());
+    }
+
+    // #[test]
+    fn test_swap_first_message() {
+        let swap_id = Uuid::from_str("637203c9-37ab-46f9-abda-0678c891b2d3").unwrap();
+        let invalid_swap_id = Uuid::from_str("deadb33f-37ab-46f9-abda-0678c891b2d3").unwrap();
+        let proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap(); // Proof key priv part
+        let proof_key = PublicKey::from_secret_key(&Secp256k1::new(), &proof_key_priv); // proof key
+        let sce_address = SCEAddress {
+            tx_backup_addr: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq".to_string(),
+            proof_key: proof_key.to_string(),
+        };
+
+        let db = MockDatabase::new();
+        let sc_entity = test_sc_entity(db);
+
+        // Sign swap token with no state_chain_ids
+        let mut swap_token = SwapToken {
+            id: swap_id,
+            amount: 1,
+            time_out: 100,
+            state_chain_ids: vec!(),
+        };
+        match sc_entity.swap_first_message(SwapMsg1 {
+            swap_token_sig: swap_token.sign(&proof_key_priv).unwrap().to_string(),
+            address: sce_address.clone()
+        }){
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Error: Swap Token: Signature does not sign for all data in token.")),
+        }
+
+        swap_token.state_chain_ids.push(Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap());
+
+        // Sign swap token with invalid swap_id
+        swap_token.id = invalid_swap_id;
+        let swap_token_sig = swap_token.sign(&proof_key_priv).unwrap().to_string();
+        match sc_entity.swap_first_message(SwapMsg1 {
+            swap_token_sig,
+            address: sce_address.clone()
+        }){
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Error: Swap Token: Signature does not sign for correct data in token.")),
+        }
+
+        // Invalid SCE-Address bitcoin address given
+        swap_token.id = invalid_swap_id;
+        match sc_entity.swap_first_message(SwapMsg1 {
+            swap_token_sig: swap_token.sign(&proof_key_priv).unwrap().to_string(),
+            address: SCEAddress {
+                tx_backup_addr: "xxxxar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq".to_string(),
+                proof_key: proof_key.to_string(),
+            }
+        }){
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Error: SCE-Address is invalid.")),
+        }
+
+        // Invalid SCE-Address proof key given
+        swap_token.id = invalid_swap_id;
+        match sc_entity.swap_first_message(SwapMsg1 {
+            swap_token_sig: swap_token.sign(&proof_key_priv).unwrap().to_string(),
+            address: SCEAddress {
+                tx_backup_addr: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq".to_string(),
+                proof_key: "invalid proof key".to_string(),
+            }
+        }){
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Error: SCE-Address is invalid.")),
+        }
+
+        // Valid inputs
+        assert!(sc_entity.swap_first_message(SwapMsg1 {
+            swap_token_sig: swap_token.sign(&proof_key_priv).unwrap().to_string(),
+            address: sce_address.clone()
+        }).is_ok());
+    }
+
+    // #[test]
+    fn test_swap_second_message() {
+        let db = MockDatabase::new();
+        let sc_entity = test_sc_entity(db);
+
+        // Blinded token invalid
+        match sc_entity.swap_second_message(SwapMsg2 {
+            blinded_spend_token: "valid token with no record of issuance".to_string()
+        }){
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Error: Blinded Token: Invalid. Token not issued by this Conductor.")),
+        }
+        match sc_entity.swap_second_message(SwapMsg2 {
+            blinded_spend_token: "invalid token".to_string()
+        }){
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Error: Blinded Token: Invalid format.")),
+        }
+
+        // Connection made through clear net
+        match sc_entity.swap_second_message(SwapMsg2 {
+            blinded_spend_token: "valid token".to_string()
+        }){
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Error: Swap Token: Signature does not sign for all data in token.")),
+        }
+
+        // Valid inputs
+        assert!(sc_entity.swap_second_message(SwapMsg2 {
+            blinded_spend_token: "valid token".to_string()
+        }).is_ok());
+    }
+
+
     // Test examples flow of Conductor with Client. Uncomment #[test] below to view test.
     // #[test]
     fn conductor_mock() {
@@ -239,7 +428,7 @@ mod tests {
         let proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap(); // Proof key priv part
         let proof_key = PublicKey::from_secret_key(&Secp256k1::new(), &proof_key_priv); // proof key
         let signature =
-            StateChainSig::new(&proof_key_priv, &"Swap".to_string(), &proof_key.to_string())
+            StateChainSig::new(&proof_key_priv, &"SWAP".to_string(), &proof_key.to_string())
                 .unwrap();
         let _ = conductor.register_utxo(RegisterUtxo {
             state_chain_id,
