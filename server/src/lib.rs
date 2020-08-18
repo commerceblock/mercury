@@ -224,9 +224,7 @@ pub trait Database {
 
     fn get_tx_withdraw(&self, user_id: Uuid) -> Result<Transaction>;
     fn update_tx_withdraw(&self, user_id: Uuid, tx: Transaction) -> Result<()>;
-    fn reset(&self, _smt_db_loc: &String) -> Result<()> {
-        Ok(())
-    }
+    fn reset(&self, smt_db_loc: &String) -> Result<()>;
     fn init(&self) -> Result<()> {
         Ok(())
     }
