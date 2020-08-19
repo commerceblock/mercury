@@ -14,6 +14,31 @@ cd mercury/client
 cargo build --release
 ```
 
+## Connecting via Tor
+Requests can be routed via Tor using a socks5 proxy as follows. 
+### MacOS:
+1) Install tor if not already installed:
+```bash
+brew install tor
+```
+2) Start a Tor service (this will also start the service automatically each time the OS starts, see for more information):
+```bash
+brew services start tor
+```
+3) Configure the client to use connect via Tor with the following lines in Settings.toml:
+```toml
+with_tor = "true"
+```
+The default URL "socks5://127.0.0.1:9050" will be used - if the Tor service is using a different URL configure it as follows:
+```toml
+tor_proxy = "<Tor proxy URL>"
+```
+As usual, the following environment variables will override the above settings:
+```bash
+export MERC_WITH_TOR="true"
+export MERC_TOR_PROXY="<Tor proxy URL>"
+```
+
 ## Using the CLI
 The wallet is currently exposed to a Mock Electrum server. The first 2 addresses generated have funds.
 

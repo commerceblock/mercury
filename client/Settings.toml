@@ -1,3 +1,5 @@
-endpoint = "http://localhost:8000"
+endpoint = "https://fakeapi.mercurywallet.io"
 electrum_server = "127.0.0.1:60401"
 testing_mode = "true"
+with_tor = "false"
+tor_proxy = "socks5://127.0.0.1:9050"

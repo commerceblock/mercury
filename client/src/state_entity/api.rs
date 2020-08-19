@@ -57,3 +57,28 @@ pub fn get_transfer_batch_status(
 ) -> Result<TransferBatchDataAPI> {
     requests::get(client_shim, &format!("info/transfer-batch/{}", batch_id))
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockito::mock;
+
+    fn mock_url() -> String {
+        String::from(&mockito::server_url())
+    }
+
+    #[test]
+    fn test_tor(){
+        let url = mock_url();
+
+        let _m =  mock("get", "/")
+                .with_header("Content-Type", "application/json")
+                .with_body("{\"test string\"}");
+
+        let _client_shim = ClientShim::new(url,None,Some(crate::tor::SOCKS5URL.to_string()));
+        //let test_string: String = requests::get(&client_shim, &format!("/")).expect("failed to get test string via tor");
+        //assert_eq!(test_string, "test string".to_string());
+    }
+        
+}
