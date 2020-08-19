@@ -40,7 +40,7 @@ use crate::mainstay::{Attestable, Commitment, CommitmentInfo};
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Root {
     id: Option<i64>,
-    value: Option<Hash>,
+    pub value: Option<Hash>,
     commitment_info: Option<CommitmentInfo>,
 }
 

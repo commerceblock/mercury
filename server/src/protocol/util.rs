@@ -12,12 +12,12 @@ use shared_lib::{
     state_chain::*,
     structs::*,
     util::{get_sighash, tx_backup_verify, tx_withdraw_verify},
-    Root,
+    Root, error::SharedLibError,
 };
 
 use crate::error::{DBErrorType, SEError};
 use crate::storage::Storage;
-use crate::{server::StateChainEntity, Database, config::SMT_DB_LOC_TESTING};
+use crate::{server::StateChainEntity, Database};
 use cfg_if::cfg_if;
 
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
@@ -360,12 +360,53 @@ pub fn reset_test_dbs(
     sc_entity: State<SCE>,
 ) -> Result<Json<()>> {
     if sc_entity.config.testing_mode {
-        match sc_entity.database.reset(&SMT_DB_LOC_TESTING.to_string()) {
+        match sc_entity.database.reset(&sc_entity.config.smt_db_loc) {
             Ok(res) => return Ok(Json(res)),
             Err(e) => return Err(e),
         }
     }
     return Err(SEError::Generic(String::from("Cannot reset Databases when not in testing mode.")))
+}
+
+use monotree::Monotree;
+use std::convert::TryInto;
+
+#[post("/test/put-smt-value", format = "json", data = "<smt_proof_msg>")]
+pub fn put_smt_value(
+    sc_entity: State<SCE>,
+    smt_proof_msg: Json<SmtProofMsgAPI>,
+) -> Result<Json<()>> {
+    if sc_entity.config.testing_mode {
+        let smt_proof_msg = smt_proof_msg.into_inner();
+        let entry_str = "00000000000000000000356568b04eb4ce6e944d113d8c45892bfbd06a5ba946".to_string();
+        let key: &monotree::Hash = smt_proof_msg.funding_txid[..32].as_bytes().try_into().unwrap();
+        let entry: &monotree::Hash = entry_str[..32].as_bytes().try_into().unwrap();
+
+        let mut tree = Monotree::<monotree::database::RocksDB, monotree::hasher::Blake2b>::new(&sc_entity.config.smt_db_loc);
+        let new_root = tree.insert(smt_proof_msg.root.value.as_ref(), key, entry).unwrap();
+        println!("put_smt_value new_root: {:?}", new_root);
+        println!("put_smt_value put entry {:?} into key {:?}", entry, key);
+    } else {
+        return Err(SEError::Generic(String::from("Testing mode only.")))
+    }
+
+    Ok(Json(()))
+}
+
+#[post("/test/get-smt-value", format = "json", data = "<smt_proof_msg>")]
+pub fn get_smt_value(
+    sc_entity: State<SCE>,
+    smt_proof_msg: Json<SmtProofMsgAPI>,
+) -> Result<Json<()>> {
+    if sc_entity.config.testing_mode {
+        let key: &monotree::Hash = smt_proof_msg.funding_txid[..32].as_bytes().try_into().unwrap();
+        let mut tree = Monotree::<monotree::database::RocksDB, monotree::hasher::Blake2b>::new(&sc_entity.config.smt_db_loc);
+        let resp = tree.get(smt_proof_msg.root.value.as_ref(), key);
+        println!("resp from get_smt_value: {:?}", resp);
+    } else {
+        return Err(SEError::Generic(String::from("Testing mode only.")))
+    }
+    Ok(Json(()))
 }
 
 // Utily functions for StateChainEntity to be used throughout codebase.
