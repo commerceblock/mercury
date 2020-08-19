@@ -105,6 +105,8 @@ pub fn get_server<T: Database + Send + Sync + 'static>
                 util::prepare_sign_tx,
                 util::get_transfer_batch_status,
                 util::reset_test_dbs, // !!
+                util::get_smt_value,
+                util::put_smt_value,
                 deposit::deposit_init,
                 deposit::deposit_confirm,
                 transfer::transfer_sender,
