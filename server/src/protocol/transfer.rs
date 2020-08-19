@@ -272,7 +272,7 @@ impl Transfer for SCE {
         );
 
         // Update sparse merkle tree with new StateChain entry
-        let (new_root, prev_root) = self.update_smt(
+        let (prev_root, new_root) = self.update_smt(
             &finalized_data
                 .new_tx_backup
                 .input
@@ -542,7 +542,7 @@ mod tests {
         let sk = x1.get_element();
         let x1_invalid = x1.add(&sk);
         msg_4_incorrect_t2.t2 = x1_invalid;
-            
+
         match sc_entity.transfer_receiver(msg_4_incorrect_t2) {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("Transfer protocol error: P1 != P2")),

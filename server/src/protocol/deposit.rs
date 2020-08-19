@@ -117,7 +117,7 @@ impl Deposit for SCE {
         );
 
         // Update sparse merkle tree with new StateChain entry
-        let (new_root, current_root) = self.update_smt(
+        let (current_root, new_root) = self.update_smt(
             &tx_backup
                 .input
                 .get(0)
