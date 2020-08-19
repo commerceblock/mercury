@@ -55,6 +55,8 @@ fn main() {
     let electrum_server_addr: String = conf_rs.get("electrum_server").unwrap();
     let testing_mode: bool = conf_rs.get("testing_mode").unwrap();
 
+    let _ = env_logger::try_init();
+
     // TODO: random generating of seed and allow input of mnemonic phrase
     let seed = [0xcd; 32];
     let client_shim = ClientShim::new(se_endpoint.to_string(), None).unwrap();

@@ -40,6 +40,12 @@ where
         Err(e) => return Err(CError::from(e)),
     };
 
+    if value.len() > 500 {
+        info!("POST value ignored because of size.");
+    } else {
+        info!("POST return value: {:?}", value);
+    }
+
     info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
 
     // catch State entity errors
@@ -70,6 +76,8 @@ where
         Ok(mut v) => v.text().unwrap(),
         Err(e) => return Err(CError::from(e)),
     };
+
+    info!("GET return value: {:?}", value);
 
     info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
 
