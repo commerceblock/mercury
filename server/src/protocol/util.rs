@@ -17,7 +17,7 @@ use shared_lib::{
 
 use crate::error::{DBErrorType, SEError};
 use crate::storage::Storage;
-use crate::{server::StateChainEntity, Database, config::SMT_DB_LOC_TESTING};
+use crate::{server::StateChainEntity, Database};
 use cfg_if::cfg_if;
 
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
@@ -360,7 +360,7 @@ pub fn reset_test_dbs(
     sc_entity: State<SCE>,
 ) -> Result<Json<()>> {
     if sc_entity.config.testing_mode {
-        match sc_entity.database.reset(&SMT_DB_LOC_TESTING.to_string()) {
+        match sc_entity.database.reset(&sc_entity.config.smt_db_loc) {
             Ok(res) => return Ok(Json(res)),
             Err(e) => return Err(e),
         }

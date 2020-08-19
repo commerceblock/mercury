@@ -48,16 +48,10 @@ pub struct ClientShim {
 impl ClientShim {
     pub fn new(endpoint: String, auth_token: Option<String>, proxy: Option<String>) -> ClientShim {
         let client = match proxy {
-            None => {
-                println!("no proxy");
-                reqwest::Client::new()
-            },
-            Some(p) => {
-                 println!("proxy: {}",p);
-                reqwest::Client::builder()
+            None => reqwest::Client::new(),
+            Some(p) => reqwest::Client::builder()
                         .proxy(reqwest::Proxy::all(&p).unwrap())
-                        .build().unwrap()
-            },
+                        .build().unwrap(),
         };
         ClientShim {
             client,

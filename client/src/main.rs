@@ -1,6 +1,5 @@
 #[macro_use]
 extern crate clap;
-use client_lib::error::CError;
 use clap::App;
 
 use client_lib::state_entity;
@@ -64,7 +63,11 @@ fn main() {
         true => conf_rs.get("tor_proxy").ok(),
         false => None,
     };
-    // TODO: random generating of seed and allow input of mnemonic phrase
+        
+    let _ = env_logger::try_init();
+    
+    
+            // TODO: random generating of seed and allow input of mnemonic phrase
     let seed = [0xcd; 32];
     let client_shim = ClientShim::new(se_endpoint.to_string(), None, tor_proxy);
 
