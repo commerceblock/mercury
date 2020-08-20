@@ -30,7 +30,6 @@ pub mod state_chain;
 pub mod structs;
 pub mod util;
 pub mod ecies;
-pub mod tor;
 
 type Result<T> = std::result::Result<T, error::SharedLibError>;
 
