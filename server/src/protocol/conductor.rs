@@ -19,6 +19,7 @@ use mockall::predicate::*;
 use mockall::*;
 use cfg_if::cfg_if;
 use std::str::FromStr;
+use std::collections::HashMap;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -137,6 +138,32 @@ pub struct SwapInfo {
     swap_token: SwapToken,
     blinded_spend_token: Option<String>, // Blinded token allowing client to claim an SCE-Address to transfer to.
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Scheduler {
+    //A map of state chain id to swap id
+    swap_id_map: HashMap<Uuid, Uuid>,
+    swap_info_map: HashMap<Uuid, SwapInfo>,
+}
+
+impl Scheduler {
+    pub fn get_swap_id(&self, state_chain_id: &Uuid) -> Option<&Uuid> {
+        self.swap_id_map.get(state_chain_id)
+    }
+
+    pub fn register_swap_id(&mut self, state_chain_id: &Uuid, swap_id: &Uuid) -> Option<Uuid> {
+        self.swap_id_map.insert(state_chain_id.to_owned(), swap_id.to_owned())
+    }
+
+    pub fn deregister_swap_id(&mut self, state_chain_id: &Uuid) -> Option<Uuid> {
+        self.swap_id_map.remove(state_chain_id)
+    }
+
+    pub fn get_swap_info(&self, swap_id: & Uuid) -> Option<&SwapInfo> {
+        self.swap_info_map.get(swap_id)     
+    }
+}
+
 
 impl Conductor for SCE {
     fn poll_utxo(&self, _state_chain_id: Uuid) -> Result<Option<Uuid>> {
