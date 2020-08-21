@@ -230,6 +230,7 @@ pub struct WithdrawMsg2 {
 pub struct RegisterUtxo {
     pub state_chain_id: Uuid,
     pub signature: StateChainSig,
+    pub swap_size: u64,
 }
 
 /// Owner -> Conductor

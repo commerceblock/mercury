@@ -40,6 +40,8 @@ extern crate shared_lib;
 #[macro_use]
 extern crate serial_test;
 
+extern crate bisetmap;
+
 pub mod config;
 pub mod error;
 pub mod protocol;

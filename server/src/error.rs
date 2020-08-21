@@ -72,6 +72,14 @@ impl From<ConfigError> for SEError {
     }
 }
 
+impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, 
+          crate::protocol::conductor::Scheduler>>> for SEError {
+    fn from(e: std::sync::PoisonError<std::sync::MutexGuard<'_, 
+    crate::protocol::conductor::Scheduler>>) -> SEError {
+        SEError::Generic(e.to_string())
+    }
+}
+
 /// DB error types
 #[derive(Debug, Deserialize)]
 pub enum DBErrorType {
