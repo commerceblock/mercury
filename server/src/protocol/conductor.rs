@@ -24,7 +24,7 @@ use bisetmap::BisetMap;
 use crate::protocol::withdraw::Withdraw;
 use crate::Database;
 
-static DEFAULT_TIMEOUT: u64 = 10000; 
+static DEFAULT_TIMEOUT: u64 = 100; 
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -91,7 +91,7 @@ pub trait Conductor {
 }
 
 #[allow(dead_code)]
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub enum SwapStatus {
     Phase1,
     Phase2,
@@ -184,12 +184,38 @@ impl Scheduler {
         self.statechain_amount_map.rev_get(amount)
     }
 
-    pub fn register_swap_id(&mut self, state_chain_id: &Uuid, swap_id: &Uuid) -> Option<Uuid> {
+    fn register_swap_id(&mut self, state_chain_id: &Uuid, swap_id: &Uuid) -> Option<Uuid> {
         self.swap_id_map.insert(state_chain_id.to_owned(), swap_id.to_owned())
     }
 
-    pub fn deregister_swap_id(&mut self, state_chain_id: &Uuid) -> Option<Uuid> {
+    fn deregister_swap_id(&mut self, state_chain_id: &Uuid) -> Option<Uuid> {
         self.swap_id_map.remove(state_chain_id)
+    }
+
+    pub fn insert_swap_info(&mut self, swap_info: &SwapInfo){
+        let swap_id = &swap_info.swap_token.id;
+        self.swap_info_map.insert(swap_id.to_owned(), swap_info.to_owned());
+        for id in &swap_info.swap_token.state_chain_ids {
+            self.register_swap_id(id, swap_id);
+        }
+        self.status_map.insert(swap_id.to_owned(), swap_info.status.to_owned());
+        self.time_out_map.insert(swap_id.to_owned(), swap_info.swap_token.time_out);
+    }
+
+    pub fn remove_swap_info(&mut self, swap_id: &Uuid) -> Option<SwapInfo>{
+        match self.get_swap_info(swap_id) {
+            Some(i) => {
+                for id in i.to_owned().swap_token.state_chain_ids {
+                    self.deregister_swap_id(&id);
+                }
+                let swap_id = &i.swap_token.id;
+                self.swap_info_map.remove(swap_id);
+                self.status_map.insert(swap_id.to_owned(), i.status);
+                self.time_out_map.insert(swap_id.to_owned(), i.swap_token.time_out);
+                Some(i)
+            },
+            None => None
+        }
     }
 
     pub fn get_swap_info(&self, swap_id: & Uuid) -> Option<SwapInfo> {
@@ -204,31 +230,37 @@ impl Scheduler {
         //Get amount to sc id map
         let amount_collect: Vec<(u64, Vec<Uuid>)> = self.statechain_amount_map.rev().collect();
         for (amount, sc_id_vec) in amount_collect {
+            let mut n_remaining = sc_id_vec.len();
             //Get a reduced swap size map containing items of this amount
-            for id in sc_id_vec{
-                let swap_size_map = BisetMap::<Uuid, u64>::new();
-                swap_size_map.insert(id, self.statechain_swap_size_map.get(&id)[0]);
+            let swap_size_map = BisetMap::<Uuid, u64>::new();
+            for id in &sc_id_vec{
+                let swap_size = self.statechain_swap_size_map.get(id);
+                if(!swap_size.is_empty()){
+                    swap_size_map.insert(id.to_owned(), swap_size[0]);
+                }
             }
 
-            //Get a swapsize to sc_id map
-            let swap_size_map = self.statechain_swap_size_map.rev();
+            let swap_size_map = swap_size_map.rev();
+
             //Loop through swap sizes in descending order
             let mut swap_size_collect = swap_size_map.collect();
+            swap_size_collect.sort();
             let swap_size_vec : Vec::<usize> = swap_size_collect.iter().map(|x|x.0 as usize).collect();
-            let swap_size_max = swap_size_vec[0] as usize;
-            let mut n_remaining = self.statechain_swap_size_map.len();
+            let swap_size_max = swap_size_vec.last().expect("expected non-empty vector").to_owned() as usize;
             let mut ids_for_swap = Vec::<Uuid>::new();
             while (!swap_size_collect.is_empty()) {
                 //Remove from the back of the vector, which will be the largest swap_size
                 let (swap_size, mut sc_ids) = swap_size_collect.pop().unwrap();
-                if (n_remaining >= swap_size as usize) {
+                if (n_remaining + ids_for_swap.len() >= swap_size as usize) {
                     //Collect some ids together for a swap
                     while(!sc_ids.is_empty() && ids_for_swap.len() < swap_size_max){
                         let id = sc_ids.pop().unwrap();
                         ids_for_swap.push(id);
                         n_remaining = n_remaining - 1;
                     }
-                } 
+                } else {
+                    break;
+                }
                 //Create a swap token with these ids and clear temporary vector of sc ids
                 if (ids_for_swap.len() == swap_size_max || n_remaining == 0){
                     let id = Uuid::new_v4();
@@ -245,7 +277,7 @@ impl Scheduler {
                         blinded_spend_token: None,
                     };
                     //Add the swap info to the map of swap infos
-                    self.swap_info_map.insert(id, si);
+                    self.insert_swap_info(&si);
                     //Remove the ids from the request lists
                     while (!ids_for_swap.is_empty()){
                         let id = ids_for_swap.pop().unwrap();
@@ -258,7 +290,7 @@ impl Scheduler {
 
                 //Push back the remaining sc_ids if there are enough remaining scs for them 
                 //to be included in a swap
-                if(!sc_ids.is_empty() && swap_size as usize <= n_remaining){
+                if(!sc_id_vec.is_empty() && swap_size as usize <= n_remaining){
                     swap_size_collect.push((swap_size, sc_ids));
                 }
             }
@@ -352,23 +384,95 @@ mod tests {
     use std::str::FromStr;
     use std::{thread, time::Duration};
     use crate::protocol::util::tests::test_sc_entity;
+    use std::collections::HashSet;
 
-    // #[test]
+    #[test]
     fn test_swap_token_sig_verify() {
         let swap_token = SwapToken {
             id: Uuid::from_str("637203c9-37ab-46f9-abda-0678c891b2d3").unwrap(),
             amount: 1,
-            time_out: 100,
+            time_out: DEFAULT_TIMEOUT,
             state_chain_ids: vec![Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap()],
         };
         let proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap(); // Proof key priv part
         let proof_key = PublicKey::from_secret_key(&Secp256k1::new(), &proof_key_priv); // proof key
 
+        assert_eq!(
+            swap_token.to_message().unwrap(), 
+            Message::from_slice(
+                hex::decode("023a63469c4b87fc88b9137d99a10cce19b0a3778c2cd4257ccf7b323247d270").unwrap().as_slice()).unwrap(),
+        );
         let sig = swap_token.sign(&proof_key_priv).unwrap();
         assert!(swap_token.verify_sig(&proof_key.to_string(), sig).is_ok());
     }
 
-    // #[test]
+    //get a scheduler preset with requests
+    fn get_scheduler(swap_size_amounts: Vec<(u64, u64)>) -> Scheduler {
+        let statechain_swap_size_map = BisetMap::new();
+        let statechain_amount_map = BisetMap::new();
+
+        for (swap_size, amount) in swap_size_amounts {
+            let id = Uuid::new_v4();
+            statechain_swap_size_map.insert(id, swap_size);
+            statechain_amount_map.insert(id, amount);
+        }
+
+        Scheduler {
+            statechain_swap_size_map,
+            statechain_amount_map,
+            swap_id_map: HashMap::<Uuid, Uuid>::new(),
+            swap_info_map: HashMap::<Uuid, SwapInfo>::new(),
+            status_map: BisetMap::<Uuid, SwapStatus>::new(),
+            time_out_map: BisetMap::<Uuid, u64>::new(),
+        }
+    }
+
+    #[test]
+    fn test_scheduler() {
+        let mut scheduler = get_scheduler(
+            vec![(3,10),(3,10),(3,10),(4,9),(4,9),(4,9),(4,9),(5,5),(5,5),(5,5),(5,5)]
+        );
+
+        scheduler.update_swap_info();
+        assert_eq!(scheduler.swap_id_map.len(),7);
+        assert_eq!(scheduler.swap_info_map.len(), 2);
+        assert_eq!(scheduler.status_map.len(), 2);
+        assert_eq!(scheduler.time_out_map.len(), 2);
+
+        //Regsiter a new request for the amount 5, but require 6 to be in the swap
+        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 6);
+        //Not enough participants to create swap
+        scheduler.update_swap_info();
+        assert_eq!(scheduler.swap_id_map.len(),7);
+        assert_eq!(scheduler.swap_info_map.len(), 2);
+        assert_eq!(scheduler.status_map.len(), 2);
+        assert_eq!(scheduler.time_out_map.len(), 2);
+
+        //Regsiter a new request for the amount 5, but require 6 to be in the swap
+        let sc_id = Uuid::new_v4();
+        scheduler.register_amount_swap_size(&sc_id, 5, 6);
+        //Now there are enough participants: new swap created
+        scheduler.update_swap_info();
+        assert_eq!(scheduler.swap_id_map.len(),13);
+        assert_eq!(scheduler.swap_info_map.len(), 3);
+        assert_eq!(scheduler.status_map.len(), 3);
+        assert_eq!(scheduler.time_out_map.len(), 3);
+
+        //Look up the swap for sc_id
+        let swap_id = scheduler.get_swap_id(&sc_id).expect("expected swap id");
+        let swap_info = scheduler.get_swap_info(&swap_id).expect("expected swap info");
+        assert_eq!(swap_info.blinded_spend_token, None, "expected no blinded spend token");
+        assert_eq!(swap_info.status, SwapStatus::Phase1, "expected phase1");
+        assert_eq!(swap_info.swap_token.amount, 5, "expected amount 5");
+        assert_eq!(swap_info.swap_token.time_out, DEFAULT_TIMEOUT, "expected default timeout");
+        let mut id_set = HashSet::new();
+        for id in swap_info.swap_token.state_chain_ids {
+            id_set.insert(id);
+        }
+        assert_eq!(id_set.len(), 6, "expected 6 unique state chain ids in the swap token");
+    }
+
+    //#[test]
     fn test_poll_utxo() {
         let uxto_waiting_for_swap = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d3").unwrap();
         let uxto_invited_to_swap = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
@@ -389,7 +493,7 @@ mod tests {
         }
     }
 
-    // #[test]
+    //#[test]
     fn test_poll_swap() {
         let swap_id_doesnt_exist = Uuid::from_str("deadb33f-93f0-46f9-abda-0678c891b2d3").unwrap();
         let swap_id_valid = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
@@ -417,7 +521,7 @@ mod tests {
         }
     }
 
-    // #[test]
+    //#[test]
     fn test_register_utxo() {
         // Check signature verified correctly
         let state_chain_id = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d3").unwrap();
@@ -449,7 +553,7 @@ mod tests {
         }).is_ok());
     }
 
-    // #[test]
+    //#[test]
     fn test_swap_first_message() {
         let swap_id = Uuid::from_str("637203c9-37ab-46f9-abda-0678c891b2d3").unwrap();
         let invalid_swap_id = Uuid::from_str("deadb33f-37ab-46f9-abda-0678c891b2d3").unwrap();
@@ -467,7 +571,7 @@ mod tests {
         let mut swap_token = SwapToken {
             id: swap_id,
             amount: 1,
-            time_out: 100,
+            time_out: DEFAULT_TIMEOUT,
             state_chain_ids: vec!(),
         };
         match sc_entity.swap_first_message(&SwapMsg1 {
@@ -524,7 +628,7 @@ mod tests {
         }).is_ok());
     }
 
-    // #[test]
+    //#[test]
     fn test_swap_second_message() {
         let db = MockDatabase::new();
         let sc_entity = test_sc_entity(db);
@@ -685,7 +789,7 @@ mod tests {
                     swap_token: SwapToken {
                         id: swap_id,
                         amount: 1,
-                        time_out: 100,
+                        time_out: DEFAULT_TIMEOUT,
                         state_chain_ids: vec![state_chain_id, state_chain_id],
                     },
                     blinded_spend_token: None,
@@ -702,7 +806,7 @@ mod tests {
                     swap_token: SwapToken {
                         id: swap_id,
                         amount: 1,
-                        time_out: 100,
+                        time_out: DEFAULT_TIMEOUT,
                         state_chain_ids: vec![state_chain_id, state_chain_id],
                     },
                     blinded_spend_token: Some(
@@ -721,7 +825,7 @@ mod tests {
                     swap_token: SwapToken {
                         id: swap_id,
                         amount: 1,
-                        time_out: 100,
+                        time_out: DEFAULT_TIMEOUT,
                         state_chain_ids: vec![state_chain_id, state_chain_id],
                     },
                     blinded_spend_token: None,
