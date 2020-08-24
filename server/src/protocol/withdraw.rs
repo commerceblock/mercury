@@ -88,7 +88,7 @@ impl Withdraw for SCE {
 
         let state_chain_id = self.database.get_statechain_id(user_id)?;
 
-        let sco=self.verify_statechain_sig(&state_chain_id, &withdraw_msg1.state_chain_sig, Some(user_id))?;
+        self.verify_statechain_sig(&state_chain_id, &withdraw_msg1.state_chain_sig, Some(user_id))?;
 
         // Mark UserSession as authorised for withdrawal
 

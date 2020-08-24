@@ -5,6 +5,8 @@
 use super::Result;
 use crate::error::SharedLibError;
 use crate::structs::PrepareSignTxMsg;
+#[cfg(test)]
+use crate::Verifiable;
 
 use bitcoin::{
     blockdata::script::Builder,
@@ -332,6 +334,6 @@ pub mod tests {
         let message = Message::from_slice(&[0xab; 32]).expect("32 bytes");
 
         let sig = secp.sign(&message, &priv_key.key);
-        assert!(secp.verify(&message, &sig, &pub_key.key).is_ok());
+        assert!(sig.verify_btc(&pub_key, &message).is_ok());
     }
 }

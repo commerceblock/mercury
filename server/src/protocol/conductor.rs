@@ -4,7 +4,7 @@
 
 pub use super::super::Result;
 
-use shared_lib::{structs::*, util::keygen::Message};
+use shared_lib::{structs::*, util::keygen::Message, Verifiable};
 extern crate shared_lib;
 use crate::server::StateChainEntity;
 
@@ -19,7 +19,7 @@ use mockall::predicate::*;
 use mockall::*;
 use cfg_if::cfg_if;
 use std::str::FromStr;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use bisetmap::BisetMap;
 use crate::protocol::withdraw::Withdraw;
 use crate::Database;
@@ -118,7 +118,7 @@ impl SwapToken {
         Ok(Message::from_slice(&hash)?)
     }
 
-    /// Generate signature for change of state chain ownership
+    /// Generate Signature for change of state chain ownership
     pub fn sign(&self, proof_key_priv: &SecretKey) -> Result<Signature> {
         let secp = Secp256k1::new();
         let message = self.to_message()?;
@@ -127,12 +127,7 @@ impl SwapToken {
 
     /// Verify self's signature for transfer or withdraw
     pub fn verify_sig(&self, pk: &String, sig: Signature) -> Result<()> {
-        let secp = Secp256k1::new();
-        Ok(secp.verify(
-            &self.to_message()?,
-            &sig,
-            &PublicKey::from_str(&pk).unwrap(),
-        )?)
+        Ok(sig.verify(&PublicKey::from_str(&pk)?,&self.to_message()?)?)
     }
 }
 
@@ -742,4 +737,6 @@ mod tests {
         });
         conductor
     }
+
+
 }
