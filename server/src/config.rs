@@ -98,6 +98,10 @@ pub struct Config {
     pub batch_lifetime: u64,
     /// Length of punishment for unresponsivve/misbehaving batch-transfer utxo
     pub punishment_duration: u64,
+    /// Watch-only
+    pub watch_only: bool,
+    /// bitcoind node connecton
+    pub bitcoind: String,
     /// Storage config
     pub storage: StorageConfig,
     /// Mainstay config
@@ -124,6 +128,8 @@ impl Default for Config {
             fee_withdraw: 300,
             batch_lifetime: 3600,     // 1 hour
             punishment_duration: 360, // 1 minute
+            watch_only: false,
+            bitcoind: String::from("user:password@http://127.0.0.1:8332"),
             storage: StorageConfig::default(),
             mainstay: Some(MainstayConfig::default()),
             rocket: RocketConfig::default()

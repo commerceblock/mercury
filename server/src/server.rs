@@ -12,6 +12,8 @@ use log::LevelFilter;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config as LogConfig, Root as LogRoot};
 use log4rs::encode::pattern::PatternEncoder;
+use std::thread;
+use crate::watch::watch_node;
 
 use mockall::*;
 use uuid::Uuid;
@@ -85,41 +87,59 @@ pub fn get_server<T: Database + Send + Sync + 'static>
         }
     }
 
-    let rock = rocket::custom(rocket_config)
-        .register(catchers![internal_error, not_found, bad_request])
-        .mount(
-            "/",
-            routes![
-                ping::ping,
-                ecdsa::first_message,
-                ecdsa::second_message,
-                ecdsa::third_message,
-                ecdsa::fourth_message,
-                ecdsa::sign_first,
-                ecdsa::sign_second,
-                util::get_statechain,
-                util::get_smt_root,
-                //util::get_confirmed_smt_root,
-                util::get_smt_proof,
-                util::get_fees,
-                util::prepare_sign_tx,
-                util::get_transfer_batch_status,
-                util::reset_test_dbs, // !!
-                util::get_smt_value,
-                util::put_smt_value,
-                deposit::deposit_init,
-                deposit::deposit_confirm,
-                transfer::transfer_sender,
-                transfer::transfer_receiver,
-                transfer_batch::transfer_batch_init,
-                transfer_batch::transfer_reveal_nonce,
-                withdraw::withdraw_init,
-                withdraw::withdraw_confirm
-            ],
-        )
-        .manage(sc_entity);
+    let bitcoind = sc_entity.config.bitcoind.clone();
 
-    Ok(rock)
+    if sc_entity.config.watch_only {
+        thread::spawn(|| watch_node(bitcoind));
+        let rock = rocket::custom(rocket_config)
+            .register(catchers![internal_error, not_found, bad_request])
+            .mount(
+                "/",
+                routes![
+                    ping::ping
+                ],
+            );
+        Ok(rock)
+    } else {
+        /// if bitcoind path supplied, run watching
+        if sc_entity.config.bitcoind.is_empty() == false {
+            thread::spawn(|| watch_node(bitcoind));
+        }
+        let rock = rocket::custom(rocket_config)
+            .register(catchers![internal_error, not_found, bad_request])
+            .mount(
+                "/",
+                routes![
+                    ping::ping,
+                    ecdsa::first_message,
+                    ecdsa::second_message,
+                    ecdsa::third_message,
+                    ecdsa::fourth_message,
+                    ecdsa::sign_first,
+                    ecdsa::sign_second,
+                    util::get_statechain,
+                    util::get_smt_root,
+                    //util::get_confirmed_smt_root,
+                    util::get_smt_proof,
+                    util::get_fees,
+                    util::prepare_sign_tx,
+                    util::get_transfer_batch_status,
+                    util::reset_test_dbs, // !!
+                    util::get_smt_value,
+                    util::put_smt_value,
+                    deposit::deposit_init,
+                    deposit::deposit_confirm,
+                    transfer::transfer_sender,
+                    transfer::transfer_receiver,
+                    transfer_batch::transfer_batch_init,
+                    transfer_batch::transfer_reveal_nonce,
+                    withdraw::withdraw_init,
+                    withdraw::withdraw_confirm
+                ],
+            )
+            .manage(sc_entity);
+        Ok(rock)
+    }
 }
 
 fn set_logging_config(log_file: &String) {

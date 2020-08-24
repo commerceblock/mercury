@@ -15,3 +15,7 @@ batch_lifetime = "3600" # 1 hour
 
 #Mainstay config
 mainstay_config = ""
+
+#Watch config
+watch_only = "true"
+bitcoind = "exch:goodpass@http://localhost:8332"

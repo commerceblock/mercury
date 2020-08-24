@@ -45,6 +45,7 @@ pub mod error;
 pub mod protocol;
 pub mod server;
 pub mod storage;
+pub mod watch;
 
 pub type Result<T> = std::result::Result<T, error::SEError>;
 pub type Hash = bitcoin::hashes::sha256d::Hash;

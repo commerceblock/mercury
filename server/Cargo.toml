@@ -47,6 +47,7 @@ stoppable_thread = "0.2.1"
 mockall = "0.7.2"
 cfg-if = "0.1.10"
 unborrow = "0.3.1"
+bitcoincore-rpc = "0.5.0"
 
 [dev-dependencies]
 mockito = "0.27.0"
