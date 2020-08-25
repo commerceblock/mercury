@@ -34,6 +34,8 @@ pub enum SEError {
     SharedLibError(String),
     /// Inherit errors from Monotree
     SMTError(String),
+    /// Swap error
+    SwapError(String)
 }
 
 impl From<String> for SEError {
@@ -116,6 +118,7 @@ impl fmt::Display for SEError {
             SEError::SigningError(ref e) => write!(f, "Signing Error: {}", e),
             SEError::SharedLibError(ref e) => write!(f, "SharedLibError Error: {}", e),
             SEError::SMTError(ref e) => write!(f, "SMT Error: {}", e),
+            SEError::SwapError(ref e) => write!(f, "Swap Error: {}", e),
         }
     }
 }

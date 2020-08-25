@@ -3,14 +3,15 @@
 //! Conductor swap protocol trait and implementation. Full protocol descritpion can be found in Conductor Trait.
 
 pub use super::super::Result;
-
+use crate::error::SEError;
 use shared_lib::{structs::*, util::keygen::Message, Verifiable};
 extern crate shared_lib;
 use crate::server::StateChainEntity;
 
 use bitcoin::{
+    Address,
     hashes::{sha256d, Hash},
-    secp256k1::{PublicKey, Secp256k1, SecretKey, Signature},
+    secp256k1::{Secp256k1, Signature,PublicKey, SecretKey},
 };
 use rocket::State;
 use rocket_contrib::json::Json;
@@ -19,10 +20,12 @@ use mockall::predicate::*;
 use mockall::*;
 use cfg_if::cfg_if;
 use std::str::FromStr;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use bisetmap::BisetMap;
 use crate::protocol::withdraw::Withdraw;
 use crate::Database;
+#[cfg(test)]
+use std::sync::Mutex;
 
 static DEFAULT_TIMEOUT: u64 = 100; 
 
@@ -126,8 +129,11 @@ impl SwapToken {
     }
 
     /// Verify self's signature for transfer or withdraw
-    pub fn verify_sig(&self, pk: &String, sig: Signature) -> Result<()> {
-        Ok(sig.verify(&PublicKey::from_str(&pk)?,&self.to_message()?)?)
+    pub fn verify_sig(&self, pk: &PublicKey, sig: Signature) -> Result<()> {
+        match sig.verify(pk,&self.to_message()?) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(SEError::SwapError(format!("signature does not sign for token: {}",e)))
+        }
     }
 }
 
@@ -153,6 +159,8 @@ pub struct Scheduler {
     status_map: BisetMap<Uuid, SwapStatus>,
     //swap id to time out
     time_out_map: BisetMap<Uuid, u64>,
+    //output addresses per swap
+    out_addr_map: BisetMap<Uuid, SCEAddress>,
 }
 
 impl Scheduler {
@@ -166,6 +174,7 @@ impl Scheduler {
             swap_info_map: HashMap::<Uuid, SwapInfo>::new(),
             status_map: BisetMap::<Uuid, SwapStatus>::new(),
             time_out_map: BisetMap::<Uuid, u64>::new(),
+            out_addr_map: BisetMap::new(),
         }
     }
 
@@ -210,6 +219,7 @@ impl Scheduler {
                 }
                 let swap_id = &i.swap_token.id;
                 self.swap_info_map.remove(swap_id);
+                self.out_addr_map.delete(swap_id);
                 self.status_map.insert(swap_id.to_owned(), i.status);
                 self.time_out_map.insert(swap_id.to_owned(), i.swap_token.time_out);
                 Some(i)
@@ -320,9 +330,22 @@ impl Conductor for SCE {
         Ok(())
     }
 
-    fn swap_first_message(&self, _swap_msg1: &SwapMsg1) -> Result<()> {
-        todo!()
+    fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> Result<()> {
+        let proof_key = &swap_msg1.address.proof_key;
+        //Find the correct swap token and verify
+        let guard = self.scheduler.lock()?;
+        let swap_id = &swap_msg1.swap_id;
+        match guard.get_swap_info(swap_id){
+            Some(i) => {
+                i.swap_token.verify_sig(proof_key,swap_msg1.swap_token_sig)?;
+                //Signature ok. Add the SCEAddress to the list.
+                guard.out_addr_map.insert(swap_id.to_owned(),swap_msg1.address.clone());
+                Ok(())
+            },
+            None => Err(SEError::SwapError(format!("no swap with id {}",&swap_msg1.swap_token_sig)))
+        }  
     }
+
     fn swap_second_message(&self, _swap_msg2: &SwapMsg2) -> Result<SCEAddress> {
         todo!()
     }
@@ -377,14 +400,16 @@ pub fn swap_second_message(
 #[allow(dead_code)]
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
+    use shared_lib::state_chain::StateChain;
+use super::*;
     use mockall::predicate;
     use shared_lib::state_chain::StateChainSig;
     use std::str::FromStr;
     use std::{thread, time::Duration};
     use crate::protocol::util::tests::test_sc_entity;
     use std::collections::HashSet;
+    use crate::structs::{StateChainOwner, StateChainAmount};
+    use shared_lib::state_chain::State as SCState;
 
     #[test]
     fn test_swap_token_sig_verify() {
@@ -403,7 +428,7 @@ mod tests {
                 hex::decode("023a63469c4b87fc88b9137d99a10cce19b0a3778c2cd4257ccf7b323247d270").unwrap().as_slice()).unwrap(),
         );
         let sig = swap_token.sign(&proof_key_priv).unwrap();
-        assert!(swap_token.verify_sig(&proof_key.to_string(), sig).is_ok());
+        assert!(swap_token.verify_sig(&proof_key, sig).is_ok());
     }
 
     //get a scheduler preset with requests
@@ -424,6 +449,7 @@ mod tests {
             swap_info_map: HashMap::<Uuid, SwapInfo>::new(),
             status_map: BisetMap::<Uuid, SwapStatus>::new(),
             time_out_map: BisetMap::<Uuid, u64>::new(),
+            out_addr_map: BisetMap::new()
         }
     }
 
@@ -472,65 +498,109 @@ mod tests {
         assert_eq!(id_set.len(), 6, "expected 6 unique state chain ids in the swap token");
     }
 
-    //#[test]
+    #[test]
     fn test_poll_utxo() {
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        let mut sc_entity = test_sc_entity(db);
+        sc_entity.scheduler = Mutex::new(get_scheduler(
+            vec![(3,10),(3,10),(3,10)]
+        ));
+
         let uxto_waiting_for_swap = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d3").unwrap();
-        let uxto_invited_to_swap = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
-
-        let db = MockDatabase::new();
-        let sc_entity = test_sc_entity(db);
-
+        
+        let mut guard = sc_entity.scheduler.lock().unwrap();
+        guard.update_swap_info();
+        let utxo_invited_to_swap = guard.swap_id_map.iter().next().unwrap().0.to_owned();
+        drop(guard);
+        //let uxto_invited_to_swap = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
         match sc_entity.poll_utxo(&uxto_waiting_for_swap)
         {
             Ok(no_swap_id) => assert!(no_swap_id.is_none()),
             Err(_) => assert!(false, "Expected Ok(())."),
         }
-
-        match sc_entity.poll_utxo(&uxto_invited_to_swap)
+        match sc_entity.poll_utxo(&utxo_invited_to_swap)
         {
             Ok(swap_id) => assert!(swap_id.is_some()),
             Err(_) => assert!(false, "Expected Ok((swap_id))."),
         }
     }
 
-    //#[test]
+    #[test]
     fn test_poll_swap() {
         let swap_id_doesnt_exist = Uuid::from_str("deadb33f-93f0-46f9-abda-0678c891b2d3").unwrap();
-        let swap_id_valid = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
 
-        let db = MockDatabase::new();
-        let sc_entity = test_sc_entity(db);
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        let mut sc_entity = test_sc_entity(db);
+        sc_entity.scheduler = Mutex::new(get_scheduler(
+            vec![(3,10),(3,10),(3,10)]
+        ));
+        let mut guard = sc_entity.scheduler.lock().unwrap();
+        guard.update_swap_info();
+        //let swap_id_valid = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let swap_id_valid = guard.swap_id_map.iter().next().unwrap().1.to_owned();
+        drop(guard);
 
         match sc_entity.poll_swap(&swap_id_doesnt_exist)
         {
-            Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("Swap does not exist.")),
+            Ok(None) => assert!(true),
+            _ => assert!(false, "Expected failure."),
         }
-
 
         match sc_entity.poll_swap(&swap_id_valid)
         {
             Ok(Some(swap_info)) => {
                 assert_eq!(swap_info.status, SwapStatus::Phase1);
                 assert_eq!(swap_info.swap_token.id, swap_id_valid);
-                assert!(swap_info.swap_token.time_out > 0);
-                assert!(swap_info.swap_token.state_chain_ids.len() > 0);
+                assert!(swap_info.swap_token.time_out == DEFAULT_TIMEOUT);
+                assert!(swap_info.swap_token.state_chain_ids.len() == 3);
                 assert_eq!(swap_info.blinded_spend_token, None);
             },
             _ => assert!(false, "Expected Ok(Some(swap_info))."),
         }
     }
 
-    //#[test]
+    #[test]
     fn test_register_utxo() {
         // Check signature verified correctly
         let state_chain_id = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d3").unwrap();
         let proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap(); // Proof key priv part
         let proof_key = PublicKey::from_secret_key(&Secp256k1::new(), &proof_key_priv); // proof key
-        let invalid_proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap();
+        let invalid_proof_key_priv = SecretKey::from_slice(&[2; 32]).unwrap();
+ 
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
 
-        let db = MockDatabase::new();
-        let sc_entity = test_sc_entity(db);
+        let mut chain = Vec::<SCState>::new();
+
+        pub struct State {
+            pub data: String,                      // proof key or address
+            pub next_state: Option<StateChainSig>, // signature representing passing of ownership
+        }
+
+        chain.push(SCState{
+            data: proof_key.to_string(),
+            next_state: None,
+        });
+
+        let statechain = StateChain{chain: chain.clone()};
+        let statechain_2 = statechain.clone();
+
+        db.expect_get_statechain_owner().returning(move |_| Ok(StateChainOwner{locked_until: chrono::prelude::Utc::now().naive_utc(), 
+                                                                        owner_id: Uuid::new_v4(),
+                                                                        chain: statechain.clone(),
+                                                                    }));
+
+        let statechain_amount = StateChainAmount{chain: statechain_2.clone(), amount: 10};
+
+        db.expect_get_statechain_amount().returning(move |_| Ok(statechain_amount.clone()));
+
+        let mut sc_entity = test_sc_entity(db);
+        sc_entity.scheduler = Mutex::new(get_scheduler(
+            vec![(3,10),(3,10),(3,10)]
+        ));
+
 
         // Try invalid signature for proof key
         let invalid_signature =
@@ -541,7 +611,7 @@ mod tests {
             swap_size: 10,
         }){
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("Swap Error: Invalid signaute for state chain.")),
+            Err(e) => assert!(e.to_string().contains("signature failed verification"), e.to_string()),
         }
         // Valid signature for proof key
         let signature =
@@ -553,79 +623,69 @@ mod tests {
         }).is_ok());
     }
 
-    //#[test]
+    #[test]
     fn test_swap_first_message() {
-        let swap_id = Uuid::from_str("637203c9-37ab-46f9-abda-0678c891b2d3").unwrap();
         let invalid_swap_id = Uuid::from_str("deadb33f-37ab-46f9-abda-0678c891b2d3").unwrap();
         let proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap(); // Proof key priv part
+        let proof_key_priv_invalid = SecretKey::from_slice(&[2; 32]).unwrap(); // Proof key priv part
         let proof_key = PublicKey::from_secret_key(&Secp256k1::new(), &proof_key_priv); // proof key
         let sce_address = SCEAddress {
-            tx_backup_addr: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq".to_string(),
-            proof_key: proof_key.to_string(),
+            tx_backup_addr: Address::from_str("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq").unwrap(),
+            proof_key,
         };
 
-        let db = MockDatabase::new();
-        let sc_entity = test_sc_entity(db);
-
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        let mut sc_entity = test_sc_entity(db);
+        sc_entity.scheduler = Mutex::new(get_scheduler(
+            vec![(3,10),(3,10),(3,10)]
+        ));
+        let mut guard = sc_entity.scheduler.lock().unwrap();
+        guard.update_swap_info();
+        //let swap_id_valid = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let swap_id = guard.swap_id_map.iter().next().unwrap().1.to_owned();
         // Sign swap token with no state_chain_ids
-        let mut swap_token = SwapToken {
-            id: swap_id,
-            amount: 1,
-            time_out: DEFAULT_TIMEOUT,
-            state_chain_ids: vec!(),
-        };
-        match sc_entity.swap_first_message(&SwapMsg1 {
-            swap_token_sig: swap_token.sign(&proof_key_priv).unwrap().to_string(),
-            address: sce_address.clone()
-        }){
-            Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("Error: Swap Token: Signature does not sign for all data in token.")),
-        }
+        let mut swap_token = guard.get_swap_info(&swap_id).unwrap().swap_token;
+        drop(guard);
 
-        swap_token.state_chain_ids.push(Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap());
+        let mut swap_token_no_sc = swap_token.clone();
+        swap_token_no_sc.state_chain_ids = Vec::new();
 
-        // Sign swap token with invalid swap_id
-        swap_token.id = invalid_swap_id;
-        let swap_token_sig = swap_token.sign(&proof_key_priv).unwrap().to_string();
-        match sc_entity.swap_first_message(&SwapMsg1 {
+        let swap_token_sig = swap_token_no_sc.sign(&proof_key_priv).unwrap();
+        let mut swap_msg_1 = SwapMsg1 {
+            swap_id,
             swap_token_sig,
             address: sce_address.clone()
-        }){
+        };
+        match sc_entity.swap_first_message(&swap_msg_1){
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("Error: Swap Token: Signature does not sign for correct data in token.")),
+            Err(e) => assert!(e.to_string().contains("Swap Error: signature does not sign for token"), e.to_string()),
         }
 
-        // Invalid SCE-Address bitcoin address given
-        swap_token.id = invalid_swap_id;
-        match sc_entity.swap_first_message(&SwapMsg1 {
-            swap_token_sig: swap_token.sign(&proof_key_priv).unwrap().to_string(),
-            address: SCEAddress {
-                tx_backup_addr: "xxxxar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq".to_string(),
-                proof_key: proof_key.to_string(),
-            }
-        }){
+        swap_msg_1.swap_token_sig = swap_token.sign(&proof_key_priv_invalid).unwrap();
+        
+        match sc_entity.swap_first_message(&swap_msg_1){
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("Error: SCE-Address is invalid.")),
+            Err(e) => assert!(e.to_string().contains("Swap Error: signature does not sign for token"), e.to_string()),
         }
 
-        // Invalid SCE-Address proof key given
-        swap_token.id = invalid_swap_id;
-        match sc_entity.swap_first_message(&SwapMsg1 {
-            swap_token_sig: swap_token.sign(&proof_key_priv).unwrap().to_string(),
-            address: SCEAddress {
-                tx_backup_addr: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq".to_string(),
-                proof_key: "invalid proof key".to_string(),
-            }
-        }){
+        // Sign swap token with invalid swap_id
+        swap_msg_1.swap_id = invalid_swap_id;
+        swap_msg_1.swap_token_sig = swap_token.sign(&proof_key_priv).unwrap();
+        
+        match sc_entity.swap_first_message(&swap_msg_1){
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("Error: SCE-Address is invalid.")),
+            Err(e) => assert!(e.to_string().contains("Swap Error: no swap with id"),e.to_string()),
         }
+
+        swap_msg_1.swap_id = swap_id;
+        swap_msg_1.swap_token_sig = swap_token.sign(&proof_key_priv).unwrap();
 
         // Valid inputs
-        assert!(sc_entity.swap_first_message(&SwapMsg1 {
-            swap_token_sig: swap_token.sign(&proof_key_priv).unwrap().to_string(),
-            address: sce_address.clone()
-        }).is_ok());
+        match sc_entity.swap_first_message(&swap_msg_1) {
+            Ok(_) => assert!(true),
+            Err(e) => assert!(false, e.to_string())
+        };
     }
 
     //#[test]
@@ -728,14 +788,15 @@ mod tests {
                     println!("Swap token signature: {:?}", signature);
                     // Generate an SCE-address
                     let sce_address = SCEAddress {
-                        tx_backup_addr: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq".to_string(),
-                        proof_key: proof_key.to_string(),
+                        tx_backup_addr: Address::from_str("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq").unwrap(),
+                        proof_key: proof_key,
                     };
                     println!("SCE-Address: {:?}", sce_address);
                     println!("Sending swap token signature and SCE address.");
                     // Send to Conductor
                     let first_msg_resp = conductor.swap_first_message(&SwapMsg1 {
-                        swap_token_sig: signature.to_string(),
+                        swap_id: swap_token.id.clone(),
+                        swap_token_sig: signature,
                         address: sce_address,
                     });
                     println!("Server response: {:?}", first_msg_resp);
@@ -834,9 +895,8 @@ mod tests {
         conductor.expect_swap_second_message().returning(|_| {
             Ok(SCEAddress {
                 // Second message
-                tx_backup_addr: "bc13rgtzzwf6e0sr5mdq3lydnw9re5r7xfkvy5l649".to_string(),
-                proof_key: "65aab40995d3ed5d03a0567b04819ff12641b84c17f5e9d5dd075571e183469c8f"
-                    .to_string(),
+                tx_backup_addr: Address::from_str("bc13rgtzzwf6e0sr5mdq3lydnw9re5r7xfkvy5l649").unwrap(),
+                proof_key: PublicKey::from_str("65aab40995d3ed5d03a0567b04819ff12641b84c17f5e9d5dd075571e183469c8f").unwrap(),
             })
         });
         conductor

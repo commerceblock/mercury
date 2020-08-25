@@ -239,6 +239,7 @@ pub trait Database {
 pub mod structs {
     use super::*;
 
+    #[derive(Clone)]
     pub struct StateChainAmount {
         pub chain: StateChain,
         pub amount: i64,
