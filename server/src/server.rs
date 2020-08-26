@@ -18,13 +18,14 @@ use log4rs::encode::pattern::PatternEncoder;
 
 use mockall::*;
 use uuid::Uuid;
+use std::sync::Arc;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 pub struct StateChainEntity<T: Database + Send + Sync + 'static> {
     pub config: Config,
     pub database: T,
-    pub scheduler: Mutex<Scheduler>
+    pub scheduler: Arc<Mutex<Scheduler>>
 }
 
 impl<T: Database + Send + Sync + 'static> StateChainEntity<T> {
@@ -33,10 +34,24 @@ impl<T: Database + Send + Sync + 'static> StateChainEntity<T> {
         let config_rs = Config::load()?;
         db.set_connection_from_config(&config_rs)?;
         
-        Ok(Self {
+        let sce = Self {
             config: config_rs,
             database: db,
-            scheduler: Mutex::new(Scheduler::new())
+            scheduler: Arc::new(Mutex::new(Scheduler::new()))
+        };
+
+        Self::start_conductor_thread(sce.scheduler.clone());
+        Ok(sce)
+    }
+
+    pub fn start_conductor_thread(scheduler: Arc<Mutex<Scheduler>>) -> std::thread::JoinHandle<()> {
+        std::thread::spawn(move || {
+            loop {
+                let mut guard = scheduler.lock().unwrap();
+                guard.update_swap_info();
+                drop(guard);
+                std::thread::sleep(std::time::Duration::from_secs(60));
+            }
         })
     }
 }

@@ -25,7 +25,8 @@ use bisetmap::BisetMap;
 use crate::protocol::withdraw::Withdraw;
 use crate::Database;
 #[cfg(test)]
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
+
 
 static DEFAULT_TIMEOUT: u64 = 100; 
 
@@ -503,9 +504,9 @@ use super::*;
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         let mut sc_entity = test_sc_entity(db);
-        sc_entity.scheduler = Mutex::new(get_scheduler(
+        sc_entity.scheduler = Arc::new(Mutex::new(get_scheduler(
             vec![(3,10),(3,10),(3,10)]
-        ));
+        )));
 
         let uxto_waiting_for_swap = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d3").unwrap();
         
@@ -533,9 +534,9 @@ use super::*;
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         let mut sc_entity = test_sc_entity(db);
-        sc_entity.scheduler = Mutex::new(get_scheduler(
+        sc_entity.scheduler = Arc::new(Mutex::new(get_scheduler(
             vec![(3,10),(3,10),(3,10)]
-        ));
+        )));
         let mut guard = sc_entity.scheduler.lock().unwrap();
         guard.update_swap_info();
         //let swap_id_valid = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
@@ -597,9 +598,9 @@ use super::*;
         db.expect_get_statechain_amount().returning(move |_| Ok(statechain_amount.clone()));
 
         let mut sc_entity = test_sc_entity(db);
-        sc_entity.scheduler = Mutex::new(get_scheduler(
+        sc_entity.scheduler = Arc::new(Mutex::new(get_scheduler(
             vec![(3,10),(3,10),(3,10)]
-        ));
+        )));
 
 
         // Try invalid signature for proof key
@@ -637,9 +638,9 @@ use super::*;
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         let mut sc_entity = test_sc_entity(db);
-        sc_entity.scheduler = Mutex::new(get_scheduler(
+        sc_entity.scheduler = Arc::new(Mutex::new(get_scheduler(
             vec![(3,10),(3,10),(3,10)]
-        ));
+        )));
         let mut guard = sc_entity.scheduler.lock().unwrap();
         guard.update_swap_info();
         //let swap_id_valid = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
