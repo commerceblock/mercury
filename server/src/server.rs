@@ -185,7 +185,7 @@ pub fn get_postgres_url(
 
 //Mock all the traits implemented by StateChainEntity so that they can
 //be called from MockStateChainEntity
-use crate::protocol::conductor::{Conductor, SwapInfo};
+use crate::protocol::conductor::{Conductor, SwapInfo, SwapStatus};
 use crate::protocol::deposit::Deposit;
 use crate::protocol::ecdsa::Ecdsa;
 use crate::protocol::transfer::{Transfer, TransferFinalizeData};
@@ -240,7 +240,8 @@ mock! {
     }
     trait Conductor {
         fn poll_utxo(&self, state_chain_id: &Uuid) -> conductor::Result<Option<Uuid>>;
-        fn poll_swap(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapInfo>>;
+        fn poll_swap(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapStatus>>;
+        fn get_swap_info(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapInfo>>;
         fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> conductor::Result<()>;
         fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> conductor::Result<()>;
         fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> conductor::Result<SCEAddress>;
