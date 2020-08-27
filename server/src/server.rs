@@ -1,8 +1,11 @@
-use super::protocol::*;
+use shared_lib::state_chain::StateChainSig;
+use crate::structs::StateChainOwner;
+use super::protocol::{*, conductor::Scheduler};
 use crate::Database;
 
 use crate::config::SMT_DB_LOC_TESTING;
 use shared_lib::mainstay;
+use std::sync::Mutex;
 
 use crate::config::Config;
 use rocket;
@@ -15,12 +18,14 @@ use log4rs::encode::pattern::PatternEncoder;
 
 use mockall::*;
 use uuid::Uuid;
+use std::sync::Arc;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 pub struct StateChainEntity<T: Database + Send + Sync + 'static> {
     pub config: Config,
     pub database: T,
+    pub scheduler: Arc<Mutex<Scheduler>>
 }
 
 impl<T: Database + Send + Sync + 'static> StateChainEntity<T> {
@@ -28,10 +33,25 @@ impl<T: Database + Send + Sync + 'static> StateChainEntity<T> {
         // Get config as defaults, Settings.toml and env vars
         let config_rs = Config::load()?;
         db.set_connection_from_config(&config_rs)?;
-
-        Ok(Self {
+        
+        let sce = Self {
             config: config_rs,
             database: db,
+            scheduler: Arc::new(Mutex::new(Scheduler::new()))
+        };
+
+        Self::start_conductor_thread(sce.scheduler.clone());
+        Ok(sce)
+    }
+
+    pub fn start_conductor_thread(scheduler: Arc<Mutex<Scheduler>>) -> std::thread::JoinHandle<()> {
+        std::thread::spawn(move || {
+            loop {
+                let mut guard = scheduler.lock().unwrap();
+                guard.update_swap_info();
+                drop(guard);
+                std::thread::sleep(std::time::Duration::from_secs(60));
+            }
         })
     }
 }
@@ -219,11 +239,11 @@ mock! {
         ) -> ecdsa::Result<Vec<Vec<u8>>>;
     }
     trait Conductor {
-        fn poll_utxo(&self, state_chain_id: Uuid) -> conductor::Result<Option<Uuid>>;
-        fn poll_swap(&self, swap_id: Uuid) -> conductor::Result<SwapInfo>;
-        fn register_utxo(&self, register_utxo_msg: RegisterUtxo) -> conductor::Result<()>;
-        fn swap_first_message(&self, swap_msg1: SwapMsg1) -> conductor::Result<()>;
-        fn swap_second_message(&self, swap_msg2: SwapMsg2) -> conductor::Result<SCEAddress>;
+        fn poll_utxo(&self, state_chain_id: &Uuid) -> conductor::Result<Option<Uuid>>;
+        fn poll_swap(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapInfo>>;
+        fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> conductor::Result<()>;
+        fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> conductor::Result<()>;
+        fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> conductor::Result<SCEAddress>;
     }
     trait Transfer {
         fn transfer_sender(
@@ -267,6 +287,11 @@ mock! {
         ) -> util::Result<()>;
     }
     trait Withdraw{
+        fn verify_statechain_sig(&self, 
+            statechain_id: &Uuid, 
+            statechain_sig: &StateChainSig,
+            user_id: Option<Uuid>) 
+                -> withdraw::Result<StateChainOwner>;
         fn withdraw_init(
             &self,
             withdraw_msg1: WithdrawMsg1,

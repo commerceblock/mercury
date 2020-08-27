@@ -5,6 +5,7 @@
 pub use super::super::Result;
 extern crate shared_lib;
 use shared_lib::{state_chain::*, structs::*};
+use crate::structs::StateChainOwner;
 
 use rocket::State;
 use rocket_contrib::json::Json;
@@ -13,6 +14,7 @@ use crate::error::SEError;
 use crate::Database;
 use crate::{server::StateChainEntity, storage::Storage};
 use cfg_if::cfg_if;
+use uuid::Uuid;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -26,6 +28,12 @@ cfg_if! {
 
 /// StateChain Withdraw protocol trait
 pub trait Withdraw {
+    fn verify_statechain_sig(&self, 
+        statechain_id: &Uuid, 
+        statechain_sig: &StateChainSig,
+        user_id: Option<Uuid>
+        ) -> Result<StateChainOwner>;
+
     /// User request withdraw:
     ///     - Check StateChainSig validity
     ///     - Mark user as authorised to withdraw
@@ -39,6 +47,39 @@ pub trait Withdraw {
 }
 
 impl Withdraw for SCE {
+    //Returns the statechain owner id if the signature is correct
+    fn verify_statechain_sig(&self, statechain_id: &Uuid, 
+                            statechain_sig: &StateChainSig,
+                            user_id: Option<Uuid>) 
+                                -> Result<StateChainOwner> {
+        // Get statechain owner
+        let sco = self.database.get_statechain_owner(*statechain_id)?;
+        //If a user id is supplied then check it,
+        //and check that the statechain is unlocked
+        match user_id {
+            Some(id) => {
+                // Check if locked
+                is_locked(sco.locked_until)?;
+                // check if owned by caller
+                if sco.owner_id != id {
+                return Err(SEError::Generic(format!(
+                    "State Chain not owned by User ID: {}.",
+                    statechain_id
+                )));
+                }
+                ()
+            },
+            None => (),
+        };
+
+        // Verify StateChainSig
+        let prev_proof_key = sco.chain.get_tip()?.data;
+        statechain_sig.verify(&prev_proof_key)?;
+        Ok(sco)
+    }
+
+
+
     fn withdraw_init(&self, withdraw_msg1: WithdrawMsg1) -> Result<()> {
         let user_id = withdraw_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
@@ -47,22 +88,7 @@ impl Withdraw for SCE {
 
         let state_chain_id = self.database.get_statechain_id(user_id)?;
 
-        // Get statechain
-        let sco = self.database.get_statechain_owner(state_chain_id)?;
-
-        // Check if locked
-        is_locked(sco.locked_until)?;
-        // check if owned by caller
-        if sco.owner_id != user_id {
-            return Err(SEError::Generic(format!(
-                "State Chain not owned by User ID: {}.",
-                state_chain_id
-            )));
-        }
-
-        // Verify new StateChainSig
-        let prev_proof_key = sco.chain.get_tip()?.data;
-        withdraw_msg1.state_chain_sig.verify(&prev_proof_key)?;
+        self.verify_statechain_sig(&state_chain_id, &withdraw_msg1.state_chain_sig, Some(user_id))?;
 
         // Mark UserSession as authorised for withdrawal
 

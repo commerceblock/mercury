@@ -12,6 +12,7 @@
 
 use super::Result;
 use crate::error::SharedLibError;
+use crate::Verifiable;
 
 use bitcoin::{
     hashes::{sha256d, Hash},
@@ -143,13 +144,8 @@ impl StateChainSig {
 
     /// Verify self's signature for transfer or withdraw
     pub fn verify(&self, pk: &String) -> Result<()> {
-        let secp = Secp256k1::new();
         let message = StateChainSig::to_message(&self.purpose, &self.data)?;
-        Ok(secp.verify(
-            &message,
-            &Signature::from_str(&self.sig).unwrap(),
-            &PublicKey::from_str(&pk).unwrap(),
-        )?)
+        Signature::from_str(&self.sig).unwrap().verify(&PublicKey::from_str(&pk).unwrap(),&message)
     }
 }
 

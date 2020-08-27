@@ -312,15 +312,16 @@ impl Wallet {
     }
 
     pub fn get_new_state_entity_address(&mut self, funding_txid: &String) -> Result<SCEAddress> {
-        let backup_addr = self
+        let tx_backup_addr = self
             .se_backup_keys
             .get_new_address_encoded_id(funding_txid_to_int(funding_txid)?)?;
         let proof_key = self
             .se_proof_keys
             .get_new_key_encoded_id(funding_txid_to_int(funding_txid)?)?;
+        let proof_key = bitcoin::secp256k1::PublicKey::from_slice(&proof_key.to_bytes().as_slice())?;
         Ok(SCEAddress {
-            tx_backup_addr: backup_addr.to_string(),
-            proof_key: proof_key.to_string(),
+            tx_backup_addr,
+            proof_key,
         })
     }
 
