@@ -237,7 +237,7 @@ impl Scheduler {
     //For each amount, the algorithm attempts to collect state chains together into
     //the requested minimum swap size, beginning with the largest, for each requested 
     //swap size
-    pub fn update_swap_info(&mut self) {
+    pub fn update_swap_requests(&mut self) {
         //Get amount to sc id map
         let amount_collect: Vec<(u64, Vec<Uuid>)> = self.statechain_amount_map.rev().collect();
         for (amount, sc_id_vec) in amount_collect {
@@ -306,6 +306,41 @@ impl Scheduler {
                 }
             }
         }
+    }
+
+    //Update the swap info based on the rersults of user first/second messages
+    pub fn update_swaps(&mut self) {
+        let init_len = self.swap_info_map.len();
+        let swap_info_map = self.swap_info_map.drain();
+        for (id, mut swap_info) in swap_info_map {
+            match swap_info.status {
+                //Phase 1 - check if all state chain addresses have been received, if so move to phase 2
+                SwapStatus::Phase1 => {
+                    if (swap_info.swap_token.state_chain_ids.len() == self.out_addr_map.get(&id).len()){
+                        //All output addresses received. 
+                        //Generate a list of blinded spend tokens and proceed to phase 2.
+                        swap_info.status = SwapStatus::Phase1;
+                    }   
+                },
+                SwapStatus::Phase2 => {
+
+                },
+                SwapStatus::Phase3 => {
+
+                }
+            };
+        }
+        assert!(self.swap_info_map.len() == init_len);
+        todo!();
+    }
+
+    fn generate_blinded_spend_tokens(sce_addresses: &Vec<SCEAddress>) -> Result<Vec<String>>{
+        todo!()
+    }
+
+    pub fn update_swap_info(&mut self) {
+        self.update_swap_requests();
+        self.update_swaps();
     }
 }
 
