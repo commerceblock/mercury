@@ -74,6 +74,11 @@ pub trait Conductor {
     // for each participant and marks each UTXO as "in phase 2 of swap with id: x". Upon polling the
     // participants receive 1 blinded token each.
 
+    //get the blinded spend token required for second message
+    //only possible after the first message
+    fn get_blinded_spend_token(&self, swap_id: &Uuid, statechain_id: &Uuid) -> Result<BlindedSpendToken>;
+
+
     /// API: Phase 3:
     ///    - Participants create a new Tor identity and "spend" their blinded token to receive one
     //         of the SCEAddress' input in phase 1.
@@ -145,11 +150,6 @@ impl SwapToken {
 pub struct SwapInfo {
     status: SwapStatus,
     swap_token: SwapToken,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct BlindedSpendToken {
-    data: String, // Blinded token allowing client to claim an SCE-Address to transfer to.
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -357,6 +357,22 @@ impl Scheduler {
         self.update_swap_requests();
         self.update_swaps();
     }
+
+    pub fn get_blinded_spend_token(&self, swap_id: &Uuid, statechain_id: &Uuid) -> Result<BlindedSpendToken>{
+        match self.get_swap_status(swap_id) {
+            Some(SwapStatus::Phase1) => Err(SEError::SwapError("in phase 1, token not available".to_string())),
+            None => Err(SEError::SwapError("unknown swap id when getting swap status".to_string())),
+            _ => {
+                match self.bst_map.get(swap_id) {
+                    Some(m) => match m.get(statechain_id) {
+                        Some(bst) => Ok(bst.clone()),
+                        None => Err(SEError::SwapError("unknown statechain id".to_string())),
+                    },
+                    None => Err(SEError::SwapError("unknown swap id when getting blind spending token".to_string())),
+                }
+            }
+        }
+    }
 }
 
 
@@ -372,6 +388,11 @@ impl Conductor for SCE {
     fn get_swap_info(&self, swap_id: &Uuid) -> Result<Option<SwapInfo>> {
         let guard = self.scheduler.lock()?;
         Ok(guard.get_swap_info(swap_id))
+    }
+
+    fn get_blinded_spend_token(&self, swap_id: &Uuid, statechain_id: &Uuid) -> Result<BlindedSpendToken> {
+        let guard = self.scheduler.lock()?;
+        Ok(guard.get_blinded_spend_token(swap_id, statechain_id)?)
     }
 
     fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> Result<()> {
@@ -431,6 +452,8 @@ pub fn get_swap_info(sc_entity: State<SCE>, swap_id: Json<Uuid>) -> Result<Json<
         Err(e) => return Err(e),
     }
 }
+
+#[post("/swap/blinded-spend-token", format = "json", data = "<bst_msg>")]
 
 #[post("/swap/register-utxo", format = "json", data = "<register_utxo_msg>")]
 pub fn register_utxo(
@@ -783,13 +806,13 @@ use super::*;
 
         // Blinded token invalid
         match sc_entity.swap_second_message(&SwapMsg2 {
-            blinded_spend_token: "valid token with no record of issuance".to_string()
+            blinded_spend_token: BlindedSpendToken::from_str("valid token with no record of issuance")
         }){
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("Error: Blinded Token: Invalid. Token not issued by this Conductor.")),
         }
         match sc_entity.swap_second_message(&SwapMsg2 {
-            blinded_spend_token: "invalid token".to_string()
+            blinded_spend_token: BlindedSpendToken::from_str("invalid token")
         }){
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("Error: Blinded Token: Invalid format.")),
@@ -797,7 +820,7 @@ use super::*;
 
         // Connection made through clear net
         match sc_entity.swap_second_message(&SwapMsg2 {
-            blinded_spend_token: "valid token".to_string()
+            blinded_spend_token: BlindedSpendToken::from_str("valid token")
         }){
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("Error: Swap Token: Signature does not sign for all data in token.")),
@@ -805,7 +828,7 @@ use super::*;
 
         // Valid inputs
         assert!(sc_entity.swap_second_message(&SwapMsg2 {
-            blinded_spend_token: "valid token".to_string()
+            blinded_spend_token: BlindedSpendToken::from_str("valid token")
         }).is_ok());
     }
 
@@ -855,7 +878,7 @@ use super::*;
         let mut phase_1_complete = false;
         let mut phase_2_complete = false;
 
-        let mut blinded_spend_token = String::default();
+        let mut blinded_spend_token = BlindedSpendToken::from_string(String::default());
 
         // Poll Status of swap and perform necessary actions for each phase.
         println!("\nBegin polling of Swap:");
