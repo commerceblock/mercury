@@ -244,10 +244,33 @@ pub struct SwapMsg1 {
     pub address: SCEAddress,
 }
 
+// Message to request a blinded spend token
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BSTMsg {
+    pub swap_id: Uuid,
+    pub state_chain_id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BlindedSpendToken {
+    data: String, // Blinded token allowing client to claim an SCE-Address to transfer to.
+}
+
+impl BlindedSpendToken {
+    pub fn from_string(data: String) -> Self {
+        Self{data}
+    }
+
+    pub fn from_str(data: &'static str) -> Self {
+        Self::from_string(data.to_string())
+    }
+}
+
 /// Owner -> Conductor
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SwapMsg2 {
-    pub blinded_spend_token: String,
+    pub swap_id : Uuid,
+    pub blinded_spend_token: BlindedSpendToken,
 }
 
 impl Default for TransferMsg5 {

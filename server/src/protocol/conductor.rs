@@ -50,7 +50,10 @@ pub trait Conductor {
     fn poll_utxo(&self, state_chain_id: &Uuid) -> Result<Option<Uuid>>;
 
     /// API: Poll Conductor to check for status of swap.
-    fn poll_swap(&self, swap_id: &Uuid) -> Result<Option<SwapInfo>>;
+    fn poll_swap(&self, swap_id: &Uuid) -> Result<Option<SwapStatus>>;
+
+    /// API: Get information about a swap.
+    fn get_swap_info(&self, swap_id: &Uuid) -> Result<Option<SwapInfo>>;
 
     /// API: Phase 0:
     ///     - Alert Conductor of desire to take part in a swap. Provide StateChainSig to prove
@@ -68,13 +71,20 @@ pub trait Conductor {
     fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> Result<()>;
 
     // Phase 2: Iff all participants have successfuly carried out Phase 1 then Conductor generates a blinded token
-    // for each participant and marks each UTXO as "in phase 1 of swap with id: x". Upon polling the
+    // for each participant and marks each UTXO as "in phase 2 of swap with id: x". Upon polling the
     // participants receive 1 blinded token each.
+
+    //get the blinded spend token required for second message
+    //only possible after the first message
+    fn get_blinded_spend_token(&self, swap_id: &Uuid, statechain_id: &Uuid) -> Result<BlindedSpendToken>;
+
 
     /// API: Phase 3:
     ///    - Participants create a new Tor identity and "spend" their blinded token to receive one
     //         of the SCEAddress' input in phase 1.
     fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> Result<SCEAddress>;
+
+    fn get_address_from_blinded_spend_token(&self, bst: &BlindedSpendToken) -> Result<SCEAddress>;
 
     // Phase 3: Participants carry out transfer_sender() and signal that this transfer is a part of
     // swap with id: x. Participants carry out corresponding transfer_receiver() and provide their
@@ -103,7 +113,6 @@ pub enum SwapStatus {
 }
 
 /// Struct defines a Swap. This is signed by each participant as agreement to take part in the swap.
-#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SwapToken {
     id: Uuid,
@@ -143,7 +152,6 @@ impl SwapToken {
 pub struct SwapInfo {
     status: SwapStatus,
     swap_token: SwapToken,
-    blinded_spend_token: Option<String>, // Blinded token allowing client to claim an SCE-Address to transfer to.
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -162,6 +170,8 @@ pub struct Scheduler {
     time_out_map: BisetMap<Uuid, u64>,
     //output addresses per swap
     out_addr_map: BisetMap<Uuid, SCEAddress>,
+    //map of swap_id to map of state chain id to blinded_spend token
+    bst_map: HashMap<Uuid, HashMap<Uuid, BlindedSpendToken>>,
 }
 
 impl Scheduler {
@@ -176,6 +186,7 @@ impl Scheduler {
             status_map: BisetMap::<Uuid, SwapStatus>::new(),
             time_out_map: BisetMap::<Uuid, u64>::new(),
             out_addr_map: BisetMap::new(),
+            bst_map: HashMap::new(),
         }
     }
 
@@ -233,11 +244,18 @@ impl Scheduler {
         self.swap_info_map.get(swap_id).cloned()     
     }
 
+    pub fn get_swap_status(&self, swap_id: & Uuid) -> Option<SwapStatus> {
+        match self.swap_info_map.get(swap_id) {
+            None => None,
+            Some(i) => Some(i.status.clone()),
+        }
+    }
+
     //Attempt to create swap tokens from the swap requests
     //For each amount, the algorithm attempts to collect state chains together into
     //the requested minimum swap size, beginning with the largest, for each requested 
     //swap size
-    pub fn update_swap_info(&mut self) {
+    pub fn update_swap_requests(&mut self) {
         //Get amount to sc id map
         let amount_collect: Vec<(u64, Vec<Uuid>)> = self.statechain_amount_map.rev().collect();
         for (amount, sc_id_vec) in amount_collect {
@@ -285,7 +303,6 @@ impl Scheduler {
                     let si = SwapInfo {
                         status: SwapStatus::Phase1,
                         swap_token,
-                        blinded_spend_token: None,
                     };
                     //Add the swap info to the map of swap infos
                     self.insert_swap_info(&si);
@@ -307,6 +324,57 @@ impl Scheduler {
             }
         }
     }
+
+    //Update the swap info based on the rersults of user first/second messages
+    pub fn update_swaps(&mut self) {
+        println!("update swaps");
+        for (id, swap_info) in self.swap_info_map.iter_mut() {
+            match swap_info.status {
+                //Phase 1 - check if all state chain addresses have been received, if so move to phase 2
+                SwapStatus::Phase1 => {
+                    if (swap_info.swap_token.state_chain_ids.len() == self.out_addr_map.get(&id).len()){
+                        //All output addresses received. 
+                        //Generate a list of blinded spend tokens and proceed to phase 2.
+                        let mut scid_bst_map = HashMap::<Uuid, BlindedSpendToken>::new();
+                        for sc_id in swap_info.swap_token.state_chain_ids.clone() {
+                            let data = "some bst".to_string();
+                            let bst = BlindedSpendToken::from_string(data);
+                            scid_bst_map.insert(sc_id.clone(), bst);
+                        }
+                        self.bst_map.insert(swap_info.swap_token.id.clone(), scid_bst_map);
+                        swap_info.status = SwapStatus::Phase2;
+                    }   
+                },
+                SwapStatus::Phase2 => {
+
+                },
+                SwapStatus::Phase3 => {
+
+                },
+            };
+        }
+    }
+
+    pub fn update_swap_info(&mut self) {
+        self.update_swap_requests();
+        self.update_swaps();
+    }
+
+    pub fn get_blinded_spend_token(&self, swap_id: &Uuid, statechain_id: &Uuid) -> Result<BlindedSpendToken>{
+        match self.get_swap_status(swap_id) {
+            Some(SwapStatus::Phase1) => Err(SEError::SwapError("in phase 1, token not available".to_string())),
+            None => Err(SEError::SwapError("unknown swap id when getting swap status".to_string())),
+            _ => {
+                match self.bst_map.get(swap_id) {
+                    Some(m) => match m.get(statechain_id) {
+                        Some(bst) => Ok(bst.clone()),
+                        None => Err(SEError::SwapError("unknown statechain id".to_string())),
+                    },
+                    None => Err(SEError::SwapError("unknown swap id when getting blind spending token".to_string())),
+                }
+            }
+        }
+    }
 }
 
 
@@ -315,17 +383,28 @@ impl Conductor for SCE {
         let guard = self.scheduler.lock()?;
         Ok(guard.get_swap_id(state_chain_id))
     }
-    fn poll_swap(&self, swap_id: &Uuid) -> Result<Option<SwapInfo>> {
+    fn poll_swap(&self, swap_id: &Uuid) -> Result<Option<SwapStatus>> {
+        let guard = self.scheduler.lock()?;
+        Ok(guard.get_swap_status(swap_id))
+    }
+    fn get_swap_info(&self, swap_id: &Uuid) -> Result<Option<SwapInfo>> {
         let guard = self.scheduler.lock()?;
         Ok(guard.get_swap_info(swap_id))
     }
+
+    fn get_blinded_spend_token(&self, swap_id: &Uuid, statechain_id: &Uuid) -> Result<BlindedSpendToken> {
+        let guard = self.scheduler.lock()?;
+        Ok(guard.get_blinded_spend_token(swap_id, statechain_id)?)
+    }
+
     fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> Result<()> {
         let sig = &register_utxo_msg.signature;
         let key_id = &register_utxo_msg.state_chain_id;
         let swap_size = &register_utxo_msg.swap_size;
         //Verify the signature
         let _ = self.verify_statechain_sig(key_id, sig, None)?;
-        let amount :u64 = self.database.get_statechain_amount(*key_id)?.amount as u64;
+        let sc_amount = self.database.get_statechain_amount(*key_id)?;
+        let amount :u64 = sc_amount.amount as u64;
         let mut guard = self.scheduler.lock()?;
         let _ = guard.register_amount_swap_size(key_id, amount, *swap_size);
         Ok(())
@@ -347,7 +426,18 @@ impl Conductor for SCE {
         }  
     }
 
-    fn swap_second_message(&self, _swap_msg2: &SwapMsg2) -> Result<SCEAddress> {
+    fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> Result<SCEAddress> {
+        let swap_id = &swap_msg2.swap_id;
+        let swap_info = match self.get_swap_info(swap_id)? {
+            Some(i) => i,
+            None =>  return Err(SEError::SwapError(format!("swap_second_message: no swap with id {}",swap_id))),
+        };
+        let _swap_token = &swap_info.swap_token;
+        let addr = self.get_address_from_blinded_spend_token(&swap_msg2.blinded_spend_token)?;
+        Ok(addr)
+    }
+
+    fn get_address_from_blinded_spend_token(&self, bst: &BlindedSpendToken) -> Result<SCEAddress>{
         todo!()
     }
 }
@@ -361,11 +451,25 @@ pub fn poll_utxo(sc_entity: State<SCE>, state_chain_id: Json<Uuid>) -> Result<Js
 }
 
 #[post("/swap/poll/swap", format = "json", data = "<swap_id>")]
-pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<Uuid>) -> Result<Json<Option<SwapInfo>>> {
+pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<Uuid>) -> Result<Json<Option<SwapStatus>>> {
     match sc_entity.poll_swap(&swap_id.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
+}
+
+#[post("/swap/info", format = "json", data = "<swap_id>")]
+pub fn get_swap_info(sc_entity: State<SCE>, swap_id: Json<Uuid>) -> Result<Json<Option<SwapInfo>>> {
+    match sc_entity.get_swap_info(&swap_id.into_inner()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[post("/swap/blinded-spend-token", format = "json", data = "<bst_msg>")]
+pub fn get_blinded_spend_token(sc_entity: State<SCE>, bst_msg: Json<BSTMsg>) -> Result<Json<BlindedSpendToken>> {
+    let bst_msg = bst_msg.into_inner();
+    sc_entity.get_blinded_spend_token(&bst_msg.swap_id, &bst_msg.state_chain_id).map(|x| Json(x))
 }
 
 #[post("/swap/register-utxo", format = "json", data = "<register_utxo_msg>")]
@@ -450,7 +554,8 @@ use super::*;
             swap_info_map: HashMap::<Uuid, SwapInfo>::new(),
             status_map: BisetMap::<Uuid, SwapStatus>::new(),
             time_out_map: BisetMap::<Uuid, u64>::new(),
-            out_addr_map: BisetMap::new()
+            out_addr_map: BisetMap::new(),
+            bst_map: HashMap::new(),
         }
     }
 
@@ -488,7 +593,6 @@ use super::*;
         //Look up the swap for sc_id
         let swap_id = scheduler.get_swap_id(&sc_id).expect("expected swap id");
         let swap_info = scheduler.get_swap_info(&swap_id).expect("expected swap info");
-        assert_eq!(swap_info.blinded_spend_token, None, "expected no blinded spend token");
         assert_eq!(swap_info.status, SwapStatus::Phase1, "expected phase1");
         assert_eq!(swap_info.swap_token.amount, 5, "expected amount 5");
         assert_eq!(swap_info.swap_token.time_out, DEFAULT_TIMEOUT, "expected default timeout");
@@ -528,7 +632,7 @@ use super::*;
     }
 
     #[test]
-    fn test_poll_swap() {
+    fn test_get_swap_info() {
         let swap_id_doesnt_exist = Uuid::from_str("deadb33f-93f0-46f9-abda-0678c891b2d3").unwrap();
 
         let mut db = MockDatabase::new();
@@ -549,14 +653,15 @@ use super::*;
             _ => assert!(false, "Expected failure."),
         }
 
-        match sc_entity.poll_swap(&swap_id_valid)
+        assert_eq!(sc_entity.poll_swap(&swap_id_valid).unwrap().unwrap(),SwapStatus::Phase1);
+
+        match sc_entity.get_swap_info(&swap_id_valid)
         {
             Ok(Some(swap_info)) => {
                 assert_eq!(swap_info.status, SwapStatus::Phase1);
                 assert_eq!(swap_info.swap_token.id, swap_id_valid);
                 assert!(swap_info.swap_token.time_out == DEFAULT_TIMEOUT);
                 assert!(swap_info.swap_token.state_chain_ids.len() == 3);
-                assert_eq!(swap_info.blinded_spend_token, None);
             },
             _ => assert!(false, "Expected Ok(Some(swap_info))."),
         }
@@ -627,13 +732,20 @@ use super::*;
     #[test]
     fn test_swap_first_message() {
         let invalid_swap_id = Uuid::from_str("deadb33f-37ab-46f9-abda-0678c891b2d3").unwrap();
-        let proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap(); // Proof key priv part
-        let proof_key_priv_invalid = SecretKey::from_slice(&[2; 32]).unwrap(); // Proof key priv part
-        let proof_key = PublicKey::from_secret_key(&Secp256k1::new(), &proof_key_priv); // proof key
-        let sce_address = SCEAddress {
-            tx_backup_addr: Address::from_str("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq").unwrap(),
-            proof_key,
-        };
+        let proof_key_priv_invalid = SecretKey::from_slice(&[99; 32]).unwrap(); // Proof key priv part
+        let mut proof_key_vec = Vec::<PublicKey>::new();
+        let mut proof_key_priv_vec = Vec::<SecretKey>::new();
+        let mut sce_addresses = Vec::<SCEAddress>::new();
+        for i in 1..4 {
+            proof_key_priv_vec.push(SecretKey::from_slice(&[i; 32]).unwrap());
+            proof_key_vec.push(PublicKey::from_secret_key(&Secp256k1::new(), &proof_key_priv_vec.last().unwrap()));
+            sce_addresses.push(
+                SCEAddress {
+                    tx_backup_addr: Address::from_str("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq").unwrap(),
+                    proof_key: proof_key_vec.last().unwrap().clone(),
+                }
+            )
+        }
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
@@ -646,17 +758,17 @@ use super::*;
         //let swap_id_valid = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
         let swap_id = guard.swap_id_map.iter().next().unwrap().1.to_owned();
         // Sign swap token with no state_chain_ids
-        let mut swap_token = guard.get_swap_info(&swap_id).unwrap().swap_token;
+        let swap_token = guard.get_swap_info(&swap_id).unwrap().swap_token;
         drop(guard);
 
         let mut swap_token_no_sc = swap_token.clone();
         swap_token_no_sc.state_chain_ids = Vec::new();
 
-        let swap_token_sig = swap_token_no_sc.sign(&proof_key_priv).unwrap();
+        let swap_token_sig = swap_token_no_sc.sign(&proof_key_priv_vec[0]).unwrap();
         let mut swap_msg_1 = SwapMsg1 {
             swap_id,
             swap_token_sig,
-            address: sce_address.clone()
+            address: sce_addresses[0].clone()
         };
         match sc_entity.swap_first_message(&swap_msg_1){
             Ok(_) => assert!(false, "Expected failure."),
@@ -672,37 +784,106 @@ use super::*;
 
         // Sign swap token with invalid swap_id
         swap_msg_1.swap_id = invalid_swap_id;
-        swap_msg_1.swap_token_sig = swap_token.sign(&proof_key_priv).unwrap();
+        swap_msg_1.swap_token_sig = swap_token.sign(&proof_key_priv_vec[0]).unwrap();
         
         match sc_entity.swap_first_message(&swap_msg_1){
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("Swap Error: no swap with id"),e.to_string()),
         }
 
-        swap_msg_1.swap_id = swap_id;
-        swap_msg_1.swap_token_sig = swap_token.sign(&proof_key_priv).unwrap();
+        //Should be in phase1 now as not enough valid first messages have been sent
+        assert_eq!(sc_entity.poll_swap(&swap_id).unwrap().unwrap(),SwapStatus::Phase1);
 
-        // Valid inputs
-        match sc_entity.swap_first_message(&swap_msg_1) {
-            Ok(_) => assert!(true),
-            Err(e) => assert!(false, e.to_string())
+
+        for i in 0..proof_key_vec.len(){
+            let swap_msg_1 = SwapMsg1 {
+                swap_id,
+                swap_token_sig: swap_token.sign(&proof_key_priv_vec[i]).unwrap(),
+                address: sce_addresses[i].clone()
+            };
+            // Valid inputs
+            match sc_entity.swap_first_message(&swap_msg_1) {
+                Ok(_) => assert!(true),
+                Err(e) => assert!(false, e.to_string())
+            };
+        }
+        //Scheduler updates swap info to move swap to phase 2
+        let mut guard = sc_entity.scheduler.lock().unwrap();
+        guard.update_swap_info();
+        drop(guard);
+        //Should be in phase 2 now as all participants have sent first message
+        assert_eq!(sc_entity.poll_swap(&swap_id).unwrap().unwrap(),SwapStatus::Phase2);
+
+        //There should be a blinded spend token for each of the sce addresses
+        let mut guard = sc_entity.scheduler.lock().unwrap();
+        assert_eq!(guard.bst_map.get(&swap_id).unwrap().len(), 
+            guard.swap_info_map.get(&swap_id).unwrap().swap_token.state_chain_ids.len());
+        drop(guard);
+    }
+
+    #[test]
+    fn test_get_blinded_spend_token(){
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        let mut sc_entity = test_sc_entity(db);
+        sc_entity.scheduler = Arc::new(Mutex::new(get_scheduler(
+            vec![(3,10),(3,10),(3,10)]
+        )));
+        let mut guard = sc_entity.scheduler.lock().unwrap();
+        guard.update_swap_info();
+        //let swap_id_valid = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let swap_id = guard.swap_id_map.iter().next().unwrap().1.to_owned();
+        // Sign swap token with no state_chain_ids
+        let mut swap_info = guard.get_swap_info(&swap_id).unwrap();
+        swap_info.status=SwapStatus::Phase2;
+        guard.swap_info_map.insert(swap_id, swap_info.clone());
+        let swap_token = swap_info.swap_token;
+        let state_chain_id = swap_token.state_chain_ids[0];
+
+        let mut id_bst_map = HashMap::<Uuid, BlindedSpendToken>::new();
+        let mut i = 0;
+        for id in swap_token.state_chain_ids {
+            id_bst_map.insert(id, BlindedSpendToken::from_string(format!("bst {}", i)));
+            i = i+1;
+        }
+        guard.bst_map.insert(swap_id.clone(), id_bst_map);
+        drop(guard);
+
+        sc_entity.get_blinded_spend_token(&swap_id, &state_chain_id).unwrap();
+
+        assert!(sc_entity.get_blinded_spend_token(&swap_id, &state_chain_id).is_ok());
+        let expected_err = SEError::SwapError("unknown swap id when getting swap status".to_string());
+        match sc_entity.get_blinded_spend_token(&Uuid::default(), &state_chain_id){
+            Err(e) => assert_eq!(e.to_string(), expected_err.to_string(), "expected Err({}), got Err({})", expected_err, e),
+            Ok(v) => assert!(false, "expected Err({}), got Ok({:?})", expected_err, v)
+        };
+
+         let expected_err = SEError::SwapError("unknown statechain id".to_string());
+        match sc_entity.get_blinded_spend_token(&swap_id, &Uuid::default()){
+            Err(e) => assert_eq!(e.to_string(), expected_err.to_string(), "expected Err({}), got Err({})", expected_err, e),
+            Ok(v) => assert!(false, "expected Err({}), got Ok({:?})", expected_err, v)
         };
     }
+  
 
     //#[test]
     fn test_swap_second_message() {
-        let db = MockDatabase::new();
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
         let sc_entity = test_sc_entity(db);
-
+        
+        let swap_id = Uuid::new_v4();
         // Blinded token invalid
         match sc_entity.swap_second_message(&SwapMsg2 {
-            blinded_spend_token: "valid token with no record of issuance".to_string()
+            swap_id,
+            blinded_spend_token: BlindedSpendToken::from_str("valid token with no record of issuance")
         }){
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("Error: Blinded Token: Invalid. Token not issued by this Conductor.")),
         }
         match sc_entity.swap_second_message(&SwapMsg2 {
-            blinded_spend_token: "invalid token".to_string()
+            swap_id,
+            blinded_spend_token: BlindedSpendToken::from_str("invalid token")
         }){
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("Error: Blinded Token: Invalid format.")),
@@ -710,7 +891,8 @@ use super::*;
 
         // Connection made through clear net
         match sc_entity.swap_second_message(&SwapMsg2 {
-            blinded_spend_token: "valid token".to_string()
+            swap_id,
+            blinded_spend_token: BlindedSpendToken::from_str("valid token")
         }){
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("Error: Swap Token: Signature does not sign for all data in token.")),
@@ -718,7 +900,8 @@ use super::*;
 
         // Valid inputs
         assert!(sc_entity.swap_second_message(&SwapMsg2 {
-            blinded_spend_token: "valid token".to_string()
+            swap_id,
+            blinded_spend_token: BlindedSpendToken::from_str("valid token")
         }).is_ok());
     }
 
@@ -768,14 +951,14 @@ use super::*;
         let mut phase_1_complete = false;
         let mut phase_2_complete = false;
 
-        let mut blinded_spend_token = String::default();
+        let mut _blinded_spend_token = BlindedSpendToken::from_string(String::default());
 
         // Poll Status of swap and perform necessary actions for each phase.
         println!("\nBegin polling of Swap:");
         loop {
             println!("\nSleeping for 3 seconds..");
             thread::sleep(Duration::from_secs(3));
-            let poll_swap_res: SwapInfo = conductor.poll_swap(&swap_id).unwrap().unwrap();
+            let poll_swap_res: SwapInfo = conductor.get_swap_info(&swap_id).unwrap().unwrap();
             println!("Swap status: {:?}", poll_swap_res);
             match poll_swap_res.status {
                 SwapStatus::Phase1 => {
@@ -808,7 +991,6 @@ use super::*;
                         continue;
                     }
                     println!("\nEnter phase2:");
-                    blinded_spend_token = poll_swap_res.blinded_spend_token.unwrap();
                     println!("Blinded spend token received: {:?}", blinded_spend_token);
                     phase_2_complete = true;
                 }
@@ -816,6 +998,7 @@ use super::*;
                     println!("\nEnter phase3:");
                     println!("Connect to Conductor via new Tor identity and present Blinded spend token.");
                     let second_msg_resp = conductor.swap_second_message(&SwapMsg2 {
+                        swap_id,
                         blinded_spend_token,
                     });
                     println!("Server responds with SCE-Address: {:?}", second_msg_resp);
@@ -842,7 +1025,7 @@ use super::*;
             .with(predicate::eq(state_chain_id))
             .returning(move |_| Ok(Some(swap_id)));
         conductor
-            .expect_poll_swap() // get swap status return phase 1. x3
+            .expect_get_swap_info() // get swap status return phase 1. x3
             .with(predicate::eq(swap_id))
             .times(3)
             .returning(move |_| {
@@ -854,12 +1037,11 @@ use super::*;
                         time_out: DEFAULT_TIMEOUT,
                         state_chain_ids: vec![state_chain_id, state_chain_id],
                     },
-                    blinded_spend_token: None,
                 }))
             });
         conductor.expect_swap_first_message().returning(|_| Ok(())); // First message
         conductor
-            .expect_poll_swap() // get swap status return phase 2. x2
+            .expect_get_swap_info() // get swap status return phase 2. x2
             .with(predicate::eq(swap_id))
             .times(2)
             .returning(move |_| {
@@ -871,14 +1053,10 @@ use super::*;
                         time_out: DEFAULT_TIMEOUT,
                         state_chain_ids: vec![state_chain_id, state_chain_id],
                     },
-                    blinded_spend_token: Some(
-                        "1d02207c5167fe2973619edb07b720b038d4e724f21543ca0a429c20a67fd64a714f47aa"
-                            .to_string(),
-                    ),
                 }))
             });
         conductor
-            .expect_poll_swap() // get swap status return phase 3. x2
+            .expect_get_swap_info() // get swap status return phase 3. x2
             .with(predicate::eq(swap_id))
             .times(1)
             .returning(move |_| {
@@ -890,7 +1068,6 @@ use super::*;
                         time_out: DEFAULT_TIMEOUT,
                         state_chain_ids: vec![state_chain_id, state_chain_id],
                     },
-                    blinded_spend_token: None,
                 }))
             });
         conductor.expect_swap_second_message().returning(|_| {
