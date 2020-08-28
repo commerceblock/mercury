@@ -84,6 +84,8 @@ pub trait Conductor {
     //         of the SCEAddress' input in phase 1.
     fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> Result<SCEAddress>;
 
+    fn get_address_from_blinded_spend_token(&self, bst: &BlindedSpendToken) -> Result<SCEAddress>;
+
     // Phase 3: Participants carry out transfer_sender() and signal that this transfer is a part of
     // swap with id: x. Participants carry out corresponding transfer_receiver() and provide their
     // commitment Comm(state_chain_id, nonce), to be used later as proof of completeing the protocol
@@ -424,7 +426,18 @@ impl Conductor for SCE {
         }  
     }
 
-    fn swap_second_message(&self, _swap_msg2: &SwapMsg2) -> Result<SCEAddress> {
+    fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> Result<SCEAddress> {
+        let swap_id = &swap_msg2.swap_id;
+        let swap_info = match self.get_swap_info(swap_id)? {
+            Some(i) => i,
+            None =>  return Err(SEError::SwapError(format!("swap_second_message: no swap with id {}",swap_id))),
+        };
+        let _swap_token = &swap_info.swap_token;
+        let addr = self.get_address_from_blinded_spend_token(&swap_msg2.blinded_spend_token)?;
+        Ok(addr)
+    }
+
+    fn get_address_from_blinded_spend_token(&self, bst: &BlindedSpendToken) -> Result<SCEAddress>{
         todo!()
     }
 }
@@ -855,17 +868,21 @@ use super::*;
 
     //#[test]
     fn test_swap_second_message() {
-        let db = MockDatabase::new();
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
         let sc_entity = test_sc_entity(db);
-
+        
+        let swap_id = Uuid::new_v4();
         // Blinded token invalid
         match sc_entity.swap_second_message(&SwapMsg2 {
+            swap_id,
             blinded_spend_token: BlindedSpendToken::from_str("valid token with no record of issuance")
         }){
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("Error: Blinded Token: Invalid. Token not issued by this Conductor.")),
         }
         match sc_entity.swap_second_message(&SwapMsg2 {
+            swap_id,
             blinded_spend_token: BlindedSpendToken::from_str("invalid token")
         }){
             Ok(_) => assert!(false, "Expected failure."),
@@ -874,6 +891,7 @@ use super::*;
 
         // Connection made through clear net
         match sc_entity.swap_second_message(&SwapMsg2 {
+            swap_id,
             blinded_spend_token: BlindedSpendToken::from_str("valid token")
         }){
             Ok(_) => assert!(false, "Expected failure."),
@@ -882,6 +900,7 @@ use super::*;
 
         // Valid inputs
         assert!(sc_entity.swap_second_message(&SwapMsg2 {
+            swap_id,
             blinded_spend_token: BlindedSpendToken::from_str("valid token")
         }).is_ok());
     }
@@ -932,7 +951,7 @@ use super::*;
         let mut phase_1_complete = false;
         let mut phase_2_complete = false;
 
-        let mut blinded_spend_token = BlindedSpendToken::from_string(String::default());
+        let mut _blinded_spend_token = BlindedSpendToken::from_string(String::default());
 
         // Poll Status of swap and perform necessary actions for each phase.
         println!("\nBegin polling of Swap:");
@@ -979,6 +998,7 @@ use super::*;
                     println!("\nEnter phase3:");
                     println!("Connect to Conductor via new Tor identity and present Blinded spend token.");
                     let second_msg_resp = conductor.swap_second_message(&SwapMsg2 {
+                        swap_id,
                         blinded_spend_token,
                     });
                     println!("Server responds with SCE-Address: {:?}", second_msg_resp);

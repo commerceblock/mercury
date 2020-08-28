@@ -269,6 +269,7 @@ impl BlindedSpendToken {
 /// Owner -> Conductor
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SwapMsg2 {
+    pub swap_id : Uuid,
     pub blinded_spend_token: BlindedSpendToken,
 }
 
