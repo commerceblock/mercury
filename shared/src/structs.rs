@@ -244,6 +244,13 @@ pub struct SwapMsg1 {
     pub address: SCEAddress,
 }
 
+// Message to request a blinded spend token
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BSTMsg {
+    pub swap_id: Uuid,
+    pub state_chain_id: Uuid,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BlindedSpendToken {
     data: String, // Blinded token allowing client to claim an SCE-Address to transfer to.

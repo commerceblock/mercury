@@ -336,7 +336,7 @@ impl Scheduler {
                         let mut scid_bst_map = HashMap::<Uuid, BlindedSpendToken>::new();
                         for sc_id in swap_info.swap_token.state_chain_ids.clone() {
                             let data = "some bst".to_string();
-                            let bst = BlindedSpendToken{data};
+                            let bst = BlindedSpendToken::from_string(data);
                             scid_bst_map.insert(sc_id.clone(), bst);
                         }
                         self.bst_map.insert(swap_info.swap_token.id.clone(), scid_bst_map);
@@ -454,6 +454,10 @@ pub fn get_swap_info(sc_entity: State<SCE>, swap_id: Json<Uuid>) -> Result<Json<
 }
 
 #[post("/swap/blinded-spend-token", format = "json", data = "<bst_msg>")]
+pub fn get_blinded_spend_token(sc_entity: State<SCE>, bst_msg: Json<BSTMsg>) -> Result<Json<BlindedSpendToken>> {
+    let bst_msg = bst_msg.into_inner();
+    sc_entity.get_blinded_spend_token(&bst_msg.swap_id, &bst_msg.state_chain_id).map(|x| Json(x))
+}
 
 #[post("/swap/register-utxo", format = "json", data = "<register_utxo_msg>")]
 pub fn register_utxo(
@@ -797,7 +801,57 @@ use super::*;
         //Should be in phase 2 now as all participants have sent first message
         assert_eq!(sc_entity.poll_swap(&swap_id).unwrap().unwrap(),SwapStatus::Phase2);
 
+        //There should be a blinded spend token for each of the sce addresses
+        let mut guard = sc_entity.scheduler.lock().unwrap();
+        assert_eq!(guard.bst_map.get(&swap_id).unwrap().len(), 
+            guard.swap_info_map.get(&swap_id).unwrap().swap_token.state_chain_ids.len());
+        drop(guard);
     }
+
+    #[test]
+    fn test_get_blinded_spend_token(){
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        let mut sc_entity = test_sc_entity(db);
+        sc_entity.scheduler = Arc::new(Mutex::new(get_scheduler(
+            vec![(3,10),(3,10),(3,10)]
+        )));
+        let mut guard = sc_entity.scheduler.lock().unwrap();
+        guard.update_swap_info();
+        //let swap_id_valid = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let swap_id = guard.swap_id_map.iter().next().unwrap().1.to_owned();
+        // Sign swap token with no state_chain_ids
+        let mut swap_info = guard.get_swap_info(&swap_id).unwrap();
+        swap_info.status=SwapStatus::Phase2;
+        guard.swap_info_map.insert(swap_id, swap_info.clone());
+        let swap_token = swap_info.swap_token;
+        let state_chain_id = swap_token.state_chain_ids[0];
+
+        let mut id_bst_map = HashMap::<Uuid, BlindedSpendToken>::new();
+        let mut i = 0;
+        for id in swap_token.state_chain_ids {
+            id_bst_map.insert(id, BlindedSpendToken::from_string(format!("bst {}", i)));
+            i = i+1;
+        }
+        guard.bst_map.insert(swap_id.clone(), id_bst_map);
+        drop(guard);
+
+        sc_entity.get_blinded_spend_token(&swap_id, &state_chain_id).unwrap();
+
+        assert!(sc_entity.get_blinded_spend_token(&swap_id, &state_chain_id).is_ok());
+        let expected_err = SEError::SwapError("unknown swap id when getting swap status".to_string());
+        match sc_entity.get_blinded_spend_token(&Uuid::default(), &state_chain_id){
+            Err(e) => assert_eq!(e.to_string(), expected_err.to_string(), "expected Err({}), got Err({})", expected_err, e),
+            Ok(v) => assert!(false, "expected Err({}), got Ok({:?})", expected_err, v)
+        };
+
+         let expected_err = SEError::SwapError("unknown statechain id".to_string());
+        match sc_entity.get_blinded_spend_token(&swap_id, &Uuid::default()){
+            Err(e) => assert_eq!(e.to_string(), expected_err.to_string(), "expected Err({}), got Err({})", expected_err, e),
+            Ok(v) => assert!(false, "expected Err({}), got Ok({:?})", expected_err, v)
+        };
+    }
+  
 
     //#[test]
     fn test_swap_second_message() {

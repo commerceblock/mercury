@@ -245,7 +245,9 @@ mock! {
         fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> conductor::Result<()>;
         fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> conductor::Result<()>;
         fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> conductor::Result<SCEAddress>;
+        fn get_blinded_spend_token(&self, swap_id: &Uuid, state_chain_id: &Uuid) -> conductor::Result<BlindedSpendToken>;
     }
+    
     trait Transfer {
         fn transfer_sender(
             &self,
