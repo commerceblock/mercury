@@ -1,0 +1,10 @@
+[package]
+name = "tor"
+version = "0.1.0"
+authors = ["Lawrence Deacon <lawrence.deacon@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+libtor = "43.6.0+0.4.3.6"
