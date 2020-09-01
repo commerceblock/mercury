@@ -3,7 +3,6 @@
 //! Test spawns a server and randomly performs deposits, transfers, withdrawals and batch-transfers.
 
 extern crate bitcoin;
-extern crate client_lib;
 extern crate server_lib;
 extern crate shared_lib;
 

@@ -131,7 +131,7 @@ pub fn gen_wallet() -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
-        ClientShim::new("http://localhost:8000".to_string(), None).unwrap(),
+        ClientShim::new("http://localhost:8000".to_string(), None, None),
         Box::new(MockElectrum::new()),
     );
 
@@ -146,7 +146,7 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
-        ClientShim::new("http://localhost:8000".to_string(), None).unwrap(),
+        ClientShim::new("http://localhost:8000".to_string(), None, None),
         Box::new(MockElectrum::new()),
     );
 

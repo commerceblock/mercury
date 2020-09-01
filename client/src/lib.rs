@@ -23,7 +23,6 @@ extern crate electrumx_client;
 extern crate hex;
 extern crate itertools;
 extern crate uuid;
-
 extern crate shared_lib;
 
 pub mod ecdsa;
@@ -35,6 +34,10 @@ mod utilities;
 
 type Result<T> = std::result::Result<T, error::CError>;
 
+pub mod tor {
+    pub static SOCKS5URL : &str = "socks5h://127.0.0.1:9050"; 
+}
+
 #[derive(Debug, Clone)]
 pub struct ClientShim {
     pub client: reqwest::Client,
@@ -43,29 +46,18 @@ pub struct ClientShim {
 }
 
 impl ClientShim {
-    pub fn new(endpoint: String, auth_token: Option<String>) -> Result<ClientShim> {
-        let mut cb = reqwest::ClientBuilder::new();
-        cb = match ssl_cert()? {
-            Some(c) => cb.add_root_certificate(c),
-            None => cb
+    pub fn new(endpoint: String, auth_token: Option<String>, proxy: Option<String>) -> ClientShim {
+        let client = match proxy {
+            None => reqwest::Client::new(),
+            Some(p) => reqwest::Client::builder()
+                        .proxy(reqwest::Proxy::all(&p).unwrap())
+                        .build().unwrap(),
         };
-        let client = cb.build()?;
-        Ok(ClientShim {
+        ClientShim {
             client,
             auth_token,
             endpoint,
-        })
+        }
     }
 }
 
-fn ssl_cert() -> Result<Option<reqwest::Certificate>> {
-    #[cfg(use_localhost_cert = "true")]
-    {
-        let mut buf = Vec::new();
-        File::open("../utilities/server/certs/localhost.crt")?
-            .read_to_end(&mut buf)?;
-        Ok(Some(reqwest::Certificate::from_pem(&buf)?))
-    }
-    #[cfg(not(use_localhost_cert = "true"))]
-    Ok(None)
-}
