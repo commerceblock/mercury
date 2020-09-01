@@ -35,7 +35,7 @@ mod utilities;
 type Result<T> = std::result::Result<T, error::CError>;
 
 pub mod tor {
-    pub static SOCKS5URL : &str = "socks5://127.0.0.1:9050"; 
+    pub static SOCKS5URL : &str = "socks5h://127.0.0.1:9050"; 
 }
 
 #[derive(Debug, Clone)]
