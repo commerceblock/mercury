@@ -28,6 +28,7 @@ use monotree::{
 
 use chrono::{Duration, NaiveDateTime, Utc};
 use std::{convert::TryInto, panic::AssertUnwindSafe, str::FromStr};
+use std::panic;
 
 /// A list of States in which each State signs for the next State.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -114,7 +115,7 @@ pub struct State {
     pub next_state: Option<StateChainSig>, // signature representing passing of ownership
 }
 /// Data necessary to create ownership transfer signatures
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
 pub struct StateChainSig {
     pub purpose: String, // "TRANSFER", "TRANSFER-BATCH" or "WITHDRAW"
     pub data: String,    // proof key, state chain id or address
@@ -168,8 +169,6 @@ pub fn update_statechain_smt(
     // update smt
     let mut tree = Monotree::<RocksDB, Blake2b>::new(sc_db_loc);
 
-    use std::panic;
-
     let mut new_root: Option<[u8; 32]> = None;
     let result = panic::catch_unwind(AssertUnwindSafe(|| {
         new_root = tree.insert(root.as_ref(), key, entry).unwrap();
@@ -194,7 +193,17 @@ pub fn gen_proof_smt(
     let mut tree = Monotree::<RocksDB, Blake2b>::new(sc_db_loc);
 
     // generate inclusion proof
-    let proof = tree.get_merkle_proof(root.as_ref(), key)?;
+    let mut proof: Option<Vec<(bool, Vec<u8>)>> = None;
+    let result = panic::catch_unwind(AssertUnwindSafe(|| {
+        proof = tree.get_merkle_proof(root.as_ref(), key).unwrap();
+    }));
+
+    if let Err(_) = result {
+        return Err(SharedLibError::Generic(String::from(
+            "Get merkle proof failure. Probably caused by Root provided not being correct.",
+        )));
+    }
+
     Ok(proof)
 }
 

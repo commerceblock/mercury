@@ -29,6 +29,7 @@ pub mod mainstay;
 pub mod state_chain;
 pub mod structs;
 pub mod util;
+pub mod ecies;
 
 use bitcoin::{
     secp256k1::{Message, Secp256k1, Signature, PublicKey},
@@ -43,7 +44,7 @@ use crate::mainstay::{Attestable, Commitment, CommitmentInfo};
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Root {
     id: Option<i64>,
-    value: Option<Hash>,
+    pub value: Option<Hash>,
     commitment_info: Option<CommitmentInfo>,
 }
 

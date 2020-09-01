@@ -23,6 +23,8 @@ pub enum CError {
     SchnorrError(String),
     /// Inherit errors from SharedLibError
     SharedLibError(String),
+    /// Tor error
+    TorError(String)
 }
 
 impl From<String> for CError {
@@ -66,6 +68,17 @@ impl From<ParseIntError> for CError {
         CError::Generic(e.to_string())
     }
 }
+impl From<std::io::Error> for CError {
+    fn from(e: std::io::Error) -> CError {
+        CError::Generic(e.to_string())
+    }
+}
+
+impl From<serde_json::Error> for CError {
+    fn from(e: serde_json::Error) -> CError {
+        CError::Generic(e.to_string())
+    }
+}
 
 impl From<bitcoin::secp256k1::Error> for CError {
     fn from(e: bitcoin::secp256k1::Error) -> CError {
@@ -103,6 +116,7 @@ impl fmt::Display for CError {
             CError::StateEntityError(ref e) => write!(f, "State Entity Error: {}", e),
             CError::SchnorrError(ref e) => write!(f, "Schnorr Error: {}", e),
             CError::SharedLibError(ref e) => write!(f, "SharedLib Error: {}", e),
+            CError::TorError(ref e) => write!(f, "Tor Error: {}", e),
         }
     }
 }

@@ -22,14 +22,18 @@ pub struct Config {
     pub endpoint: String,
     pub electrum_server: String,
     pub testing_mode: bool,
+    pub with_tor: bool,
+    pub tor_proxy: String
 }
 
 impl Default for Config {
     fn default() -> Config {
         Config {
-            endpoint: "https://localhost:8000".to_string(),
+            endpoint: "http://localhost:8000".to_string(),
             electrum_server: "127.0.0.1:60401".to_string(),
             testing_mode: true,
+            with_tor: false,
+            tor_proxy: client_lib::tor::SOCKS5URL.to_string(),
         }
     }
 }
@@ -54,10 +58,18 @@ fn main() {
     let se_endpoint: String = conf_rs.get("endpoint").unwrap();
     let electrum_server_addr: String = conf_rs.get("electrum_server").unwrap();
     let testing_mode: bool = conf_rs.get("testing_mode").unwrap();
-
-    // TODO: random generating of seed and allow input of mnemonic phrase
+    let with_tor: bool = conf_rs.get("with_tor").unwrap(); 
+    let tor_proxy: Option<String> = match with_tor {
+        true => conf_rs.get("tor_proxy").ok(),
+        false => None,
+    };
+        
+    let _ = env_logger::try_init();
+    
+    
+            // TODO: random generating of seed and allow input of mnemonic phrase
     let seed = [0xcd; 32];
-    let client_shim = ClientShim::new(se_endpoint.to_string(), None).unwrap();
+    let client_shim = ClientShim::new(se_endpoint.to_string(), None, tor_proxy);
 
     let electrum: Box<dyn Electrumx> = if testing_mode {
         Box::new(MockElectrum::new())
@@ -191,10 +203,10 @@ fn main() {
             }
         } else if matches.is_present("transfer-receiver") {
             if let Some(matches) = matches.subcommand_matches("transfer-receiver") {
-                let transfer_msg: TransferMsg3 =
+                let mut transfer_msg: TransferMsg3 =
                     serde_json::from_str(matches.value_of("message").unwrap()).unwrap();
                 let finalized_data =
-                    state_entity::transfer::transfer_receiver(&mut wallet, &transfer_msg, &None)
+                    state_entity::transfer::transfer_receiver(&mut wallet, &mut transfer_msg, &None)
                         .unwrap();
                 wallet.save();
                 println!(

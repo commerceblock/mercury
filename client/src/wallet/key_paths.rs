@@ -61,7 +61,6 @@ impl KeyPathWithAddresses {
     /// generate new bitcoin address
     pub fn get_new_address(&mut self) -> Result<bitcoin::Address> {
         let secp = Secp256k1::new();
-
         let new_ext_priv_key = self.derive_new_key(&secp)?;
         let new_ext_pub_key = ExtendedPubKey::from_private(&secp, &new_ext_priv_key);
 
