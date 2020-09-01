@@ -29,7 +29,7 @@ brew services start tor
 ```toml
 with_tor = "true"
 ```
-The default URL "socks5://127.0.0.1:9050" will be used - if the Tor service is using a different URL configure it as follows:
+The default URL "socks5h://127.0.0.1:9050" will be used - if the Tor service is using a different URL configure it as follows:
 ```toml
 tor_proxy = "<Tor proxy URL>"
 ```
