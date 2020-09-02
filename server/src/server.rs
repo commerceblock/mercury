@@ -61,6 +61,18 @@ pub fn get_server<T: Database + Send + Sync + 'static>
 
     let mut sc_entity = StateChainEntity::<T>::load(db)?;
 
+    set_logging_config(&sc_entity.config.log_file);
+
+    // Initialise DBs
+    sc_entity.database.init()?;
+    if sc_entity.config.testing_mode {
+        info!("Server running in testing mode.");
+        // Use test SMT DB
+        sc_entity.config.smt_db_loc = SMT_DB_LOC_TESTING.to_string();
+        // reset dbs
+        sc_entity.database.reset(&sc_entity.config.smt_db_loc)?;
+    }
+
     match mainstay_config {
         Some(c) => sc_entity.config.mainstay = Some(c),
         None => (),
@@ -71,19 +83,7 @@ pub fn get_server<T: Database + Send + Sync + 'static>
         panic!("expected mainstay config");
     }
 
-    set_logging_config(&sc_entity.config.log_file);
-
     let rocket_config = get_rocket_config(&sc_entity.config);
-
-    if sc_entity.config.testing_mode {
-        info!("Server running in testing mode.");
-        // Use test SMT DB
-        sc_entity.config.smt_db_loc = SMT_DB_LOC_TESTING.to_string();
-        // reset dbs
-        if let Err(_) = sc_entity.database.reset(&sc_entity.config.smt_db_loc) {
-            sc_entity.database.init()?;
-        }
-    }
 
     let rock = rocket::custom(rocket_config)
         .register(catchers![internal_error, not_found, bad_request])

@@ -31,6 +31,7 @@ use shared_lib::state_chain::*;
 use shared_lib::{mainstay, Root};
 use std::collections::HashMap;
 use uuid::Uuid;
+use monotree::database::Database as MonotreeDatabase;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Alpha {
@@ -62,6 +63,7 @@ pub enum Table {
     TransferBatch,
     Root,
     BackupTxs,
+    Smt,
 }
 impl Table {
     pub fn to_string(&self) -> String {
@@ -141,6 +143,10 @@ pub enum Column {
     // Id,
     Value,
     CommitmentInfo,
+
+    // Smt
+    Key,
+    // Value
 }
 
 impl Column {
@@ -186,32 +192,25 @@ impl PGDatabase {
         }
     }
 
-    pub fn init(&self) -> Result<()> {
-        self.make_tables()
-    }
-
     /// Build DB tables and Schemas
     pub fn make_tables(&self) -> Result<()> {
         // Create Schemas if they do not already exist
         let _ = self.database_w()?.execute(
-            &format!(
-                "
-            CREATE SCHEMA IF NOT EXISTS statechainentity;",
-            ),
+            &format!("
+            CREATE SCHEMA IF NOT EXISTS statechainentity;
+            "),
             &[],
         )?;
         let _ = self.database_w()?.execute(
-            &format!(
-                "
-            CREATE SCHEMA IF NOT EXISTS watcher;",
-            ),
+            &format!("
+            CREATE SCHEMA IF NOT EXISTS watcher;
+            "),
             &[],
         )?;
 
         // Create tables if they do not already exist
         self.database_w()?.execute(
-            &format!(
-                "
+            &format!("
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 statechainid uuid,
@@ -230,8 +229,7 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!(
-                "
+            &format!("
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 keygenfirstmsg varchar,
@@ -256,8 +254,7 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!(
-                "
+            &format!("
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 chain varchar,
@@ -272,8 +269,7 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!(
-                "
+            &format!("
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 statechainsig varchar,
@@ -286,8 +282,7 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!(
-                "
+            &format!("
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 starttime timestamp,
@@ -303,8 +298,7 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!(
-                "
+            &format!("
             CREATE TABLE IF NOT EXISTS {} (
                 id BIGSERIAL,
                 value varchar,
@@ -317,14 +311,25 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!(
-                "
+            &format!("
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 txbackup varchar,
                 PRIMARY KEY (id)
             );",
                 Table::BackupTxs.to_string(),
+            ),
+            &[],
+        )?;
+
+        self.database_w()?.execute(
+            &format!("
+            CREATE TABLE IF NOT EXISTS {} (
+                key varchar,
+                value varchar,
+                PRIMARY KEY (key)
+            );",
+                Table::Smt.to_string(),
             ),
             &[],
         )?;
@@ -358,7 +363,7 @@ impl PGDatabase {
         self.database_w()?.execute(
             &format!(
                 "
-            TRUNCATE {},{},{},{},{},{},{} RESTART IDENTITY;",
+            TRUNCATE {},{},{},{},{},{},{},{} RESTART IDENTITY;",
                 Table::UserSession.to_string(),
                 Table::Ecdsa.to_string(),
                 Table::StateChain.to_string(),
@@ -366,6 +371,7 @@ impl PGDatabase {
                 Table::TransferBatch.to_string(),
                 Table::Root.to_string(),
                 Table::BackupTxs.to_string(),
+                Table::Smt.to_string(),
             ),
             &[],
         )?;
@@ -593,6 +599,10 @@ impl PGDatabase {
 }
 
 impl Database for PGDatabase {
+    fn init(&self) -> Result<()> {
+        self.make_tables()
+    }
+
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self {
         Self {
            pool: Some(pool)
@@ -1430,10 +1440,6 @@ impl Database for PGDatabase {
         eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg,
         eph_ec_key_pair_party1: party_one::EphEcKeyPair,
     ) -> Result<()> {
-        //    user_id,
-        //    sign_msg1.eph_key_gen_first_message_party_two,
-        //    eph_ec_key_pair_party1
-        //) -> Result<()> {
 
         self.update(
             &user_id,
@@ -1444,9 +1450,6 @@ impl Database for PGDatabase {
                 &Self::ser(eph_ec_key_pair_party1)?,
             ],
         )?;
-
-        //}
-
         Ok(())
     }
 
@@ -1494,3 +1497,105 @@ impl Database for PGDatabase {
         )
     }
 }
+
+// impl MonotreeDatabase for PGDatabase {
+//     fn new(postgresinfo: &str) -> Self {
+//         // Get url and table_name from input str
+//         let postgresinfo: PostgresDbInfo = serde_json::from_str(postgresinfo).unwrap();
+//         let mut conn = Client::connect(&postgresinfo.url, NoTls).unwrap();
+//
+//         let stmt = conn.prepare(&format!(
+//             "CREATE TABLE IF NOT EXISTS {} (
+//             key varchar,
+//             value varchar,
+//             PRIMARY KEY (key)
+//         );", postgresinfo.table_name)).unwrap();
+//
+//         let _ = conn.execute(&stmt, &[]).unwrap(); // panic if fail to create table
+//
+//         Postgres {
+//             db: conn,
+//             table_name: postgresinfo.table_name,
+//             batch: HashMap::new(),
+//             cache: MemCache::new(),
+//             batch_on: false,
+//         }
+//     }
+//
+//     fn get(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
+//         if self.cache.contains(key) {
+//             return self.cache.get(key);
+//         }
+//         let stmt = self.db.prepare(&format!(
+//             "SELECT value FROM {} WHERE key = ('{}')"
+//             ,self.table_name, serde_json::to_string(&key).unwrap()))?;
+//         let rows: Vec<postgres::Row> = self.db.query(&stmt, &[])?;
+//         match rows.get(0) {
+//             None => Ok(None),
+//             Some(row) => {
+//                 match row.try_get(0) {
+//                     Err(_) => Ok(None),
+//                     Ok(data) => Ok(Some(serde_json::from_str(data).unwrap()))
+//                 }
+//             }
+//         }
+//     }
+//
+//     fn put(&mut self, key: &[u8], value: Vec<u8>) -> Result<()> {
+//         self.cache.put(key, value.to_owned())?;
+//         if self.batch_on {
+//             let key_vec: Vec<u8> = key.iter().cloned().collect();
+//             self.batch.insert(key_vec, value);
+//         } else {
+//             let stmt = self.db.prepare(&format!(
+//                 "INSERT INTO {} (key, value)
+//                 VALUES ('{}','{}')
+//                 ON CONFLICT (key) DO UPDATE
+//                 SET value = EXCLUDED.value;",
+//                 self.table_name,
+//                 serde_json::to_string(&key).unwrap(),
+//                 serde_json::to_string(&value).unwrap()))?;
+//             self.db.execute(&stmt, &[])?;
+//         };
+//         return Ok(());
+//     }
+//
+//     fn delete(&mut self, key: &[u8]) -> Result<()> {
+//         self.cache.delete(key)?;
+//         if self.batch_on {
+//             self.batch.remove(key);
+//         } else {
+//             let stmt = self.db.prepare(&format!(
+//                 "DELETE FROM {} WHERE key = ('{}');",
+//                 self.table_name, serde_json::to_string(&key).unwrap()))?;
+//             self.db.execute(&stmt, &[])?;
+//         }
+//         return Ok(());
+//     }
+//
+//     fn init_batch(&mut self) -> Result<()> {
+//         self.batch = HashMap::new();
+//         self.cache.clear();
+//         self.batch_on = true;
+//         Ok(())
+//     }
+//
+//     fn finish_batch(&mut self) -> Result<()> {
+//         self.batch_on = false;
+//         if !self.batch.is_empty() {
+//             let batch = std::mem::take(&mut self.batch);
+//             let mut stmt_str = format!("INSERT INTO {} (key, value) VALUES", self.table_name);
+//             for (key, value) in batch.iter() {
+//                 stmt_str.push_str(&format!(" ('{}','{}'),",
+//                 serde_json::to_string(&key).unwrap(),
+//                 serde_json::to_string(&value).unwrap()));
+//             }
+//             stmt_str.truncate(stmt_str.len() - 1);
+//             stmt_str.push_str(" ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;");
+//
+//             let stmt = self.db.prepare(&stmt_str)?;
+//             self.db.execute(&stmt, &[])?;
+//         }
+//         Ok(())
+//     }
+// }
