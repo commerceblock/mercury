@@ -23,17 +23,39 @@ pub struct Config {
     pub electrum_server: String,
     pub testing_mode: bool,
     pub with_tor: bool,
-    pub tor_proxy: String
+    pub tor_proxy: String,
+    pub tor_control_port: u64,
+    pub tor_control_password: String,
 }
 
 impl Default for Config {
     fn default() -> Config {
+        let tc = TourConfig::default();
+
         Config {
             endpoint: "http://localhost:8000".to_string(),
             electrum_server: "127.0.0.1:60401".to_string(),
             testing_mode: true,
             with_tor: false,
-            tor_proxy: client_lib::tor::SOCKS5URL.to_string(),
+            tor_proxy: tc.proxy,
+            tor_control_port: tc.control_port,
+            tor_control_password: tc.control_passwrod,
+        }
+    }
+}
+
+pub struct TorConfig {
+    pub proxy: String,
+    pub control_port: u64,
+    pub control_password: String,
+}
+
+impl Default for TorConfig {
+    fn default() -> Self {
+        TorConfig {
+            proxy: client_lib::tor::SOCKS5URL.to_string(),
+            control_port: 9051,
+            control_password: "".to_string(),
         }
     }
 }
@@ -59,17 +81,32 @@ fn main() {
     let electrum_server_addr: String = conf_rs.get("electrum_server").unwrap();
     let testing_mode: bool = conf_rs.get("testing_mode").unwrap();
     let with_tor: bool = conf_rs.get("with_tor").unwrap(); 
-    let tor_proxy: Option<String> = match with_tor {
-        true => conf_rs.get("tor_proxy").ok(),
+    let tor_config: Option<TorConfig> = match with_tor {
+        true => {
+            let mut tc = tc::default();
+            match conf_rs.get("tor_proxy") {
+                Some(v) => tc.proxy = v,
+                None => ()
+            };
+            match conf_rs.get("tor_control_port") {
+                Some(v) => tc.control_port = v,
+                None => ()
+            };
+            match conf_rs.get("tor_control_password") {
+                Some(v) => tc.control_password = v,
+                None => ()
+            };
+            let tc = tc;
+            Ok(tc)
+        },
         false => None,
     };
         
     let _ = env_logger::try_init();
     
-    
-            // TODO: random generating of seed and allow input of mnemonic phrase
+    // TODO: random generating of seed and allow input of mnemonic phrase
     let seed = [0xcd; 32];
-    let client_shim = ClientShim::new(se_endpoint.to_string(), None, tor_proxy);
+    let client_shim = ClientShim::new(se_endpoint.to_string(), None, tor_config);
 
     let electrum: Box<dyn Electrumx> = if testing_mode {
         Box::new(MockElectrum::new())
