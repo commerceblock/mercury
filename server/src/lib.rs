@@ -75,6 +75,10 @@ pub struct DatabaseR(postgres::Connection);
 
 pub struct PGDatabase {
     pub pool: Option<r2d2::Pool<PostgresConnectionManager>>,
+    pub smt_cache: monotree::database::MemCache,
+    pub smt_batch_on: bool,
+    pub smt_batch: HashMap<Vec<u8>, Vec<u8>>,
+
 }
 
 use structs::*;

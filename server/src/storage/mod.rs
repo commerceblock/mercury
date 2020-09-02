@@ -1,4 +1,5 @@
 pub mod db;
+pub mod monotree;
 pub use super::Result;
 
 use rocket::http::{ContentType, Status};

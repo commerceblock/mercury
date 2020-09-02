@@ -17,7 +17,7 @@ use shared_lib::{
 
 use crate::error::{DBErrorType, SEError};
 use crate::storage::Storage;
-use crate::{server::StateChainEntity, Database};
+use crate::{server::StateChainEntity, Database, PGDatabase};
 use cfg_if::cfg_if;
 
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
@@ -36,9 +36,12 @@ cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
         use crate::MockDatabase as DB;
         type SCE = StateChainEntity::<DB>;
+        use monotree::database::MemoryDB;
+        type MonotreeDB = MemoryDB;
     } else {
         use crate::PGDatabase as DB;
         type SCE = StateChainEntity::<DB>;
+        type MonotreeDB = DB;
     }
 }
 
@@ -102,7 +105,7 @@ impl Utilities for SCE {
             }
         }
 
-        Ok(gen_proof_smt(
+        Ok(gen_proof_smt::<MonotreeDB>(
             &self.config.smt_db_loc,
             &Some(smt_proof_msg.root.hash()),
             &smt_proof_msg.funding_txid,
@@ -382,7 +385,7 @@ pub fn put_smt_value(
         let key: &monotree::Hash = smt_proof_msg.funding_txid[..32].as_bytes().try_into().unwrap();
         let entry: &monotree::Hash = entry_str[..32].as_bytes().try_into().unwrap();
 
-        let mut tree = Monotree::<monotree::database::RocksDB, monotree::hasher::Blake2b>::new(&sc_entity.config.smt_db_loc);
+        let mut tree = Monotree::<MonotreeDB, monotree::hasher::Blake3>::new(&sc_entity.config.smt_db_loc);
         let new_root = tree.insert(smt_proof_msg.root.value.as_ref(), key, entry).unwrap();
         println!("put_smt_value new_root: {:?}", new_root);
         println!("put_smt_value put entry {:?} into key {:?}", entry, key);
@@ -400,7 +403,7 @@ pub fn get_smt_value(
 ) -> Result<Json<()>> {
     if sc_entity.config.testing_mode {
         let key: &monotree::Hash = smt_proof_msg.funding_txid[..32].as_bytes().try_into().unwrap();
-        let mut tree = Monotree::<monotree::database::RocksDB, monotree::hasher::Blake2b>::new(&sc_entity.config.smt_db_loc);
+        let mut tree = Monotree::<MonotreeDB, monotree::hasher::Blake3>::new(&sc_entity.config.smt_db_loc);
         let resp = tree.get(smt_proof_msg.root.value.as_ref(), key);
         println!("resp from get_smt_value: {:?}", resp);
     } else {
@@ -578,7 +581,7 @@ impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
         let current_root_id = db.root_get_current_id()?;
         let current_root = db.get_root(current_root_id)?;
 
-        let new_root_hash = update_statechain_smt(
+        let new_root_hash = update_statechain_smt::<MonotreeDB>(
             &self.config.smt_db_loc,
             &current_root.clone().map(|r| r.hash()),
             funding_txid,
@@ -814,7 +817,7 @@ pub mod mocks {
         pub fn post_commitment() -> Mock {
             mock("POST", "/commitment/send")
             .match_header("content-type", "application/json")
-            .with_body(serde_json::json!({"response":"Commitment added","timestamp":1541761540,"allowance":{"cost":4832691}}).to_string())
+            .with_body(json!({"response":"Commitment added","timestamp":1541761540,"allowance":{"cost":4832691}}).to_string())
             .with_header("content-type", "application/json")
         }
 
@@ -978,7 +981,7 @@ pub mod tests {
             .unwrap();
 
         let hash_exp: [u8; 32] =
-            hex::decode("bdb8618ea37b27b771da7609b30860568f3e81a2951e62b03f76cd34b14242fc")
+            hex::decode("cfeecaedcbaa90b750637ad2044b2e4b6425bd1430fc7250dceb28053a7e2733")
                 .unwrap()[..]
                 .try_into()
                 .unwrap();

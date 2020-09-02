@@ -19,8 +19,7 @@ use bitcoin::{
 };
 
 use monotree::{
-    database::RocksDB,
-    hasher::{Blake2b, Hasher},
+    hasher::{Hasher, Blake3},
     tree::verify_proof,
     {Monotree, Proof},
 };
@@ -155,7 +154,7 @@ impl StateChainSig {
 }
 
 /// Insert new statechain entry into Sparse Merkle Tree and return proof
-pub fn update_statechain_smt(
+pub fn update_statechain_smt<D: monotree::database::Database>(
     sc_db_loc: &str,
     root: &Option<monotree::Hash>,
     funding_txid: &String,
@@ -171,7 +170,7 @@ pub fn update_statechain_smt(
     };
 
     // update smt
-    let mut tree = Monotree::<RocksDB, Blake2b>::new(sc_db_loc);
+    let mut tree = Monotree::<D, Blake3>::new(sc_db_loc);
 
     let mut new_root: Option<[u8; 32]> = None;
     let result = panic::catch_unwind(AssertUnwindSafe(|| {
@@ -188,13 +187,13 @@ pub fn update_statechain_smt(
 }
 
 // Method can run as a seperate proof generation daemon. Must check root exists before calling.
-pub fn gen_proof_smt(
+pub fn gen_proof_smt<D: monotree::database::Database>(
     sc_db_loc: &str,
     root: &Option<monotree::Hash>,
     funding_txid: &String,
 ) -> Result<Option<Proof>> {
     let key: &monotree::Hash = funding_txid[..32].as_bytes().try_into().unwrap();
-    let mut tree = Monotree::<RocksDB, Blake2b>::new(sc_db_loc);
+    let mut tree = Monotree::<D, Blake3>::new(sc_db_loc);
 
     // generate inclusion proof
     let mut proof: Option<Vec<(bool, Vec<u8>)>> = None;
@@ -217,7 +216,7 @@ pub fn verify_statechain_smt(
     proof: &Option<Proof>,
 ) -> bool {
     let entry: &monotree::Hash = proof_key[..32].as_bytes().try_into().unwrap();
-    let hasher = Blake2b::new();
+    let hasher = Blake3::new();
     verify_proof(&hasher, root.as_ref(), &entry, proof.as_ref())
 }
 
@@ -272,18 +271,18 @@ mod tests {
 
         let root: Option<monotree::Hash> = None;
 
-        let root = update_statechain_smt(DB_LOC, &root, &funding_txid, &proof_key).unwrap();
+        let root = update_statechain_smt::<monotree::database::MemoryDB>(DB_LOC, &root, &funding_txid, &proof_key).unwrap();
 
-        let sc_smt_proof1 = gen_proof_smt(DB_LOC, &root, &funding_txid).unwrap();
+        let sc_smt_proof1 = gen_proof_smt::<monotree::database::MemoryDB>(DB_LOC, &root, &funding_txid).unwrap();
 
         assert!(verify_statechain_smt(&root, &proof_key, &sc_smt_proof1));
 
         // update with new proof key and try again
         let proof_key =
             String::from("13b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3");
-        let root = update_statechain_smt(DB_LOC, &root, &funding_txid, &proof_key).unwrap();
+        let root = update_statechain_smt::<monotree::database::MemoryDB>(DB_LOC, &root, &funding_txid, &proof_key).unwrap();
 
-        let sc_smt_proof2 = gen_proof_smt(DB_LOC, &root, &funding_txid).unwrap();
+        let sc_smt_proof2 = gen_proof_smt::<monotree::database::MemoryDB>(DB_LOC, &root, &funding_txid).unwrap();
         assert!(verify_statechain_smt(&root, &proof_key, &sc_smt_proof2));
     }
 }
