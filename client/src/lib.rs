@@ -32,10 +32,50 @@ pub mod wallet;
 
 mod utilities;
 
+use serde::{Deserialize, Serialize};
+
 type Result<T> = std::result::Result<T, error::CError>;
 
 pub mod tor {
     pub static SOCKS5URL : &str = "socks5h://127.0.0.1:9050"; 
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Config {
+    pub endpoint: String,
+    pub electrum_server: String,
+    pub testing_mode: bool,
+    pub tor: Tor,
+}
+
+impl Default for Config {
+    fn default() -> Config {
+        Config {
+            endpoint: "http://localhost:8000".to_string(),
+            electrum_server: "127.0.0.1:60401".to_string(),
+            testing_mode: true,
+            tor: Tor::default(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Tor {
+    pub enable: bool,
+    pub proxy: String,
+    pub control_port: u64,
+    pub control_password: String,
+}
+
+impl Default for Tor {
+   fn default() -> Self  {
+       Self{ 
+            enable: false, 
+            proxy: tor::SOCKS5URL.to_string(), 
+            control_port: 9051,  
+            control_password: String::default()
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -46,18 +86,35 @@ pub struct ClientShim {
 }
 
 impl ClientShim {
-    pub fn new(endpoint: String, auth_token: Option<String>, proxy: Option<String>) -> ClientShim {
-        let client = match proxy {
+
+    pub fn from_config(config: &Config) -> ClientShim {
+        match config.tor.enable {
+            true => Self::new(config.endpoint.to_owned(), None, Some(&config.tor)),
+            false => Self::new(config.endpoint.to_owned(), None, None),
+        }
+    }
+
+    pub fn new(endpoint: String, auth_token: Option<String>, tor: Option<&Tor>) -> ClientShim {
+        println!("clinet shim...");
+        let client = match tor {
             None => reqwest::Client::new(),
-            Some(p) => reqwest::Client::builder()
-                        .proxy(reqwest::Proxy::all(&p).unwrap())
-                        .build().unwrap(),
+            Some(t) => match t.enable {
+                true => {
+                    println!("client using tor proxy: {}", t.proxy);
+                    reqwest::Client::builder()
+                        .proxy(reqwest::Proxy::all(&t.proxy).unwrap())
+                        .build().unwrap()
+                },
+                false => reqwest::Client::new(),
+            }
         };
-        ClientShim {
+        let cs = ClientShim {
             client,
             auth_token,
             endpoint,
-        }
+        };
+        println!("new clientshim: {:?}", cs);
+        cs
     }
 }
 

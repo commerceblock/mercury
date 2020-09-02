@@ -46,18 +46,22 @@ brew services start tor
 ```
 3) Configure the client to use connect via Tor with the following lines in Settings.toml:
 ```toml
-with_tor = "true"
+[tor]
+enable = true
 ```
 The default URL "socks5h://127.0.0.1:9050" and control port 9051 will be used - if the Tor service is using a different URL and/or control port configure it as follows:
 ```toml
-tor_proxy = "<Tor proxy URL>"
-tor_control_port="<Tor control port>"
-tor_control_password="<Tor control password>"
+[tor]
+enable = true
+proxy = "<Tor proxy URL>"
+control_port="<Tor control port>"
+control_password="<Tor control password>"
 ```
 As usual, the following environment variables will override the above settings:
 ```bash
-export MERC_WITH_TOR="true"
+export MERC_TOR_ENABLE="true"
 export MERC_TOR_PROXY="<Tor proxy URL>"
+export MERC_TOR_CONTROL_PORT="<Tor control port>"
 export MERC_TOR_CONTROL_PASSWORD="<Tor control password>"
 ```
 

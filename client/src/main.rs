@@ -4,7 +4,7 @@ use clap::App;
 
 use client_lib::state_entity;
 use client_lib::wallet::wallet;
-use client_lib::ClientShim;
+use client_lib::{ClientShim, Config, Tor};
 use shared_lib::{
     mocks::mock_electrum::MockElectrum,
     structs::{SCEAddress, TransferMsg3},
@@ -13,52 +13,8 @@ use shared_lib::{
 use bitcoin::consensus;
 use config::Config as ConfigRs;
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
-use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use uuid::Uuid;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Config {
-    pub endpoint: String,
-    pub electrum_server: String,
-    pub testing_mode: bool,
-    pub with_tor: bool,
-    pub tor_proxy: String,
-    pub tor_control_port: u64,
-    pub tor_control_password: String,
-}
-
-impl Default for Config {
-    fn default() -> Config {
-        let tc = TourConfig::default();
-
-        Config {
-            endpoint: "http://localhost:8000".to_string(),
-            electrum_server: "127.0.0.1:60401".to_string(),
-            testing_mode: true,
-            with_tor: false,
-            tor_proxy: tc.proxy,
-            tor_control_port: tc.control_port,
-            tor_control_password: tc.control_passwrod,
-        }
-    }
-}
-
-pub struct TorConfig {
-    pub proxy: String,
-    pub control_port: u64,
-    pub control_password: String,
-}
-
-impl Default for TorConfig {
-    fn default() -> Self {
-        TorConfig {
-            proxy: client_lib::tor::SOCKS5URL.to_string(),
-            control_port: 9051,
-            control_password: "".to_string(),
-        }
-    }
-}
 
 fn main() {
     let yaml = load_yaml!("../cli.yml");
@@ -77,41 +33,45 @@ fn main() {
         // Eg.. `APP_DEBUG=1 ./target/app` would set the `debug` key
         .merge(config::Environment::with_prefix("MERC"))
         .unwrap();
-    let se_endpoint: String = conf_rs.get("endpoint").unwrap();
-    let electrum_server_addr: String = conf_rs.get("electrum_server").unwrap();
-    let testing_mode: bool = conf_rs.get("testing_mode").unwrap();
-    let with_tor: bool = conf_rs.get("with_tor").unwrap(); 
-    let tor_config: Option<TorConfig> = match with_tor {
+    
+    let endpoint : String = conf_rs.get("endpoint").unwrap();
+    let electrum_server: String = conf_rs.get("electrum_server").unwrap();
+    let testing_mode : bool = conf_rs.get("testing_mode").unwrap();
+    let mut tor = Tor::default();
+    match conf_rs.get("tor_enable").ok() {
+        Some(v) => tor.enable = v,
+        None => (),
+    };
+    match conf_rs.get("tor_proxy").ok() {
+        Some(v) => tor.proxy = v,
+        None => (),
+    };
+    match conf_rs.get("tor_control_port").ok() {
+        Some(v) => tor.control_port = v,
+        None => (),
+    };
+    let tor = match tor.enable {
         true => {
-            let mut tc = tc::default();
-            match conf_rs.get("tor_proxy") {
-                Some(v) => tc.proxy = v,
-                None => ()
-            };
-            match conf_rs.get("tor_control_port") {
-                Some(v) => tc.control_port = v,
-                None => ()
-            };
-            match conf_rs.get("tor_control_password") {
-                Some(v) => tc.control_password = v,
-                None => ()
-            };
-            let tc = tc;
-            Ok(tc)
+            tor.control_password = conf_rs.get("tor_control_password")
+            .expect("tor enabled - tor_control_password required");
+            Some(tor)
         },
         false => None,
     };
+    
+    
+    println!("config tor: {:?}", tor);
         
     let _ = env_logger::try_init();
     
     // TODO: random generating of seed and allow input of mnemonic phrase
     let seed = [0xcd; 32];
-    let client_shim = ClientShim::new(se_endpoint.to_string(), None, tor_config);
+    let client_shim = ClientShim::new(endpoint, None, tor.as_ref());
 
     let electrum: Box<dyn Electrumx> = if testing_mode {
         Box::new(MockElectrum::new())
     } else {
-        Box::new(ElectrumxClient::new(electrum_server_addr).unwrap())
+        Box::new(ElectrumxClient::new(electrum_server).unwrap())
     };
 
     let network = "testnet".to_string();
