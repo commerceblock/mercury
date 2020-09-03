@@ -1,7 +1,5 @@
 use super::protocol::*;
 use crate::Database;
-
-use crate::config::SMT_DB_LOC_TESTING;
 use shared_lib::mainstay;
 
 use crate::config::Config;
@@ -20,13 +18,13 @@ use monotree::database::Database as MonotreeDatabase;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-pub struct StateChainEntity<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 'static> {
+pub struct StateChainEntity<T: Database + Send + Sync + 'static, D: MonotreeDatabase + Send + Sync + 'static> {
     pub config: Config,
     pub database: T,
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>
 }
 
-impl<T: Database + Send + Sync + 'static, D: Database + monotree::Database + Send + Sync + 'static> StateChainEntity<T,D> {
+impl<T: Database + Send + Sync + 'static, D: Database + MonotreeDatabase + Send + Sync + 'static> StateChainEntity<T,D> {
     pub fn load(mut db: T, mut db_smt: D) -> Result<StateChainEntity<T,D>> {
         // Get config as defaults, Settings.toml and env vars
         let config_rs = Config::load()?;
@@ -65,7 +63,7 @@ use std::marker::{Send, Sync};
 
 /// Start Rocket Server. mainstay_config parameter overrides Settings.toml and env var settings.
 /// If no db provided then use mock
-pub fn get_server<T: Database + Send + Sync + 'static, D: Database + monotree::Database + Send + Sync + 'static>
+pub fn get_server<T: Database + Send + Sync + 'static, D: Database + MonotreeDatabase + Send + Sync + 'static>
     (mainstay_config: Option<mainstay::MainstayConfig>,
         db: T, db_smt: D) -> Result<Rocket> {
 
@@ -77,10 +75,8 @@ pub fn get_server<T: Database + Send + Sync + 'static, D: Database + monotree::D
     sc_entity.database.init()?;
     if sc_entity.config.testing_mode {
         info!("Server running in testing mode.");
-        // Use test SMT DB
-        sc_entity.config.smt_db_loc = SMT_DB_LOC_TESTING.to_string();
         // reset dbs
-        sc_entity.database.reset(&sc_entity.config.smt_db_loc)?;
+        sc_entity.database.reset()?;
     }
 
     match mainstay_config {
@@ -186,7 +182,7 @@ use crate::protocol::transfer_batch::BatchTransfer;
 use crate::protocol::util::{Proof, Utilities};
 use crate::protocol::withdraw::Withdraw;
 use crate::storage;
-use crate::{PGDatabase, storage::Storage};
+use crate::storage::Storage;
 use shared_lib::structs::*;
 use monotree::{hasher::Blake3, Monotree, Hasher};
 

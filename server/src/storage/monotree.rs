@@ -437,7 +437,7 @@ impl Database for MemoryDB {
     fn update_tx_withdraw(&self, _user_id: uuid::Uuid, _tx: bitcoin::Transaction) -> crate::Result<()> {
         unimplemented!()
     }
-    fn reset(&self, _smt_db_loc: &String) -> crate::Result<()> {
+    fn reset(&self) -> crate::Result<()> {
         unimplemented!()
     }
     fn init(&self) -> crate::Result<()> {

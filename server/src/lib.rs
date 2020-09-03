@@ -228,7 +228,7 @@ pub trait Database {
 
     fn get_tx_withdraw(&self, user_id: Uuid) -> Result<Transaction>;
     fn update_tx_withdraw(&self, user_id: Uuid, tx: Transaction) -> Result<()>;
-    fn reset(&self, smt_db_loc: &String) -> Result<()>;
+    fn reset(&self) -> Result<()>;
     fn init(&self) -> Result<()>;
     fn get_ecdsa_master_key_input(&self, user_id: Uuid) -> Result<ECDSAMasterKeyInput>;
     fn update_ecdsa_master(&self, user_id: &Uuid, master_key: MasterKey1) -> Result<()>;

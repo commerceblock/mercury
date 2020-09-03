@@ -12,12 +12,12 @@ use shared_lib::{
     state_chain::*,
     structs::*,
     util::{get_sighash, tx_backup_verify, tx_withdraw_verify},
-    Root, error::SharedLibError,
+    Root,
 };
 
 use crate::error::{DBErrorType, SEError};
 use crate::storage::Storage;
-use crate::{server::StateChainEntity, Database, PGDatabase};
+use crate::{server::StateChainEntity, Database};
 use cfg_if::cfg_if;
 
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
@@ -104,7 +104,6 @@ impl Utilities for SCE {
 
         Ok(gen_proof_smt(
             self.smt.clone(),
-            &self.config.smt_db_loc,
             &Some(smt_proof_msg.root.hash()),
             &smt_proof_msg.funding_txid,
         )?)
@@ -361,7 +360,7 @@ pub fn reset_test_dbs(
     sc_entity: State<SCE>,
 ) -> Result<Json<()>> {
     if sc_entity.config.testing_mode {
-        match sc_entity.database.reset(&sc_entity.config.smt_db_loc) {
+        match sc_entity.database.reset() {
             Ok(res) => return Ok(Json(res)),
             Err(e) => return Err(e),
         }
@@ -391,7 +390,6 @@ pub fn put_smt_value_test(
 
         let new_root_hash = update_statechain_smt(
             sc_entity.smt.clone(),
-            &sc_entity.config.smt_db_loc,
             &current_root.clone().map(|r| r.hash()),
             &key,
             &entry,
@@ -426,7 +424,6 @@ pub fn get_smt_proof_test(
 
         let proof = gen_proof_smt(
             sc_entity.smt.clone(),
-            &sc_entity.config.smt_db_loc,
             &current_root.clone().map(|r| r.hash()),
             &key
         );
@@ -608,7 +605,6 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
 
         let new_root_hash = update_statechain_smt(
             self.smt.clone(),
-            &self.config.smt_db_loc,
             &current_root.clone().map(|r| r.hash()),
             funding_txid,
             proof_key,

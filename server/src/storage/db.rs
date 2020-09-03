@@ -26,13 +26,12 @@ use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, par
 use rocket_contrib::databases::postgres::{rows::Row, types::ToSql};
 use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
-use rocksdb::{Options, DB};
 use shared_lib::state_chain::*;
 use shared_lib::{mainstay, Root};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use monotree::database::{MemCache, Database as MonotreeDatabase};
+use monotree::database::MemCache;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Alpha {
@@ -644,13 +643,9 @@ impl Database for PGDatabase {
         }
     }
 
-    fn reset(&self, smt_db_loc: &String) -> Result<()> {
+    fn reset(&self) -> Result<()> {
         // truncate all postgres tables
-        self.truncate_tables()?;
-
-        // Destroy Sparse Merkle Tree RocksDB instance
-        let _ = DB::destroy(&Options::default(), smt_db_loc); // ignore error
-        Ok(())
+        self.truncate_tables()
     }
 
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid> {

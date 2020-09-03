@@ -157,7 +157,6 @@ impl StateChainSig {
 /// Insert new statechain entry into Sparse Merkle Tree and return proof
 pub fn update_statechain_smt<D: monotree::database::Database>(
     tree: Arc<Mutex<Monotree<D, Blake3>>>,
-    sc_db_loc: &str,
     root: &Option<monotree::Hash>,
     funding_txid: &String,
     entry: &String,
@@ -190,7 +189,6 @@ pub fn update_statechain_smt<D: monotree::database::Database>(
 // Method can run as a seperate proof generation daemon. Must check root exists before calling.
 pub fn gen_proof_smt<D: monotree::database::Database>(
     tree: Arc<Mutex<Monotree<D, Blake3>>>,
-    sc_db_loc: &str,
     root: &Option<monotree::Hash>,
     funding_txid: &String,
 ) -> Result<Option<Proof>> {
@@ -228,7 +226,6 @@ mod tests {
     use super::*;
     use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
     use monotree::database::MemoryDB;
-    pub static DB_LOC: &str = "./db-test";
 
     #[test]
     fn test_add_to_state_chain() {
@@ -275,18 +272,18 @@ mod tests {
         let tree = Arc::new(Mutex::new(Monotree::<MemoryDB, Blake3>::new("")));
         let root: Option<monotree::Hash> = None;
 
-        let root = update_statechain_smt::<monotree::database::MemoryDB>(tree.clone(), DB_LOC, &root, &funding_txid, &proof_key).unwrap();
+        let root = update_statechain_smt::<monotree::database::MemoryDB>(tree.clone(), &root, &funding_txid, &proof_key).unwrap();
 
-        let sc_smt_proof1 = gen_proof_smt::<monotree::database::MemoryDB>(tree.clone(), DB_LOC, &root, &funding_txid).unwrap();
+        let sc_smt_proof1 = gen_proof_smt::<monotree::database::MemoryDB>(tree.clone(), &root, &funding_txid).unwrap();
 
         assert!(verify_statechain_smt(&root, &proof_key, &sc_smt_proof1));
 
         // update with new proof key and try again
         let proof_key =
             String::from("13b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3");
-        let root = update_statechain_smt::<monotree::database::MemoryDB>(tree.clone(), DB_LOC, &root, &funding_txid, &proof_key).unwrap();
+        let root = update_statechain_smt::<monotree::database::MemoryDB>(tree.clone(), &root, &funding_txid, &proof_key).unwrap();
 
-        let sc_smt_proof2 = gen_proof_smt::<monotree::database::MemoryDB>(tree.clone(), DB_LOC, &root, &funding_txid).unwrap();
+        let sc_smt_proof2 = gen_proof_smt::<monotree::database::MemoryDB>(tree.clone(), &root, &funding_txid).unwrap();
         assert!(verify_statechain_smt(&root, &proof_key, &sc_smt_proof2));
     }
 }
