@@ -17,10 +17,11 @@ use cfg_if::cfg_if;
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
         use crate::MockDatabase;
-        type SCE = StateChainEntity::<MockDatabase>;
+        use monotree::database::MemoryDB;
+        type SCE = StateChainEntity::<MockDatabase, MemoryDB>;
     } else {
         use crate::PGDatabase;
-        type SCE = StateChainEntity::<PGDatabase>;
+        type SCE = StateChainEntity::<PGDatabase, PGDatabase>;
     }
 }
 

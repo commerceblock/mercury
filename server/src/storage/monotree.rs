@@ -1,8 +1,9 @@
 //! Postgres implementation for Monotree
 
 use crate::PGDatabase;
+use crate::Database;
 use crate::storage::db::Table;
-use monotree::database::{MemCache, Database as MonotreeDatabase};
+use monotree::database::{MemCache, Database as MonotreeDatabase, MemoryDB};
 use monotree::Errors;
 use std::collections::HashMap;
 
@@ -75,7 +76,7 @@ impl MonotreeDatabase for PGDatabase {
                 VALUES ('{}','{}')
                 ON CONFLICT (key) DO UPDATE
                 SET value = EXCLUDED.value;",
-                Table::Transfer.to_string(),
+                Table::Smt.to_string(),
                 serde_json::to_string(&key).unwrap(),
                 serde_json::to_string(&value).unwrap())) {
                     Ok(v) => v,
@@ -127,7 +128,7 @@ impl MonotreeDatabase for PGDatabase {
                 Err(e) => return Err(Errors::new(&e.to_string()))
             };
             let batch = std::mem::take(&mut self.smt_batch);
-            let mut stmt_str = format!("INSERT INTO {} (key, value) VALUES", Table::Transfer.to_string());
+            let mut stmt_str = format!("INSERT INTO {} (key, value) VALUES", Table::Smt.to_string());
             for (key, value) in batch.iter() {
                 stmt_str.push_str(&format!(" ('{}','{}'),",
                 serde_json::to_string(&key).unwrap(),
@@ -147,4 +148,309 @@ impl MonotreeDatabase for PGDatabase {
         }
         Ok(())
     }
+}
+
+
+// Dummy implementation. Unused.
+use crate::MockDatabase;
+impl monotree::database::Database for MockDatabase {
+    fn new(_dbname: &str) -> Self {
+        MockDatabase::new()
+    }
+
+    fn get(&mut self, _key: &[u8]) -> Result<Option<Vec<u8>>> {
+        Ok(None)
+    }
+
+    fn put(&mut self, _key: &[u8], _value: Vec<u8>) -> Result<()> {
+        Ok(())
+    }
+
+    fn delete(&mut self, _key: &[u8]) -> Result<()> {
+        Ok(())
+    }
+
+    fn init_batch(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn finish_batch(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+// Dummy implementation. Unused.
+use rocket_contrib;
+impl Database for MemoryDB {
+    fn get_new() -> Self {
+        unimplemented!()
+    }
+    fn set_connection_from_config(&mut self, _config: &crate::config::Config) -> crate::Result<()> {
+        Ok(())
+    }
+    fn set_connection(&mut self, _url: &String) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn from_pool(_pool: rocket_contrib::databases::r2d2::Pool<rocket_contrib::databases::r2d2_postgres::PostgresConnectionManager>) -> Self {
+        unimplemented!()
+    }
+    fn get_user_auth(&self, _user_id: uuid::Uuid) -> crate::Result<uuid::Uuid> {
+        unimplemented!()
+    }
+    fn has_withdraw_sc_sig(&self, _user_id: uuid::Uuid) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn update_withdraw_sc_sig(&self, _user_id: &uuid::Uuid, _sig: shared_lib::state_chain::StateChainSig) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn update_withdraw_tx_sighash(
+        &self,
+        _user_id: &uuid::Uuid,
+        _sig_hash: crate::Hash,
+        _tx: bitcoin::Transaction,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn update_sighash(&self, _user_id: &uuid::Uuid, _sig_hash: crate::Hash) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn update_user_backup_tx(&self,_user_id: &uuid::Uuid, _tx: bitcoin::Transaction) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_user_backup_tx(&self,_user_id: uuid::Uuid) -> crate::Result<bitcoin::Transaction> {
+        unimplemented!()
+    }
+    fn update_backup_tx(&self,_state_chain_id: &uuid::Uuid, _tx: bitcoin::Transaction) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_withdraw_confirm_data(&self, _user_id: uuid::Uuid) -> crate::Result<crate::structs::WithdrawConfirmData> {
+        unimplemented!()
+    }
+    fn root_update(&self, _rt: &super::Root) -> crate::Result<i64> {
+        unimplemented!()
+    }
+    fn root_insert(&self, _root: super::Root) -> crate::Result<u64> {
+        unimplemented!()
+    }
+    fn root_get_current_id(&self) -> crate::Result<i64> {
+        unimplemented!()
+    }
+    fn get_root(&self, _id: i64) -> crate::Result<Option<super::Root>> {
+        unimplemented!()
+    }
+    fn get_confirmed_smt_root(&self) -> crate::Result<Option<super::Root>> {
+        unimplemented!()
+    }
+    fn get_statechain_id(&self, _user_id: uuid::Uuid) -> crate::Result<uuid::Uuid> {
+        unimplemented!()
+    }
+    fn update_statechain_id(&self, _user_id: &uuid::Uuid, _state_chain_id: &uuid::Uuid) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_statechain_amount(&self, _state_chain_id: uuid::Uuid) -> crate::Result<crate::structs::StateChainAmount> {
+        unimplemented!()
+    }
+    fn update_statechain_amount(
+        &self,
+        _state_chain_id: &uuid::Uuid,
+        _state_chain: super::StateChain,
+        _amount: u64,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn create_statechain(
+        &self,
+        _state_chain_id: &uuid::Uuid,
+        _user_id: &uuid::Uuid,
+        _state_chain: &super::StateChain,
+        _amount: &i64,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_statechain(&self, _state_chain_id: uuid::Uuid) -> crate::Result<super::StateChain> {
+        unimplemented!()
+    }
+    fn update_statechain_owner(
+        &self,
+        _state_chain_id: &uuid::Uuid,
+        _state_chain: super::StateChain,
+        _new_user_id: &uuid::Uuid,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn remove_statechain_id(&self, _user_id: &uuid::Uuid) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn create_backup_transaction(
+        &self,
+        _state_chain_id: &uuid::Uuid,
+        _tx_backup: &bitcoin::Transaction,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_backup_transaction(&self, _state_chain_id: uuid::Uuid) -> crate::Result<bitcoin::Transaction> {
+        unimplemented!()
+    }
+    fn get_backup_transaction_and_proof_key(&self, _user_id: uuid::Uuid) -> crate::Result<(bitcoin::Transaction, String)> {
+        unimplemented!()
+    }
+    fn get_proof_key(&self, _user_id: uuid::Uuid) -> crate::Result<String> {
+        unimplemented!()
+    }
+    fn get_sc_locked_until(&self, _state_chain_id: uuid::Uuid) -> crate::Result<chrono::NaiveDateTime> {
+        unimplemented!()
+    }
+    fn update_locked_until(&self, _state_chain_id: &uuid::Uuid, _time: &chrono::NaiveDateTime) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_transfer_batch_data(&self, _batch_id: uuid::Uuid) -> crate::Result<crate::structs::TransferBatchData> {
+        unimplemented!()
+    }
+    fn has_transfer_batch_id(&self, _batch_id: uuid::Uuid) -> bool {
+        unimplemented!()
+    }
+    fn get_transfer_batch_id(&self, _batch_id: uuid::Uuid) -> crate::Result<uuid::Uuid> {
+        unimplemented!()
+    }
+    fn get_punished_state_chains(&self, _batch_id: uuid::Uuid) -> crate::Result<Vec<uuid::Uuid>> {
+        unimplemented!()
+    }
+    fn create_transfer(
+        &self,
+        _state_chain_id: &uuid::Uuid,
+        _state_chain_sig: &shared_lib::state_chain::StateChainSig,
+        _x1: &curv::FE,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn create_transfer_batch_data(
+        &self,
+        _batch_id: &uuid::Uuid,
+        _state_chains: HashMap<uuid::Uuid, bool>,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_transfer_data(&self, _state_chain_id: uuid::Uuid) -> crate::Result<crate::structs::TransferData> {
+        unimplemented!()
+    }
+    fn remove_transfer_data(&self, _state_chain_id: &uuid::Uuid) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn transfer_is_completed(&self, _state_chain_id: uuid::Uuid) -> bool {
+        unimplemented!()
+    }
+    fn get_ecdsa_master(&self, _user_id: uuid::Uuid) -> crate::Result<Option<String>> {
+        unimplemented!()
+    }
+    fn get_ecdsa_witness_keypair(
+        &self,
+        _user_id: uuid::Uuid,
+    ) -> crate::Result<(crate::protocol::ecdsa::party_one::CommWitness, crate::protocol::ecdsa::party_one::EcKeyPair)> {
+        unimplemented!()
+    }
+    fn get_ecdsa_s2(&self, _user_id: uuid::Uuid) -> crate::Result<curv::FE> {
+        unimplemented!()
+    }
+    fn update_keygen_first_msg(
+        &self,
+        _user_id: &uuid::Uuid,
+        _key_gen_first_msg: &crate::protocol::ecdsa::party_one::KeyGenFirstMsg,
+        _comm_witness: crate::protocol::ecdsa::party_one::CommWitness,
+        _ec_key_pair: crate::protocol::ecdsa::party_one::EcKeyPair,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn update_keygen_second_msg(
+        &self,
+        _user_id: &uuid::Uuid,
+        _party2_public: curv::GE,
+        _paillier_key_pair: crate::protocol::ecdsa::party_one::PaillierKeyPair,
+        _party_one_private: crate::protocol::ecdsa::party_one::Party1Private,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn update_keygen_third_msg(
+        &self,
+        _user_id: &uuid::Uuid,
+        _party_one_pdl_decommit: crate::protocol::ecdsa::party_one::PDLdecommit,
+        _party_two_pdl_first_message: crate::protocol::ecdsa::party_two::PDLFirstMessage,
+        _alpha: curv::BigInt,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn init_ecdsa(&self, _user_id: &uuid::Uuid) -> crate::Result<u64> {
+        unimplemented!()
+    }
+    fn get_ecdsa_party_1_private(&self, _user_id: uuid::Uuid) -> crate::Result<crate::protocol::ecdsa::party_one::Party1Private> {
+        unimplemented!()
+    }
+    fn get_ecdsa_keypair(&self, _user_id: uuid::Uuid) -> crate::Result<crate::structs::ECDSAKeypair> {
+        unimplemented!()
+    }
+    fn update_punished(&self, _batch_id: &uuid::Uuid, _punished_state_chains: Vec<uuid::Uuid>) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_finalize_batch_data(&self, _batch_id: uuid::Uuid) -> crate::Result<crate::structs::TransferFinalizeBatchData> {
+        unimplemented!()
+    }
+    fn update_finalize_batch_data(
+        &self,
+        _batch_id: &uuid::Uuid,
+        _state_chains: HashMap<uuid::Uuid, bool>,
+        _finalized_data_vec: Vec<crate::protocol::transfer::TransferFinalizeData>,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn update_transfer_batch_finalized(&self, _batch_id: &uuid::Uuid, _b_finalized: &bool) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_statechain_owner(&self, _state_chain_id: uuid::Uuid) -> crate::Result<crate::structs::StateChainOwner> {
+        unimplemented!()
+    }
+    fn create_user_session(&self, _user_id: &uuid::Uuid, _auth: &String, _proof_key: &String) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn transfer_init_user_session(
+        &self,
+        _new_user_id: &uuid::Uuid,
+        _state_chain_id: &uuid::Uuid,
+        _finalized_data: crate::protocol::transfer::TransferFinalizeData,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_ecdsa_fourth_message_input(&self, _user_id: uuid::Uuid) -> crate::Result<crate::structs::ECDSAFourthMessageInput> {
+        unimplemented!()
+    }
+    fn update_ecdsa_sign_first(
+        &self,
+        _user_id: uuid::Uuid,
+        _eph_key_gen_first_message_party_two: crate::protocol::ecdsa::party_two::EphKeyGenFirstMsg,
+        _eph_ec_key_pair_party1: crate::protocol::ecdsa::party_one::EphEcKeyPair,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_ecdsa_sign_second_input(&self, _user_id: uuid::Uuid) -> crate::Result<crate::structs::ECDSASignSecondInput> {
+        unimplemented!()
+    }
+    fn get_tx_withdraw(&self, _user_id: uuid::Uuid) -> crate::Result<bitcoin::Transaction> {
+        unimplemented!()
+    }
+    fn update_tx_withdraw(&self, _user_id: uuid::Uuid, _tx: bitcoin::Transaction) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn reset(&self, _smt_db_loc: &String) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn init(&self) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_ecdsa_master_key_input(&self, _user_id: uuid::Uuid) -> crate::Result<crate::structs::ECDSAMasterKeyInput> {
+        unimplemented!()
+    }
+    fn update_ecdsa_master(&self, _user_id: &uuid::Uuid, _master_key: crate::protocol::ecdsa::MasterKey1) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_sighash(&self, _user_id: uuid::Uuid) -> crate::Result<bitcoin::hashes::sha256d::Hash> {
+        unimplemented!()
+    }
+
 }

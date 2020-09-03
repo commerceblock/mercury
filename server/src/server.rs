@@ -15,23 +15,33 @@ use log4rs::encode::pattern::PatternEncoder;
 
 use mockall::*;
 use uuid::Uuid;
+use std::sync::{Arc, Mutex};
+use monotree::database::Database as MonotreeDatabase;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-pub struct StateChainEntity<T: Database + Send + Sync + 'static> {
+pub struct StateChainEntity<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 'static> {
     pub config: Config,
     pub database: T,
+    pub smt: Arc<Mutex<Monotree<D, Blake3>>>
 }
 
-impl<T: Database + Send + Sync + 'static> StateChainEntity<T> {
-    pub fn load(mut db: T) -> Result<StateChainEntity<T>> {
+impl<T: Database + Send + Sync + 'static, D: Database + monotree::Database + Send + Sync + 'static> StateChainEntity<T,D> {
+    pub fn load(mut db: T, mut db_smt: D) -> Result<StateChainEntity<T,D>> {
         // Get config as defaults, Settings.toml and env vars
         let config_rs = Config::load()?;
         db.set_connection_from_config(&config_rs)?;
+        db_smt.set_connection_from_config(&config_rs)?;
+
+        let smt = Monotree {
+            db: db_smt,
+            hasher: Blake3::new()
+        };
 
         Ok(Self {
             config: config_rs,
             database: db,
+            smt: Arc::new(Mutex::new(smt))
         })
     }
 }
@@ -55,11 +65,11 @@ use std::marker::{Send, Sync};
 
 /// Start Rocket Server. mainstay_config parameter overrides Settings.toml and env var settings.
 /// If no db provided then use mock
-pub fn get_server<T: Database + Send + Sync + 'static>
+pub fn get_server<T: Database + Send + Sync + 'static, D: Database + monotree::Database + Send + Sync + 'static>
     (mainstay_config: Option<mainstay::MainstayConfig>,
-        db: T) -> Result<Rocket> {
+        db: T, db_smt: D) -> Result<Rocket> {
 
-    let mut sc_entity = StateChainEntity::<T>::load(db)?;
+    let mut sc_entity = StateChainEntity::<T, D>::load(db, db_smt)?;
 
     set_logging_config(&sc_entity.config.log_file);
 
@@ -105,8 +115,8 @@ pub fn get_server<T: Database + Send + Sync + 'static>
                 util::prepare_sign_tx,
                 util::get_transfer_batch_status,
                 util::reset_test_dbs, // !!
-                util::get_smt_value,
-                util::put_smt_value,
+                util::get_smt_proof_test,
+                util::put_smt_value_test,
                 deposit::deposit_init,
                 deposit::deposit_confirm,
                 transfer::transfer_sender,
@@ -176,8 +186,9 @@ use crate::protocol::transfer_batch::BatchTransfer;
 use crate::protocol::util::{Proof, Utilities};
 use crate::protocol::withdraw::Withdraw;
 use crate::storage;
-use crate::storage::Storage;
+use crate::{PGDatabase, storage::Storage};
 use shared_lib::structs::*;
+use monotree::{hasher::Blake3, Monotree, Hasher};
 
 mock! {
     StateChainEntity{}
