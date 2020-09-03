@@ -35,7 +35,7 @@ impl MonotreeDatabase for PGDatabase {
 
         let stmt = match dbr.prepare(&format!(
             "SELECT value FROM {} WHERE key = ('{}')"
-            ,Table::Transfer.to_string(), serde_json::to_string(&key).unwrap())) {
+            ,Table::Smt.to_string(), serde_json::to_string(&key).unwrap())) {
                 Ok(v) => v,
                 Err(e) => return Err(Errors::new(&e.to_string()))
             };
@@ -48,15 +48,15 @@ impl MonotreeDatabase for PGDatabase {
         if rows.is_empty() {
             return Err(Errors::new("No data for key"));
         };
-
         let row = rows.get(0);
-        match row.get_opt(0) {
+
+        match row.get_opt::<usize, String>(0) {
             None => return Err(Errors::new("No data for key")),
             Some(data) => match data {
-                Ok(v) => Ok(v),
+                Ok(v) => return Ok(Self::deser::<Option<Vec<u8>>>(v).unwrap()),
                 Err(_) => return Err(Errors::new("No data for key")),
             },
-        }
+        };
     }
 
     /// Monotree put
@@ -101,7 +101,7 @@ impl MonotreeDatabase for PGDatabase {
             };
             let stmt = match dbw.prepare(&format!(
                 "DELETE FROM {} WHERE key = ('{}');",
-                Table::Transfer.to_string(), serde_json::to_string(&key).unwrap())){
+                Table::Smt.to_string(), serde_json::to_string(&key).unwrap())){
                     Ok(v) => v,
                     Err(e) => return Err(Errors::new(&e.to_string()))
                 };
@@ -127,9 +127,8 @@ impl MonotreeDatabase for PGDatabase {
                 Ok(v) => v,
                 Err(e) => return Err(Errors::new(&e.to_string()))
             };
-            let batch = std::mem::take(&mut self.smt_batch);
             let mut stmt_str = format!("INSERT INTO {} (key, value) VALUES", Table::Smt.to_string());
-            for (key, value) in batch.iter() {
+            for (key, value) in &self.smt_batch {
                 stmt_str.push_str(&format!(" ('{}','{}'),",
                 serde_json::to_string(&key).unwrap(),
                 serde_json::to_string(&value).unwrap()));
@@ -150,6 +149,75 @@ impl MonotreeDatabase for PGDatabase {
     }
 }
 
+#[cfg(test)]
+#[cfg(not(feature="mockdb"))] // Run tests only if mockdb feature disabled
+pub mod tests {
+    use super::*;
+    use crate::config::Config;
+    use monotree::hasher::{Hasher,Blake3};
+    use monotree::Monotree;
+
+    fn get_monotree_postgres_tree() -> Monotree<PGDatabase, Blake3> {
+        let config_rs = Config::load().unwrap();
+        let mut db = PGDatabase::get_new();
+        db.set_connection_from_config(&config_rs).unwrap();
+        db.database_w().unwrap().execute(&format!("TRUNCATE {};",Table::Smt.to_string()),&[]).unwrap();
+        Monotree {
+            db,
+            hasher: Blake3::new()
+        }
+    }
+
+    #[test]
+    fn test_monotree_postgres_tree() {
+        let mut tree = get_monotree_postgres_tree();
+
+        let root = None;
+        let key: &monotree::Hash = &[1; 32];
+        let leaf: &monotree::Hash = &[2; 32];
+
+        let root = tree.insert(root.as_ref(), key, leaf).unwrap();
+
+        let res = tree.get(root.as_ref(), key);
+        assert_eq!(leaf, &res.unwrap().unwrap());
+
+        let root = tree.remove(root.as_ref(), key).unwrap();
+        // Root returned to None
+        assert_eq!(None, root);
+
+        let res = tree.get(root.as_ref(), key);
+        // Nothing returned from get
+        assert_eq!(None, res.unwrap());
+    }
+
+    #[test]
+    fn test_batch_monotree_postgres_tree() {
+        let mut tree = get_monotree_postgres_tree();
+
+        let root = None;
+        let keys: &[monotree::Hash] = &[[1; 32], [2; 32], [3; 32]];
+        let leaves: &[monotree::Hash] = &[[4; 32], [5; 32], [6; 32]];
+
+        let root = tree.inserts(root.as_ref(), keys, leaves).unwrap();
+        assert!(root.is_some());
+
+        let res = tree.gets(root.as_ref(), keys).unwrap();
+        assert!(res.contains(&Some(leaves[0])));
+        assert!(res.contains(&Some(leaves[1])));
+        assert!(res.contains(&Some(leaves[2])));
+
+        let root = tree.removes(root.as_ref(), keys).unwrap();
+        // Root returned to None
+        assert_eq!(None, root);
+
+        let res = tree.get(root.as_ref(), &keys[0]);
+        assert_eq!(None, res.unwrap());
+        let res = tree.get(root.as_ref(), &keys[1]);
+        assert_eq!(None, res.unwrap());
+        let res = tree.get(root.as_ref(), &keys[2]);
+        assert_eq!(None, res.unwrap());
+    }
+}
 
 // Dummy implementation. Unused.
 use crate::MockDatabase;

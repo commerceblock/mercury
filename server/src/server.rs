@@ -59,8 +59,6 @@ fn not_found(req: &Request) -> String {
     format!("Unknown route '{}'.", req.uri())
 }
 
-use std::marker::{Send, Sync};
-
 /// Start Rocket Server. mainstay_config parameter overrides Settings.toml and env var settings.
 /// If no db provided then use mock
 pub fn get_server<T: Database + Send + Sync + 'static, D: Database + MonotreeDatabase + Send + Sync + 'static>
