@@ -36,7 +36,6 @@ hex = "0.3.2"
 floating-duration = "0.1.2"
 bitcoin = { version = "0.20", features = [ "use-serde" ] }
 rand = "0.6.5"
-monotree = "0.1.3"
 electrumx_client = { git = "https://github.com/commerceblock/rust-electrumx-client" }
 env_logger = "0.7.1"
 log4rs = "0.12.0"
@@ -75,6 +74,11 @@ tag = "v0.3.1"
 git = "https://github.com/KZen-networks/curv"
 tag = "v0.2.2"
 features =  ["ec_secp256k1"]
+
+[dependencies.monotree]
+git = "https://github.com/commerceblock/monotree"
+default-features = false
+features=["hasher-blake3"]
 
 [dependencies.serde_dynamodb]
 git = "https://github.com/KZen-networks/serde_dynamodb"

@@ -38,6 +38,7 @@ cfg_if! {
         use monotree::database::MemoryDB;
         type SCE = StateChainEntity::<MockDatabase, MemoryDB>;
     } else {
+        use crate::PGDatabase;
         type SCE = StateChainEntity::<PGDatabase, PGDatabase>;
     }
 }
