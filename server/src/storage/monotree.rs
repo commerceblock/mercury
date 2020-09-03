@@ -161,6 +161,12 @@ pub mod tests {
         let config_rs = Config::load().unwrap();
         let mut db = PGDatabase::get_new();
         db.set_connection_from_config(&config_rs).unwrap();
+        db.database_w().unwrap().execute(&format!("
+            CREATE TABLE IF NOT EXISTS {} (
+                key varchar,
+                value varchar,
+                PRIMARY KEY (key)
+            );", Table::Smt.to_string()),&[]).unwrap();
         db.database_w().unwrap().execute(&format!("TRUNCATE {};",Table::Smt.to_string()),&[]).unwrap();
         Monotree {
             db,
