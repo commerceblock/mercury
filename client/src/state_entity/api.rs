@@ -58,7 +58,6 @@ pub fn get_transfer_batch_status(
     requests::get(client_shim, &format!("info/transfer-batch/{}", batch_id))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

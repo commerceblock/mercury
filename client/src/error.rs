@@ -86,6 +86,18 @@ impl From<bitcoin::secp256k1::Error> for CError {
     }
 }
 
+impl From<url::ParseError> for CError {
+    fn from(e: url::ParseError) -> CError {
+        CError::Generic(e.to_string())
+    }
+}
+
+impl From<()> for CError {
+    fn from(e: ()) -> CError {
+        CError::Generic(String::default())
+    }
+}
+
 /// Wallet error types
 #[derive(Debug, Deserialize)]
 pub enum WalletErrorType {

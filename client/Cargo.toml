@@ -34,7 +34,9 @@ monotree = "0.1.3"
 electrumx_client = { git = "https://github.com/commerceblock/rust-electrumx-client" }
 base64 = "0.12.2"
 env_logger = "0.7.1"
-
+url = "2.1.1"
+telnet = "0.1.4"
+tor_control = { git = "https://github.com/commerceblock/tor_control", branch = "develop"}
 
 [dev-dependencies]
 mockito = "0.27.0"

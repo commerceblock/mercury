@@ -24,6 +24,8 @@ extern crate hex;
 extern crate itertools;
 extern crate uuid;
 extern crate shared_lib;
+extern crate telnet;
+extern crate tor_control;
 
 pub mod ecdsa;
 pub mod error;
@@ -32,9 +34,14 @@ pub mod wallet;
 
 mod utilities;
 
+extern crate url;
+use url::Url;
+
 use serde::{Deserialize, Serialize};
 
 type Result<T> = std::result::Result<T, error::CError>;
+
+type TorControl = tor_control::TorControl< Writer = BufStream<T>, Error  = tor_control::TCError>
 
 pub mod tor {
     pub static SOCKS5URL : &str = "socks5h://127.0.0.1:9050"; 
@@ -59,7 +66,7 @@ impl Default for Config {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Tor {
     pub enable: bool,
     pub proxy: String,
@@ -78,9 +85,25 @@ impl Default for Tor {
     }
 }
 
+impl Tor {
+    fn get_control(&self) -> Result<dyn tor_control::TorControl> {
+        if (self.enable == false){
+            return Err(CError::TorError("cannot get TorControl: Tor not enabled".to_string()));
+        }
+        let mut url = Url::parse(&self.proxy)?;
+        url.set_port(Some(self.control_port as u16))?;
+        url.set_scheme(None)?;
+        let url = url.into_string();
+        let mut tc = tor_control::TorControl::connect(&url)?;
+        tc.auth(Some(format!("\"{}\"", tor.control_password)))?;
+        tc
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ClientShim {
     pub client: reqwest::Client,
+    pub tor_control: Option<dyn tor_control::TorControl>,
     pub auth_token: Option<String>,
     pub endpoint: String,
 }
@@ -89,31 +112,31 @@ impl ClientShim {
 
     pub fn from_config(config: &Config) -> ClientShim {
         match config.tor.enable {
-            true => Self::new(config.endpoint.to_owned(), None, Some(&config.tor)),
+            true => Self::new(config.endpoint.to_owned(), None, Some(config.tor)),
             false => Self::new(config.endpoint.to_owned(), None, None),
         }
     }
 
-    pub fn new(endpoint: String, auth_token: Option<String>, tor: Option<&Tor>) -> ClientShim {
-        println!("clinet shim...");
-        let client = match tor {
-            None => reqwest::Client::new(),
+    pub fn new(endpoint: String, auth_token: Option<String>, tor: Option<Tor>) -> ClientShim {
+        let (client, tor_control) = match tor {
+            None => (reqwest::Client::new(), None),
             Some(t) => match t.enable {
                 true => {
-                    println!("client using tor proxy: {}", t.proxy);
-                    reqwest::Client::builder()
+                    (reqwest::Client::builder()
                         .proxy(reqwest::Proxy::all(&t.proxy).unwrap())
-                        .build().unwrap()
+                        .build().unwrap(),
+                        t.get_control()?)
                 },
-                false => reqwest::Client::new(),
+                false => (reqwest::Client::new(), None),
             }
         };
+
         let cs = ClientShim {
             client,
+            tor_control,
             auth_token,
             endpoint,
         };
-        println!("new clientshim: {:?}", cs);
         cs
     }
 }
