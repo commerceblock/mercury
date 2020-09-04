@@ -72,9 +72,17 @@ use uuid::Uuid;
 pub struct DatabaseW(postgres::Connection);
 #[database("postgres_r")]
 pub struct DatabaseR(postgres::Connection);
-
+/// Sparse Merkle Tree DB items
+pub struct PGDatabaseSmt {
+    pub cache: monotree::database::MemCache,
+    pub batch_on: bool,
+    pub batch: HashMap<Vec<u8>, Vec<u8>>,
+    pub table_name: String
+}
+/// POstgres database struct for Mercury. Contains database connection pool and SMT DB items.
 pub struct PGDatabase {
     pub pool: Option<r2d2::Pool<PostgresConnectionManager>>,
+    pub smt: PGDatabaseSmt
 }
 
 use structs::*;
@@ -224,10 +232,8 @@ pub trait Database {
 
     fn get_tx_withdraw(&self, user_id: Uuid) -> Result<Transaction>;
     fn update_tx_withdraw(&self, user_id: Uuid, tx: Transaction) -> Result<()>;
-    fn reset(&self, smt_db_loc: &String) -> Result<()>;
-    fn init(&self) -> Result<()> {
-        Ok(())
-    }
+    fn reset(&self) -> Result<()>;
+    fn init(&self) -> Result<()>;
     fn get_ecdsa_master_key_input(&self, user_id: Uuid) -> Result<ECDSAMasterKeyInput>;
     fn update_ecdsa_master(&self, user_id: &Uuid, master_key: MasterKey1) -> Result<()>;
     fn get_sighash(&self, user_id: Uuid) -> Result<sha256d::Hash>;

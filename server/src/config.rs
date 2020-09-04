@@ -78,8 +78,6 @@ impl Default for RocketConfig {
 pub struct Config {
     /// Log file location. If not present print to stdout
     pub log_file: String,
-    /// SMT DB location
-    pub smt_db_loc: String,
     /// Electrum Server Address
     pub electrum_server: String,
     /// Bitcoin network name (testnet, regtest, mainnet)
@@ -106,15 +104,10 @@ pub struct Config {
     pub rocket: RocketConfig
 }
 
-/// Config default variable definitons
-pub static SMT_DB_LOC_DEFAULT: &str = "./db-smt";
-pub static SMT_DB_LOC_TESTING: &str = "./db-smt-testing";
-
 impl Default for Config {
     fn default() -> Config {
         Config {
             log_file: String::from(""),
-            smt_db_loc: SMT_DB_LOC_DEFAULT.to_owned(),
             electrum_server: String::from("127.0.0.1:60401"),
             network: String::from("regtest"),
             block_time: 2,
