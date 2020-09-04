@@ -161,13 +161,14 @@ pub mod tests {
         let config_rs = Config::load().unwrap();
         let mut db = PGDatabase::get_new();
         db.set_connection_from_config(&config_rs).unwrap();
+        let table_name = "testing.smt".to_string();
         db.database_w().unwrap().execute(&format!("
             CREATE TABLE IF NOT EXISTS {} (
                 key varchar,
                 value varchar,
                 PRIMARY KEY (key)
-            );", Table::Smt.to_string()),&[]).unwrap();
-        db.database_w().unwrap().execute(&format!("TRUNCATE {};",Table::Smt.to_string()),&[]).unwrap();
+            );", table_name),&[]).unwrap();
+        db.database_w().unwrap().execute(&format!("TRUNCATE {};",table_name),&[]).unwrap();
         Monotree {
             db,
             hasher: Blake3::new()
@@ -175,6 +176,7 @@ pub mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_monotree_postgres_tree() {
         let mut tree = get_monotree_postgres_tree();
 
@@ -197,12 +199,13 @@ pub mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_batch_monotree_postgres_tree() {
         let mut tree = get_monotree_postgres_tree();
 
         let root = None;
-        let keys: &[monotree::Hash] = &[[1; 32], [2; 32], [3; 32]];
-        let leaves: &[monotree::Hash] = &[[4; 32], [5; 32], [6; 32]];
+        let keys: &[monotree::Hash] = &[[3; 32], [4; 32], [5; 32]];
+        let leaves: &[monotree::Hash] = &[[6; 32], [7; 32], [8; 32]];
 
         let root = tree.inserts(root.as_ref(), keys, leaves).unwrap();
         assert!(root.is_some());

@@ -207,6 +207,12 @@ impl PGDatabase {
             "),
             &[],
         )?;
+        let _ = self.database_w()?.execute(
+            &format!("
+            CREATE SCHEMA IF NOT EXISTS testing;
+            "),
+            &[],
+        )?;
 
         // Create tables if they do not already exist
         self.database_w()?.execute(
