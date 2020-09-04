@@ -91,8 +91,5 @@ where
 
 /// Reset the Tor id
 pub fn new_tor_id(client_shim: &ClientShim) -> Result<()> {
-    
-
-
-
+    todo!();
 }

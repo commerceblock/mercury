@@ -24,8 +24,7 @@ extern crate hex;
 extern crate itertools;
 extern crate uuid;
 extern crate shared_lib;
-extern crate telnet;
-extern crate tor_control;
+extern crate pyo3;
 
 pub mod ecdsa;
 pub mod error;
@@ -39,9 +38,13 @@ use url::Url;
 
 use serde::{Deserialize, Serialize};
 
-type Result<T> = std::result::Result<T, error::CError>;
+use pyo3::prelude::*;
+use pyo3::types::IntoPyDict;
 
-type TorControl = tor_control::TorControl< Writer = BufStream<T>, Error  = tor_control::TCError>
+use error::CError;
+
+type Result<T> = std::result::Result<T, CError>;
+
 
 pub mod tor {
     pub static SOCKS5URL : &str = "socks5h://127.0.0.1:9050"; 
@@ -86,24 +89,37 @@ impl Default for Tor {
 }
 
 impl Tor {
-    fn get_control(&self) -> Result<dyn tor_control::TorControl> {
+    /*
+    fn get_control(&self) -> Result<TorControl> {
         if (self.enable == false){
             return Err(CError::TorError("cannot get TorControl: Tor not enabled".to_string()));
         }
         let mut url = Url::parse(&self.proxy)?;
         url.set_port(Some(self.control_port as u16))?;
-        url.set_scheme(None)?;
+        //url.set_scheme(None)?;
         let url = url.into_string();
-        let mut tc = tor_control::TorControl::connect(&url)?;
-        tc.auth(Some(format!("\"{}\"", tor.control_password)))?;
-        tc
+        let mut tc = TorControl::new(&self)?;
+        tc.connect(url)?;
+        //tc.auth(Some(format!("\"{}\"", self.control_password)))?;
+        Ok(tc)
+    }
+    */
+
+    pub fn get_bytes_read(&self) -> Result<u64> {
+        //let gil = Python::acquire_gil();
+        //let py = gil.python();
+        //let ct = PyModule::import(py,"stem.controller")?;
+        //ct.call1("authenticate",(&self.control_password.to_owned(),))?;
+        //let bytes_read: u64 = ct.call1("get_info", ("traffic/read",))?.extract()?;
+        //Ok(bytes_read)
+        Ok(0)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct ClientShim {
     pub client: reqwest::Client,
-    pub tor_control: Option<dyn tor_control::TorControl>,
+    pub tor: Option<Tor>,
     pub auth_token: Option<String>,
     pub endpoint: String,
 }
@@ -112,28 +128,25 @@ impl ClientShim {
 
     pub fn from_config(config: &Config) -> ClientShim {
         match config.tor.enable {
-            true => Self::new(config.endpoint.to_owned(), None, Some(config.tor)),
+            true => Self::new(config.endpoint.to_owned(), None, Some(config.tor.clone())),
             false => Self::new(config.endpoint.to_owned(), None, None),
         }
     }
 
     pub fn new(endpoint: String, auth_token: Option<String>, tor: Option<Tor>) -> ClientShim {
-        let (client, tor_control) = match tor {
-            None => (reqwest::Client::new(), None),
+        let client = match tor.as_ref() {
+            None => reqwest::Client::new(),
             Some(t) => match t.enable {
-                true => {
-                    (reqwest::Client::builder()
+                true => reqwest::Client::builder()
                         .proxy(reqwest::Proxy::all(&t.proxy).unwrap())
                         .build().unwrap(),
-                        t.get_control()?)
-                },
-                false => (reqwest::Client::new(), None),
+                false => reqwest::Client::new(),
             }
         };
 
         let cs = ClientShim {
             client,
-            tor_control,
+            tor,
             auth_token,
             endpoint,
         };
@@ -141,3 +154,14 @@ impl ClientShim {
     }
 }
 
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_tor_control(){
+        //let tor = Tor::default();
+        //let tor_control = TorControl::new(&tor).expect("failed to get new TorControl");
+    }
+
+}

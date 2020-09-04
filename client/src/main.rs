@@ -66,7 +66,7 @@ fn main() {
     
     // TODO: random generating of seed and allow input of mnemonic phrase
     let seed = [0xcd; 32];
-    let client_shim = ClientShim::new(endpoint, None, tor.as_ref());
+    let client_shim = ClientShim::new(endpoint, None, tor);
 
     let electrum: Box<dyn Electrumx> = if testing_mode {
         Box::new(MockElectrum::new())

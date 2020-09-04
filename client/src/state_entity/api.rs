@@ -77,7 +77,7 @@ mod tests {
 
         let tor = crate::Tor::default();
 
-        let _client_shim = ClientShim::new(url,None,Some(&tor));
+        let _client_shim = ClientShim::new(url,None,Some(tor));
         //let test_string: String = requests::get(&client_shim, &format!("/")).expect("failed to get test string via tor");
         //assert_eq!(test_string, "test string".to_string());
     }
