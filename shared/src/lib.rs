@@ -24,15 +24,14 @@ extern crate merkletree;
 extern crate reqwest;
 
 pub mod commitment;
+pub mod blinded_token;
 pub mod error;
 pub mod mainstay;
 pub mod state_chain;
 pub mod structs;
 pub mod util;
 
-use bitcoin::{
-    secp256k1::{Message, Secp256k1, Signature, PublicKey},
-};
+use bitcoin::secp256k1::{Message, Secp256k1, Signature, PublicKey};
 
 type Result<T> = std::result::Result<T, error::SharedLibError>;
 
