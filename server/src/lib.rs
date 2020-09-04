@@ -72,13 +72,17 @@ use uuid::Uuid;
 pub struct DatabaseW(postgres::Connection);
 #[database("postgres_r")]
 pub struct DatabaseR(postgres::Connection);
-
+/// Sparse Merkle Tree DB items
+pub struct PGDatabaseSmt {
+    pub cache: monotree::database::MemCache,
+    pub batch_on: bool,
+    pub batch: HashMap<Vec<u8>, Vec<u8>>,
+    pub table_name: String
+}
+/// POstgres database struct for Mercury. Contains database connection pool and SMT DB items.
 pub struct PGDatabase {
     pub pool: Option<r2d2::Pool<PostgresConnectionManager>>,
-    pub smt_cache: monotree::database::MemCache,
-    pub smt_batch_on: bool,
-    pub smt_batch: HashMap<Vec<u8>, Vec<u8>>,
-
+    pub smt: PGDatabaseSmt
 }
 
 use structs::*;

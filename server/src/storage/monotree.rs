@@ -17,15 +17,18 @@ impl MonotreeDatabase for PGDatabase {
         // Return dummy
         PGDatabase {
             pool: None,
-            smt_cache: MemCache::new(),
-            smt_batch_on: false,
-            smt_batch: HashMap::new()
+            smt: PGDatabaseSmt {
+                table_name: Table::Smt.to_string(),
+                cache: MemCache::new(),
+                batch_on: false,
+                batch: HashMap::new()
+            }
         }
     }
     /// Monotree get
     fn get(&mut self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        if self.smt_cache.contains(key) {
-            return self.smt_cache.get(key);
+        if self.smt.cache.contains(key) {
+            return self.smt.cache.get(key);
         }
 
         let dbr = match self.database_r() {
@@ -35,7 +38,7 @@ impl MonotreeDatabase for PGDatabase {
 
         let stmt = match dbr.prepare(&format!(
             "SELECT value FROM {} WHERE key = ('{}')"
-            ,Table::Smt.to_string(), serde_json::to_string(&key).unwrap())) {
+            ,self.smt.table_name, serde_json::to_string(&key).unwrap())) {
                 Ok(v) => v,
                 Err(e) => return Err(Errors::new(&e.to_string()))
             };
@@ -61,10 +64,10 @@ impl MonotreeDatabase for PGDatabase {
 
     /// Monotree put
     fn put(&mut self, key: &[u8], value: Vec<u8>) -> Result<()> {
-        self.smt_cache.put(key, value.to_owned())?;
-        if self.smt_batch_on {
+        self.smt.cache.put(key, value.to_owned())?;
+        if self.smt.batch_on {
             let key_vec: Vec<u8> = key.iter().cloned().collect();
-            self.smt_batch.insert(key_vec, value);
+            self.smt.batch.insert(key_vec, value);
         } else {
             let dbw = match self.database_w() {
                 Ok(v) => v,
@@ -76,7 +79,7 @@ impl MonotreeDatabase for PGDatabase {
                 VALUES ('{}','{}')
                 ON CONFLICT (key) DO UPDATE
                 SET value = EXCLUDED.value;",
-                Table::Smt.to_string(),
+                self.smt.table_name,
                 serde_json::to_string(&key).unwrap(),
                 serde_json::to_string(&value).unwrap())) {
                     Ok(v) => v,
@@ -91,9 +94,9 @@ impl MonotreeDatabase for PGDatabase {
     }
     /// Monotree delete
     fn delete(&mut self, key: &[u8]) -> Result<()> {
-        self.smt_cache.delete(key)?;
-        if self.smt_batch_on {
-            self.smt_batch.remove(key);
+        self.smt.cache.delete(key)?;
+        if self.smt.batch_on {
+            self.smt.batch.remove(key);
         } else {
             let dbw = match self.database_w() {
                 Ok(v) => v,
@@ -101,7 +104,7 @@ impl MonotreeDatabase for PGDatabase {
             };
             let stmt = match dbw.prepare(&format!(
                 "DELETE FROM {} WHERE key = ('{}');",
-                Table::Smt.to_string(), serde_json::to_string(&key).unwrap())){
+                self.smt.table_name, serde_json::to_string(&key).unwrap())){
                     Ok(v) => v,
                     Err(e) => return Err(Errors::new(&e.to_string()))
                 };
@@ -114,21 +117,21 @@ impl MonotreeDatabase for PGDatabase {
     }
     /// Monotree init_batch
     fn init_batch(&mut self) -> Result<()> {
-        self.smt_batch = HashMap::new();
-        self.smt_cache.clear();
-        self.smt_batch_on = true;
+        self.smt.batch = HashMap::new();
+        self.smt.cache.clear();
+        self.smt.batch_on = true;
         Ok(())
     }
     /// Monotree finish_batch
     fn finish_batch(&mut self) -> Result<()> {
-        self.smt_batch_on = false;
-        if !self.smt_batch.is_empty() {
+        self.smt.batch_on = false;
+        if !self.smt.batch.is_empty() {
             let dbw = match self.database_w() {
                 Ok(v) => v,
                 Err(e) => return Err(Errors::new(&e.to_string()))
             };
-            let mut stmt_str = format!("INSERT INTO {} (key, value) VALUES", Table::Smt.to_string());
-            for (key, value) in &self.smt_batch {
+            let mut stmt_str = format!("INSERT INTO {} (key, value) VALUES", self.smt.table_name);
+            for (key, value) in &self.smt.batch {
                 stmt_str.push_str(&format!(" ('{}','{}'),",
                 serde_json::to_string(&key).unwrap(),
                 serde_json::to_string(&value).unwrap()));
@@ -162,6 +165,9 @@ pub mod tests {
         let mut db = PGDatabase::get_new();
         db.set_connection_from_config(&config_rs).unwrap();
         let table_name = "testing.smt".to_string();
+        // Create testing table
+        db.database_w().unwrap().execute(
+            &format!("CREATE SCHEMA IF NOT EXISTS testing;"),&[],).unwrap();
         db.database_w().unwrap().execute(&format!("
             CREATE TABLE IF NOT EXISTS {} (
                 key varchar,
@@ -169,6 +175,8 @@ pub mod tests {
                 PRIMARY KEY (key)
             );", table_name),&[]).unwrap();
         db.database_w().unwrap().execute(&format!("TRUNCATE {};",table_name),&[]).unwrap();
+        // set PGDatabaseSMT table name to testing table
+        db.smt.table_name = table_name;
         Monotree {
             db,
             hasher: Blake3::new()
@@ -229,7 +237,7 @@ pub mod tests {
 }
 
 // Dummy implementation. Unused.
-use crate::MockDatabase;
+use crate::{PGDatabaseSmt, MockDatabase};
 impl monotree::database::Database for MockDatabase {
     fn new(_dbname: &str) -> Self {
         MockDatabase::new()

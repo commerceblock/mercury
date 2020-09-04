@@ -14,7 +14,7 @@ use crate::{
         SEError,
     },
     structs::*,
-    Database, DatabaseR, DatabaseW, PGDatabase,
+    Database, DatabaseR, DatabaseW, PGDatabase, PGDatabaseSmt,
 };
 use bitcoin::hashes::sha256d;
 use chrono::NaiveDateTime;
@@ -204,12 +204,6 @@ impl PGDatabase {
         let _ = self.database_w()?.execute(
             &format!("
             CREATE SCHEMA IF NOT EXISTS watcher;
-            "),
-            &[],
-        )?;
-        let _ = self.database_w()?.execute(
-            &format!("
-            CREATE SCHEMA IF NOT EXISTS testing;
             "),
             &[],
         )?;
@@ -612,18 +606,24 @@ impl Database for PGDatabase {
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self {
         Self {
            pool: Some(pool),
-           smt_cache: MemCache::new(),
-           smt_batch_on: false,
-           smt_batch: HashMap::new()
+           smt: PGDatabaseSmt {
+               table_name: Table::Smt.to_string(),
+               cache: MemCache::new(),
+               batch_on: false,
+               batch: HashMap::new()
+           }
         }
     }
 
     fn get_new() -> Self {
         Self {
             pool : None,
-            smt_cache: MemCache::new(),
-            smt_batch_on: false,
-            smt_batch: HashMap::new()
+            smt: PGDatabaseSmt {
+                table_name: Table::Smt.to_string(),
+                cache: MemCache::new(),
+                batch_on: false,
+                batch: HashMap::new()
+            }
         }
     }
 
