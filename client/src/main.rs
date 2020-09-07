@@ -4,14 +4,13 @@ use clap::App;
 
 use client_lib::state_entity;
 use client_lib::wallet::wallet;
-use client_lib::{ClientShim, Config, Tor};
+use client_lib::{ClientShim, Tor};
 use shared_lib::{
     mocks::mock_electrum::MockElectrum,
     structs::{SCEAddress, TransferMsg3},
 };
 
 use bitcoin::consensus;
-use config::Config as ConfigRs;
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
 use std::str::FromStr;
 use uuid::Uuid;

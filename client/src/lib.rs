@@ -33,14 +33,10 @@ pub mod wallet;
 
 mod utilities;
 
-extern crate url;
-use url::Url;
-
 use serde::{Deserialize, Serialize};
 
 use pyo3::prelude::*;
 use pyo3::{PyCell, PyObjectProtocol, py_run};
-use pyo3::types::IntoPyDict;
 
 use error::CError;
 use config::Config as ConfigRs;

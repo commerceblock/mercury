@@ -88,8 +88,3 @@ where
 
     Ok(serde_json::from_str(value.as_str()).unwrap())
 }
-
-/// Reset the Tor id
-pub fn new_tor_id(client_shim: &ClientShim) -> Result<()> {
-    todo!();
-}

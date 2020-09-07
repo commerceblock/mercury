@@ -4,8 +4,22 @@
 Mercury client is a bitcoin minimalist decentralized wallet CLI app with a client side
 state chain implementation.
 
-## Requirement
+## Requirements
 Mercury server is required to interact with the client, for instruction on how to run it see [here](../server/README.md).
+
+### Requirements for Tor
+In order to enable Tor, openssl and python3 should be installed. The python package "stem" is also required. 
+
+#### MacOs
+Install openssl and python3 via homebrew:
+```bash
+brew install openssl
+brew install python3
+```
+Install stem via pip3:
+```bash
+pip3 install stem
+``` 
 
 ## Installation
 ```bash
