@@ -60,6 +60,19 @@ pub struct Config {
     pub tor: Tor,
 }
 
+impl Config {
+    pub fn get() -> Result<Config> {
+        let cfg = get_config()?;
+        let tor = Tor::from_config(&cfg);
+        Ok(Config {
+            endpoint: cfg.get("endpoint")?,
+            electrum_server: cfg.get("electrum_server")?,
+            testing_mode: cfg.get("testing_mode")?,
+            tor,
+        })
+    }
+}
+
 impl Default for Config {
     fn default() -> Config {
         Config {
@@ -124,22 +137,6 @@ impl Default for Tor {
 }
 
 impl Tor {
-    /*
-    fn get_control(&self) -> Result<TorControl> {
-        if (self.enable == false){
-            return Err(CError::TorError("cannot get TorControl: Tor not enabled".to_string()));
-        }
-        let mut url = Url::parse(&self.proxy)?;
-        url.set_port(Some(self.control_port as u16))?;
-        //url.set_scheme(None)?;
-        let url = url.into_string();
-        let mut tc = TorControl::new(&self)?;
-        tc.connect(url)?;
-        //tc.auth(Some(format!("\"{}\"", self.control_password)))?;
-        Ok(tc)
-    }
-    */
-
     pub fn from_config(conf_rs: &ConfigRs) -> Self {
         let mut tor = Self::default();
         match conf_rs.get("tor_enable").ok() {
@@ -231,6 +228,15 @@ impl ClientShim {
         };
         cs
     }
+
+    pub fn new_tor_id(&self) -> Result<()> {
+        match &self.tor {
+            Some(t) => {
+                t.newnym()
+            },
+            None => Err(CError::TorError("no Tor in ClientShim".to_string()))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -241,10 +247,18 @@ pub mod tests {
     #[test]
     #[ignore]
     fn test_tor_control() {
-        let config = get_config().expect("failed to get default config");
+        let config = get_config().expect("failed to get config");
         let tor = Tor::from_config(&config);
         let _ = tor.get_bytes_read().expect("failed to get bytes read");
         let _ = tor.newnym().expect("failed to get new tor identity");
         //let tor_control = TorControl::new(&tor).expect("failed to get new TorControl");
     }
-}
+
+    #[test]
+    #[ignore]
+    fn test_client_shim_tor_control() {
+        let config = Config::get().expect("failed to get config");
+        let cs = ClientShim::from_config(&config);
+        let _ = cs.new_tor_id().expect("failed to get new tor id");
+    }
+}   
