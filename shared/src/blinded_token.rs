@@ -33,8 +33,92 @@ use curv::{GE, elliptic::curves::traits::{ECPoint, ECScalar}, FE, BigInt, arithm
 // And verifies
 //      sp=eq+r
 
-// pub type GE = Secp256k1Point;
-// pub type FE = Secp256k1Scalar;
+
+/// blind spend signature
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BlindedSpendSignature {
+    s_prime: FE
+}
+impl Default for BlindedSpendSignature {
+    fn default() -> Self {
+        BlindedSpendSignature{ s_prime: FE::zero() }
+    }
+}
+
+/// (s,r) blind spend token
+pub struct BlindSpendToken {
+    s: FE,
+    r: GE
+}
+
+/// Blind Spend Token data for each Swap. (priv, pub) keypair, k and R' value for signing and verification.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BSTSenderData {
+    x: FE,
+    q: GE,
+    k: FE,
+    r_prime: GE
+}
+impl BSTSenderData {
+    /// Generate new BSTSenderData for Swap
+    pub fn setup() -> Self {
+        let p: GE = ECPoint::generator(); // gen
+        let x = FE::new_random(); // priv
+        let q = p*x; //pub
+        let (k, r_prime) = signer_gen_r_prime();
+        BSTSenderData {
+            x,
+            q,
+            k,
+            r_prime
+        }
+    }
+    
+    /// Create a blind signature for some e_prime value
+    pub fn gen_blind_signature(&self, e_prime: FE) -> BlindedSpendSignature {
+        BlindedSpendSignature{ s_prime: sender_calc_s_prime(self.x, e_prime, self.k) }
+    }
+
+    /// Verify blind spend token
+    pub fn verify_blind_spend_token(&self, token: BlindSpendToken, m: &String) -> Result<bool> {
+        verify_blind_sig(token.s, m, self.q, token.r)
+    }
+}
+
+/// Blind Spend Token data for each Swap. (priv, pub) keypair, k and R' value for signing and verification.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BSTRequestorData {
+    u: FE,
+    v: FE,
+    r: GE,
+    e_prime: FE
+}
+impl BSTRequestorData {
+    /// Generate new BSTRequestorData with senders r_prime value and a message m
+    pub fn setup(r_prime: GE, m:&String) -> Result<Self> {
+        let (u, v, r, e_prime) = requester_calc_e_prime(r_prime, &m)?;
+        Ok(BSTRequestorData {
+            u,
+            v,
+            r,
+            e_prime
+        })
+    }
+
+    /// Unblind blind spend token signature
+    pub fn unblind_signature(&self, signature: BlindedSpendSignature) -> FE {
+        requester_calc_s(signature.s_prime, self.u, self.v)
+    }
+
+    /// Create BlindSpendToken for blinded signature
+    pub fn make_blind_spend_token(&self, s: FE) -> BlindSpendToken {
+        BlindSpendToken {
+            s,
+            r: self.r
+        }
+    }
+}
+
 
 ///  Signer generates
 ///      r' = kp
@@ -122,5 +206,20 @@ mod tests {
 
         // Sender verify
         assert!(verify_blind_sig(s, &m, q, r).unwrap());
+    }
+
+    #[test]
+    fn test_blind_sign_structs() {
+        let msg = "Message".to_string();
+        // Sender, Requestor init
+        let sender = BSTSenderData::setup();
+        let requestor = BSTRequestorData::setup(sender.r_prime, &msg).unwrap();
+
+        let blind_sig = sender.gen_blind_signature(requestor.e_prime);
+        let unblind_sig = requestor.unblind_signature(blind_sig);
+
+        let blind_spend_token = requestor.make_blind_spend_token(unblind_sig);
+
+        assert!(sender.verify_blind_spend_token(blind_spend_token, &msg).unwrap());
     }
 }
