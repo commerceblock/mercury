@@ -99,8 +99,14 @@ impl From<()> for CError {
 }
 
 impl From<pyo3::PyErr> for CError {
-    fn from(_e: pyo3::PyErr) -> CError {
-        CError::Generic("a python error occured".to_string())
+    fn from(e: pyo3::PyErr) -> CError {
+        CError::Generic(format!("a python error occured: {:?}",e))
+    }
+}
+
+impl std::convert::From<config::ConfigError> for CError {
+    fn from(e: config::ConfigError) -> CError {
+        CError::Generic(e.to_string())
     }
 }
 

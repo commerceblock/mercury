@@ -449,4 +449,6 @@ mod tests {
         let err = state_entity::api::get_statechain(&wallet.client_shim, &invalid_scid);
         assert!(err.is_err());
     }
+
+
 }

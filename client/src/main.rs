@@ -20,36 +20,12 @@ fn main() {
     let yaml = load_yaml!("../cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
 
-    let mut conf_rs = ConfigRs::new();
-    let _ = conf_rs
-        // First merge struct default config
-        .merge(ConfigRs::try_from(&Config::default()).unwrap())
-        .unwrap();
-    conf_rs
-        // Add in `./Settings.toml`
-        .merge(config::File::with_name("Settings").required(false))
-        .unwrap()
-        // Add in settings from the environment (with prefix "APP")
-        // Eg.. `APP_DEBUG=1 ./target/app` would set the `debug` key
-        .merge(config::Environment::with_prefix("MERC"))
-        .unwrap();
+    let conf_rs = client_lib::get_config().unwrap();
     
     let endpoint : String = conf_rs.get("endpoint").unwrap();
     let electrum_server: String = conf_rs.get("electrum_server").unwrap();
     let testing_mode : bool = conf_rs.get("testing_mode").unwrap();
-    let mut tor = Tor::default();
-    match conf_rs.get("tor_enable").ok() {
-        Some(v) => tor.enable = v,
-        None => (),
-    };
-    match conf_rs.get("tor_proxy").ok() {
-        Some(v) => tor.proxy = v,
-        None => (),
-    };
-    match conf_rs.get("tor_control_port").ok() {
-        Some(v) => tor.control_port = v,
-        None => (),
-    };
+    let mut tor = Tor::from_config(&conf_rs);
     let tor = match tor.enable {
         true => {
             tor.control_password = conf_rs.get("tor_control_password")
