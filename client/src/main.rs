@@ -4,65 +4,49 @@ use clap::App;
 
 use client_lib::state_entity;
 use client_lib::wallet::wallet;
-use client_lib::ClientShim;
+use client_lib::{ClientShim, Tor};
 use shared_lib::{
     mocks::mock_electrum::MockElectrum,
     structs::{SCEAddress, TransferMsg3},
 };
 
 use bitcoin::consensus;
-use config::Config as ConfigRs;
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
-use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use uuid::Uuid;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Config {
-    pub endpoint: String,
-    pub electrum_server: String,
-    pub testing_mode: bool,
-}
-
-impl Default for Config {
-    fn default() -> Config {
-        Config {
-            endpoint: "https://localhost:8000".to_string(),
-            electrum_server: "127.0.0.1:60401".to_string(),
-            testing_mode: true,
-        }
-    }
-}
 
 fn main() {
     let yaml = load_yaml!("../cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
 
-    let mut conf_rs = ConfigRs::new();
-    let _ = conf_rs
-        // First merge struct default config
-        .merge(ConfigRs::try_from(&Config::default()).unwrap())
-        .unwrap();
-    conf_rs
-        // Add in `./Settings.toml`
-        .merge(config::File::with_name("Settings").required(false))
-        .unwrap()
-        // Add in settings from the environment (with prefix "APP")
-        // Eg.. `APP_DEBUG=1 ./target/app` would set the `debug` key
-        .merge(config::Environment::with_prefix("MERC"))
-        .unwrap();
-    let se_endpoint: String = conf_rs.get("endpoint").unwrap();
-    let electrum_server_addr: String = conf_rs.get("electrum_server").unwrap();
-    let testing_mode: bool = conf_rs.get("testing_mode").unwrap();
-
+    let conf_rs = client_lib::get_config().unwrap();
+    
+    let endpoint : String = conf_rs.get("endpoint").unwrap();
+    let electrum_server: String = conf_rs.get("electrum_server").unwrap();
+    let testing_mode : bool = conf_rs.get("testing_mode").unwrap();
+    let mut tor = Tor::from_config(&conf_rs);
+    let tor = match tor.enable {
+        true => {
+            tor.control_password = conf_rs.get("tor_control_password")
+            .expect("tor enabled - tor_control_password required");
+            Some(tor)
+        },
+        false => None,
+    };
+    
+    
+    println!("config tor: {:?}", tor);
+        
+    let _ = env_logger::try_init();
+    
     // TODO: random generating of seed and allow input of mnemonic phrase
     let seed = [0xcd; 32];
-    let client_shim = ClientShim::new(se_endpoint.to_string(), None).unwrap();
+    let client_shim = ClientShim::new(endpoint, None, tor);
 
     let electrum: Box<dyn Electrumx> = if testing_mode {
         Box::new(MockElectrum::new())
     } else {
-        Box::new(ElectrumxClient::new(electrum_server_addr).unwrap())
+        Box::new(ElectrumxClient::new(electrum_server).unwrap())
     };
 
     let network = "testnet".to_string();
@@ -191,10 +175,10 @@ fn main() {
             }
         } else if matches.is_present("transfer-receiver") {
             if let Some(matches) = matches.subcommand_matches("transfer-receiver") {
-                let transfer_msg: TransferMsg3 =
+                let mut transfer_msg: TransferMsg3 =
                     serde_json::from_str(matches.value_of("message").unwrap()).unwrap();
                 let finalized_data =
-                    state_entity::transfer::transfer_receiver(&mut wallet, &transfer_msg, &None)
+                    state_entity::transfer::transfer_receiver(&mut wallet, &mut transfer_msg, &None)
                         .unwrap();
                 wallet.save();
                 println!(

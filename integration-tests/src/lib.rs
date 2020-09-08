@@ -131,7 +131,7 @@ pub fn gen_wallet() -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
-        ClientShim::new("http://localhost:8000".to_string(), None).unwrap(),
+        ClientShim::new("http://localhost:8000".to_string(), None, None),
         Box::new(MockElectrum::new()),
     );
 
@@ -146,7 +146,7 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
-        ClientShim::new("http://localhost:8000".to_string(), None).unwrap(),
+        ClientShim::new("http://localhost:8000".to_string(), None, None),
         Box::new(MockElectrum::new()),
     );
 
@@ -212,7 +212,7 @@ pub fn run_transfer(
         .unwrap();
 
     let start = Instant::now();
-    let tranfer_sender_resp = state_entity::transfer::transfer_sender(
+    let mut tranfer_sender_resp = state_entity::transfer::transfer_sender(
         &mut wallets[sender_index],
         state_chain_id,
         receiver_addr.clone(),
@@ -221,7 +221,7 @@ pub fn run_transfer(
 
     let new_shared_key_id = state_entity::transfer::transfer_receiver(
         &mut wallets[receiver_index],
-        &tranfer_sender_resp,
+        &mut tranfer_sender_resp,
         &None,
     )
     .unwrap()
@@ -249,7 +249,7 @@ pub fn run_transfer_with_commitment(
         .get_new_state_entity_address(&funding_txid)
         .unwrap();
 
-    let tranfer_sender_resp = state_entity::transfer::transfer_sender(
+    let mut tranfer_sender_resp = state_entity::transfer::transfer_sender(
         &mut wallets[sender_index],
         sender_state_chain_id,
         receiver_addr.clone(),
@@ -260,7 +260,7 @@ pub fn run_transfer_with_commitment(
 
     let transfer_finalized_data = state_entity::transfer::transfer_receiver(
         &mut wallets[receiver_index],
-        &tranfer_sender_resp,
+        &mut tranfer_sender_resp,
         &Some(BatchData {
             id: batch_id.clone(),
             commitment: commitment.clone(),

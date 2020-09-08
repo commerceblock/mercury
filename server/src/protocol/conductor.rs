@@ -9,7 +9,6 @@ extern crate shared_lib;
 use crate::server::StateChainEntity;
 
 use bitcoin::{
-    Address,
     hashes::{sha256d, Hash},
     secp256k1::{Secp256k1, Signature,PublicKey, SecretKey},
 };
@@ -19,8 +18,7 @@ use uuid::Uuid;
 use mockall::predicate::*;
 use mockall::*;
 use cfg_if::cfg_if;
-use std::str::FromStr;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use bisetmap::BisetMap;
 use crate::protocol::withdraw::Withdraw;
 use crate::Database;
@@ -327,7 +325,6 @@ impl Scheduler {
 
     //Update the swap info based on the rersults of user first/second messages
     pub fn update_swaps(&mut self) {
-        println!("update swaps");
         for (id, swap_info) in self.swap_info_map.iter_mut() {
             match swap_info.status {
                 //Phase 1 - check if all state chain addresses have been received, if so move to phase 2
@@ -437,7 +434,7 @@ impl Conductor for SCE {
         Ok(addr)
     }
 
-    fn get_address_from_blinded_spend_token(&self, bst: &BlindedSpendToken) -> Result<SCEAddress>{
+    fn get_address_from_blinded_spend_token(&self, _bst: &BlindedSpendToken) -> Result<SCEAddress>{
         todo!()
     }
 }
@@ -505,6 +502,7 @@ pub fn swap_second_message(
 #[allow(dead_code)]
 #[cfg(test)]
 mod tests {
+    use bitcoin::Address;
     use shared_lib::state_chain::StateChain;
 use super::*;
     use mockall::predicate;
@@ -815,7 +813,7 @@ use super::*;
         assert_eq!(sc_entity.poll_swap(&swap_id).unwrap().unwrap(),SwapStatus::Phase2);
 
         //There should be a blinded spend token for each of the sce addresses
-        let mut guard = sc_entity.scheduler.lock().unwrap();
+        let guard = sc_entity.scheduler.lock().unwrap();
         assert_eq!(guard.bst_map.get(&swap_id).unwrap().len(), 
             guard.swap_info_map.get(&swap_id).unwrap().swap_token.state_chain_ids.len());
         drop(guard);
@@ -951,7 +949,7 @@ use super::*;
         let mut phase_1_complete = false;
         let mut phase_2_complete = false;
 
-        let mut _blinded_spend_token = BlindedSpendToken::from_string(String::default());
+        let blinded_spend_token = BlindedSpendToken::from_string(String::default());
 
         // Poll Status of swap and perform necessary actions for each phase.
         println!("\nBegin polling of Swap:");

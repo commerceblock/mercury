@@ -96,6 +96,7 @@ pub fn get_server<T: Database + Send + Sync + 'static>
     let rocket_config = get_rocket_config(&sc_entity.config);
 
     if sc_entity.config.testing_mode {
+        info!("Server running in testing mode.");
         // Use test SMT DB
         sc_entity.config.smt_db_loc = SMT_DB_LOC_TESTING.to_string();
         // reset dbs
@@ -124,6 +125,8 @@ pub fn get_server<T: Database + Send + Sync + 'static>
                 util::prepare_sign_tx,
                 util::get_transfer_batch_status,
                 util::reset_test_dbs, // !!
+                util::get_smt_value,
+                util::put_smt_value,
                 deposit::deposit_init,
                 deposit::deposit_confirm,
                 transfer::transfer_sender,

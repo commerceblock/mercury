@@ -156,7 +156,7 @@ impl PGDatabase {
         let manager = PostgresConnectionManager::new(url.clone(), TlsMode::None)?;
         match r2d2::Pool::new(manager){
             Ok(m) => Ok(m),
-            Err(e) => Err(SEError::DBError(ConnectionFailed, 
+            Err(e) => Err(SEError::DBError(ConnectionFailed,
                 format!("Failed to get postgres connection managerfor rocket url {}: {}",
                         url, e)))
         }
@@ -166,10 +166,10 @@ impl PGDatabase {
         match &self.pool {
             Some(p) => match p.get() {
                         Ok(c) => Ok(DatabaseR(c)),
-                        Err(e) => Err(SEError::DBError(ConnectionFailed, 
+                        Err(e) => Err(SEError::DBError(ConnectionFailed,
                         format!("Failed to get pooled connection for read: {}", e))),
                     },
-            None =>  Err(SEError::DBError(ConnectionFailed, 
+            None =>  Err(SEError::DBError(ConnectionFailed,
                         "Failed to get pooled connection for read: pool not set".to_string())),
         }
     }
@@ -178,14 +178,14 @@ impl PGDatabase {
         match &self.pool {
             Some(p) => match p.get() {
                         Ok(c) => Ok(DatabaseW(c)),
-                        Err(e) => Err(SEError::DBError(ConnectionFailed, 
+                        Err(e) => Err(SEError::DBError(ConnectionFailed,
                         format!("Failed to get pooled connection for write: {}", e))),
                     },
-            None =>  Err(SEError::DBError(ConnectionFailed, 
+            None =>  Err(SEError::DBError(ConnectionFailed,
                         "Failed to get pooled connection for write: pool not set".to_string())),
         }
     }
-    
+
     pub fn init(&self) -> Result<()> {
         self.make_tables()
     }
@@ -369,15 +369,6 @@ impl PGDatabase {
             ),
             &[],
         )?;
-        Ok(())
-    }
-
-    pub fn reset(&self, smt_db_loc: &String) -> Result<()>{
-        // truncate all postgres tables
-        self.truncate_tables()?;
-
-        // Destroy Sparse Merkle Tree RocksDB instance
-        let _ = DB::destroy(&Options::default(), smt_db_loc); // ignore error
         Ok(())
     }
 
@@ -618,7 +609,7 @@ impl Database for PGDatabase {
             config.storage.db_port_w.clone(),
             config.storage.db_user_w.clone(),
             config.storage.db_pass_w.clone(),
-            config.storage.db_database_w.clone()            
+            config.storage.db_database_w.clone()
         );
         self.set_connection(&rocket_url)
     }
@@ -629,9 +620,18 @@ impl Database for PGDatabase {
                 self.pool = Some(p.clone());
                 Ok(())
             },
-            Err(e) => Err(SEError::DBError(ConnectionFailed, 
+            Err(e) => Err(SEError::DBError(ConnectionFailed,
                         format!("Error obtaining pool address for url {}: {}",url, e)))
         }
+    }
+
+    fn reset(&self, smt_db_loc: &String) -> Result<()>{
+        // truncate all postgres tables
+        self.truncate_tables()?;
+
+        // Destroy Sparse Merkle Tree RocksDB instance
+        let _ = DB::destroy(&Options::default(), smt_db_loc); // ignore error
+        Ok(())
     }
 
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid> {
@@ -978,6 +978,15 @@ impl Database for PGDatabase {
             self.get_1::<String>(state_chain_id, Table::BackupTxs, vec![Column::TxBackup])?;
         let tx_backup: Transaction = Self::deser(tx_backup_str)?;
         Ok(tx_backup)
+    }
+
+    fn get_proof_key(&self, user_id: Uuid) -> Result<String> {
+        let proof_key = self.get_1::<String>(
+            user_id,
+            Table::UserSession,
+            vec![Column::ProofKey],
+        )?;
+        Ok(proof_key)
     }
 
     fn get_backup_transaction_and_proof_key(&self, user_id: Uuid) -> Result<(Transaction, String)> {
