@@ -46,9 +46,25 @@ impl Default for BlindedSpendSignature {
 }
 
 /// (s,r) blind spend token
-pub struct BlindSpendToken {
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BlindedSpendToken {
     s: FE,
-    r: GE
+    r: GE,
+    m: String
+}
+impl Default for BlindedSpendToken {
+    fn default() -> Self {
+        BlindedSpendToken{
+            s: FE::zero(),
+            r: GE::generator(),
+            m: String::default()
+        }
+    }
+}
+impl BlindedSpendToken {
+    pub fn get_msg(&self) -> String {
+        self.m.to_owned()
+    }
 }
 
 /// Blind Spend Token data for each Swap. (priv, pub) keypair, k and R' value for signing and verification.
@@ -73,15 +89,15 @@ impl BSTSenderData {
             r_prime
         }
     }
-    
+
     /// Create a blind signature for some e_prime value
     pub fn gen_blind_signature(&self, e_prime: FE) -> BlindedSpendSignature {
         BlindedSpendSignature{ s_prime: sender_calc_s_prime(self.x, e_prime, self.k) }
     }
 
     /// Verify blind spend token
-    pub fn verify_blind_spend_token(&self, token: BlindSpendToken, m: &String) -> Result<bool> {
-        verify_blind_sig(token.s, m, self.q, token.r)
+    pub fn verify_blind_spend_token(&self, token: BlindedSpendToken) -> Result<bool> {
+        verify_blind_sig(token.s, &token.m, self.q, token.r)
     }
 }
 
@@ -91,17 +107,19 @@ pub struct BSTRequestorData {
     u: FE,
     v: FE,
     r: GE,
-    e_prime: FE
+    e_prime: FE,
+    m: String
 }
 impl BSTRequestorData {
     /// Generate new BSTRequestorData with senders r_prime value and a message m
-    pub fn setup(r_prime: GE, m:&String) -> Result<Self> {
+    pub fn setup(r_prime: GE, m: &String) -> Result<Self> {
         let (u, v, r, e_prime) = requester_calc_e_prime(r_prime, &m)?;
         Ok(BSTRequestorData {
             u,
             v,
             r,
-            e_prime
+            e_prime,
+            m: m.to_owned()
         })
     }
 
@@ -110,11 +128,12 @@ impl BSTRequestorData {
         requester_calc_s(signature.s_prime, self.u, self.v)
     }
 
-    /// Create BlindSpendToken for blinded signature
-    pub fn make_blind_spend_token(&self, s: FE) -> BlindSpendToken {
-        BlindSpendToken {
+    /// Create BlindedSpendToken for blinded signature
+    pub fn make_blind_spend_token(&self, s: FE) -> BlindedSpendToken {
+        BlindedSpendToken {
             s,
-            r: self.r
+            r: self.r,
+            m: self.m.clone()
         }
     }
 }
@@ -220,6 +239,6 @@ mod tests {
 
         let blind_spend_token = requestor.make_blind_spend_token(unblind_sig);
 
-        assert!(sender.verify_blind_spend_token(blind_spend_token, &msg).unwrap());
+        assert!(sender.verify_blind_spend_token(blind_spend_token).unwrap());
     }
 }

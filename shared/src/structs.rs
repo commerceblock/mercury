@@ -3,6 +3,7 @@
 //! Struct definitions used in State entity protocols
 
 use crate::state_chain::{State, StateChainSig};
+use crate::blinded_token::BlindedSpendToken;
 use crate::Root;
 use crate::Signature;
 use bitcoin::{OutPoint, Transaction};
@@ -240,8 +241,10 @@ pub struct RegisterUtxo {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SwapMsg1 {
     pub swap_id: Uuid,
+    pub state_chain_id: Uuid,
     pub swap_token_sig: Signature,
     pub address: SCEAddress,
+    pub bst_e_prime: FE
 }
 
 // Message to request a blinded spend token
@@ -251,20 +254,6 @@ pub struct BSTMsg {
     pub state_chain_id: Uuid,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct BlindedSpendToken {
-    data: String, // Blinded token allowing client to claim an SCE-Address to transfer to.
-}
-
-impl BlindedSpendToken {
-    pub fn from_string(data: String) -> Self {
-        Self{data}
-    }
-
-    pub fn from_str(data: &'static str) -> Self {
-        Self::from_string(data.to_string())
-    }
-}
 
 /// Owner -> Conductor
 #[derive(Serialize, Deserialize, Debug)]

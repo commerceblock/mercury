@@ -1,6 +1,7 @@
 use shared_lib::state_chain::StateChainSig;
 use crate::structs::StateChainOwner;
-use super::protocol::{*, conductor::Scheduler};
+use super::protocol::*;
+use super::protocol::conductor::Scheduler;
 use crate::Database;
 
 use crate::config::SMT_DB_LOC_TESTING;
@@ -33,7 +34,7 @@ impl<T: Database + Send + Sync + 'static> StateChainEntity<T> {
         // Get config as defaults, Settings.toml and env vars
         let config_rs = Config::load()?;
         db.set_connection_from_config(&config_rs)?;
-        
+
         let sce = Self {
             config: config_rs,
             database: db,
@@ -48,7 +49,9 @@ impl<T: Database + Send + Sync + 'static> StateChainEntity<T> {
         std::thread::spawn(move || {
             loop {
                 let mut guard = scheduler.lock().unwrap();
-                guard.update_swap_info();
+                if let Err(e) = guard.update_swap_info() {
+                    error!("{}",&e.to_string());
+                }
                 drop(guard);
                 std::thread::sleep(std::time::Duration::from_secs(60));
             }
@@ -195,6 +198,7 @@ use crate::protocol::withdraw::Withdraw;
 use crate::storage;
 use crate::storage::Storage;
 use shared_lib::structs::*;
+use shared_lib::blinded_token::{BlindedSpendToken,BlindedSpendSignature};
 
 mock! {
     StateChainEntity{}
@@ -245,7 +249,7 @@ mock! {
         fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> conductor::Result<()>;
         fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> conductor::Result<()>;
         fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> conductor::Result<SCEAddress>;
-        fn get_blinded_spend_token(&self, swap_id: &Uuid, state_chain_id: &Uuid) -> conductor::Result<BlindedSpendToken>;
+        fn get_blinded_spend_signature(&self, swap_id: &Uuid, state_chain_id: &Uuid) -> conductor::Result<BlindedSpendSignature>;
         fn get_address_from_blinded_spend_token(&self, bst: &BlindedSpendToken) -> conductor::Result<SCEAddress>;
     }
 
@@ -291,10 +295,10 @@ mock! {
         ) -> util::Result<()>;
     }
     trait Withdraw{
-        fn verify_statechain_sig(&self, 
-            statechain_id: &Uuid, 
+        fn verify_statechain_sig(&self,
+            statechain_id: &Uuid,
             statechain_sig: &StateChainSig,
-            user_id: Option<Uuid>) 
+            user_id: Option<Uuid>)
                 -> withdraw::Result<StateChainOwner>;
         fn withdraw_init(
             &self,
