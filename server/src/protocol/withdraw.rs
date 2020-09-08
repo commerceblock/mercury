@@ -129,7 +129,7 @@ impl Withdraw for SCE {
         self.database.remove_statechain_id(&user_id)?;
 
         // Update sparse merkle tree
-        let (new_root, prev_root) = self.update_smt(
+        let (prev_root, new_root) = self.update_smt(
             &wcd.tx_withdraw
                 .input
                 .get(0)

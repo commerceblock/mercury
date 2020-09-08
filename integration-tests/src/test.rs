@@ -30,7 +30,7 @@ mod tests {
     #[serial]
     fn test_failed_auth() {
         let _handle = start_server();
-        let client_shim = ClientShim::new("https://localhost:8000".to_string(), None).unwrap();
+        let client_shim = ClientShim::new("http://localhost:8000".to_string(), None, None);
         let secret_key: FE = ECScalar::new_random();
         let invalid_key = Uuid::new_v4();
         let err = ecdsa::get_master_key(
@@ -369,7 +369,7 @@ mod tests {
         let wallet_json = wallet.to_json();
         let wallet_rebuilt = wallet::wallet::Wallet::from_json(
             wallet_json,
-            ClientShim::new("https://localhost:8000".to_string(), None).unwrap(),
+            ClientShim::new("http://localhost:8000".to_string(), None, None),
             Box::new(MockElectrum::new()),
         )
         .unwrap();
@@ -412,7 +412,6 @@ mod tests {
     fn test_get_statechain() {
         let mockito_server_url = mockito::server_url();
         let _m = mock("GET", "/ping").create();
-        println!("mockito server url: {}", mockito_server_url);
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(
             &mockito_server_url);
         let mut db = MockDatabase::new();
@@ -450,4 +449,6 @@ mod tests {
         let err = state_entity::api::get_statechain(&wallet.client_shim, &invalid_scid);
         assert!(err.is_err());
     }
+
+
 }

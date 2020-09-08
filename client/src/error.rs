@@ -11,7 +11,7 @@ use std::fmt;
 use std::num::ParseIntError;
 
 /// Client specific errors
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub enum CError {
     /// Generic error from string error message
     Generic(String),
@@ -23,6 +23,8 @@ pub enum CError {
     SchnorrError(String),
     /// Inherit errors from SharedLibError
     SharedLibError(String),
+    /// Tor error
+    TorError(String)
 }
 
 impl From<String> for CError {
@@ -66,6 +68,17 @@ impl From<ParseIntError> for CError {
         CError::Generic(e.to_string())
     }
 }
+impl From<std::io::Error> for CError {
+    fn from(e: std::io::Error) -> CError {
+        CError::Generic(e.to_string())
+    }
+}
+
+impl From<serde_json::Error> for CError {
+    fn from(e: serde_json::Error) -> CError {
+        CError::Generic(e.to_string())
+    }
+}
 
 impl From<bitcoin::secp256k1::Error> for CError {
     fn from(e: bitcoin::secp256k1::Error) -> CError {
@@ -73,8 +86,26 @@ impl From<bitcoin::secp256k1::Error> for CError {
     }
 }
 
+impl From<()> for CError {
+    fn from(_e: ()) -> CError {
+        CError::Generic(String::default())
+    }
+}
+
+impl From<pyo3::PyErr> for CError {
+    fn from(e: pyo3::PyErr) -> CError {
+        CError::Generic(format!("a python error occured: {:?}",e))
+    }
+}
+
+impl std::convert::From<config::ConfigError> for CError {
+    fn from(e: config::ConfigError) -> CError {
+        CError::Generic(e.to_string())
+    }
+}
+
 /// Wallet error types
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub enum WalletErrorType {
     NotEnoughFunds,
     KeyNotFound,
@@ -103,6 +134,7 @@ impl fmt::Display for CError {
             CError::StateEntityError(ref e) => write!(f, "State Entity Error: {}", e),
             CError::SchnorrError(ref e) => write!(f, "Schnorr Error: {}", e),
             CError::SharedLibError(ref e) => write!(f, "SharedLib Error: {}", e),
+            CError::TorError(ref e) => write!(f, "Tor Error: {}", e),
         }
     }
 }

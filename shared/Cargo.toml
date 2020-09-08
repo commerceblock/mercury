@@ -33,6 +33,9 @@ merkletree = "0.20.0"
 arrayvec = "0.5.1"
 chrono = { version = "0.4", features = ["serde"] }
 log = "0.4"
+ecies = "0.1.4"
+error-chain="0.8.1"
+tor-stream = "0.2.0"
 
 [dev-dependencies]
 mockito = "0.27.0"

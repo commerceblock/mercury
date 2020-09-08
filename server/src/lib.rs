@@ -143,6 +143,7 @@ pub trait Database {
     ) -> Result<()>;
     fn get_backup_transaction(&self, state_chain_id: Uuid) -> Result<Transaction>;
     fn get_backup_transaction_and_proof_key(&self, user_id: Uuid) -> Result<(Transaction, String)>;
+    fn get_proof_key(&self, user_id: Uuid) -> Result<String>;
     fn get_sc_locked_until(&self, state_chain_id: Uuid) -> Result<NaiveDateTime>;
     fn update_locked_until(&self, state_chain_id: &Uuid, time: &NaiveDateTime) -> Result<()>;
     fn get_transfer_batch_data(&self, batch_id: Uuid) -> Result<TransferBatchData>;
@@ -225,9 +226,7 @@ pub trait Database {
 
     fn get_tx_withdraw(&self, user_id: Uuid) -> Result<Transaction>;
     fn update_tx_withdraw(&self, user_id: Uuid, tx: Transaction) -> Result<()>;
-    fn reset(&self, _smt_db_loc: &String) -> Result<()> {
-        Ok(())
-    }
+    fn reset(&self, smt_db_loc: &String) -> Result<()>;
     fn init(&self) -> Result<()> {
         Ok(())
     }

@@ -343,7 +343,6 @@ impl Scheduler {
 
     //Update the swap info based on the rersults of user first/second messages
     pub fn update_swaps(&mut self) -> Result<()> {
-        println!("update swaps");
         for (id, swap_info) in self.swap_info_map.iter_mut() {
             match swap_info.status {
                 //Phase 1 - check if all state chain addresses have been received, if so:
@@ -625,9 +624,9 @@ mod tests {
     use super::*;
     use crate::protocol::util::tests::test_sc_entity;
     use crate::structs::{StateChainOwner, StateChainAmount};
+    use bitcoin::Address;
     use mockall::predicate;
     use shared_lib::{blinded_token::{BSTRequestorData, BlindedSpendToken}, state_chain::{StateChain, StateChainSig, State as SCState}};
-    use bitcoin::Address;
     use std::str::FromStr;
     use std::{thread, time::Duration};
     use std::collections::HashSet;
