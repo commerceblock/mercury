@@ -62,8 +62,18 @@ impl Default for BlindedSpendToken {
     }
 }
 impl BlindedSpendToken {
+    pub fn new_random() -> Self {
+        BlindedSpendToken{
+            s: FE::new_random(),
+            r: GE::random_point(),
+            m: String::default()
+        }
+    }
     pub fn get_msg(&self) -> String {
         self.m.to_owned()
+    }
+    pub fn set_msg(&mut self, msg: String) {
+        self.m = msg
     }
 }
 
@@ -88,6 +98,10 @@ impl BSTSenderData {
             k,
             r_prime
         }
+    }
+
+    pub fn get_r_prime(&self) -> GE {
+        self.r_prime
     }
 
     /// Create a blind signature for some e_prime value
@@ -121,6 +135,10 @@ impl BSTRequestorData {
             e_prime,
             m: m.to_owned()
         })
+    }
+
+    pub fn get_e_prime(&self) -> FE {
+        self.e_prime
     }
 
     /// Unblind blind spend token signature

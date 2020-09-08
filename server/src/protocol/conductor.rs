@@ -43,13 +43,13 @@ cfg_if! {
 
 /// Struct serialized to string to be used as Blind sign token message
 #[derive(Serialize, Deserialize, Debug)]
-pub struct BlindSpentTokenMessage {
+pub struct BlindedSpentTokenMessage {
     swap_id: Uuid,
     nonce: Uuid
 }
-impl BlindSpentTokenMessage {
+impl BlindedSpentTokenMessage {
     pub fn new(swap_id: Uuid) -> Self {
-        BlindSpentTokenMessage {
+        BlindedSpentTokenMessage {
             swap_id,
             nonce: Uuid::new_v4()
         }
@@ -350,8 +350,10 @@ impl Scheduler {
                 //    - Generate a Blind Spend Tokens for each participant
                 //    - Move swap to phase 2
                 SwapStatus::Phase1 => {
-                    let out_addr_map: &BisetMap<SCEAddress, Option<Uuid>> =
-                        self.out_addr_map.get(&id).ok_or(SEError::SwapError("Swap does not exist.".to_string()))?;
+                    let out_addr_map: &BisetMap<SCEAddress, Option<Uuid>> = match self.out_addr_map.get(&id) {
+                        Some(out_addr_map) => out_addr_map,
+                        None => return Ok(()) // BisetMap not yet created means no participants have completed swap_msg_1 yet
+                    };
                     if (swap_info.swap_token.state_chain_ids.len() == out_addr_map.len()){
                         //All output addresses received.
                         //Generate a list of blinded spend tokens and proceed to phase 2.
@@ -484,7 +486,7 @@ impl Conductor for SCE {
 
     fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> Result<SCEAddress> {
         // Get message that is signed
-        let bst_msg: BlindSpentTokenMessage = match serde_json::from_str(&swap_msg2.blinded_spend_token.get_msg()) {
+        let bst_msg: BlindedSpentTokenMessage = match serde_json::from_str(&swap_msg2.blinded_spend_token.get_msg()) {
             Ok(v) => v,
             Err(_) => return Err(SEError::SwapError("Failed to deserialize message.".to_string())),
         };
@@ -493,8 +495,9 @@ impl Conductor for SCE {
         if bst_msg.swap_id != swap_msg2.swap_id {
             return Err(SEError::SwapError("swap_second_message: swap_ids do not match.".to_string()));
         }
-        let swap_id = swap_msg2.swap_id;
-        let swap_info = match self.get_swap_info(&swap_id)? {
+        let swap_id = &swap_msg2.swap_id;
+        let mut guard = self.scheduler.lock()?;
+        let swap_info = match guard.get_swap_info(&swap_id) {
             Some(i) => i,
             None =>  return Err(SEError::SwapError(format!("swap_second_message: no swap with id {}",swap_id))),
         };
@@ -502,7 +505,6 @@ impl Conductor for SCE {
         // Verify BlindSpentToken
         if swap_info.bst_sender_data.verify_blind_spend_token(swap_msg2.blinded_spend_token.clone())? {
             // Get BisetMap of SCEAddress to Option<calimed_nonce> for this swap id
-            let mut guard = self.scheduler.lock()?;
             let sce_address_bisetmap = guard.out_addr_map.get_mut(&swap_id)
                 .ok_or(SEError::SwapError(format!("swap_second_message: no swap with id {}", swap_id)))?;
 
@@ -520,7 +522,7 @@ impl Conductor for SCE {
             // Otherwise add to the first SCEAddress in sce_address_bisetmap without a claimed_nonce
             let unclaimed_addr_list = sce_address_bisetmap.rev_get(&None); // get list all SCEAddress's without a claimed_nonce
             if unclaimed_addr_list.len() == 0 {
-                return Err(SEError::SwapError("swap_second_message: all SCEAddresses have been claimed.".to_string()));
+                return Err(SEError::SwapError("swap_second_message: All SCEAddresses have been claimed.".to_string()));
             }
             let addr = unclaimed_addr_list.get(0).unwrap().clone();
             sce_address_bisetmap.insert(addr.clone(), claimed_nonce);
@@ -530,10 +532,6 @@ impl Conductor for SCE {
         } else {
             return Err(SEError::SwapError("swap_second_message: Blind Spent Token signature verification failed.".to_string()))
         }
-    }
-
-    fn get_address_from_blinded_spend_token(&self, _bst: &BlindedSpendToken) -> Result<SCEAddress>{
-        todo!()
     }
 }
 
@@ -604,7 +602,7 @@ mod tests {
     use crate::protocol::util::tests::test_sc_entity;
     use crate::structs::{StateChainOwner, StateChainAmount};
     use mockall::predicate;
-    use shared_lib::{blinded_token::BlindedSpendToken, state_chain::{StateChain, StateChainSig, State as SCState}};
+    use shared_lib::{blinded_token::{BSTRequestorData, BlindedSpendToken}, state_chain::{StateChain, StateChainSig, State as SCState}};
     use bitcoin::Address;
     use std::str::FromStr;
     use std::{thread, time::Duration};
@@ -803,7 +801,6 @@ mod tests {
             vec![(3,10),(3,10),(3,10)]
         )));
 
-
         // Try invalid signature for proof key
         let invalid_signature =
             StateChainSig::new(&invalid_proof_key_priv, &"SWAP".to_string(), &proof_key.to_string()).unwrap();
@@ -827,7 +824,6 @@ mod tests {
 
     #[test]
     fn test_swap_first_message() {
-        let state_chain_id = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d3").unwrap();
         let invalid_swap_id = Uuid::from_str("deadb33f-37ab-46f9-abda-0678c891b2d3").unwrap();
         let proof_key_priv_invalid = SecretKey::from_slice(&[99; 32]).unwrap(); // Proof key priv part
         let mut proof_key_vec = Vec::<PublicKey>::new();
@@ -856,6 +852,7 @@ mod tests {
         let swap_id = guard.swap_id_map.iter().next().unwrap().1.to_owned();
         // Sign swap token with no state_chain_ids
         let swap_token = guard.get_swap_info(&swap_id).unwrap().swap_token;
+        let statechain_ids = swap_token.state_chain_ids.clone();
         drop(guard);
 
         let mut swap_token_no_sc = swap_token.clone();
@@ -863,7 +860,7 @@ mod tests {
 
         let swap_token_sig = swap_token_no_sc.sign(&proof_key_priv_vec[0]).unwrap();
         let mut swap_msg_1 = SwapMsg1 {
-            state_chain_id,
+            state_chain_id: statechain_ids[0],
             swap_id,
             swap_token_sig,
             address: sce_addresses[0].clone(),
@@ -893,14 +890,14 @@ mod tests {
         //Should be in phase1 now as not enough valid first messages have been sent
         assert_eq!(sc_entity.poll_swap(&swap_id).unwrap().unwrap(),SwapStatus::Phase1);
 
-
+        //Send valid first messages for all participants
         for i in 0..proof_key_vec.len(){
             let swap_msg_1 = SwapMsg1 {
-                state_chain_id,
+                state_chain_id: statechain_ids[i],
                 swap_id,
                 swap_token_sig: swap_token.sign(&proof_key_priv_vec[i]).unwrap(),
                 address: sce_addresses[i].clone(),
-                bst_e_prime: FE::zero(),
+                bst_e_prime: FE::new_random(),
             };
             // Valid inputs
             match sc_entity.swap_first_message(&swap_msg_1) {
@@ -912,10 +909,9 @@ mod tests {
         let mut guard = sc_entity.scheduler.lock().unwrap();
         guard.update_swap_info().unwrap();
         drop(guard);
-        //Should be in phase 2 now as all participants have sent first message
         assert_eq!(sc_entity.poll_swap(&swap_id).unwrap().unwrap(),SwapStatus::Phase2);
 
-        //There should be a blinded spend token for each of the sce addresses
+        //There should be a blinded spend signature for each of the sce addresses
         let guard = sc_entity.scheduler.lock().unwrap();
         assert_eq!(guard.bst_sig_map.get(&swap_id).unwrap().len(),
             guard.swap_info_map.get(&swap_id).unwrap().swap_token.state_chain_ids.len());
@@ -932,20 +928,19 @@ mod tests {
         )));
         let mut guard = sc_entity.scheduler.lock().unwrap();
         guard.update_swap_info().unwrap();
-        //let swap_id_valid = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
+
         let swap_id = guard.swap_id_map.iter().next().unwrap().1.to_owned();
-        // Sign swap token with no state_chain_ids
         let mut swap_info = guard.get_swap_info(&swap_id).unwrap();
+        // Sign swap token with no state_chain_ids
         swap_info.status=SwapStatus::Phase2;
         guard.swap_info_map.insert(swap_id, swap_info.clone());
         let swap_token = swap_info.swap_token;
         let state_chain_id = swap_token.state_chain_ids[0];
 
+        // Dummy signature for each state_chain_id
         let mut id_bst_map = HashMap::<Uuid, BlindedSpendSignature>::new();
-        let mut i = 0;
         for id in swap_token.state_chain_ids {
             id_bst_map.insert(id, BlindedSpendSignature::default());
-            i = i+1;
         }
         guard.bst_sig_map.insert(swap_id.clone(), id_bst_map);
         drop(guard);
@@ -959,52 +954,113 @@ mod tests {
             Ok(v) => assert!(false, "expected Err({}), got Ok({:?})", expected_err, v)
         };
 
-         let expected_err = SEError::SwapError("unknown statechain id".to_string());
+        let expected_err = SEError::SwapError("unknown statechain id".to_string());
         match sc_entity.get_blinded_spend_signature(&swap_id, &Uuid::default()){
             Err(e) => assert_eq!(e.to_string(), expected_err.to_string(), "expected Err({}), got Err({})", expected_err, e),
             Ok(v) => assert!(false, "expected Err({}), got Ok({:?})", expected_err, v)
         };
     }
 
+    // from a BSTSenderData instance, generate a BSTRequestorData and build a BlindedSpendToken
+    fn make_valid_blind_spend_token(bst_sender: &BSTSenderData, msg: &String) -> (BSTRequestorData, BlindedSpendToken) {
+        let bst_requestor = BSTRequestorData::setup(bst_sender.get_r_prime(),msg).unwrap();
+        let blind_sig = bst_sender.gen_blind_signature(bst_requestor.get_e_prime());
+        let unblind_sig = bst_requestor.unblind_signature(blind_sig);
+        let blind_spend_token = bst_requestor.make_blind_spend_token(unblind_sig);
+        (bst_requestor, blind_spend_token)
+    }
 
-    //#[test]
+    #[test]
     fn test_swap_second_message() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        let sc_entity = test_sc_entity(db);
+        let mut sc_entity = test_sc_entity(db);
+        sc_entity.scheduler = Arc::new(Mutex::new(get_scheduler(vec![(3,10),(3,10),(3,10)])));
+        let mut guard = sc_entity.scheduler.lock().unwrap();
+        guard.update_swap_info().unwrap();
 
-        let swap_id = Uuid::new_v4();
+        let swap_id = guard.swap_id_map.iter().next().unwrap().1.to_owned();
+        drop(guard);
 
-        // Blinded token invalid
-        match sc_entity.swap_second_message(&SwapMsg2 {
+        let mut swap_msg_2 = SwapMsg2 {
             swap_id,
-            blinded_spend_token: BlindedSpendToken::default()
-        }){
-            Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("Error: Blinded Token: Invalid. Token not issued by this Conductor.")),
-        }
-        match sc_entity.swap_second_message(&SwapMsg2 {
-            swap_id,
-            blinded_spend_token: BlindedSpendToken::default()
-        }){
-            Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("Error: Blinded Token: Invalid format.")),
-        }
+            blinded_spend_token: BlindedSpendToken::new_random()
+        };
 
+        // Blinded token signs for invalid message
+        match sc_entity.swap_second_message(&swap_msg_2){
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Failed to deserialize message."), e.to_string()),
+        }
+        // Blind token invalid message swapid
+        swap_msg_2.blinded_spend_token.set_msg(serde_json::to_string(&BlindedSpentTokenMessage::new(Uuid::new_v4())).unwrap());
+        match sc_entity.swap_second_message(&swap_msg_2){
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("swap_ids do not match")),
+        }
+        // Blinded token verification fails
+        let msg = serde_json::to_string(&BlindedSpentTokenMessage::new(swap_id)).unwrap();
+        swap_msg_2.blinded_spend_token.set_msg(msg.clone());
+        match sc_entity.swap_second_message(&swap_msg_2){
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Blind Spent Token signature verification failed."), e.to_string()),
+        }
         // Connection made through clear net
-        match sc_entity.swap_second_message(&SwapMsg2 {
-            swap_id,
-            blinded_spend_token: BlindedSpendToken::default()
-        }){
+        // match sc_entity.swap_second_message(&SwapMsg2 {
+        //     swap_id,
+        //     blinded_spend_token: blinded_spend_token.clone()
+        // }){
+        //     Ok(_) => assert!(false, "Expected failure."),
+        //     Err(e) => assert!(e.to_string().contains("Swap Error: Connection made via clearnet!")),
+        // }
+
+        // Create a valid BlindSpentToken
+        let mut guard = sc_entity.scheduler.lock().unwrap();
+        let swap_info = guard.get_swap_info(&swap_id).unwrap();
+        let (_, blind_spend_token) = make_valid_blind_spend_token(&swap_info.bst_sender_data, &msg);
+
+        // Add swap to scheduler
+        guard.out_addr_map.insert(swap_id, BisetMap::<SCEAddress, Option<Uuid>>::new());
+        drop(guard);
+
+        // No SCEAddresses added at the moment so we can test for all claimed here since there are no unassigned SCEAddresses.
+        swap_msg_2.blinded_spend_token = blind_spend_token;
+        match sc_entity.swap_second_message(&swap_msg_2){
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("Error: Swap Token: Signature does not sign for all data in token.")),
+            Err(e) => assert!(e.to_string().contains("All SCEAddresses have been claimed.")),
         }
 
-        // Valid inputs
-        assert!(sc_entity.swap_second_message(&SwapMsg2 {
-            swap_id,
-            blinded_spend_token: BlindedSpendToken::default()
-        }).is_ok());
+        // Add SCEAddress and check it gets claimed by this blinded_spend_token's nonce
+        let mut guard = sc_entity.scheduler.lock().unwrap();
+        let sce_addr_biset_map = guard.out_addr_map.get_mut(&swap_id).unwrap();
+        let sce_addr = SCEAddress {
+            tx_backup_addr: Address::from_str("tb1q7gjz7dnzpz06svq7v3z2wpt33erx086x66jgtn").unwrap(),
+            proof_key: PublicKey::from_str("03b97f69f86f42c65787bfcaebc9c717993fec405973f6368b3d158cb79aa27791").unwrap()
+        };
+        sce_addr_biset_map.insert(sce_addr.clone(), None);
+        drop(guard);
+
+        let _ = sc_entity.swap_second_message(&swap_msg_2);
+
+        let mut guard = sc_entity.scheduler.lock().unwrap();
+        let sce_addr_biset_map = guard.out_addr_map.get_mut(&swap_id).unwrap();
+        assert_eq!(sce_addr_biset_map.len(),1);
+        let nonce = serde_json::from_str::<BlindedSpentTokenMessage>(&swap_msg_2.blinded_spend_token.get_msg()).unwrap().nonce;
+        assert_eq!(sce_addr_biset_map.get(&sce_addr).get(0).unwrap().unwrap(),nonce);
+        drop(guard);
+
+        // Call swap_message_2 again and ensure SCEAddress is already assigned and returned sce_addr
+        let assigned_sce_addr = sc_entity.swap_second_message(&swap_msg_2).unwrap();
+        assert_eq!(assigned_sce_addr, sce_addr);
+
+        // Call with a different valid BlindedSpendToken
+        let msg = serde_json::to_string(&BlindedSpentTokenMessage::new(swap_id)).unwrap();
+        let (_, blind_spend_token) = make_valid_blind_spend_token(&swap_info.bst_sender_data, &msg);
+        swap_msg_2.blinded_spend_token = blind_spend_token;
+        match sc_entity.swap_second_message(&swap_msg_2){
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("All SCEAddresses have been claimed."), e.to_string()),
+        }
     }
 
 
