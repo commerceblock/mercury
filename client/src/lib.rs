@@ -43,9 +43,9 @@ use config::Config as ConfigRs;
 
 type Result<T> = std::result::Result<T, CError>;
 
-
 pub mod tor {
     pub static SOCKS5URL : &str = "socks5h://127.0.0.1:9050"; 
+    pub static IPIFYURL: &str = "https://api6.ipify.org?format=json";
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -177,6 +177,7 @@ impl Tor {
         let py = gil.python();
         let tordata = PyCell::new(py, self.to_owned())?;
 
+
         py_run!(py, tordata, r#"
             from stem import Signal
             from stem.control import Controller
@@ -206,16 +207,7 @@ impl ClientShim {
     }
 
     pub fn new(endpoint: String, auth_token: Option<String>, tor: Option<Tor>) -> ClientShim {
-        let client = match tor.as_ref() {
-            None => reqwest::Client::new(),
-            Some(t) => match t.enable {
-                true => reqwest::Client::builder()
-                        .proxy(reqwest::Proxy::all(&t.proxy).unwrap())
-                        .build().unwrap(),
-                false => reqwest::Client::new(),
-            }
-        };
-
+        let client = Self::new_client(tor.as_ref());
         let cs = ClientShim {
             client,
             tor,
@@ -225,16 +217,34 @@ impl ClientShim {
         cs
     }
 
-    pub fn new_tor_id(&self) -> Result<()> {
+    pub fn new_client(tor: Option<&Tor>) -> reqwest::Client {
+        match tor {
+            None => reqwest::Client::new(),
+            Some(t) => match t.enable {
+                true => reqwest::Client::builder()
+                        .proxy(reqwest::Proxy::all(&t.proxy).unwrap())
+                        .build().unwrap(),
+                false => reqwest::Client::new(),
+            }
+        }
+    }
+
+    pub fn new_tor_id(&mut self) -> Result<()> {
         match &self.tor {
             Some(t) => {
-                t.newnym()
+                t.newnym()?;
+                self.client = Self::new_client(self.tor.as_ref());
+                Ok(())
             },
             None => Err(CError::TorError("no Tor in ClientShim".to_string()))
         }
     }
 
-    //pub fn get_my_public_ip(&self) -> 
+    pub fn get_public_ip_address(&self) -> Result<String> {
+        let b = self.client.get(tor::IPIFYURL);
+        let value = b.send()?.text()?;
+        Ok(value)
+    }
 }
 
 #[cfg(test)]
@@ -256,7 +266,7 @@ pub mod tests {
     #[ignore]
     fn test_client_shim_tor_control() {
         let config = Config::get().expect("failed to get config");
-        let cs = ClientShim::from_config(&config);
+        let mut cs = ClientShim::from_config(&config);
         let _ = cs.new_tor_id().expect("failed to get new tor id");
     }
 
@@ -264,15 +274,18 @@ pub mod tests {
     #[ignore]
     fn test_tor_stats() {
         let config = Config::get().expect("failed to get config");
-        let cs = ClientShim::from_config(&config);
+        let mut cs = ClientShim::from_config(&config);
         let mut buffer = Vec::new();
         let mut sum: f32 = 0.0;
         let mut max: f32 = 0.0;
         let mut min = std::f32::MAX;
+        let old_ip = cs.get_public_ip_address().expect("failed get_public_ip_address");
         for _ in 0..10 {
             let timer = Instant::now();
             cs.new_tor_id().expect("failed to get new tor id");
             let elapsed = timer.elapsed().as_millis() as f32;
+            let new_ip = cs.get_public_ip_address().expect("failed get_public_ip_address");
+            assert!(new_ip != old_ip, "expected new ip address");
             buffer.push(elapsed);
             println!("{} ms", elapsed);
             sum = sum + elapsed;
