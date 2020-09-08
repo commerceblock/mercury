@@ -233,12 +233,14 @@ impl ClientShim {
             None => Err(CError::TorError("no Tor in ClientShim".to_string()))
         }
     }
+
+    //pub fn get_my_public_ip(&self) -> 
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
-
+    use std::time::Instant;
 
     #[test]
     #[ignore]
@@ -256,5 +258,37 @@ pub mod tests {
         let config = Config::get().expect("failed to get config");
         let cs = ClientShim::from_config(&config);
         let _ = cs.new_tor_id().expect("failed to get new tor id");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_tor_stats() {
+        let config = Config::get().expect("failed to get config");
+        let cs = ClientShim::from_config(&config);
+        let mut buffer = Vec::new();
+        let mut sum: f32 = 0.0;
+        let mut max: f32 = 0.0;
+        let mut min = std::f32::MAX;
+        for _ in 0..10 {
+            let timer = Instant::now();
+            cs.new_tor_id().expect("failed to get new tor id");
+            let elapsed = timer.elapsed().as_millis() as f32;
+            buffer.push(elapsed);
+            println!("{} ms", elapsed);
+            sum = sum + elapsed;
+            max = max.max(elapsed);
+            min = min.min(elapsed);
+        }
+        let count = buffer.len() as f32;
+        let mean = sum / count;
+        let variance: f32 = buffer.iter().map(|val| {
+            let diff = mean  - val;
+            diff * diff
+        }).sum::<f32>() / count; 
+        let stdev = variance.sqrt();
+
+        println!("Average time for new tor id is {} +/- {} ms", mean, stdev);
+        println!("Longest time: {} ms", max);
+        println!("Shortest time: {} ms", min);
     }
 }   
