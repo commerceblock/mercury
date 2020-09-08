@@ -949,7 +949,7 @@ use super::*;
         let mut phase_1_complete = false;
         let mut phase_2_complete = false;
 
-        let mut blinded_spend_token = BlindedSpendToken::from_string(String::default());
+        let blinded_spend_token = BlindedSpendToken::from_string(String::default());
 
         // Poll Status of swap and perform necessary actions for each phase.
         println!("\nBegin polling of Swap:");
