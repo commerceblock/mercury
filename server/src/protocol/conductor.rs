@@ -84,19 +84,21 @@ pub trait Conductor {
     ///         a fresh SCE_Address and e_prime for blind spend token.
     fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> Result<()>;
 
-    // Phase 2: Iff all participants have successfuly carried out Phase 1 then Conductor generates a blinded token
-    // for each participant and marks each UTXO as "in phase 2 of swap with id: x". Upon polling the
-    // participants receive 1 blinded token each.
+    // Phase 2:
+    //      Iff all participants have successfuly carried out Phase 1 then Conductor generates a blinded token
+    //      for each participant and marks each UTXO as "in phase 2 of swap with id: x". Upon polling the
+    //      participants receive 1 blinded token each.
 
-    //get the blinded spend token required for second message
-    //only possible after the first message
+    /// API:
+    ///    get the blinded spend token required for second message only possible after the first message
     fn get_blinded_spend_signature(&self, swap_id: &Uuid, statechain_id: &Uuid) -> Result<BlindedSpendSignature>;
 
-    /// API: Phase 3:
-    ///    - Participants create a new Tor identity and "spend" their blinded token to receive one
-    //         of the SCEAddress' input in phase 1.
+    /// API:
+    ///    Participants create a new Tor identity and "spend" their blinded token to receive one
+    //     of the SCEAddress' input in phase 1.
     fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> Result<SCEAddress>;
-
+    /// API:
+    ///    After completing swap_second_message this fn can be used to get the SCEAddress assigned to this BST
     fn get_address_from_blinded_spend_token(&self, bst: &BlindedSpendToken) -> Result<SCEAddress>;
 
     // Phase 3: Participants carry out transfer_sender() and signal that this transfer is a part of
@@ -188,6 +190,7 @@ pub struct Scheduler {
     bst_e_prime_map: HashMap<Uuid, HashMap<Uuid, FE>>,
     //map of swap_id to map of state chain id to blinded spend signatures
     bst_sig_map: HashMap<Uuid, HashMap<Uuid, BlindedSpendSignature>>,
+    //map of swap_id to map to state chian id to bool of signalling whether blinded spend signature has been rec
 }
 
 impl Scheduler {
@@ -343,13 +346,13 @@ impl Scheduler {
 
     //Update the swap info based on the rersults of user first/second messages
     pub fn update_swaps(&mut self) -> Result<()> {
-        for (id, swap_info) in self.swap_info_map.iter_mut() {
+        for (swap_id, swap_info) in self.swap_info_map.iter_mut() {
             match swap_info.status {
                 //Phase 1 - check if all state chain addresses have been received, if so:
                 //    - Generate a Blind Spend Tokens for each participant
                 //    - Move swap to phase 2
                 SwapStatus::Phase1 => {
-                    let out_addr_map: &BisetMap<SCEAddress, Option<Uuid>> = match self.out_addr_map.get(&id) {
+                    let out_addr_map: &BisetMap<SCEAddress, Option<Uuid>> = match self.out_addr_map.get(&swap_id) {
                         Some(out_addr_map) => out_addr_map,
                         None => return Ok(()) // BisetMap not yet created means no participants have completed swap_msg_1 yet
                     };
@@ -366,7 +369,16 @@ impl Scheduler {
                     }
                 },
                 SwapStatus::Phase2 => {
-                    //Phase 2 - Return BSTs
+                    //Phase 2 - Return BST and SCEAddresses for corresponding valid signtures
+                    //Signature ok. Add the SCEAddress to the list.
+                    let sce_addr_list = match self.out_addr_map.get(swap_id) {
+                        Some(sce_addr_list) => sce_addr_list,
+                        None => return Err(SEError::SwapError("In phase 2 but no SCEAddress<->claimed_nonce map found".to_string())),
+                    };
+                    // Check if there are any uncalimed SCEAddresses
+                    if sce_addr_list.rev_get(&None).len() == 0 {
+                        swap_info.status = SwapStatus::Phase3;
+                    }
                 },
                 SwapStatus::Phase3 => {
 
@@ -533,8 +545,7 @@ impl Conductor for SCE {
         }
     }
 
-    fn get_address_from_blinded_spend_token(&self, bst: &BlindedSpendToken) -> Result<SCEAddress>{
-        // Get message that is signed
+    fn get_address_from_blinded_spend_token(&self, bst: &BlindedSpendToken) -> Result<SCEAddress> {
         let bst_msg: BlindedSpentTokenMessage = match serde_json::from_str(&bst.get_msg()) {
             Ok(v) => v,
             Err(_) => return Err(SEError::SwapError("Failed to deserialize message.".to_string())),
@@ -1039,7 +1050,9 @@ mod tests {
 
         // Create a valid BlindSpentToken
         let mut guard = sc_entity.scheduler.lock().unwrap();
-        let swap_info = guard.get_swap_info(&swap_id).unwrap();
+        let mut swap_info = guard.get_swap_info(&swap_id).unwrap();
+        swap_info.status=SwapStatus::Phase2;
+        guard.swap_info_map.insert(swap_id, swap_info.clone());
         let (_, blind_spend_token) = make_valid_blinded_spend_token(&swap_info.bst_sender_data, &msg);
 
         // Add swap to scheduler
@@ -1084,6 +1097,12 @@ mod tests {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("All SCEAddresses have been claimed."), e.to_string()),
         }
+
+        // update swaps and check phase is updated
+        let mut guard = sc_entity.scheduler.lock().unwrap();
+        let _ = guard.update_swap_info();
+        let swap_info = guard.get_swap_info(&swap_id).unwrap();
+        assert_eq!(swap_info.status, SwapStatus::Phase3);
     }
 
     #[test]

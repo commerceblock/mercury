@@ -3,6 +3,12 @@
 //! Sign blinded message and verify that the signature is valid for the unblinded message.
 //! Following
 
+//! Based on work:
+//! Blind Signature Scheme Based on Elliptic Curve Cryptography
+//! Chwei-Shyong Tsai, Min-Shiang Hwang, Pei-Chen Sung
+//! Department of Management Information System,National Chung Hsin
+//! https://pdfs.semanticscholar.org/e58a/1713858a5b9355a9e18adfe3abfc05de244e.pdf
+
 use super::Result;
 use bitcoin::hashes::{sha256d, Hash};
 use curv::{GE, elliptic::curves::traits::{ECPoint, ECScalar}, FE, BigInt, arithmetic::traits::Converter};
