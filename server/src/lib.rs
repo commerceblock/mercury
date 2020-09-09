@@ -40,6 +40,8 @@ extern crate shared_lib;
 #[macro_use]
 extern crate serial_test;
 
+extern crate bisetmap;
+
 pub mod config;
 pub mod error;
 pub mod protocol;
@@ -242,6 +244,7 @@ pub trait Database {
 pub mod structs {
     use super::*;
 
+    #[derive(Clone)]
     pub struct StateChainAmount {
         pub chain: StateChain,
         pub amount: i64,

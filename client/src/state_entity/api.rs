@@ -58,7 +58,6 @@ pub fn get_transfer_batch_status(
     requests::get(client_shim, &format!("info/transfer-batch/{}", batch_id))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -76,7 +75,9 @@ mod tests {
                 .with_header("Content-Type", "application/json")
                 .with_body("{\"test string\"}");
 
-        let _client_shim = ClientShim::new(url,None,Some(crate::tor::SOCKS5URL.to_string()));
+        let tor = crate::Tor::default();
+
+        let _client_shim = ClientShim::new(url,None,Some(tor));
         //let test_string: String = requests::get(&client_shim, &format!("/")).expect("failed to get test string via tor");
         //assert_eq!(test_string, "test string".to_string());
     }

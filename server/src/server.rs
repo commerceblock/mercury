@@ -1,27 +1,29 @@
+use shared_lib::state_chain::StateChainSig;
+use crate::structs::StateChainOwner;
 use super::protocol::*;
+use super::protocol::conductor::Scheduler;
 use crate::Database;
 use shared_lib::mainstay;
-
 use crate::config::Config;
+
 use rocket;
 use rocket::{Rocket, Request, config::{Config as RocketConfig, Environment}};
-
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config as LogConfig, Root as LogRoot};
 use log4rs::encode::pattern::PatternEncoder;
-
 use mockall::*;
 use uuid::Uuid;
-use std::sync::{Arc, Mutex};
 use monotree::database::Database as MonotreeDatabase;
+use std::sync::{Arc, Mutex};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 pub struct StateChainEntity<T: Database + Send + Sync + 'static, D: MonotreeDatabase + Send + Sync + 'static> {
     pub config: Config,
     pub database: T,
-    pub smt: Arc<Mutex<Monotree<D, Blake3>>>
+    pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
+    pub scheduler: Arc<Mutex<Scheduler>>
 }
 
 impl<T: Database + Send + Sync + 'static, D: Database + MonotreeDatabase + Send + Sync + 'static> StateChainEntity<T,D> {
@@ -36,10 +38,27 @@ impl<T: Database + Send + Sync + 'static, D: Database + MonotreeDatabase + Send 
             hasher: Blake3::new()
         };
 
-        Ok(Self {
+        let sce = Self {
             config: config_rs,
             database: db,
-            smt: Arc::new(Mutex::new(smt))
+            smt: Arc::new(Mutex::new(smt)),
+            scheduler: Arc::new(Mutex::new(Scheduler::new()))
+        };
+
+        Self::start_conductor_thread(sce.scheduler.clone());
+        Ok(sce)
+    }
+
+    pub fn start_conductor_thread(scheduler: Arc<Mutex<Scheduler>>) -> std::thread::JoinHandle<()> {
+        std::thread::spawn(move || {
+            loop {
+                let mut guard = scheduler.lock().unwrap();
+                if let Err(e) = guard.update_swap_info() {
+                    error!("{}",&e.to_string());
+                }
+                drop(guard);
+                std::thread::sleep(std::time::Duration::from_secs(60));
+            }
         })
     }
 }
@@ -172,7 +191,7 @@ pub fn get_postgres_url(
 
 //Mock all the traits implemented by StateChainEntity so that they can
 //be called from MockStateChainEntity
-use crate::protocol::conductor::{Conductor, SwapInfo};
+use crate::protocol::conductor::{Conductor, SwapInfo, SwapStatus};
 use crate::protocol::deposit::Deposit;
 use crate::protocol::ecdsa::Ecdsa;
 use crate::protocol::transfer::{Transfer, TransferFinalizeData};
@@ -182,6 +201,7 @@ use crate::protocol::withdraw::Withdraw;
 use crate::storage;
 use crate::storage::Storage;
 use shared_lib::structs::*;
+use shared_lib::blinded_token::{BlindedSpendToken,BlindedSpendSignature};
 use monotree::{hasher::Blake3, Monotree, Hasher};
 
 mock! {
@@ -227,12 +247,16 @@ mock! {
         ) -> ecdsa::Result<Vec<Vec<u8>>>;
     }
     trait Conductor {
-        fn poll_utxo(&self, state_chain_id: Uuid) -> conductor::Result<Option<Uuid>>;
-        fn poll_swap(&self, swap_id: Uuid) -> conductor::Result<SwapInfo>;
-        fn register_utxo(&self, register_utxo_msg: RegisterUtxo) -> conductor::Result<()>;
-        fn swap_first_message(&self, swap_msg1: SwapMsg1) -> conductor::Result<()>;
-        fn swap_second_message(&self, swap_msg2: SwapMsg2) -> conductor::Result<SCEAddress>;
+        fn poll_utxo(&self, state_chain_id: &Uuid) -> conductor::Result<Option<Uuid>>;
+        fn poll_swap(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapStatus>>;
+        fn get_swap_info(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapInfo>>;
+        fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> conductor::Result<()>;
+        fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> conductor::Result<()>;
+        fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> conductor::Result<SCEAddress>;
+        fn get_blinded_spend_signature(&self, swap_id: &Uuid, state_chain_id: &Uuid) -> conductor::Result<BlindedSpendSignature>;
+        fn get_address_from_blinded_spend_token(&self, bst: &BlindedSpendToken) -> conductor::Result<SCEAddress>;
     }
+
     trait Transfer {
         fn transfer_sender(
             &self,
@@ -275,6 +299,11 @@ mock! {
         ) -> util::Result<()>;
     }
     trait Withdraw{
+        fn verify_statechain_sig(&self,
+            statechain_id: &Uuid,
+            statechain_sig: &StateChainSig,
+            user_id: Option<Uuid>)
+                -> withdraw::Result<StateChainOwner>;
         fn withdraw_init(
             &self,
             withdraw_msg1: WithdrawMsg1,

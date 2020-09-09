@@ -5,7 +5,7 @@ use bitcoin::{util::misc::hex_bytes, Transaction};
 use electrumx_client::interface::Electrumx;
 use electrumx_client::response::{
     GetBalanceResponse, GetBlockHeadersResponse, GetHistoryResponse, GetListUnspentResponse,
-    GetTransactionConfStatus,
+    GetTransactionConfStatus, GetTipResponse,
 };
 
 pub struct MockElectrum {}
@@ -17,6 +17,9 @@ impl MockElectrum {
 }
 
 impl Electrumx for MockElectrum {
+    fn get_tip_header(&mut self) -> std::result::Result<GetTipResponse, Box<dyn std::error::Error>> {
+        todo!()
+     }
     fn get_block_header(&mut self, _height: usize) -> Result<String, Box<dyn std::error::Error>> {
         todo!()
     }

@@ -12,7 +12,7 @@ use shared_lib::{
     state_chain::*,
     structs::*,
     util::{get_sighash, tx_backup_verify, tx_withdraw_verify},
-    Root,
+    Root
 };
 
 use crate::error::{DBErrorType, SEError};

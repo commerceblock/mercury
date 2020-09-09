@@ -4,77 +4,49 @@ use clap::App;
 
 use client_lib::state_entity;
 use client_lib::wallet::wallet;
-use client_lib::ClientShim;
+use client_lib::{ClientShim, Tor};
 use shared_lib::{
     mocks::mock_electrum::MockElectrum,
     structs::{SCEAddress, TransferMsg3},
 };
 
 use bitcoin::consensus;
-use config::Config as ConfigRs;
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
-use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use uuid::Uuid;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Config {
-    pub endpoint: String,
-    pub electrum_server: String,
-    pub testing_mode: bool,
-    pub with_tor: bool,
-    pub tor_proxy: String
-}
-
-impl Default for Config {
-    fn default() -> Config {
-        Config {
-            endpoint: "http://localhost:8000".to_string(),
-            electrum_server: "127.0.0.1:60401".to_string(),
-            testing_mode: true,
-            with_tor: false,
-            tor_proxy: client_lib::tor::SOCKS5URL.to_string(),
-        }
-    }
-}
 
 fn main() {
     let yaml = load_yaml!("../cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
 
-    let mut conf_rs = ConfigRs::new();
-    let _ = conf_rs
-        // First merge struct default config
-        .merge(ConfigRs::try_from(&Config::default()).unwrap())
-        .unwrap();
-    conf_rs
-        // Add in `./Settings.toml`
-        .merge(config::File::with_name("Settings").required(false))
-        .unwrap()
-        // Add in settings from the environment (with prefix "APP")
-        // Eg.. `APP_DEBUG=1 ./target/app` would set the `debug` key
-        .merge(config::Environment::with_prefix("MERC"))
-        .unwrap();
-    let se_endpoint: String = conf_rs.get("endpoint").unwrap();
-    let electrum_server_addr: String = conf_rs.get("electrum_server").unwrap();
-    let testing_mode: bool = conf_rs.get("testing_mode").unwrap();
-    let with_tor: bool = conf_rs.get("with_tor").unwrap(); 
-    let tor_proxy: Option<String> = match with_tor {
-        true => conf_rs.get("tor_proxy").ok(),
+    let conf_rs = client_lib::get_config().unwrap();
+    
+    let endpoint : String = conf_rs.get("endpoint").unwrap();
+    let electrum_server: String = conf_rs.get("electrum_server").unwrap();
+    let testing_mode : bool = conf_rs.get("testing_mode").unwrap();
+    let mut tor = Tor::from_config(&conf_rs);
+    let tor = match tor.enable {
+        true => {
+            tor.control_password = conf_rs.get("tor_control_password")
+            .expect("tor enabled - tor_control_password required");
+            Some(tor)
+        },
         false => None,
     };
+    
+    
+    println!("config tor: {:?}", tor);
         
     let _ = env_logger::try_init();
     
-    
-            // TODO: random generating of seed and allow input of mnemonic phrase
+    // TODO: random generating of seed and allow input of mnemonic phrase
     let seed = [0xcd; 32];
-    let client_shim = ClientShim::new(se_endpoint.to_string(), None, tor_proxy);
+    let client_shim = ClientShim::new(endpoint, None, tor);
 
     let electrum: Box<dyn Electrumx> = if testing_mode {
         Box::new(MockElectrum::new())
     } else {
-        Box::new(ElectrumxClient::new(electrum_server_addr).unwrap())
+        Box::new(ElectrumxClient::new(electrum_server).unwrap())
     };
 
     let network = "testnet".to_string();

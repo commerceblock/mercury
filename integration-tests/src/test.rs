@@ -167,7 +167,7 @@ mod tests {
         assert_eq!(shared_key.smt_proof.clone().unwrap().proof, proof);
         assert_eq!(
             shared_key.proof_key.clone().unwrap(),
-            receiver_addr.proof_key
+            receiver_addr.proof_key.to_string()
         );
     }
 
@@ -296,7 +296,7 @@ mod tests {
         assert_eq!(shared_key.smt_proof.clone().unwrap().proof, proof);
         assert_eq!(
             shared_key.proof_key.clone().unwrap(),
-            receiver2_addr.proof_key
+            receiver2_addr.proof_key.to_string()
         );
     }
 
@@ -449,4 +449,6 @@ mod tests {
         let err = state_entity::api::get_statechain(&wallet.client_shim, &invalid_scid);
         assert!(err.is_err());
     }
+
+
 }

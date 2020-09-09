@@ -3,7 +3,9 @@
 //! Struct definitions used in State entity protocols
 
 use crate::state_chain::{State, StateChainSig};
+use crate::blinded_token::BlindedSpendToken;
 use crate::Root;
+use crate::Signature;
 use bitcoin::{OutPoint, Transaction, TxIn, TxOut};
 use curv::{cryptographic_primitives::proofs::sigma_dlog::DLogProof, BigInt, FE, GE, PK};
 use kms::ecdsa::two_party::party2;
@@ -11,6 +13,7 @@ use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_two;
 
 use std::{collections::HashMap, fmt};
 use uuid::Uuid;
+use bitcoin::{Address, secp256k1::PublicKey};
 
 use crate::ecies::{WalletDecryptable, Encryptable, SelfEncryptable};
 use crate::ecies;
@@ -191,11 +194,12 @@ pub struct DepositMsg2 {
 // Transfer algorithm structs
 
 /// Address generated for State Entity transfer protocol
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash)]
 pub struct SCEAddress {
-    pub tx_backup_addr: String,
-    pub proof_key: String,
+    pub tx_backup_addr: Address,
+    pub proof_key: PublicKey,
 }
+impl Eq for SCEAddress{}
 
 /// Sender -> SE
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -210,7 +214,7 @@ pub struct TransferMsg2 {
     pub proof_key: ecies::PublicKey
 }
 /// Sender -> Receiver
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq,)]
 pub struct TransferMsg3 {
     pub shared_key_id: Uuid,
     pub t1: FESer, // t1 = o1x1
@@ -284,19 +288,32 @@ pub struct WithdrawMsg2 {
 pub struct RegisterUtxo {
     pub state_chain_id: Uuid,
     pub signature: StateChainSig,
+    pub swap_size: u64,
 }
 
 /// Owner -> Conductor
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SwapMsg1 {
-    pub swap_token_sig: String,
+    pub swap_id: Uuid,
+    pub state_chain_id: Uuid,
+    pub swap_token_sig: Signature,
     pub address: SCEAddress,
+    pub bst_e_prime: FE
 }
+
+// Message to request a blinded spend token
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BSTMsg {
+    pub swap_id: Uuid,
+    pub state_chain_id: Uuid,
+}
+
 
 /// Owner -> Conductor
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SwapMsg2 {
-    pub blinded_spend_token: String,
+    pub swap_id : Uuid,
+    pub blinded_spend_token: BlindedSpendToken,
 }
 
 impl Default for TransferMsg5 {
@@ -420,6 +437,8 @@ impl WalletDecryptable for &mut TransferMsg3 {
 mod tests{
     use super::*;
     use crate::util::keygen::generate_keypair;
+    use bitcoin::secp256k1::{SecretKey, Secp256k1};
+    use rand::rngs::OsRng;
     
     #[test]
     fn test_encrypt_fe_ser(){
@@ -445,10 +464,18 @@ mod tests{
     
     #[test]
     fn test_encrypt_transfer_msg3(){
-        let t1 = FESer::new_random();
-        let mut msg = TransferMsg3::default();
-        msg.t1 = t1;
-
+        let mut rng = OsRng::new().expect("OsRng");
+        let secp = Secp256k1::new();
+        let mut msg = TransferMsg3{
+            shared_key_id: Uuid::new_v4(),
+            t1: FESer::new_random(),
+            state_chain_sig: StateChainSig::default(),
+            state_chain_id: Uuid::new_v4(),
+            tx_backup_psm: PrepareSignTxMsg::default(),
+            rec_addr: SCEAddress{tx_backup_addr: Address::from_str("1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h").unwrap(), 
+            proof_key: PublicKey::from_secret_key(&secp, &SecretKey::new(&mut rng))}
+        };
+        
         let msg_clone = msg.clone();
         assert_eq!(msg, msg_clone);
         let (priv_k, pub_k) = generate_keypair();

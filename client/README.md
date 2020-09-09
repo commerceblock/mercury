@@ -4,8 +4,22 @@
 Mercury client is a bitcoin minimalist decentralized wallet CLI app with a client side
 state chain implementation.
 
-## Requirement
+## Requirements
 Mercury server is required to interact with the client, for instruction on how to run it see [here](../server/README.md).
+
+### Requirements for Tor
+In order to enable Tor, openssl and python3 should be installed. The python package "stem" is also required. 
+
+#### MacOs
+Install openssl and python3 via homebrew:
+```bash
+brew install openssl
+brew install python3
+```
+Install stem via pip3:
+```bash
+pip3 install stem
+``` 
 
 ## Installation
 ```bash
@@ -16,6 +30,25 @@ cargo build --release
 
 ## Connecting via Tor
 Requests can be routed via Tor using a socks5 proxy as follows. 
+### Installing and configuring Tor for MacOS
+1) Install tor via homebrew:
+```bash
+brew install tor
+```
+2) Copy the sample Tor configuration file:
+```bash
+cp /usr/local/etc/tor/torrc.sample /usr/local/etc/tor/torrc
+```
+3) Set a control password and control port
+```bash
+tor --hash-password "<Tor control password>"
+```
+4) Edit the torrc file to include the following lines, replacing the password hash with the one generated above:
+```
+ControlPort 9051
+HashedControlPassword 16:872860B76453A77D60CA2BB8C1A7042072093276A3D701AD684053EC4C
+```
+
 ### MacOS:
 1) Install tor if not already installed:
 ```bash
@@ -27,16 +60,23 @@ brew services start tor
 ```
 3) Configure the client to use connect via Tor with the following lines in Settings.toml:
 ```toml
-with_tor = "true"
+[tor]
+enable = true
 ```
-The default URL "socks5h://127.0.0.1:9050" will be used - if the Tor service is using a different URL configure it as follows:
+The default URL "socks5h://127.0.0.1:9050" and control port 9051 will be used - if the Tor service is using a different URL and/or control port configure it as follows:
 ```toml
-tor_proxy = "<Tor proxy URL>"
+[tor]
+enable = true
+proxy = "<Tor proxy URL>"
+control_port="<Tor control port>"
+control_password="<Tor control password>"
 ```
 As usual, the following environment variables will override the above settings:
 ```bash
-export MERC_WITH_TOR="true"
+export MERC_TOR_ENABLE="true"
 export MERC_TOR_PROXY="<Tor proxy URL>"
+export MERC_TOR_CONTROL_PORT="<Tor control port>"
+export MERC_TOR_CONTROL_PASSWORD="<Tor control password>"
 ```
 
 ## Using the CLI

@@ -11,7 +11,7 @@ use std::fmt;
 use std::num::ParseIntError;
 
 /// Client specific errors
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub enum CError {
     /// Generic error from string error message
     Generic(String),
@@ -80,8 +80,32 @@ impl From<serde_json::Error> for CError {
     }
 }
 
+impl From<bitcoin::secp256k1::Error> for CError {
+    fn from(e: bitcoin::secp256k1::Error) -> CError {
+        CError::Generic(e.to_string())
+    }
+}
+
+impl From<()> for CError {
+    fn from(_e: ()) -> CError {
+        CError::Generic(String::default())
+    }
+}
+
+impl From<pyo3::PyErr> for CError {
+    fn from(e: pyo3::PyErr) -> CError {
+        CError::Generic(format!("a python error occured: {:?}",e))
+    }
+}
+
+impl std::convert::From<config::ConfigError> for CError {
+    fn from(e: config::ConfigError) -> CError {
+        CError::Generic(e.to_string())
+    }
+}
+
 /// Wallet error types
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub enum WalletErrorType {
     NotEnoughFunds,
     KeyNotFound,
