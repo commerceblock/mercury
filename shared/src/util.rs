@@ -5,6 +5,8 @@
 use super::Result;
 use crate::error::SharedLibError;
 use crate::structs::PrepareSignTxMsg;
+#[cfg(test)]
+use crate::Verifiable;
 
 use bitcoin::{
     blockdata::script::Builder,
@@ -254,16 +256,15 @@ pub fn tx_withdraw_build(
 }
 
 pub mod keygen {
-    pub use bitcoin::secp256k1::{key::SecretKey, Message, Secp256k1};
+    pub use bitcoin::secp256k1::{key::SecretKey, Message, Secp256k1, PublicKey};
     pub use bitcoin::util;
     pub use bitcoin::{Amount, Network, OutPoint, Script};
     pub use rand::rngs::OsRng;
     pub const NETWORK: bitcoin::network::constants::Network = Network::Regtest;
     /// generate bitcoin::util::key key pair
     pub fn generate_keypair() -> (util::key::PrivateKey, util::key::PublicKey) {
-        let secp = Secp256k1::new();
-        let mut rng = OsRng::new().expect("OsRng");
-        let secret_key = SecretKey::new(&mut rng);
+       let secp = Secp256k1::new();
+        let secret_key = generate_secret_key();
         let priv_key = util::key::PrivateKey {
             compressed: false,
             network: NETWORK,
@@ -271,6 +272,18 @@ pub mod keygen {
         };
         let pub_key = util::key::PublicKey::from_private_key(&secp, &priv_key);
         return (priv_key, pub_key);
+    }
+
+    pub fn generate_secp_keypair() -> (SecretKey, PublicKey) {
+        let secp = Secp256k1::new();
+        let secret_key = generate_secret_key();
+        let pub_key = PublicKey::from_secret_key(&secp, &secret_key);
+        return (secret_key, pub_key);
+    }
+
+    pub fn generate_secret_key() -> SecretKey {
+        let mut rng = OsRng::new().expect("OsRng");
+        SecretKey::new(&mut rng)
     }
 }
 
@@ -333,6 +346,6 @@ pub mod tests {
         let message = Message::from_slice(&[0xab; 32]).expect("32 bytes");
 
         let sig = secp.sign(&message, &priv_key.key);
-        assert!(secp.verify(&message, &sig, &pub_key.key).is_ok());
+        assert!(sig.verify_btc(&pub_key, &message).is_ok());
     }
 }

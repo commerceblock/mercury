@@ -12,7 +12,7 @@ use shared_lib::{
     state_chain::*,
     structs::*,
     util::{get_sighash, tx_backup_verify, tx_withdraw_verify},
-    Root, error::SharedLibError,
+    Root
 };
 
 use crate::error::{DBErrorType, SEError};
@@ -34,11 +34,12 @@ use uuid::Uuid;
 //type of StateChainEntity here
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
-        use crate::MockDatabase as DB;
-        type SCE = StateChainEntity::<DB>;
+        use crate::MockDatabase;
+        use monotree::database::MemoryDB;
+        type SCE = StateChainEntity::<MockDatabase, MemoryDB>;
     } else {
-        use crate::PGDatabase as DB;
-        type SCE = StateChainEntity::<DB>;
+        use crate::PGDatabase;
+        type SCE = StateChainEntity::<PGDatabase, PGDatabase>;
     }
 }
 
@@ -105,7 +106,7 @@ impl Utilities for SCE {
         }
 
         Ok(gen_proof_smt(
-            &self.config.smt_db_loc,
+            self.smt.clone(),
             &Some(smt_proof_msg.root.hash()),
             &smt_proof_msg.funding_txid,
         )?)
@@ -362,7 +363,7 @@ pub fn reset_test_dbs(
     sc_entity: State<SCE>,
 ) -> Result<Json<()>> {
     if sc_entity.config.testing_mode {
-        match sc_entity.database.reset(&sc_entity.config.smt_db_loc) {
+        match sc_entity.database.reset() {
             Ok(res) => return Ok(Json(res)),
             Err(e) => return Err(e),
         }
@@ -370,24 +371,39 @@ pub fn reset_test_dbs(
     return Err(SEError::Generic(String::from("Cannot reset Databases when not in testing mode.")))
 }
 
-use monotree::Monotree;
-use std::convert::TryInto;
-
-#[post("/test/put-smt-value", format = "json", data = "<smt_proof_msg>")]
-pub fn put_smt_value(
+#[derive(Serialize, Deserialize)]
+pub struct SMTTest {
+    key: String,
+    entry: String
+}
+#[post("/test/put-smt-value", format = "json", data = "<input>")]
+pub fn put_smt_value_test(
     sc_entity: State<SCE>,
-    smt_proof_msg: Json<SmtProofMsgAPI>,
+    input: Json<SMTTest>
 ) -> Result<Json<()>> {
     if sc_entity.config.testing_mode {
-        let smt_proof_msg = smt_proof_msg.into_inner();
-        let entry_str = "00000000000000000000356568b04eb4ce6e944d113d8c45892bfbd06a5ba946".to_string();
-        let key: &monotree::Hash = smt_proof_msg.funding_txid[..32].as_bytes().try_into().unwrap();
-        let entry: &monotree::Hash = entry_str[..32].as_bytes().try_into().unwrap();
+        let key = input.key.clone();
+        let entry = input.entry.clone();
+        let db = &sc_entity.database;
 
-        let mut tree = Monotree::<monotree::database::RocksDB, monotree::hasher::Blake2b>::new(&sc_entity.config.smt_db_loc);
-        let new_root = tree.insert(smt_proof_msg.root.value.as_ref(), key, entry).unwrap();
-        println!("put_smt_value new_root: {:?}", new_root);
+        let current_root_id = db.root_get_current_id()?;
+        println!("current_root_id: {:?}",current_root_id);
+        let current_root = db.get_root(current_root_id)?;
+        println!("current_root: {:?}",current_root);
+
+        let new_root_hash = update_statechain_smt(
+            sc_entity.smt.clone(),
+            &current_root.clone().map(|r| r.hash()),
+            &key,
+            &entry,
+        )?;
+
+        let new_root = Root::from_hash(&new_root_hash.unwrap());
+        sc_entity.update_root(&new_root)?; // Update current root
+
+        println!("put_smt_value new_root: {:?}", new_root_hash);
         println!("put_smt_value put entry {:?} into key {:?}", entry, key);
+
     } else {
         return Err(SEError::Generic(String::from("Testing mode only.")))
     }
@@ -395,16 +411,26 @@ pub fn put_smt_value(
     Ok(Json(()))
 }
 
-#[post("/test/get-smt-value", format = "json", data = "<smt_proof_msg>")]
-pub fn get_smt_value(
+#[post("/test/get-smt-proof", format = "json", data = "<input>")]
+pub fn get_smt_proof_test(
     sc_entity: State<SCE>,
-    smt_proof_msg: Json<SmtProofMsgAPI>,
+    input: Json<SMTTest>
 ) -> Result<Json<()>> {
     if sc_entity.config.testing_mode {
-        let key: &monotree::Hash = smt_proof_msg.funding_txid[..32].as_bytes().try_into().unwrap();
-        let mut tree = Monotree::<monotree::database::RocksDB, monotree::hasher::Blake2b>::new(&sc_entity.config.smt_db_loc);
-        let resp = tree.get(smt_proof_msg.root.value.as_ref(), key);
-        println!("resp from get_smt_value: {:?}", resp);
+        let key = input.key.clone();
+        let db = &sc_entity.database;
+
+        let current_root_id = db.root_get_current_id()?;
+        println!("current_root_id: {:?}",current_root_id);
+        let current_root = db.get_root(current_root_id)?;
+        println!("current_root: {:?}",current_root);
+
+        let proof = gen_proof_smt(
+            sc_entity.smt.clone(),
+            &current_root.clone().map(|r| r.hash()),
+            &key
+        );
+        println!("proof from get_smt_value: {:?}", proof);
     } else {
         return Err(SEError::Generic(String::from("Testing mode only.")))
     }
@@ -551,7 +577,7 @@ impl SCE {
     }
 }
 
-impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
+impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 'static> Storage for StateChainEntity<T, D> {
      /// Update the database and the mainstay slot with the SMT root, if applicable
      fn update_root(&self, root: &Root) -> Result<i64> {
          let db = &self.database;
@@ -581,7 +607,7 @@ impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
         let current_root = db.get_root(current_root_id)?;
 
         let new_root_hash = update_statechain_smt(
-            &self.config.smt_db_loc,
+            self.smt.clone(),
             &current_root.clone().map(|r| r.hash()),
             funding_txid,
             proof_key,
@@ -817,7 +843,7 @@ pub mod mocks {
         pub fn post_commitment() -> Mock {
             mock("POST", "/commitment/send")
             .match_header("content-type", "application/json")
-            .with_body(serde_json::json!({"response":"Commitment added","timestamp":1541761540,"allowance":{"cost":4832691}}).to_string())
+            .with_body(json!({"response":"Commitment added","timestamp":1541761540,"allowance":{"cost":4832691}}).to_string())
             .with_header("content-type", "application/json")
         }
 
@@ -867,6 +893,7 @@ pub mod tests {
     use crate::MockDatabase;
     use std::str::FromStr;
     use std::convert::TryInto;
+    use monotree::database::{Database as monotreeDatabase, MemoryDB};
 
     // Useful data structs for tests throughout codebase
     pub static BACKUP_TX_NOT_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
@@ -875,7 +902,7 @@ pub mod tests {
     pub static STATE_CHAIN_SIG: &str = "{ \"purpose\": \"TRANSFER\", \"data\": \"024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766\", \"sig\": \"3045022100e1171094db96e68392bb2a72695dc7cbce86db7be9d2e943444b6fa08877eec9022036dc63a3b2536d8e2327e0f44ff990f18e6166dce66d87bdcb57f825158a507c\"}";
 
     pub fn test_sc_entity(db: MockDatabase) -> SCE {
-        let mut sc_entity = SCE::load(db).unwrap();
+        let mut sc_entity = SCE::load(db, MemoryDB::new("")).unwrap();
         sc_entity.config.mainstay = Some(mainstay::MainstayConfig::mock_from_url(&test_url()));
         sc_entity
     }
@@ -981,7 +1008,7 @@ pub mod tests {
             .unwrap();
 
         let hash_exp: [u8; 32] =
-            hex::decode("bdb8618ea37b27b771da7609b30860568f3e81a2951e62b03f76cd34b14242fc")
+            hex::decode("cfeecaedcbaa90b750637ad2044b2e4b6425bd1430fc7250dceb28053a7e2733")
                 .unwrap()[..]
                 .try_into()
                 .unwrap();

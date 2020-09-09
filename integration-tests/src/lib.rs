@@ -25,6 +25,7 @@ use std::sync::mpsc::RecvTimeoutError;
 use std::time::Instant;
 use std::thread;
 use uuid::Uuid;
+use monotree::database::{Database as monotreeDatabase, MemoryDB};
 
 extern crate stoppable_thread;
 
@@ -88,7 +89,7 @@ fn spawn_server(self, mainstay_config: Option<mainstay::MainstayConfig>)
 
     // Rocket server is blocking, so we spawn a new thread.
     let handle = thread::spawn(||{
-            match server::get_server::<Self>(mainstay_config, self) {
+            match server::get_server::<Self, PGDatabase>(mainstay_config, self, PGDatabase::get_new()) {
                 Ok(s) => {
                     let try_launch = s.launch();
                     let _ = try_launch.kind(); // LaunchError needs to be accessed here for this to work. Be carfeul modifying this code.
@@ -97,7 +98,7 @@ fn spawn_server(self, mainstay_config: Option<mainstay::MainstayConfig>)
                 Err(_) => SpawnError::GetServer,
             }
     });
-    std::thread::sleep(std::time::Duration::from_secs(5));
+    std::thread::sleep(std::time::Duration::from_secs(7));
     handle
     }
 }
@@ -112,7 +113,8 @@ impl SpawnServer for MockDatabase {
 
         // Rocket server is blocking, so we spawn a new thread.
         let handle = thread::spawn(||{
-                match server::get_server::<Self>(mainstay_config, self) {
+            let db_smt = MemoryDB::new("");
+                match server::get_server::<Self, MemoryDB>(mainstay_config, self, db_smt) {
                     Ok(s) => {
                         let try_launch = s.launch();
                         let _ = try_launch.kind(); // LaunchError needs to be accessed here for this to work. Be carfeul modifying this code.
@@ -131,7 +133,7 @@ pub fn gen_wallet() -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
-        ClientShim::new("http://localhost:8000".to_string(), None).unwrap(),
+        ClientShim::new("http://localhost:8000".to_string(), None, None),
         Box::new(MockElectrum::new()),
     );
 
@@ -146,7 +148,7 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
-        ClientShim::new("http://localhost:8000".to_string(), None).unwrap(),
+        ClientShim::new("http://localhost:8000".to_string(), None, None),
         Box::new(MockElectrum::new()),
     );
 

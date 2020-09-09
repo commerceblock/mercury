@@ -34,6 +34,8 @@ pub enum SEError {
     SharedLibError(String),
     /// Inherit errors from Monotree
     SMTError(String),
+    /// Swap error
+    SwapError(String)
 }
 
 impl From<String> for SEError {
@@ -68,6 +70,14 @@ impl From<PostgresError> for SEError {
 }
 impl From<ConfigError> for SEError {
     fn from(e: ConfigError) -> SEError {
+        SEError::Generic(e.to_string())
+    }
+}
+
+impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, 
+          crate::protocol::conductor::Scheduler>>> for SEError {
+    fn from(e: std::sync::PoisonError<std::sync::MutexGuard<'_, 
+    crate::protocol::conductor::Scheduler>>) -> SEError {
         SEError::Generic(e.to_string())
     }
 }
@@ -108,6 +118,7 @@ impl fmt::Display for SEError {
             SEError::SigningError(ref e) => write!(f, "Signing Error: {}", e),
             SEError::SharedLibError(ref e) => write!(f, "SharedLibError Error: {}", e),
             SEError::SMTError(ref e) => write!(f, "SMT Error: {}", e),
+            SEError::SwapError(ref e) => write!(f, "Swap Error: {}", e),
         }
     }
 }

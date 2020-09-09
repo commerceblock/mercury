@@ -1,39 +1,68 @@
+use shared_lib::state_chain::StateChainSig;
+use crate::structs::StateChainOwner;
 use super::protocol::*;
+use super::protocol::conductor::Scheduler;
 use crate::Database;
-
-use crate::config::SMT_DB_LOC_TESTING;
 use shared_lib::mainstay;
-
 use crate::config::Config;
+
 use rocket;
 use rocket::{Rocket, Request, config::{Config as RocketConfig, Environment}};
-
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config as LogConfig, Root as LogRoot};
 use log4rs::encode::pattern::PatternEncoder;
+
 use std::thread;
 use crate::watch::watch_node;
 
 use mockall::*;
 use uuid::Uuid;
+use monotree::database::Database as MonotreeDatabase;
+use std::sync::{Arc, Mutex};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-pub struct StateChainEntity<T: Database + Send + Sync + 'static> {
+pub struct StateChainEntity<T: Database + Send + Sync + 'static, D: MonotreeDatabase + Send + Sync + 'static> {
     pub config: Config,
     pub database: T,
+    pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
+    pub scheduler: Arc<Mutex<Scheduler>>
 }
 
-impl<T: Database + Send + Sync + 'static> StateChainEntity<T> {
-    pub fn load(mut db: T) -> Result<StateChainEntity<T>> {
+impl<T: Database + Send + Sync + 'static, D: Database + MonotreeDatabase + Send + Sync + 'static> StateChainEntity<T,D> {
+    pub fn load(mut db: T, mut db_smt: D) -> Result<StateChainEntity<T,D>> {
         // Get config as defaults, Settings.toml and env vars
         let config_rs = Config::load()?;
         db.set_connection_from_config(&config_rs)?;
+        db_smt.set_connection_from_config(&config_rs)?;
 
-        Ok(Self {
+        let smt = Monotree {
+            db: db_smt,
+            hasher: Blake3::new()
+        };
+
+        let sce = Self {
             config: config_rs,
             database: db,
+            smt: Arc::new(Mutex::new(smt)),
+            scheduler: Arc::new(Mutex::new(Scheduler::new()))
+        };
+
+        Self::start_conductor_thread(sce.scheduler.clone());
+        Ok(sce)
+    }
+
+    pub fn start_conductor_thread(scheduler: Arc<Mutex<Scheduler>>) -> std::thread::JoinHandle<()> {
+        std::thread::spawn(move || {
+            loop {
+                let mut guard = scheduler.lock().unwrap();
+                if let Err(e) = guard.update_swap_info() {
+                    error!("{}",&e.to_string());
+                }
+                drop(guard);
+                std::thread::sleep(std::time::Duration::from_secs(60));
+            }
         })
     }
 }
@@ -53,15 +82,23 @@ fn not_found(req: &Request) -> String {
     format!("Unknown route '{}'.", req.uri())
 }
 
-use std::marker::{Send, Sync};
-
 /// Start Rocket Server. mainstay_config parameter overrides Settings.toml and env var settings.
 /// If no db provided then use mock
-pub fn get_server<T: Database + Send + Sync + 'static>
+pub fn get_server<T: Database + Send + Sync + 'static, D: Database + MonotreeDatabase + Send + Sync + 'static>
     (mainstay_config: Option<mainstay::MainstayConfig>,
-        db: T) -> Result<Rocket> {
+        db: T, db_smt: D) -> Result<Rocket> {
 
-    let mut sc_entity = StateChainEntity::<T>::load(db)?;
+    let mut sc_entity = StateChainEntity::<T, D>::load(db, db_smt)?;
+
+    set_logging_config(&sc_entity.config.log_file);
+
+    // Initialise DBs
+    sc_entity.database.init()?;
+    if sc_entity.config.testing_mode {
+        info!("Server running in testing mode.");
+        // reset dbs
+        sc_entity.database.reset()?;
+    }
 
     match mainstay_config {
         Some(c) => sc_entity.config.mainstay = Some(c),
@@ -73,10 +110,9 @@ pub fn get_server<T: Database + Send + Sync + 'static>
         panic!("expected mainstay config");
     }
 
-    set_logging_config(&sc_entity.config.log_file);
-
     let rocket_config = get_rocket_config(&sc_entity.config);
 
+<<<<<<< HEAD
     if sc_entity.config.testing_mode {
         info!("Server running in testing mode.");
         // Use test SMT DB
@@ -140,6 +176,43 @@ pub fn get_server<T: Database + Send + Sync + 'static>
             .manage(sc_entity);
         Ok(rock)
     }
+=======
+    let rock = rocket::custom(rocket_config)
+        .register(catchers![internal_error, not_found, bad_request])
+        .mount(
+            "/",
+            routes![
+                ping::ping,
+                ecdsa::first_message,
+                ecdsa::second_message,
+                ecdsa::third_message,
+                ecdsa::fourth_message,
+                ecdsa::sign_first,
+                ecdsa::sign_second,
+                util::get_statechain,
+                util::get_smt_root,
+                //util::get_confirmed_smt_root,
+                util::get_smt_proof,
+                util::get_fees,
+                util::prepare_sign_tx,
+                util::get_transfer_batch_status,
+                util::reset_test_dbs, // !!
+                util::get_smt_proof_test,
+                util::put_smt_value_test,
+                deposit::deposit_init,
+                deposit::deposit_confirm,
+                transfer::transfer_sender,
+                transfer::transfer_receiver,
+                transfer_batch::transfer_batch_init,
+                transfer_batch::transfer_reveal_nonce,
+                withdraw::withdraw_init,
+                withdraw::withdraw_confirm
+            ],
+        )
+        .manage(sc_entity);
+
+    Ok(rock)
+>>>>>>> master
 }
 
 fn set_logging_config(log_file: &String) {
@@ -188,7 +261,7 @@ pub fn get_postgres_url(
 
 //Mock all the traits implemented by StateChainEntity so that they can
 //be called from MockStateChainEntity
-use crate::protocol::conductor::{Conductor, SwapInfo};
+use crate::protocol::conductor::{Conductor, SwapInfo, SwapStatus};
 use crate::protocol::deposit::Deposit;
 use crate::protocol::ecdsa::Ecdsa;
 use crate::protocol::transfer::{Transfer, TransferFinalizeData};
@@ -198,6 +271,8 @@ use crate::protocol::withdraw::Withdraw;
 use crate::storage;
 use crate::storage::Storage;
 use shared_lib::structs::*;
+use shared_lib::blinded_token::{BlindedSpendToken,BlindedSpendSignature};
+use monotree::{hasher::Blake3, Monotree, Hasher};
 
 mock! {
     StateChainEntity{}
@@ -242,12 +317,16 @@ mock! {
         ) -> ecdsa::Result<Vec<Vec<u8>>>;
     }
     trait Conductor {
-        fn poll_utxo(&self, state_chain_id: Uuid) -> conductor::Result<Option<Uuid>>;
-        fn poll_swap(&self, swap_id: Uuid) -> conductor::Result<SwapInfo>;
-        fn register_utxo(&self, register_utxo_msg: RegisterUtxo) -> conductor::Result<()>;
-        fn swap_first_message(&self, swap_msg1: SwapMsg1) -> conductor::Result<()>;
-        fn swap_second_message(&self, swap_msg2: SwapMsg2) -> conductor::Result<SCEAddress>;
+        fn poll_utxo(&self, state_chain_id: &Uuid) -> conductor::Result<Option<Uuid>>;
+        fn poll_swap(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapStatus>>;
+        fn get_swap_info(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapInfo>>;
+        fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> conductor::Result<()>;
+        fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> conductor::Result<()>;
+        fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> conductor::Result<SCEAddress>;
+        fn get_blinded_spend_signature(&self, swap_id: &Uuid, state_chain_id: &Uuid) -> conductor::Result<BlindedSpendSignature>;
+        fn get_address_from_blinded_spend_token(&self, bst: &BlindedSpendToken) -> conductor::Result<SCEAddress>;
     }
+
     trait Transfer {
         fn transfer_sender(
             &self,
@@ -290,6 +369,11 @@ mock! {
         ) -> util::Result<()>;
     }
     trait Withdraw{
+        fn verify_statechain_sig(&self,
+            statechain_id: &Uuid,
+            statechain_sig: &StateChainSig,
+            user_id: Option<Uuid>)
+                -> withdraw::Result<StateChainOwner>;
         fn withdraw_init(
             &self,
             withdraw_msg1: WithdrawMsg1,

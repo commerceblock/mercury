@@ -14,7 +14,7 @@ use crate::{
         SEError,
     },
     structs::*,
-    Database, DatabaseR, DatabaseW, PGDatabase,
+    Database, DatabaseR, DatabaseW, PGDatabase, PGDatabaseSmt,
 };
 use bitcoin::hashes::sha256d;
 use chrono::NaiveDateTime;
@@ -26,11 +26,12 @@ use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, par
 use rocket_contrib::databases::postgres::{rows::Row, types::ToSql};
 use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
-use rocksdb::{Options, DB};
 use shared_lib::state_chain::*;
 use shared_lib::{mainstay, Root};
 use std::collections::HashMap;
 use uuid::Uuid;
+
+use monotree::database::MemCache;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Alpha {
@@ -62,6 +63,7 @@ pub enum Table {
     TransferBatch,
     Root,
     BackupTxs,
+    Smt,
 }
 impl Table {
     pub fn to_string(&self) -> String {
@@ -142,6 +144,10 @@ pub enum Column {
     // Id,
     Value,
     CommitmentInfo,
+
+    // Smt
+    Key,
+    // Value
 }
 
 impl Column {
@@ -163,7 +169,7 @@ impl PGDatabase {
         }
     }
 
-    fn database_r(&self) -> Result<DatabaseR> {
+    pub fn database_r(&self) -> Result<DatabaseR> {
         match &self.pool {
             Some(p) => match p.get() {
                         Ok(c) => Ok(DatabaseR(c)),
@@ -175,7 +181,7 @@ impl PGDatabase {
         }
     }
 
-    fn database_w(&self) -> Result<DatabaseW> {
+    pub fn database_w(&self) -> Result<DatabaseW> {
         match &self.pool {
             Some(p) => match p.get() {
                         Ok(c) => Ok(DatabaseW(c)),
@@ -187,32 +193,25 @@ impl PGDatabase {
         }
     }
 
-    pub fn init(&self) -> Result<()> {
-        self.make_tables()
-    }
-
     /// Build DB tables and Schemas
     pub fn make_tables(&self) -> Result<()> {
         // Create Schemas if they do not already exist
         let _ = self.database_w()?.execute(
-            &format!(
-                "
-            CREATE SCHEMA IF NOT EXISTS statechainentity;",
-            ),
+            &format!("
+            CREATE SCHEMA IF NOT EXISTS statechainentity;
+            "),
             &[],
         )?;
         let _ = self.database_w()?.execute(
-            &format!(
-                "
-            CREATE SCHEMA IF NOT EXISTS watcher;",
-            ),
+            &format!("
+            CREATE SCHEMA IF NOT EXISTS watcher;
+            "),
             &[],
         )?;
 
         // Create tables if they do not already exist
         self.database_w()?.execute(
-            &format!(
-                "
+            &format!("
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 statechainid uuid,
@@ -232,8 +231,7 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!(
-                "
+            &format!("
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 keygenfirstmsg varchar,
@@ -258,8 +256,7 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!(
-                "
+            &format!("
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 chain varchar,
@@ -274,8 +271,7 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!(
-                "
+            &format!("
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 statechainsig varchar,
@@ -288,8 +284,7 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!(
-                "
+            &format!("
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 starttime timestamp,
@@ -305,8 +300,7 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!(
-                "
+            &format!("
             CREATE TABLE IF NOT EXISTS {} (
                 id BIGSERIAL,
                 value varchar,
@@ -319,8 +313,7 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!(
-                "
+            &format!("
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 txbackup varchar,
@@ -328,6 +321,18 @@ impl PGDatabase {
                 PRIMARY KEY (id)
             );",
                 Table::BackupTxs.to_string(),
+            ),
+            &[],
+        )?;
+
+        self.database_w()?.execute(
+            &format!("
+            CREATE TABLE IF NOT EXISTS {} (
+                key varchar,
+                value varchar,
+                PRIMARY KEY (key)
+            );",
+                Table::Smt.to_string(),
             ),
             &[],
         )?;
@@ -361,7 +366,7 @@ impl PGDatabase {
         self.database_w()?.execute(
             &format!(
                 "
-            TRUNCATE {},{},{},{},{},{},{} RESTART IDENTITY;",
+            TRUNCATE {},{},{},{},{},{},{},{} RESTART IDENTITY;",
                 Table::UserSession.to_string(),
                 Table::Ecdsa.to_string(),
                 Table::StateChain.to_string(),
@@ -369,6 +374,7 @@ impl PGDatabase {
                 Table::TransferBatch.to_string(),
                 Table::Root.to_string(),
                 Table::BackupTxs.to_string(),
+                Table::Smt.to_string(),
             ),
             &[],
         )?;
@@ -596,14 +602,32 @@ impl PGDatabase {
 }
 
 impl Database for PGDatabase {
+    fn init(&self) -> Result<()> {
+        self.make_tables()
+    }
+
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self {
         Self {
-           pool: Some(pool)
+           pool: Some(pool),
+           smt: PGDatabaseSmt {
+               table_name: Table::Smt.to_string(),
+               cache: MemCache::new(),
+               batch_on: false,
+               batch: HashMap::new()
+           }
         }
     }
 
     fn get_new() -> Self {
-        Self { pool : None }
+        Self {
+            pool : None,
+            smt: PGDatabaseSmt {
+                table_name: Table::Smt.to_string(),
+                cache: MemCache::new(),
+                batch_on: false,
+                batch: HashMap::new()
+            }
+        }
     }
 
     fn set_connection_from_config(&mut self, config: &crate::config::Config) -> Result<()> {
@@ -617,7 +641,7 @@ impl Database for PGDatabase {
         self.set_connection(&rocket_url)
     }
 
-    fn set_connection(&mut self, url: &String) -> Result<()>{
+    fn set_connection(&mut self, url: &String) -> Result<()> {
         match Self::get_postgres_connection_pool(url){
             Ok(p) => {
                 self.pool = Some(p.clone());
@@ -628,13 +652,9 @@ impl Database for PGDatabase {
         }
     }
 
-    fn reset(&self, smt_db_loc: &String) -> Result<()>{
+    fn reset(&self) -> Result<()> {
         // truncate all postgres tables
-        self.truncate_tables()?;
-
-        // Destroy Sparse Merkle Tree RocksDB instance
-        let _ = DB::destroy(&Options::default(), smt_db_loc); // ignore error
-        Ok(())
+        self.truncate_tables()
     }
 
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid> {
@@ -1448,10 +1468,6 @@ impl Database for PGDatabase {
         eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg,
         eph_ec_key_pair_party1: party_one::EphEcKeyPair,
     ) -> Result<()> {
-        //    user_id,
-        //    sign_msg1.eph_key_gen_first_message_party_two,
-        //    eph_ec_key_pair_party1
-        //) -> Result<()> {
 
         self.update(
             &user_id,
@@ -1462,9 +1478,6 @@ impl Database for PGDatabase {
                 &Self::ser(eph_ec_key_pair_party1)?,
             ],
         )?;
-
-        //}
-
         Ok(())
     }
 

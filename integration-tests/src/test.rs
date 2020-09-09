@@ -30,7 +30,7 @@ mod tests {
     #[serial]
     fn test_failed_auth() {
         let _handle = start_server();
-        let client_shim = ClientShim::new("http://localhost:8000".to_string(), None).unwrap();
+        let client_shim = ClientShim::new("http://localhost:8000".to_string(), None, None);
         let secret_key: FE = ECScalar::new_random();
         let invalid_key = Uuid::new_v4();
         let err = ecdsa::get_master_key(
@@ -167,7 +167,7 @@ mod tests {
         assert_eq!(shared_key.smt_proof.clone().unwrap().proof, proof);
         assert_eq!(
             shared_key.proof_key.clone().unwrap(),
-            receiver_addr.proof_key
+            receiver_addr.proof_key.to_string()
         );
     }
 
@@ -296,7 +296,7 @@ mod tests {
         assert_eq!(shared_key.smt_proof.clone().unwrap().proof, proof);
         assert_eq!(
             shared_key.proof_key.clone().unwrap(),
-            receiver2_addr.proof_key
+            receiver2_addr.proof_key.to_string()
         );
     }
 
@@ -369,7 +369,7 @@ mod tests {
         let wallet_json = wallet.to_json();
         let wallet_rebuilt = wallet::wallet::Wallet::from_json(
             wallet_json,
-            ClientShim::new("http://localhost:8000".to_string(), None).unwrap(),
+            ClientShim::new("http://localhost:8000".to_string(), None, None),
             Box::new(MockElectrum::new()),
         )
         .unwrap();
@@ -417,7 +417,7 @@ mod tests {
         let mut db = MockDatabase::new();
         let wallet = gen_wallet();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_reset().returning(|_|Ok(()));
+        db.expect_reset().returning(|| Ok(()));
         let invalid_scid = Uuid::new_v4();
         db.expect_get_statechain_amount().
         returning(|_x|Err(server_lib::error::SEError::DBError(server_lib::error::DBErrorType::NoDataForID, "".to_string())));
@@ -449,4 +449,6 @@ mod tests {
         let err = state_entity::api::get_statechain(&wallet.client_shim, &invalid_scid);
         assert!(err.is_err());
     }
+
+
 }
