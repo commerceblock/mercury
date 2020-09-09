@@ -91,6 +91,7 @@ pub enum Column {
     ProofKey,
     StateChainId,
     TxBackup,
+    LockTime,
     TxWithdraw,
     SigHash,
     S2,
@@ -157,7 +158,7 @@ impl PGDatabase {
         match r2d2::Pool::new(manager){
             Ok(m) => Ok(m),
             Err(e) => Err(SEError::DBError(ConnectionFailed,
-                format!("Failed to get postgres connection managerfor rocket url {}: {}",
+                format!("Failed to get postgres connection manager for rocket url {}: {}",
                         url, e)))
         }
     }
@@ -222,6 +223,7 @@ impl PGDatabase {
                 txwithdraw varchar,
                 proofkey varchar,
                 txbackup varchar,
+                locktime varchar,
                 PRIMARY KEY (id)
             );",
                 Table::UserSession.to_string(),
@@ -322,6 +324,7 @@ impl PGDatabase {
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 txbackup varchar,
+                locktime varchar,
                 PRIMARY KEY (id)
             );",
                 Table::BackupTxs.to_string(),
@@ -701,11 +704,12 @@ impl Database for PGDatabase {
     }
 
     fn update_backup_tx(&self,state_chain_id: &Uuid, tx: Transaction) -> Result<()> {
+        let locktime = tx.lock_time;
         self.update(
             state_chain_id,
             Table::BackupTxs,
-            vec![Column::TxBackup],
-            vec![&Self::ser(tx)?],
+            vec![Column::TxBackup,Column::LockTime],
+            vec![&Self::ser(tx)?,&locktime],
         )
     }
 
@@ -964,12 +968,13 @@ impl Database for PGDatabase {
         state_chain_id: &Uuid,
         tx_backup: &Transaction,
     ) -> Result<()> {
+        let locktime = tx_backup.lock_time;
         self.insert(state_chain_id, Table::BackupTxs)?;
         self.update(
             state_chain_id,
             Table::BackupTxs,
-            vec![Column::TxBackup],
-            vec![&Self::ser(tx_backup.clone())?],
+            vec![Column::TxBackup,Column::LockTime],
+            vec![&Self::ser(tx_backup.clone())?,&locktime],
         )
     }
 
@@ -979,6 +984,19 @@ impl Database for PGDatabase {
         let tx_backup: Transaction = Self::deser(tx_backup_str)?;
         Ok(tx_backup)
     }
+
+
+
+
+
+
+
+//    fn get_backups_locktime(&self, height: u32) -> Result<> {
+
+
+
+
+
 
     fn get_proof_key(&self, user_id: Uuid) -> Result<String> {
         let proof_key = self.get_1::<String>(

@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 /// Get state chain fee
 pub fn get_statechain_fee_info(client_shim: &ClientShim) -> Result<StateEntityFeeInfoAPI> {
+    println!("{:?}", client_shim);
     requests::get(client_shim, &format!("info/fee"))
 }
 

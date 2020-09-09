@@ -67,7 +67,7 @@ fn main() {
         Box::new(ElectrumxClient::new(electrum_server_addr).unwrap())
     };
 
-    let network = "testnet".to_string();
+    let network = "regtest".to_string();
 
     if let Some(_matches) = matches.subcommand_matches("create-wallet") {
         println!("Network: [{}], Creating wallet", network);
@@ -268,8 +268,8 @@ fn main() {
                 println!("\nStateChain with Id {} info: \n", id);
 
                 println!(
-                    "amount: {}\nutxo:\n\ttxid: {},\n\tvout: {}",
-                    state_chain_info.amount, state_chain_info.utxo.txid, state_chain_info.utxo.vout
+                    "amount: {}\nutxo:\n\ttxid: {},\n\tvout: {},\nlocktime: {}",
+                    state_chain_info.amount, state_chain_info.utxo.txid, state_chain_info.utxo.vout, state_chain_info.locktime,
                 );
                 println!("StateChain: ");
                 for state in state_chain_info.chain.clone() {

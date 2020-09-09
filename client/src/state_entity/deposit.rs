@@ -87,10 +87,20 @@ pub fn deposit(
         &amounts,
     );
 
+    //get initial locktime
+    let chaintip = wallet
+        .electrumx_client
+        .get_tip_header()?;
+    debug!("Deposit: Got current best block height: ", funding_txid);
+    let blockheight = chaintip.height;
+    let init_locktime: u32 = blockheight + se_fee_info.interval;
+    debug!("Deposit: Set initial locktime: ", init_locktime);
+
+
     // Make unsigned backup tx
     let backup_receive_addr = wallet.se_backup_keys.get_new_address()?;
     let tx_backup_unsigned =
-        tx_backup_build(&tx_funding_signed.txid(), &backup_receive_addr, &amount)?;
+        tx_backup_build(&tx_funding_signed.txid(), &backup_receive_addr, &amount, &init_locktime)?;
 
     // Co-sign tx backup tx
     let tx_backup_psm = PrepareSignTxMsg {

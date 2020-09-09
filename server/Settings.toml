@@ -1,12 +1,14 @@
-electrum_server = "127.0.0.1:60401"
-network = "testnet"
+electrum_server = "127.0.0.1:50002"
+network = "regtest"
 block_time = 2
-testing_mode = true
+testing_mode = false
 # log_file = "log/output.log" # Comment out for stdout
+lockheight_init = 1000
+lh_decrement = 10
 
 # Fees
 fee_address = "bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x"
-fee_deposit = 300
+fee_deposit = 400
 fee_withdraw = 300
 
 # Swap parameters
@@ -17,5 +19,5 @@ batch_lifetime = "3600" # 1 hour
 mainstay_config = ""
 
 #Watch config
-watch_only = "true"
+watch_only = false
 bitcoind = "exch:goodpass@http://localhost:8332"

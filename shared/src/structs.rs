@@ -60,13 +60,16 @@ pub struct StateEntityFeeInfoAPI {
     pub address: String, // Receive address for fee payments
     pub deposit: u64,    // satoshis
     pub withdraw: u64,   // satoshis
+    pub interval: u32,   // locktime decrement interval in blocks
+    pub initlock: u32,   // inital backup locktime
 }
+
 impl fmt::Display for StateEntityFeeInfoAPI {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Fee address: {},\nDeposit fee: {}\nWithdrawal fee: {}",
-            self.address, self.deposit, self.withdraw
+            "Fee address: {},\nDeposit fee: {}\nWithdrawal fee: {}\nLock interval: {}\nInitial lock: {}",
+            self.address, self.deposit, self.withdraw, self.interval, self.initlock
         )
     }
 }
@@ -77,6 +80,7 @@ pub struct StateChainDataAPI {
     pub utxo: OutPoint,
     pub amount: u64,
     pub chain: Vec<State>,
+    pub locktime: u32,  // the curent owner nlocktime
 }
 
 /// /info/transfer-batch return struct
@@ -203,6 +207,7 @@ pub struct TransferMsg1 {
     pub shared_key_id: Uuid,
     pub state_chain_sig: StateChainSig,
 }
+
 /// SE -> Sender
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct TransferMsg2 {

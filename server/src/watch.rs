@@ -4,19 +4,32 @@ use crate::error::{DBErrorType, SEError};
 use crate::server::StateChainEntity;
 use crate::storage::Storage;
 use crate::Database;
+use crate::PGDatabase;
+use crate::config::Config;
+use cfg_if::cfg_if;
+use uuid::Uuid;
+use std::str::FromStr;
 
 use std::{thread, time};
 
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use bitcoin::{Transaction,
     hashes::sha256d};
-use bitcoin::consensus::encode;
+use bitcoin::consensus;
 
+
+use std::marker::{Send, Sync};
 
 pub fn watch_node(rpc_path: String) {
 
-    let interval = time::Duration::from_millis(100);
+    let config_rs = Config::load().unwrap();
 
+    let mut sc_entity = PGDatabase::get_new();
+
+    sc_entity.set_connection_from_config(&config_rs);
+
+    //check interval 
+    let interval = time::Duration::from_millis(10000);
     let rpc_path_parts: Vec<&str> = rpc_path.split('@').collect();
     if rpc_path_parts.len() != 2 {
         panic!("Invalid bitcoind RPC path")
@@ -31,6 +44,7 @@ pub fn watch_node(rpc_path: String) {
                           Auth::UserPass(rpc_cred[0].to_string(),
                                          rpc_cred[1].to_string())).unwrap();
 
+
     // main watch loop
     loop {
         // get current block height
@@ -38,6 +52,11 @@ pub fn watch_node(rpc_path: String) {
         let blocks = bestblockcount.unwrap();
 
         println!("{} blocks",blocks);
+
+        let state_chain_id = Uuid::from_str("8c160273-d187-4474-bbdd-4335c4dae800").unwrap();
+        let tx = sc_entity.get_backup_transaction(state_chain_id).unwrap();
+
+        println!("{}",hex::encode(consensus::serialize(&tx)));
 
         // find valid backup transactions
         // iterate through backup transaction db

@@ -80,6 +80,8 @@ impl Utilities for SCE {
             address: self.config.fee_address.clone(),
             deposit: self.config.fee_deposit,
             withdraw: self.config.fee_withdraw,
+            interval: self.config.lh_decrement,
+            initlock: self.config.lockheight_init,
         })
     }
 
@@ -760,6 +762,7 @@ impl<T: Database + Send + Sync + 'static> Storage for StateChainEntity<T> {
                 amount: state_chain.amount as u64,
                 utxo: tx_backup.input.get(0).unwrap().previous_output,
                 chain: state_chain.chain.chain,
+                locktime: tx_backup.lock_time,
             }
         })
     }
