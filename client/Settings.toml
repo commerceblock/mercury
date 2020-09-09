@@ -1,4 +1,4 @@
-endpoint = "http://fakeapi.mercurywallet.io"
+endpoint = "127.0.0.1:8000"
 electrum_server = "127.0.0.1:60401"
 testing_mode = "false"
 [tor]

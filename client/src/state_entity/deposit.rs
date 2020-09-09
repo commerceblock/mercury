@@ -96,7 +96,6 @@ pub fn deposit(
     let init_locktime: u32 = blockheight + se_fee_info.interval;
     debug!("Deposit: Set initial locktime: ", init_locktime);
 
-
     // Make unsigned backup tx
     let backup_receive_addr = wallet.se_backup_keys.get_new_address()?;
     let tx_backup_unsigned =
@@ -113,7 +112,6 @@ pub fn deposit(
     };
     
     let witness = cosign_tx_input(wallet, &tx_backup_psm)?;
-    
     
     // Add witness to back up tx
     let mut tx_backup_signed = tx_backup_unsigned.clone();
