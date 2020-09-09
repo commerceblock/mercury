@@ -390,6 +390,7 @@ impl Scheduler {
                     //   Else move on to phase4
                     swap_info.status = SwapStatus::Phase4;
                 },
+                SwapStatus::Phase4 => {}
             };
         }
         Ok(())
@@ -1263,6 +1264,7 @@ mod tests {
                     println!("Server responds with SCE-Address: {:?}", second_msg_resp);
                     break; // end poll swap loop
                 }
+                SwapStatus::Phase4 => {}
             }
         }
         println!("\nPolling of Swap loop ended. Client now has SCE-Address to transfer to. This is the end of our Client's interaction with Conductor.");
