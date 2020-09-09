@@ -125,6 +125,7 @@ pub enum SwapStatus {
     Phase1,
     Phase2,
     Phase3,
+    Phase4,
 }
 
 /// Struct defines a Swap. This is signed by each participant as agreement to take part in the swap.
@@ -252,6 +253,8 @@ impl Scheduler {
                 self.out_addr_map.remove(swap_id);
                 self.status_map.insert(swap_id.to_owned(), i.status);
                 self.time_out_map.insert(swap_id.to_owned(), i.swap_token.time_out);
+                self.bst_e_prime_map.remove(swap_id);
+                self.bst_sig_map.remove(swap_id);
                 Some(i)
             },
             None => None
@@ -381,7 +384,11 @@ impl Scheduler {
                     }
                 },
                 SwapStatus::Phase3 => {
-
+                    //Phase3 - Query StateChainEntity for batch-transfer status
+                    //   If complete - Remove swap data
+                    // self.remove_swap_info(swap_id);
+                    //   Else move on to phase4
+                    swap_info.status = SwapStatus::Phase4;
                 },
             };
         }
