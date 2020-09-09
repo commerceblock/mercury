@@ -91,10 +91,9 @@ pub fn deposit(
     let chaintip = wallet
         .electrumx_client
         .get_tip_header()?;
-    debug!("Deposit: Got current best block height: ", funding_txid);
-    let blockheight = chaintip.height;
-    let init_locktime: u32 = blockheight + se_fee_info.interval;
-    debug!("Deposit: Set initial locktime: ", init_locktime);
+    debug!("Deposit: Got current best block height: {}", chaintip.height.to_string());
+    let init_locktime: u32 = (chaintip.height as u32) + (se_fee_info.initlock as u32);
+    debug!("Deposit: Set initial locktime: {}", init_locktime.to_string());
 
     // Make unsigned backup tx
     let backup_receive_addr = wallet.se_backup_keys.get_new_address()?;
@@ -150,7 +149,6 @@ pub fn deposit(
         shared_key.tx_backup_psm = Some(tx_backup_psm.to_owned());
         shared_key.add_proof_data(&proof_key.to_string(), &root, &proof, &funding_txid);
     }
-
 
     Ok((
         shared_key_id,

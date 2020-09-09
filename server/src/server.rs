@@ -112,17 +112,6 @@ pub fn get_server<T: Database + Send + Sync + 'static, D: Database + MonotreeDat
 
     let rocket_config = get_rocket_config(&sc_entity.config);
 
-<<<<<<< HEAD
-    if sc_entity.config.testing_mode {
-        info!("Server running in testing mode.");
-        // Use test SMT DB
-        sc_entity.config.smt_db_loc = SMT_DB_LOC_TESTING.to_string();
-        // reset dbs
-        if let Err(_) = sc_entity.database.reset(&sc_entity.config.smt_db_loc) {
-            sc_entity.database.init()?;
-        }
-    }
-
     let bitcoind = sc_entity.config.bitcoind.clone();
 
     if sc_entity.config.watch_only {
@@ -161,8 +150,8 @@ pub fn get_server<T: Database + Send + Sync + 'static, D: Database + MonotreeDat
                     util::prepare_sign_tx,
                     util::get_transfer_batch_status,
                     util::reset_test_dbs, // !!
-                    util::get_smt_value,
-                    util::put_smt_value,
+                    util::get_smt_proof_test,
+                    util::put_smt_value_test,
                     deposit::deposit_init,
                     deposit::deposit_confirm,
                     transfer::transfer_sender,
@@ -174,45 +163,10 @@ pub fn get_server<T: Database + Send + Sync + 'static, D: Database + MonotreeDat
                 ],
             )
             .manage(sc_entity);
+
         Ok(rock)
     }
-=======
-    let rock = rocket::custom(rocket_config)
-        .register(catchers![internal_error, not_found, bad_request])
-        .mount(
-            "/",
-            routes![
-                ping::ping,
-                ecdsa::first_message,
-                ecdsa::second_message,
-                ecdsa::third_message,
-                ecdsa::fourth_message,
-                ecdsa::sign_first,
-                ecdsa::sign_second,
-                util::get_statechain,
-                util::get_smt_root,
-                //util::get_confirmed_smt_root,
-                util::get_smt_proof,
-                util::get_fees,
-                util::prepare_sign_tx,
-                util::get_transfer_batch_status,
-                util::reset_test_dbs, // !!
-                util::get_smt_proof_test,
-                util::put_smt_value_test,
-                deposit::deposit_init,
-                deposit::deposit_confirm,
-                transfer::transfer_sender,
-                transfer::transfer_receiver,
-                transfer_batch::transfer_batch_init,
-                transfer_batch::transfer_reveal_nonce,
-                withdraw::withdraw_init,
-                withdraw::withdraw_confirm
-            ],
-        )
-        .manage(sc_entity);
 
-    Ok(rock)
->>>>>>> master
 }
 
 fn set_logging_config(log_file: &String) {

@@ -205,7 +205,7 @@ pub fn tx_backup_build(
             script_pubkey: b_address.script_pubkey(),
             value: amount - FEE,
         }],
-        lock_time: locktime,
+        lock_time: *locktime,
         version: 2,
     };
     Ok(tx_b)
