@@ -1,5 +1,3 @@
 db/
-db-smt/
-db-smt-testing/
 target/
 log/

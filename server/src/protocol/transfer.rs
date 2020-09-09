@@ -24,11 +24,12 @@ use std::str::FromStr;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
-        use crate::MockDatabase as DB;
-        type SCE = StateChainEntity::<DB>;
+        use crate::MockDatabase;
+        use monotree::database::MemoryDB;
+        type SCE = StateChainEntity::<MockDatabase, MemoryDB>;
     } else {
-        use crate::PGDatabase as DB;
-        type SCE = StateChainEntity::<DB>;
+        use crate::PGDatabase;
+        type SCE = StateChainEntity::<PGDatabase, PGDatabase>;
     }
 }
 

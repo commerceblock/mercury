@@ -10,6 +10,4 @@ Cargo.lock
 **/*.rs.bk
 .idea
 db/
-db-smt/
-db-smt-testing/
 log/

@@ -3,41 +3,45 @@ use crate::structs::StateChainOwner;
 use super::protocol::*;
 use super::protocol::conductor::Scheduler;
 use crate::Database;
-
-use crate::config::SMT_DB_LOC_TESTING;
 use shared_lib::mainstay;
-use std::sync::Mutex;
-
 use crate::config::Config;
+
 use rocket;
 use rocket::{Rocket, Request, config::{Config as RocketConfig, Environment}};
-
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config as LogConfig, Root as LogRoot};
 use log4rs::encode::pattern::PatternEncoder;
-
 use mockall::*;
 use uuid::Uuid;
-use std::sync::Arc;
+use monotree::database::Database as MonotreeDatabase;
+use std::sync::{Arc, Mutex};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-pub struct StateChainEntity<T: Database + Send + Sync + 'static> {
+pub struct StateChainEntity<T: Database + Send + Sync + 'static, D: MonotreeDatabase + Send + Sync + 'static> {
     pub config: Config,
     pub database: T,
+    pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
     pub scheduler: Arc<Mutex<Scheduler>>
 }
 
-impl<T: Database + Send + Sync + 'static> StateChainEntity<T> {
-    pub fn load(mut db: T) -> Result<StateChainEntity<T>> {
+impl<T: Database + Send + Sync + 'static, D: Database + MonotreeDatabase + Send + Sync + 'static> StateChainEntity<T,D> {
+    pub fn load(mut db: T, mut db_smt: D) -> Result<StateChainEntity<T,D>> {
         // Get config as defaults, Settings.toml and env vars
         let config_rs = Config::load()?;
         db.set_connection_from_config(&config_rs)?;
+        db_smt.set_connection_from_config(&config_rs)?;
+
+        let smt = Monotree {
+            db: db_smt,
+            hasher: Blake3::new()
+        };
 
         let sce = Self {
             config: config_rs,
             database: db,
+            smt: Arc::new(Mutex::new(smt)),
             scheduler: Arc::new(Mutex::new(Scheduler::new()))
         };
 
@@ -74,15 +78,23 @@ fn not_found(req: &Request) -> String {
     format!("Unknown route '{}'.", req.uri())
 }
 
-use std::marker::{Send, Sync};
-
 /// Start Rocket Server. mainstay_config parameter overrides Settings.toml and env var settings.
 /// If no db provided then use mock
-pub fn get_server<T: Database + Send + Sync + 'static>
+pub fn get_server<T: Database + Send + Sync + 'static, D: Database + MonotreeDatabase + Send + Sync + 'static>
     (mainstay_config: Option<mainstay::MainstayConfig>,
-        db: T) -> Result<Rocket> {
+        db: T, db_smt: D) -> Result<Rocket> {
 
-    let mut sc_entity = StateChainEntity::<T>::load(db)?;
+    let mut sc_entity = StateChainEntity::<T, D>::load(db, db_smt)?;
+
+    set_logging_config(&sc_entity.config.log_file);
+
+    // Initialise DBs
+    sc_entity.database.init()?;
+    if sc_entity.config.testing_mode {
+        info!("Server running in testing mode.");
+        // reset dbs
+        sc_entity.database.reset()?;
+    }
 
     match mainstay_config {
         Some(c) => sc_entity.config.mainstay = Some(c),
@@ -94,19 +106,7 @@ pub fn get_server<T: Database + Send + Sync + 'static>
         panic!("expected mainstay config");
     }
 
-    set_logging_config(&sc_entity.config.log_file);
-
     let rocket_config = get_rocket_config(&sc_entity.config);
-
-    if sc_entity.config.testing_mode {
-        info!("Server running in testing mode.");
-        // Use test SMT DB
-        sc_entity.config.smt_db_loc = SMT_DB_LOC_TESTING.to_string();
-        // reset dbs
-        if let Err(_) = sc_entity.database.reset(&sc_entity.config.smt_db_loc) {
-            sc_entity.database.init()?;
-        }
-    }
 
     let rock = rocket::custom(rocket_config)
         .register(catchers![internal_error, not_found, bad_request])
@@ -128,8 +128,8 @@ pub fn get_server<T: Database + Send + Sync + 'static>
                 util::prepare_sign_tx,
                 util::get_transfer_batch_status,
                 util::reset_test_dbs, // !!
-                util::get_smt_value,
-                util::put_smt_value,
+                util::get_smt_proof_test,
+                util::put_smt_value_test,
                 deposit::deposit_init,
                 deposit::deposit_confirm,
                 transfer::transfer_sender,
@@ -202,6 +202,7 @@ use crate::storage;
 use crate::storage::Storage;
 use shared_lib::structs::*;
 use shared_lib::blinded_token::{BlindedSpendToken,BlindedSpendSignature};
+use monotree::{hasher::Blake3, Monotree, Hasher};
 
 mock! {
     StateChainEntity{}

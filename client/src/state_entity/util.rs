@@ -15,7 +15,7 @@ use shared_lib::util::get_sighash;
 use curv::arithmetic::traits::Converter;
 use curv::BigInt;
 use monotree::{
-    hasher::{Blake2b, Hasher},
+    hasher::{Hasher, Blake3},
     tree::verify_proof,
     {Hash, Proof},
 };
@@ -63,6 +63,6 @@ pub fn verify_statechain_smt(
     proof: &Option<Proof>,
 ) -> bool {
     let entry: &[u8; 32] = proof_key[..32].as_bytes().try_into().unwrap();
-    let hasher = Blake2b::new();
+    let hasher = Blake3::new();
     verify_proof(&hasher, root.as_ref(), &entry, proof.as_ref())
 }
