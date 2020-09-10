@@ -1,5 +1,5 @@
 #[cfg(test)]
-#[cfg(not(feature="mockdb"))]
+#[cfg(not(feature = "mockdb"))]
 mod tests {
     use crate::*;
     extern crate bitcoin;
@@ -12,7 +12,6 @@ mod tests {
     use bitcoin::PublicKey;
     use client_lib::state_entity;
     use std::{str::FromStr, thread, time::Duration};
-
 
     /// Test batch transfer signature generation
     #[test]

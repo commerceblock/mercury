@@ -4,8 +4,8 @@
 
 pub use super::super::Result;
 extern crate shared_lib;
-use shared_lib::{state_chain::*, structs::*, ecies, ecies::{WalletDecryptable}};
 use super::transfer_batch::transfer_batch_is_ended;
+use shared_lib::{ecies, ecies::WalletDecryptable, state_chain::*, structs::*};
 
 use crate::error::SEError;
 use crate::Database;
@@ -19,8 +19,8 @@ use curv::{
 };
 use rocket::State;
 use rocket_contrib::json::Json;
-use uuid::Uuid;
 use std::str::FromStr;
+use uuid::Uuid;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -107,19 +107,24 @@ impl Transfer for SCE {
         debug!("TRANSFER: Sender side complete. State Chain ID: {}. State Chain Signature: {:?}. x1: {:?}.", state_chain_id, transfer_msg1.state_chain_sig, x1);
 
         // encrypt x1 with Senders proof key
-        let proof_key = match ecies::PublicKey::from_str(&self.database.get_proof_key(user_id)?){
+        let proof_key = match ecies::PublicKey::from_str(&self.database.get_proof_key(user_id)?) {
             Ok(k) => k,
-            Err(e) => return Err(SEError::SharedLibError(format!("error deserialising proof key: {}", e))),
+            Err(e) => {
+                return Err(SEError::SharedLibError(format!(
+                    "error deserialising proof key: {}",
+                    e
+                )))
+            }
         };
 
         let mut msg2 = TransferMsg2 {
             x1: x1_ser,
-            proof_key
+            proof_key,
         };
 
         match msg2.encrypt() {
             Ok(_) => (),
-            Err(e) => return Err(SEError::SharedLibError(format!("{}",e))),
+            Err(e) => return Err(SEError::SharedLibError(format!("{}", e))),
         };
 
         let msg2 = msg2;
@@ -145,7 +150,6 @@ impl Transfer for SCE {
         }
 
         let kp = self.database.get_ecdsa_keypair(user_id)?;
-
 
         // let x1 = transfer_data.x1;
         let t2 = transfer_msg4.t2;
@@ -357,19 +361,27 @@ mod tests {
 
     #[test]
     fn test_transfer_sender() {
-        let transfer_msg_4 = serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap();
+        let transfer_msg_4 =
+            serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap();
         let shared_key_id = transfer_msg_4.shared_key_id;
         let no_sc_shared_key_id = Uuid::from_str("deadb33f-1111-46f9-aaaa-0678c891b2d3").unwrap(); // random Uuid
         let state_chain_id = transfer_msg_4.state_chain_id;
         let state_chain_sig: StateChainSig =
-            serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap().state_chain_sig;
-        let transfer_msg_1 = TransferMsg1 {shared_key_id,state_chain_sig};
+            serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string())
+                .unwrap()
+                .state_chain_sig;
+        let transfer_msg_1 = TransferMsg1 {
+            shared_key_id,
+            state_chain_sig,
+        };
 
         let mut db = MockDatabase::new();
         let (_privkey, pubkey) = shared_lib::util::keygen::generate_keypair();
-        db.expect_get_proof_key().returning(move |_| Ok(pubkey.to_string()));
+        db.expect_get_proof_key()
+            .returning(move |_| Ok(pubkey.to_string()));
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_get_user_auth().returning(move |_| Ok(shared_key_id));
+        db.expect_get_user_auth()
+            .returning(move |_| Ok(shared_key_id));
         db.expect_get_statechain_id()
             .with(predicate::eq(shared_key_id))
             .returning(move |_| Ok(state_chain_id));
@@ -385,7 +397,7 @@ mod tests {
         db.expect_transfer_is_completed()
             .with(predicate::eq(state_chain_id))
             .returning(|_| false);
-        db.expect_get_statechain_owner()    // sc locked
+        db.expect_get_statechain_owner() // sc locked
             .with(predicate::eq(state_chain_id))
             .times(1)
             .returning(move |_| {
@@ -419,12 +431,12 @@ mod tests {
         // Sc locked
         match sc_entity.transfer_sender(transfer_msg_1.clone()) {
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("SharedLibError Error: Error: State Chain locked for 1 minutes.")),
+            Err(e) => assert!(e
+                .to_string()
+                .contains("SharedLibError Error: Error: State Chain locked for 1 minutes.")),
         }
 
-        assert!(sc_entity
-            .transfer_sender(transfer_msg_1)
-            .is_ok());
+        assert!(sc_entity.transfer_sender(transfer_msg_1).is_ok());
     }
 
     #[test]
@@ -530,7 +542,7 @@ mod tests {
             .returning(|_, _, _| Ok(()));
 
         let sc_entity = test_sc_entity(db);
-        let _m = mocks::ms::post_commitment().create();        //Mainstay post commitment mock
+        let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
 
         // Input data to transfer_receiver
         let mut transfer_msg_4 =

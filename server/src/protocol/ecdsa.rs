@@ -1,14 +1,15 @@
 pub use super::super::Result;
 
+use crate::error::{DBErrorType, SEError};
+use crate::Database;
+use crate::{server::StateChainEntity, structs::*};
 use shared_lib::{
     structs::{KeyGenMsg1, KeyGenMsg2, KeyGenMsg3, KeyGenMsg4, Protocol, SignMsg1, SignMsg2},
     util::reverse_hex_str,
 };
-use crate::error::{DBErrorType, SEError};
-use crate::Database;
-use crate::{server::StateChainEntity, structs::*};
 
 use bitcoin::{hashes::sha256d, secp256k1::Signature, Transaction};
+use cfg_if::cfg_if;
 use curv::{
     arithmetic::traits::Converter,
     elliptic::curves::traits::ECPoint,
@@ -18,7 +19,6 @@ pub use kms::ecdsa::two_party::*;
 pub use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
 use rocket::State;
 use rocket_contrib::json::Json;
-use cfg_if::cfg_if;
 use std::string::ToString;
 use uuid::Uuid;
 
@@ -248,12 +248,8 @@ impl Ecdsa for SCE {
 
         // Get transaction which is being signed.
         let mut tx: Transaction = match sign_msg2.sign_second_msg_request.protocol {
-            Protocol::Withdraw => {
-                db.get_tx_withdraw(user_id)?
-            },
-            _ => {
-                db.get_user_backup_tx(user_id)?
-            }
+            Protocol::Withdraw => db.get_tx_withdraw(user_id)?,
+            _ => db.get_user_backup_tx(user_id)?,
         };
 
         // Make signature witness

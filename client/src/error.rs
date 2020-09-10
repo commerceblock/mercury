@@ -24,7 +24,7 @@ pub enum CError {
     /// Inherit errors from SharedLibError
     SharedLibError(String),
     /// Tor error
-    TorError(String)
+    TorError(String),
 }
 
 impl From<String> for CError {
@@ -94,7 +94,7 @@ impl From<()> for CError {
 
 impl From<pyo3::PyErr> for CError {
     fn from(e: pyo3::PyErr) -> CError {
-        CError::Generic(format!("a python error occured: {:?}",e))
+        CError::Generic(format!("a python error occured: {:?}", e))
     }
 }
 

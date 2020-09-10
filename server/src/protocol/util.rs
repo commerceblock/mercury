@@ -12,7 +12,7 @@ use shared_lib::{
     state_chain::*,
     structs::*,
     util::{get_sighash, tx_backup_verify, tx_withdraw_verify},
-    Root
+    Root,
 };
 
 use crate::error::{DBErrorType, SEError};
@@ -314,9 +314,7 @@ pub fn get_statechain(
 }
 
 #[get("/info/root", format = "json")]
-pub fn get_smt_root(
-    sc_entity: State<SCE>
-) -> Result<Json<Option<Root>>> {
+pub fn get_smt_root(sc_entity: State<SCE>) -> Result<Json<Option<Root>>> {
     match sc_entity.get_smt_root() {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -357,37 +355,34 @@ pub fn prepare_sign_tx(
 }
 
 #[post("/test/reset-db", format = "json")]
-pub fn reset_test_dbs(
-    sc_entity: State<SCE>,
-) -> Result<Json<()>> {
+pub fn reset_test_dbs(sc_entity: State<SCE>) -> Result<Json<()>> {
     if sc_entity.config.testing_mode {
         match sc_entity.database.reset() {
             Ok(res) => return Ok(Json(res)),
             Err(e) => return Err(e),
         }
     }
-    return Err(SEError::Generic(String::from("Cannot reset Databases when not in testing mode.")))
+    return Err(SEError::Generic(String::from(
+        "Cannot reset Databases when not in testing mode.",
+    )));
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct SMTTest {
     key: String,
-    entry: String
+    entry: String,
 }
 #[post("/test/put-smt-value", format = "json", data = "<input>")]
-pub fn put_smt_value_test(
-    sc_entity: State<SCE>,
-    input: Json<SMTTest>
-) -> Result<Json<()>> {
+pub fn put_smt_value_test(sc_entity: State<SCE>, input: Json<SMTTest>) -> Result<Json<()>> {
     if sc_entity.config.testing_mode {
         let key = input.key.clone();
         let entry = input.entry.clone();
         let db = &sc_entity.database;
 
         let current_root_id = db.root_get_current_id()?;
-        println!("current_root_id: {:?}",current_root_id);
+        println!("current_root_id: {:?}", current_root_id);
         let current_root = db.get_root(current_root_id)?;
-        println!("current_root: {:?}",current_root);
+        println!("current_root: {:?}", current_root);
 
         let new_root_hash = update_statechain_smt(
             sc_entity.smt.clone(),
@@ -401,36 +396,32 @@ pub fn put_smt_value_test(
 
         println!("put_smt_value new_root: {:?}", new_root_hash);
         println!("put_smt_value put entry {:?} into key {:?}", entry, key);
-
     } else {
-        return Err(SEError::Generic(String::from("Testing mode only.")))
+        return Err(SEError::Generic(String::from("Testing mode only.")));
     }
 
     Ok(Json(()))
 }
 
 #[post("/test/get-smt-proof", format = "json", data = "<input>")]
-pub fn get_smt_proof_test(
-    sc_entity: State<SCE>,
-    input: Json<SMTTest>
-) -> Result<Json<()>> {
+pub fn get_smt_proof_test(sc_entity: State<SCE>, input: Json<SMTTest>) -> Result<Json<()>> {
     if sc_entity.config.testing_mode {
         let key = input.key.clone();
         let db = &sc_entity.database;
 
         let current_root_id = db.root_get_current_id()?;
-        println!("current_root_id: {:?}",current_root_id);
+        println!("current_root_id: {:?}", current_root_id);
         let current_root = db.get_root(current_root_id)?;
-        println!("current_root: {:?}",current_root);
+        println!("current_root: {:?}", current_root);
 
         let proof = gen_proof_smt(
             sc_entity.smt.clone(),
             &current_root.clone().map(|r| r.hash()),
-            &key
+            &key,
         );
         println!("proof from get_smt_value: {:?}", proof);
     } else {
-        return Err(SEError::Generic(String::from("Testing mode only.")))
+        return Err(SEError::Generic(String::from("Testing mode only.")));
     }
     Ok(Json(()))
 }
@@ -573,10 +564,12 @@ impl SCE {
     }
 }
 
-impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 'static> Storage for StateChainEntity<T, D> {
-     /// Update the database and the mainstay slot with the SMT root, if applicable
-     fn update_root(&self, root: &Root) -> Result<i64> {
-         let db = &self.database;
+impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 'static> Storage
+    for StateChainEntity<T, D>
+{
+    /// Update the database and the mainstay slot with the SMT root, if applicable
+    fn update_root(&self, root: &Root) -> Result<i64> {
+        let db = &self.database;
 
         match &self.config.mainstay {
             Some(c) => match root.attest(&c) {
@@ -623,53 +616,47 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
 
     /// Update the database with the latest available mainstay attestation info
     fn get_confirmed_smt_root(&self) -> Result<Option<Root>> {
-        use crate::shared_lib::mainstay::{Commitment, CommitmentIndexed,
-            CommitmentInfo, MainstayAPIError};
+        use crate::shared_lib::mainstay::{
+            Commitment, CommitmentIndexed, CommitmentInfo, MainstayAPIError,
+        };
 
         let db = &self.database;
 
-        fn update_db_from_ci<U: Database>(
-            db: &U,
-            ci: &CommitmentInfo,
-            ) -> Result<Option<Root>> {
-                let mut root = Root::from_commitment_info(ci);
-                let current_id = db.root_get_current_id()?;
-                let mut id;
-                for x in 0..=current_id - 1 {
-                    id = current_id - x;
-                    let root_get = db.get_root(id)?;
-                    match root_get {
-                        Some(r) => {
-                            if r.hash() == ci.commitment().to_hash() {
-                                match r.id() {
-                                    Some(r_id) => {
-                                        root.set_id(&r_id);
-                                        break;
-                                    }
-                                    None => (),
+        fn update_db_from_ci<U: Database>(db: &U, ci: &CommitmentInfo) -> Result<Option<Root>> {
+            let mut root = Root::from_commitment_info(ci);
+            let current_id = db.root_get_current_id()?;
+            let mut id;
+            for x in 0..=current_id - 1 {
+                id = current_id - x;
+                let root_get = db.get_root(id)?;
+                match root_get {
+                    Some(r) => {
+                        if r.hash() == ci.commitment().to_hash() {
+                            match r.id() {
+                                Some(r_id) => {
+                                    root.set_id(&r_id);
+                                    break;
                                 }
+                                None => (),
                             }
                         }
-                        None => (),
-                    };
-                }
-
-                let root = root;
-
-                match db.root_update(&root) {
-                    Ok(_) => {
-                        Ok(Some(root))
                     }
-                    Err(e) => Err(e),
-                }
+                    None => (),
+                };
             }
 
+            let root = root;
 
-            match &self.config.mainstay {
-                Some(conf) => {
+            match db.root_update(&root) {
+                Ok(_) => Ok(Some(root)),
+                Err(e) => Err(e),
+            }
+        }
 
-                    match &db.get_confirmed_smt_root()? {
-                        Some(cr_db) => {
+        match &self.config.mainstay {
+            Some(conf) => {
+                match &db.get_confirmed_smt_root()? {
+                    Some(cr_db) => {
                         //Search for update
 
                         //First try to find the latest root in the latest commitment
@@ -711,17 +698,25 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
                                                 }
 
                                                 //MainStay::NotFoundRrror is acceptable - continue the search. Otherwise return the error
-                                                Err(e) => match e.downcast_ref::<MainstayAPIError>() {
-                                                    Some(e) => match e {
-                                                        MainstayAPIError::NotFoundError(_) => (),
-                                                        _ => {
-                                                            return Err(SEError::Generic(e.to_string()))
+                                                Err(e) => {
+                                                    match e.downcast_ref::<MainstayAPIError>() {
+                                                        Some(e) => match e {
+                                                            MainstayAPIError::NotFoundError(_) => {
+                                                                ()
+                                                            }
+                                                            _ => {
+                                                                return Err(SEError::Generic(
+                                                                    e.to_string(),
+                                                                ))
+                                                            }
+                                                        },
+                                                        None => {
+                                                            return Err(SEError::Generic(
+                                                                e.to_string(),
+                                                            ))
                                                         }
-                                                    },
-                                                    None => {
-                                                        return Err(SEError::Generic(e.to_string()))
                                                     }
-                                                },
+                                                }
                                             };
                                         }
                                         None => (),
@@ -732,7 +727,7 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
                         }
                     }
                     None => match &CommitmentInfo::from_latest(conf) {
-                        Ok(ci) => update_db_from_ci(db,ci),
+                        Ok(ci) => update_db_from_ci(db, ci),
                         Err(e) => Err(SEError::SharedLibError(e.to_string())),
                     },
                 }
@@ -740,7 +735,6 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
             None => Ok(None),
         }
     }
-
 
     fn get_root(&self, id: i64) -> Result<Option<Root>> {
         self.database.get_root(id)
@@ -886,9 +880,9 @@ pub mod tests {
     use super::*;
     use crate::shared_lib::mainstay;
     use crate::MockDatabase;
-    use std::str::FromStr;
-    use std::convert::TryInto;
     use monotree::database::{Database as monotreeDatabase, MemoryDB};
+    use std::convert::TryInto;
+    use std::str::FromStr;
 
     // Useful data structs for tests throughout codebase
     pub static BACKUP_TX_NOT_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";

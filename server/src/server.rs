@@ -1,33 +1,43 @@
-use shared_lib::state_chain::StateChainSig;
-use crate::structs::StateChainOwner;
-use super::protocol::*;
 use super::protocol::conductor::Scheduler;
+use super::protocol::*;
+use crate::config::Config;
+use crate::structs::StateChainOwner;
 use crate::Database;
 use shared_lib::mainstay;
-use crate::config::Config;
+use shared_lib::state_chain::StateChainSig;
 
-use rocket;
-use rocket::{Rocket, Request, config::{Config as RocketConfig, Environment}};
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config as LogConfig, Root as LogRoot};
 use log4rs::encode::pattern::PatternEncoder;
 use mockall::*;
-use uuid::Uuid;
 use monotree::database::Database as MonotreeDatabase;
+use rocket;
+use rocket::{
+    config::{Config as RocketConfig, Environment},
+    Request, Rocket,
+};
 use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-pub struct StateChainEntity<T: Database + Send + Sync + 'static, D: MonotreeDatabase + Send + Sync + 'static> {
+pub struct StateChainEntity<
+    T: Database + Send + Sync + 'static,
+    D: MonotreeDatabase + Send + Sync + 'static,
+> {
     pub config: Config,
     pub database: T,
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
-    pub scheduler: Arc<Mutex<Scheduler>>
+    pub scheduler: Arc<Mutex<Scheduler>>,
 }
 
-impl<T: Database + Send + Sync + 'static, D: Database + MonotreeDatabase + Send + Sync + 'static> StateChainEntity<T,D> {
-    pub fn load(mut db: T, mut db_smt: D) -> Result<StateChainEntity<T,D>> {
+impl<
+        T: Database + Send + Sync + 'static,
+        D: Database + MonotreeDatabase + Send + Sync + 'static,
+    > StateChainEntity<T, D>
+{
+    pub fn load(mut db: T, mut db_smt: D) -> Result<StateChainEntity<T, D>> {
         // Get config as defaults, Settings.toml and env vars
         let config_rs = Config::load()?;
         db.set_connection_from_config(&config_rs)?;
@@ -35,14 +45,14 @@ impl<T: Database + Send + Sync + 'static, D: Database + MonotreeDatabase + Send 
 
         let smt = Monotree {
             db: db_smt,
-            hasher: Blake3::new()
+            hasher: Blake3::new(),
         };
 
         let sce = Self {
             config: config_rs,
             database: db,
             smt: Arc::new(Mutex::new(smt)),
-            scheduler: Arc::new(Mutex::new(Scheduler::new()))
+            scheduler: Arc::new(Mutex::new(Scheduler::new())),
         };
 
         Self::start_conductor_thread(sce.scheduler.clone());
@@ -50,15 +60,13 @@ impl<T: Database + Send + Sync + 'static, D: Database + MonotreeDatabase + Send 
     }
 
     pub fn start_conductor_thread(scheduler: Arc<Mutex<Scheduler>>) -> std::thread::JoinHandle<()> {
-        std::thread::spawn(move || {
-            loop {
-                let mut guard = scheduler.lock().unwrap();
-                if let Err(e) = guard.update_swap_info() {
-                    error!("{}",&e.to_string());
-                }
-                drop(guard);
-                std::thread::sleep(std::time::Duration::from_secs(60));
+        std::thread::spawn(move || loop {
+            let mut guard = scheduler.lock().unwrap();
+            if let Err(e) = guard.update_swap_info() {
+                error!("{}", &e.to_string());
             }
+            drop(guard);
+            std::thread::sleep(std::time::Duration::from_secs(60));
         })
     }
 }
@@ -80,10 +88,14 @@ fn not_found(req: &Request) -> String {
 
 /// Start Rocket Server. mainstay_config parameter overrides Settings.toml and env var settings.
 /// If no db provided then use mock
-pub fn get_server<T: Database + Send + Sync + 'static, D: Database + MonotreeDatabase + Send + Sync + 'static>
-    (mainstay_config: Option<mainstay::MainstayConfig>,
-        db: T, db_smt: D) -> Result<Rocket> {
-
+pub fn get_server<
+    T: Database + Send + Sync + 'static,
+    D: Database + MonotreeDatabase + Send + Sync + 'static,
+>(
+    mainstay_config: Option<mainstay::MainstayConfig>,
+    db: T,
+    db_smt: D,
+) -> Result<Rocket> {
     let mut sc_entity = StateChainEntity::<T, D>::load(db, db_smt)?;
 
     set_logging_config(&sc_entity.config.log_file);
@@ -200,9 +212,9 @@ use crate::protocol::util::{Proof, Utilities};
 use crate::protocol::withdraw::Withdraw;
 use crate::storage;
 use crate::storage::Storage;
+use monotree::{hasher::Blake3, Hasher, Monotree};
+use shared_lib::blinded_token::{BlindedSpendSignature, BlindedSpendToken};
 use shared_lib::structs::*;
-use shared_lib::blinded_token::{BlindedSpendToken,BlindedSpendSignature};
-use monotree::{hasher::Blake3, Monotree, Hasher};
 
 mock! {
     StateChainEntity{}

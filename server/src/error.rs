@@ -35,7 +35,7 @@ pub enum SEError {
     /// Inherit errors from Monotree
     SMTError(String),
     /// Swap error
-    SwapError(String)
+    SwapError(String),
 }
 
 impl From<String> for SEError {
@@ -74,10 +74,12 @@ impl From<ConfigError> for SEError {
     }
 }
 
-impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, 
-          crate::protocol::conductor::Scheduler>>> for SEError {
-    fn from(e: std::sync::PoisonError<std::sync::MutexGuard<'_, 
-    crate::protocol::conductor::Scheduler>>) -> SEError {
+impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, crate::protocol::conductor::Scheduler>>>
+    for SEError
+{
+    fn from(
+        e: std::sync::PoisonError<std::sync::MutexGuard<'_, crate::protocol::conductor::Scheduler>>,
+    ) -> SEError {
         SEError::Generic(e.to_string())
     }
 }

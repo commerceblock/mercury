@@ -212,20 +212,19 @@ pub fn transfer_reveal_nonce(
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::MockDatabase;
     use crate::{
         protocol::{transfer::TransferFinalizeData, util::tests::test_sc_entity},
-        structs::{StateChainOwner, TransferFinalizeBatchData, TransferBatchData},
+        structs::{StateChainOwner, TransferBatchData, TransferFinalizeBatchData},
     };
-    use chrono::{Duration,Utc};
+    use chrono::{Duration, Utc};
     use mockall::predicate;
+    use shared_lib::commitment::make_commitment;
     use std::str::FromStr;
     use uuid::Uuid;
-    use shared_lib::commitment::make_commitment;
 
     // Useful data structs for transfer batch protocol.
     /// Batch id and Signatures for statechains to take part in batch-transfer
@@ -244,26 +243,36 @@ mod tests {
         let transfer_batch_init_msg =
             serde_json::from_str::<TransferBatchInitMsg>(TRANSFER_BATCH_INIT).unwrap();
         let batch_id = transfer_batch_init_msg.id;
-        let already_active_batch_id = Uuid::from_str(&"deadb33f-1725-445e-9e08-0d15865cc844").unwrap();
+        let already_active_batch_id =
+            Uuid::from_str(&"deadb33f-1725-445e-9e08-0d15865cc844").unwrap();
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_has_transfer_batch_id().with(predicate::eq(already_active_batch_id)).returning(|_| true);
-        db.expect_has_transfer_batch_id().with(predicate::eq(batch_id)).returning(|_| false);
-        db.expect_create_transfer_batch_data().returning(|_,_| Ok(()));
+        db.expect_has_transfer_batch_id()
+            .with(predicate::eq(already_active_batch_id))
+            .returning(|_| true);
+        db.expect_has_transfer_batch_id()
+            .with(predicate::eq(batch_id))
+            .returning(|_| false);
+        db.expect_create_transfer_batch_data()
+            .returning(|_, _| Ok(()));
 
-        for (id, proof_key) in serde_json::from_str::<HashMap<&str,&str>>(SIG_PROOF_KEYS).unwrap().into_iter() {
+        for (id, proof_key) in serde_json::from_str::<HashMap<&str, &str>>(SIG_PROOF_KEYS)
+            .unwrap()
+            .into_iter()
+        {
             db.expect_get_statechain_owner()
-            .with(predicate::eq(Uuid::from_str(id).unwrap()))
-            .returning(move |_| {
-                Ok(StateChainOwner {
-                    locked_until: Utc::now().naive_utc(),   // do not test for locked statechains here since
-                    owner_id: already_active_batch_id,      // it has been done in deposit, transfer and withdraw tests.
-                    chain: StateChain::new(proof_key.to_string()),
-                })
-            });
+                .with(predicate::eq(Uuid::from_str(id).unwrap()))
+                .returning(move |_| {
+                    Ok(StateChainOwner {
+                        locked_until: Utc::now().naive_utc(), // do not test for locked statechains here since
+                        owner_id: already_active_batch_id, // it has been done in deposit, transfer and withdraw tests.
+                        chain: StateChain::new(proof_key.to_string()),
+                    })
+                });
         }
-        db.expect_create_transfer_batch_data().returning(|_,_| Ok(()));
+        db.expect_create_transfer_batch_data()
+            .returning(|_, _| Ok(()));
 
         let sc_entity = test_sc_entity(db);
 
@@ -277,110 +286,142 @@ mod tests {
 
         // one sig signs for incorrect batch_id
         let mut init_msg_sigs_one_wrong_batch_id = transfer_batch_init_msg.clone();
-        *init_msg_sigs_one_wrong_batch_id.signatures.get_mut(2).unwrap() = serde_json::from_str::<StateChainSig>(&STATE_CHAIN_SIG_ONE_WRONG_BATCH_ID.to_string()).unwrap();
+        *init_msg_sigs_one_wrong_batch_id
+            .signatures
+            .get_mut(2)
+            .unwrap() =
+            serde_json::from_str::<StateChainSig>(&STATE_CHAIN_SIG_ONE_WRONG_BATCH_ID.to_string())
+                .unwrap();
         match sc_entity.transfer_batch_init(init_msg_sigs_one_wrong_batch_id) {
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("Batch id is not identical for all signtures.")),
+            Err(e) => assert!(e
+                .to_string()
+                .contains("Batch id is not identical for all signtures.")),
         }
 
         // one sig signs for "TRANSFER" instead of "TRANSFER-BATCH"
         let mut init_msg_sigs_one_sign_for_regular_transfer = transfer_batch_init_msg.clone();
-        *init_msg_sigs_one_sign_for_regular_transfer.signatures.get_mut(0).unwrap() = serde_json::from_str::<StateChainSig>(&STATE_CHAIN_SIG_ONE_SIGN_REG_TRANSFER.to_string()).unwrap();
+        *init_msg_sigs_one_sign_for_regular_transfer
+            .signatures
+            .get_mut(0)
+            .unwrap() = serde_json::from_str::<StateChainSig>(
+            &STATE_CHAIN_SIG_ONE_SIGN_REG_TRANSFER.to_string(),
+        )
+        .unwrap();
         match sc_entity.transfer_batch_init(init_msg_sigs_one_sign_for_regular_transfer) {
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains(" purpose is not valid for batch transfer.")),
+            Err(e) => assert!(e
+                .to_string()
+                .contains(" purpose is not valid for batch transfer.")),
         }
 
         // Expect successful run
-        assert!(sc_entity.transfer_batch_init(transfer_batch_init_msg).is_ok());
+        assert!(sc_entity
+            .transfer_batch_init(transfer_batch_init_msg)
+            .is_ok());
     }
 
     #[test]
     fn test_finalize_batch() {
-        let batch_id = serde_json::from_str::<TransferBatchInitMsg>(TRANSFER_BATCH_INIT).unwrap().id;
+        let batch_id = serde_json::from_str::<TransferBatchInitMsg>(TRANSFER_BATCH_INIT)
+            .unwrap()
+            .id;
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         // simply test for state_chains.len() != finalized_data.len()
-        db.expect_get_finalize_batch_data()
-            .times(1)
-            .returning(|_| Ok(TransferFinalizeBatchData {
+        db.expect_get_finalize_batch_data().times(1).returning(|_| {
+            Ok(TransferFinalizeBatchData {
                 state_chains: HashMap::new(),
-                finalized_data_vec: vec!(serde_json::from_str(TRANSFER_FINALIZE_DATA).unwrap()),
+                finalized_data_vec: vec![serde_json::from_str(TRANSFER_FINALIZE_DATA).unwrap()],
                 start_time: Utc::now().naive_utc(),
-            }));
+            })
+        });
 
         let sc_entity = test_sc_entity(db);
 
         match sc_entity.finalize_batch(batch_id) {
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("TransferBatch has unequal finalized data to state chains.")),
+            Err(e) => assert!(e
+                .to_string()
+                .contains("TransferBatch has unequal finalized data to state chains.")),
         }
     }
 
     #[test]
     fn test_transfer_reveal_nonce() {
-        let transfer_finalize_data: TransferFinalizeData = serde_json::from_str(TRANSFER_FINALIZE_DATA).unwrap();
+        let transfer_finalize_data: TransferFinalizeData =
+            serde_json::from_str(TRANSFER_FINALIZE_DATA).unwrap();
         let batch_id = transfer_finalize_data.batch_data.unwrap().id;
         let state_chain_id = transfer_finalize_data.state_chain_id;
 
         let mut transfer_batch_data = TransferBatchData {
             state_chains: HashMap::new(),
-            punished_state_chains: vec!(),
+            punished_state_chains: vec![],
             start_time: Utc::now().naive_utc(),
             finalized: false,
         };
 
-
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         // state chain id not involved in batch
-        db.expect_get_transfer_batch_data().times(1)
-            .returning(|_| Ok(TransferBatchData {
+        db.expect_get_transfer_batch_data().times(1).returning(|_| {
+            Ok(TransferBatchData {
                 state_chains: HashMap::new(),
-                punished_state_chains: vec!(),
+                punished_state_chains: vec![],
                 start_time: Utc::now().naive_utc(),
                 finalized: false,
-            }));
+            })
+        });
         let mut state_chains = HashMap::new();
         state_chains.insert(state_chain_id, false);
         transfer_batch_data.state_chains = state_chains;
         // Batch completed successfully - no need to reveal nonce.
         transfer_batch_data.finalized = true;
-        db.expect_get_transfer_batch_data().times(1)
-            .returning(move |_| Ok(TransferBatchData {
-                state_chains: {
-                    let mut state_chains = HashMap::new();
-                    state_chains.insert(state_chain_id, false);
-                    state_chains},
-                punished_state_chains: vec!(),
-                start_time: Utc::now().naive_utc(),
-                finalized: true,
-            }));
-        transfer_batch_data.finalized = false;
-        db.expect_get_transfer_batch_data().times(1)
-            .returning(move |_| Ok(TransferBatchData {
-                state_chains: {
-                    let mut state_chains = HashMap::new();
-                    state_chains.insert(state_chain_id, false);
-                    state_chains},
-                punished_state_chains: vec!(),
-                start_time: Utc::now().naive_utc(),
-                finalized: false,
-            }));
         db.expect_get_transfer_batch_data()
-            .returning(move |_| Ok(TransferBatchData {
+            .times(1)
+            .returning(move |_| {
+                Ok(TransferBatchData {
+                    state_chains: {
+                        let mut state_chains = HashMap::new();
+                        state_chains.insert(state_chain_id, false);
+                        state_chains
+                    },
+                    punished_state_chains: vec![],
+                    start_time: Utc::now().naive_utc(),
+                    finalized: true,
+                })
+            });
+        transfer_batch_data.finalized = false;
+        db.expect_get_transfer_batch_data()
+            .times(1)
+            .returning(move |_| {
+                Ok(TransferBatchData {
+                    state_chains: {
+                        let mut state_chains = HashMap::new();
+                        state_chains.insert(state_chain_id, false);
+                        state_chains
+                    },
+                    punished_state_chains: vec![],
+                    start_time: Utc::now().naive_utc(),
+                    finalized: false,
+                })
+            });
+        db.expect_get_transfer_batch_data().returning(move |_| {
+            Ok(TransferBatchData {
                 state_chains: {
                     let mut state_chains = HashMap::new();
                     state_chains.insert(state_chain_id, false);
-                    state_chains},
-                punished_state_chains: vec!(),
-                start_time: Utc::now().naive_utc()-Duration::seconds(9999), // ensure batch lifetime has passed,
+                    state_chains
+                },
+                punished_state_chains: vec![],
+                start_time: Utc::now().naive_utc() - Duration::seconds(9999), // ensure batch lifetime has passed,
                 finalized: false,
-            }));
+            })
+        });
 
-        db.expect_update_locked_until().returning(|_,_| Ok(()));
-        db.expect_update_punished().returning(|_,_| Ok(()));
+        db.expect_update_locked_until().returning(|_, _| Ok(()));
+        db.expect_update_punished().returning(|_, _| Ok(()));
 
         let sc_entity = test_sc_entity(db);
 
@@ -401,7 +442,9 @@ mod tests {
         // Transfer batch completed successfully - no need to reveal nonce.
         match sc_entity.transfer_reveal_nonce(transfer_reveal_nonce.clone()) {
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("Transfer Batch completed successfully.")),
+            Err(e) => assert!(e
+                .to_string()
+                .contains("Transfer Batch completed successfully.")),
         }
 
         // Transfer batch is still live - no need to reveal nonce yet.
@@ -412,20 +455,33 @@ mod tests {
 
         // Invalid nonce for commitment
         let mut transfer_reveal_nonce_incorrect_nonce = transfer_reveal_nonce.clone();
-        transfer_reveal_nonce_incorrect_nonce.nonce = [0;32];
+        transfer_reveal_nonce_incorrect_nonce.nonce = [0; 32];
         match sc_entity.transfer_reveal_nonce(transfer_reveal_nonce_incorrect_nonce) {
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("Error: Commitment verification failed.")),
+            Err(e) => assert!(e
+                .to_string()
+                .contains("Error: Commitment verification failed.")),
         }
 
         // Expect successful run
-        assert!(sc_entity.transfer_reveal_nonce(transfer_reveal_nonce).is_ok());
+        assert!(sc_entity
+            .transfer_reveal_nonce(transfer_reveal_nonce)
+            .is_ok());
     }
 
     #[test]
     fn test_transfer_batch_is_ended() {
-        assert_eq!(transfer_batch_is_ended(Utc::now().naive_utc()-Duration::seconds(2),1),true);
-        assert_eq!(transfer_batch_is_ended(Utc::now().naive_utc()-Duration::seconds(1),2),false);
-        assert_eq!(transfer_batch_is_ended(Utc::now().naive_utc()-Duration::seconds(1),1),false);
+        assert_eq!(
+            transfer_batch_is_ended(Utc::now().naive_utc() - Duration::seconds(2), 1),
+            true
+        );
+        assert_eq!(
+            transfer_batch_is_ended(Utc::now().naive_utc() - Duration::seconds(1), 2),
+            false
+        );
+        assert_eq!(
+            transfer_batch_is_ended(Utc::now().naive_utc() - Duration::seconds(1), 1),
+            false
+        );
     }
 }

@@ -410,11 +410,11 @@ impl FromStr for MainstayConfig {
 impl Default for MainstayConfig {
     #[cfg(not(test))]
     fn default() -> Self {
-       Self {
-                url: String::from("https://mainstay.xyz/api/v1"),
-                key: None,
-                position: u64::default(),
-                token: String::default(),
+        Self {
+            url: String::from("https://mainstay.xyz/api/v1"),
+            key: None,
+            position: u64::default(),
+            token: String::default(),
         }
     }
 
@@ -1021,7 +1021,7 @@ mod tests {
         let random_hash = Commitment::from_hash(&monotree::utils::random_hash());
 
         let mut config = MainstayConfig::mock();
-        config.position=1;
+        config.position = 1;
 
         let _m = mocks::post_commitment().create();
 
@@ -1222,7 +1222,7 @@ mod tests {
 
     fn test_get_proof_from_commitment(commitment: &Commitment) -> Result<()> {
         let mut config = MainstayConfig::mock();
-        config.position=1;
+        config.position = 1;
         let _m = mocks::commitment_proof().create();
 
         let proof1 = merkle::Proof::from_commitment(&config, commitment)?;
@@ -1248,7 +1248,7 @@ mod tests {
     #[test]
     fn test_get_commitment_info() {
         let mut config = MainstayConfig::mock();
-        config.position=1;
+        config.position = 1;
         let _m = mocks::commitment_proof().create();
 
         //Retrieve the proof for a commitment

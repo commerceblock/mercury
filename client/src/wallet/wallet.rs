@@ -4,10 +4,10 @@
 
 use super::super::Result;
 use shared_lib::{
+    ecies,
+    ecies::{SelfEncryptable, WalletDecryptable},
     structs::{Protocol, SCEAddress},
     util::get_sighash,
-    ecies::{WalletDecryptable, SelfEncryptable},
-    ecies
 };
 
 use super::key_paths::{funding_txid_to_int, KeyPath, KeyPathWithAddresses};
@@ -320,7 +320,8 @@ impl Wallet {
         let proof_key = self
             .se_proof_keys
             .get_new_key_encoded_id(funding_txid_to_int(funding_txid)?)?;
-        let proof_key = bitcoin::secp256k1::PublicKey::from_slice(&proof_key.to_bytes().as_slice())?;
+        let proof_key =
+            bitcoin::secp256k1::PublicKey::from_slice(&proof_key.to_bytes().as_slice())?;
         Ok(SCEAddress {
             tx_backup_addr,
             proof_key,
@@ -372,24 +373,27 @@ impl Wallet {
         return signed_transaction;
     }
 
-    pub fn decrypt<T: WalletDecryptable>(&self, val: &mut T) -> ecies::Result<()>{
+    pub fn decrypt<T: WalletDecryptable>(&self, val: &mut T) -> ecies::Result<()> {
         match val.get_public_key()? {
-            Some(k) => {
-                self.decrypt_from_pub(val, &k)
-            },
-            None => Err(CError::Generic("item to be decrypted has no public key".to_string()).into())
+            Some(k) => self.decrypt_from_pub(val, &k),
+            None => {
+                Err(CError::Generic("item to be decrypted has no public key".to_string()).into())
+            }
         }
     }
 
-    pub fn decrypt_from_pub<T: SelfEncryptable>
-        (&self, val: &mut T, k: &PublicKey) -> ecies::Result<()>{
-            match self.se_proof_keys.get_key_derivation(k){
-                Some(p) => {
-                    let priv_k = p.private_key;
-                    val.decrypt(&priv_k)
-                },
-                None =>  Err(CError::WalletError(WalletErrorType::KeyNotFound).into())
+    pub fn decrypt_from_pub<T: SelfEncryptable>(
+        &self,
+        val: &mut T,
+        k: &PublicKey,
+    ) -> ecies::Result<()> {
+        match self.se_proof_keys.get_key_derivation(k) {
+            Some(p) => {
+                let priv_k = p.private_key;
+                val.decrypt(&priv_k)
             }
+            None => Err(CError::WalletError(WalletErrorType::KeyNotFound).into()),
+        }
     }
 
     /// create new 2P-ECDSA key with state entity
@@ -620,7 +624,6 @@ pub fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -811,26 +814,24 @@ mod tests {
         use ecies::Encryptable;
 
         #[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
-        struct TestStruct{
+        struct TestStruct {
             first: String,
             second: String,
-            pubk: ecies::PublicKey
+            pubk: ecies::PublicKey,
         }
 
-        impl Encryptable for TestStruct{}
+        impl Encryptable for TestStruct {}
         impl SelfEncryptable for TestStruct {
             fn encrypt_with_pubkey(&mut self, pubk: &ecies::PublicKey) -> ecies::Result<()> {
                 self.first.encrypt_with_pubkey(pubk)
-                
             }
 
             fn decrypt(&mut self, privk: &ecies::PrivateKey) -> ecies::Result<()> {
                 self.first.decrypt(privk)
             }
-            
         }
         impl WalletDecryptable for TestStruct {
-            fn get_public_key(&self) -> ecies::Result<Option<ecies::PublicKey>>{
+            fn get_public_key(&self) -> ecies::Result<Option<ecies::PublicKey>> {
                 Ok(Some(self.pubk.clone()))
             }
         }
@@ -838,7 +839,11 @@ mod tests {
         let mut wallet = gen_wallet();
         let pubk = wallet.se_proof_keys.get_new_key().unwrap();
 
-        let mut my_struct = TestStruct{first: "str1".to_string(), second: "str2".to_string(), pubk};
+        let mut my_struct = TestStruct {
+            first: "str1".to_string(),
+            second: "str2".to_string(),
+            pubk,
+        };
         let my_struct_clone = my_struct.clone();
         assert_eq!(my_struct, my_struct_clone);
         //Encrypt the struct using its own public key
@@ -848,7 +853,7 @@ mod tests {
         wallet.decrypt(&mut my_struct).unwrap();
         assert_eq!(my_struct, my_struct_clone);
 
-        //Encrypt/decrypt the struct, passing the public key explicitly 
+        //Encrypt/decrypt the struct, passing the public key explicitly
         my_struct.encrypt_with_pubkey(&pubk).unwrap();
         assert_ne!(my_struct, my_struct_clone);
         wallet.decrypt_from_pub(&mut my_struct, &pubk).unwrap();
