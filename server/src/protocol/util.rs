@@ -518,8 +518,6 @@ impl SCE {
     }
 
     fn get_transfer_batch_status(&self, batch_id: Uuid) -> Result<TransferBatchDataAPI> {
-        //let batch_id = Uuid::from_str(&batch_id).unwrap();
-
         let tbd = self.database.get_transfer_batch_data(batch_id)?;
 
         // Check if all transfers are complete. If so then all transfers in batch can be finalized.

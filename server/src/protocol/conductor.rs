@@ -314,10 +314,10 @@ impl Scheduler {
                 }
                 //Create a swap token with these ids and clear temporary vector of sc ids
                 if (ids_for_swap.len() == swap_size_max || n_remaining == 0){
-                    let id = Uuid::new_v4();
+                    let swap_id = Uuid::new_v4();
 
                     let swap_token = SwapToken{
-                        id: id.clone(),
+                        id: swap_id.clone(),
                         amount,
                         time_out: DEFAULT_TIMEOUT,
                         state_chain_ids: ids_for_swap.clone()};
@@ -337,6 +337,8 @@ impl Scheduler {
                         assert!(self.statechain_swap_size_map.delete(&id).len() == 1);
                         assert!(self.statechain_amount_map.delete(&id).len() == 1);
                     }
+                    info!("SCHEDULER: Created Swap ID: {}",swap_id);
+                    debug!("SCHEDULER: Swap Info: {:?}",si);
                 }
 
                 //Push back the remaining sc_ids if there are enough remaining scs for them
@@ -348,7 +350,7 @@ impl Scheduler {
         }
     }
 
-    //Update the swap info based on the rersults of user first/second messages
+    //Update the swap info based on the results of user first/second messages
     pub fn update_swaps(&mut self) -> Result<()> {
         for (swap_id, swap_info) in self.swap_info_map.iter_mut() {
             match swap_info.status {
@@ -371,6 +373,7 @@ impl Scheduler {
                         self.bst_sig_map.insert(swap_id, scid_bst_map);
                         swap_info.status = SwapStatus::Phase2;
                     }
+                    info!("SCHEDULER: Swap ID: {} moved on to Phase2",swap_id);
                 },
                 SwapStatus::Phase2 => {
                     //Phase 2 - Return BST and SCEAddresses for corresponding valid signtures
@@ -383,13 +386,18 @@ impl Scheduler {
                     if sce_addr_list.rev_get(&None).len() == 0 {
                         swap_info.status = SwapStatus::Phase3;
                     }
+                    info!("SCHEDULER: Swap ID: {} moved on to Phase3",swap_id);
                 },
                 SwapStatus::Phase3 => {
                     //Phase3 - Query StateChainEntity for batch-transfer status
+                    // let trasfer_batch_status = self.get_transfer_batch_status(swap_id);
+
                     //   If complete - Remove swap data
                     // self.remove_swap_info(swap_id);
                     //   Else move on to phase4
                     swap_info.status = SwapStatus::Phase4;
+                    info!("SCHEDULER: Swap ID: {} moved on to Phase4",swap_id);
+
                 },
                 SwapStatus::Phase4 => {}
             };
@@ -498,6 +506,7 @@ impl Conductor for SCE {
                         guard.bst_e_prime_map.insert(swap_id.to_owned(),swaps_e_prime_list.clone());
                     }
                 };
+                info!("CONDUTOR: swap_first_message complete for StateChain ID {} of Swap ID: {}",swap_msg1.state_chain_id, swap_id);
                 Ok(())
             },
             None => Err(SEError::SwapError(format!("no swap with id {}",&swap_msg1.swap_token_sig)))
@@ -537,6 +546,7 @@ impl Conductor for SCE {
                 return Err(SEError::SwapError("swap_second_message: claimed_nonce assigned to more than one SCEAddress".to_string()));
             } else if claimed_nonce_assignments_num == 1 {
                 // SCEAddress already claimed for this nonce. Return the address.
+                info!("CONDUTOR: swap_second_message re-completed for claimed nonce {:?} of Swap ID: {}", claimed_nonce, swap_id);
                 return Ok(claimed_nonce_sce_addrs_vec.get(0).unwrap().clone())
             }
             // Otherwise add to the first SCEAddress in sce_address_bisetmap without a claimed_nonce
@@ -548,6 +558,7 @@ impl Conductor for SCE {
             sce_address_bisetmap.insert(addr.clone(), claimed_nonce);
             sce_address_bisetmap.remove(&addr, &None);
 
+            info!("CONDUTOR: swap_second_message completed for claimed nonce {:?} of Swap ID: {}", claimed_nonce, swap_id);
             Ok(addr)
         } else {
             return Err(SEError::SwapError("swap_second_message: Blind Spent Token signature verification failed.".to_string()))
@@ -571,7 +582,7 @@ impl Conductor for SCE {
             error!("claimed_nonce assigned to more than one SCEAddress. Nonce: {:?}. Swap ID: {:?}", claimed_nonce, bst_msg.swap_id);
             return Err(SEError::SwapError("get_address_from_blinded_spend_token: claimed_nonce assigned to more than one SCEAddress".to_string()));
         } else if claimed_nonce_assignments_num == 1 {
-            // SCEAddress already claimed for this nonce. Return the address.
+            // Return the address.
             return Ok(claimed_nonce_sce_addrs_vec.get(0).unwrap().clone())
         }
         return Err(SEError::SwapError("No SCEAddress claimed for this Blinded Spent Token.".to_string()));
