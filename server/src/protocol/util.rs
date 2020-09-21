@@ -929,6 +929,7 @@ pub mod tests {
 
     pub fn test_sc_entity(db: MockDatabase) -> SCE {
         let mut sc_entity = SCE::load(db, MemoryDB::new("")).unwrap();
+        sc_entity.config.testing_mode = true;
         sc_entity.config.mainstay = Some(mainstay::MainstayConfig::mock_from_url(&test_url()));
         sc_entity
     }
