@@ -326,7 +326,6 @@ pub trait Attestable {
         } else {
             return Err(MainstayError::Generic(format!("{}", err_base)).into());
         }
-        return Ok(())
     }
 
     //The data to be commited
