@@ -141,6 +141,9 @@ impl Withdraw for SCE {
             &withdraw_msg2.address,
         )?;
 
+        //remove backup tx from the backup db
+        self.database.remove_backup_tx(&user_id)?;
+
         info!(
             "WITHDRAW: Address included in sparse merkle tree. State Chain ID: {}",
             wcd.state_chain_id

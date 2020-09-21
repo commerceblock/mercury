@@ -104,6 +104,8 @@ impl Deposit for SCE {
         let amount = (tx_backup.output.last().unwrap().value + FEE) as i64;
         let state_chain = StateChain::new(proof_key.clone());
 
+        println!("{:?}","HERE 1" );
+
         // Insert into StateChain table
         self.database
             .create_statechain(&state_chain_id, &user_id, &state_chain, &amount)?;

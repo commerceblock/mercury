@@ -104,6 +104,7 @@ pub fn get_server<T: Database + Send + Sync + 'static, D: Database + MonotreeDat
         Some(c) => sc_entity.config.mainstay = Some(c),
         None => (),
     }
+
     //At this point the mainstay config should be set,
     //either in testing mode or specified in the settings file
     if sc_entity.config.mainstay.is_none() {
@@ -126,7 +127,7 @@ pub fn get_server<T: Database + Send + Sync + 'static, D: Database + MonotreeDat
             );
         Ok(rock)
     } else {
-        /// if bitcoind path supplied, run watching
+        // if bitcoind path supplied, run watching
         if sc_entity.config.bitcoind.is_empty() == false {
             thread::spawn(|| watch_node(bitcoind));
         }

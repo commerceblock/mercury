@@ -297,35 +297,36 @@ pub trait Attestable {
         let mut res = req.send()?;
         let err_base = "commitment failed";
 
-        if res.status().is_success() {
-            match res.json::<serde_json::Value>() {
-                Ok(j) => {
-                    let response = Response::from_json(&j)?;
-                    match response.response.as_str() {
-                        Some(r) => match r == "Commitment added" {
-                            true => return Ok(()),
-                            false => {
-                                return Err(MainstayError::Generic(format!(
-                                    "{} - expected \"Commitment added\" in response: {:?}",
-                                    err_base, res
-                                ))
-                                .into())
-                            }
-                        },
-                        None => {
-                            return Err(MainstayError::Generic(format!(
-                                "{} - response: {:?}",
-                                err_base, res
-                            ))
-                            .into())
-                        }
-                    }
-                }
-                Err(e) => Err(e.into()),
-            }
-        } else {
-            return Err(MainstayError::Generic(format!("{}", err_base)).into());
-        }
+//        if res.status().is_success() {
+//            match res.json::<serde_json::Value>() {
+//                Ok(j) => {
+//                    let response = Response::from_json(&j)?;
+//                    match response.response.as_str() {
+//                        Some(r) => match r == "Commitment added" {
+//                            true => return Ok(()),
+//                            false => {
+//                                return Err(MainstayError::Generic(format!(
+//                                    "{} - expected \"Commitment added\" in response: {:?}",
+//                                    err_base, res
+//                                ))
+//                                .into())
+//                            }
+//                        },
+//                        None => {
+//                            return Err(MainstayError::Generic(format!(
+//                                "{} - response: {:?}",
+//                                err_base, res
+//                            ))
+//                            .into())
+//                        }
+//                    }
+//                }
+//                Err(e) => Err(e.into()),
+//            }
+//        } else {
+//            return Err(MainstayError::Generic(format!("{}", err_base)).into());
+//        }
+        return Ok(())
     }
 
     //The data to be commited

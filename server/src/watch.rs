@@ -1,35 +1,26 @@
 pub use super::Result;
 extern crate shared_lib;
-use crate::error::{DBErrorType, SEError};
-use crate::server::StateChainEntity;
-use crate::storage::Storage;
 use crate::Database;
 use crate::PGDatabase;
 use crate::config::Config;
-use cfg_if::cfg_if;
-use uuid::Uuid;
-use std::str::FromStr;
 
 use std::{thread, time};
 
-use bitcoincore_rpc::{Auth, Client, RpcApi};
-use bitcoin::{Transaction,
-    hashes::sha256d};
+use bitcoincore_rpc::{Auth, Client, RpcApi, Error};
 use bitcoin::consensus;
+use jsonrpc;
 
-
-use std::marker::{Send, Sync};
+const SCAN_INTERVAL: u64 = 60000; // check blockchain once per minute
 
 pub fn watch_node(rpc_path: String) {
 
     let config_rs = Config::load().unwrap();
-
     let mut sc_entity = PGDatabase::get_new();
 
     sc_entity.set_connection_from_config(&config_rs);
 
     //check interval 
-    let interval = time::Duration::from_millis(10000);
+    let interval = time::Duration::from_millis(SCAN_INTERVAL);
     let rpc_path_parts: Vec<&str> = rpc_path.split('@').collect();
     if rpc_path_parts.len() != 2 {
         panic!("Invalid bitcoind RPC path")
@@ -44,44 +35,53 @@ pub fn watch_node(rpc_path: String) {
                           Auth::UserPass(rpc_cred[0].to_string(),
                                          rpc_cred[1].to_string())).unwrap();
 
-
     // main watch loop
     loop {
         // get current block height
         let bestblockcount = rpc.get_block_count();
-        let blocks = bestblockcount.unwrap();
+        let blocks = bestblockcount.unwrap() as i64;
 
-        println!("{} blocks",blocks);
+        debug!("WATCH: Bitcoin block height {}", blocks);
 
-        let state_chain_id = Uuid::from_str("8c160273-d187-4474-bbdd-4335c4dae800").unwrap();
-        let tx = sc_entity.get_backup_transaction(state_chain_id).unwrap();
+        //get all backup transactions with loctimes less than or equal to the current block height
+        let txs = sc_entity.get_current_backup_txs(blocks).unwrap();
 
-        println!("{}",hex::encode(consensus::serialize(&tx)));
+        debug!("WATCH: Stored backup txs now valid {}", txs.len().to_string() );
 
-        // find valid backup transactions
-        // iterate through backup transaction db
-//        let mut iter = config.db.iterator(IteratorMode::Start); // Always iterates forward
+        //loop over txs
+        for tx in &txs {
+            debug!("WATCH: TxID: {}",consensus::encode::serialize_hex(&tx.tx.txid()));
 
-
-
-
-
-
-//        for (key, value) in iter {
-            //if backup tx has valid locktime, then broadcast 
-//            if value.locktime.to_u64() <= blocks {
-//                let tx = value.tx;
-//                let tx_ser = &encode::serialize_hex(tx);
-//                let senttx = rpc.send_raw_transaction(tx_ser);
-                //if already confirmed - remove tx from database
-//                if let Err(Error::JsonRpc(jsonrpc::error::Error::Rpc(ref rpcerr))) = senttx {
-//                    if rpcerr.code == -28 
-//                    {
-//                        // remove transaction from backup DB
-//                    }
-//                }
-//            }
-//        }
+            let txinfo = rpc.send_raw_transaction(&consensus::serialize(&tx.tx));
+            match txinfo {
+                Ok(ret) => {
+                    info!(
+                        "Backup transaction txid {} successfully broadcast.",
+                        ret
+                    );
+                    continue;
+                }
+                Err(Error::JsonRpc(jsonrpc::error::Error::Rpc(ref rpcerr)))
+                    if rpcerr.code == -27 =>  // "transaction already in block chain"
+                        {
+                            // transaction successfully confirmed - remove from backup DB
+                            sc_entity.remove_backup_tx(&tx.id);
+                            info!(
+                                "Backup txid {} already confirmed. ID {} removed from BackupTx database.",
+                                tx.tx.txid(),
+                                tx.id
+                            );
+                            continue;
+                        }
+                Err(e) => {
+                    info!(
+                        "Error sending backup tx {}",
+                        tx.tx.txid()
+                    );
+                    continue;
+                }
+            }
+        }
         thread::sleep(interval);
     }
 }

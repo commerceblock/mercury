@@ -1,6 +1,6 @@
-electrum_server = "127.0.0.1:50002"
+electrum_server = "127.0.0.1:60401"
 network = "regtest"
-block_time = 2
+block_time = 2000
 testing_mode = false
 # log_file = "log/output.log" # Comment out for stdout
 lockheight_init = 1000
@@ -16,7 +16,7 @@ punishment_duration = "3600" # 1 hour
 batch_lifetime = "3600" # 1 hour
 
 #Mainstay config
-mainstay_config = ""
+mainstay_config = {url = "https://mainstay.xyz/api/v1", position = 6, token = "4135fe4d-a687-4f78-8f44-30aa57d88299"}
 
 #Watch config
 watch_only = false

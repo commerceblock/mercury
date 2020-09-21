@@ -11,9 +11,11 @@ use shared_lib::{
     mocks::mock_electrum::MockElectrum,
     state_chain::*,
     structs::*,
-    util::{get_sighash, tx_backup_verify, tx_withdraw_verify},
+    util::{get_sighash, tx_withdraw_verify},
     Root
 };
+
+use shared_lib::structs::Protocol;
 
 use crate::error::{DBErrorType, SEError};
 use crate::storage::Storage;
@@ -267,7 +269,36 @@ impl Utilities for SCE {
             }
             _ => {
                 // Verify unsigned backup tx to ensure co-sign will be signing the correct data
-                tx_backup_verify(&prepare_sign_msg)?;
+                if prepare_sign_msg.input_addrs.len() != prepare_sign_msg.input_amounts.len() {
+                    return Err(SEError::Generic(String::from(
+                        "Back up tx number of signing addresses != number of input amounts.",
+                    )));
+                }
+
+                //check that the locktime is height and not epoch
+                if (prepare_sign_msg.tx.lock_time as u32) >= (500000000 as u32) {
+                    return Err(SEError::Generic(String::from(
+                        "Backup tx locktime specified as Unix epoch time not block height.",
+                    )));
+                }
+
+                //for transfer (not deposit)
+                if prepare_sign_msg.protocol == Protocol::Transfer {
+                    //verify transfer locktime is correct
+                    let state_chain_id = self.database.get_statechain_id(user_id)?;
+                    let current_tx_backup = self.database.get_backup_transaction(state_chain_id)?;
+
+                    println!("{:?}", "TXCHECK" );
+                    println!("{:?}", current_tx_backup.lock_time.to_string());
+                    println!("{:?}", prepare_sign_msg.tx.lock_time.to_string());
+                    println!("{:?}", self.config.lh_decrement.to_string());
+
+                    if (current_tx_backup.lock_time as u32) != (prepare_sign_msg.tx.lock_time as u32) + (self.config.lh_decrement as u32) {
+                        return Err(SEError::Generic(String::from(
+                            "Backup tx locktime not correctly decremented.",
+                        )));
+                    }
+                }
 
                 let sig_hash = get_sighash(
                     &prepare_sign_msg.tx,

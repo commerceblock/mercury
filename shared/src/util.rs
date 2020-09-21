@@ -67,22 +67,6 @@ pub fn get_sighash(
     )
 }
 
-/// Check backup tx is valid
-pub fn tx_backup_verify(tx_psm: &PrepareSignTxMsg) -> Result<()> {
-    if tx_psm.input_addrs.len() != tx_psm.input_amounts.len() {
-        return Err(SharedLibError::FormatError(String::from(
-            "Back up tx number of signing addresses != number of input amounts.",
-        )));
-    }
-
-    // May want to check more here
-    // - locktime
-    // - amounts
-    // - Fee rate?
-
-    Ok(())
-}
-
 /// Check withdraw tx is valid
 pub fn tx_withdraw_verify(
     tx_psm: &PrepareSignTxMsg,
@@ -148,34 +132,34 @@ pub fn tx_funding_build(
 /// build kick-off transaction spending funding tx to:
 ///     - amount A-D to p2wpkh address P, and
 ///     - amount D to script OP_TRUE
-//pub fn tx_kickoff_build(
-//    funding_tx_in: &TxIn,
-//    p_address: &Address,
-//    amount: &u64,
-//) -> Result<Transaction> {
-//    if DUSTLIMIT >= *amount {
-//        return Err(SharedLibError::FormatError(String::from(
-//            "Not enough value to cover fee.",
-//        )));
-//    }
-//    let script = Builder::new().push_opcode(OP_TRUE).into_script();
-//    let tx_k = Transaction {
-//        input: vec![funding_tx_in.clone()],
-//        output: vec![
-//            TxOut {
-//                script_pubkey: p_address.script_pubkey(),
-//                value: amount - DUSTLIMIT,
-//            },
-//            TxOut {
-//                script_pubkey: script,
-//                value: DUSTLIMIT,
-//            },
-//        ],
-//        lock_time: 0,
-//        version: 2,
-//    };
-//    Ok(tx_k)
-//}
+pub fn tx_kickoff_build(
+    funding_tx_in: &TxIn,
+    p_address: &Address,
+    amount: &u64,
+) -> Result<Transaction> {
+    if DUSTLIMIT >= *amount {
+        return Err(SharedLibError::FormatError(String::from(
+            "Not enough value to cover fee.",
+        )));
+    }
+    let script = Builder::new().push_opcode(OP_TRUE).into_script();
+    let tx_k = Transaction {
+        input: vec![funding_tx_in.clone()],
+        output: vec![
+            TxOut {
+                script_pubkey: p_address.script_pubkey(),
+                value: amount - DUSTLIMIT,
+            },
+            TxOut {
+                script_pubkey: script,
+                value: DUSTLIMIT,
+            },
+        ],
+        lock_time: 0,
+        version: 2,
+    };
+    Ok(tx_k)
+}
 
 /// Build backup tx spending P output of txK to given backup address
 pub fn tx_backup_build(

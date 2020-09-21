@@ -150,6 +150,8 @@ pub trait Database {
         state_chain_id: &Uuid,
         tx_backup: &Transaction,
     ) -> Result<()>;
+    fn get_current_backup_txs(&self, locktime: i64) -> Result<Vec<BackupTxID>>;
+    fn remove_backup_tx(&self, state_chain_id: &Uuid) -> Result<()>;
     fn get_backup_transaction(&self, state_chain_id: Uuid) -> Result<Transaction>;
     fn get_backup_transaction_and_proof_key(&self, user_id: Uuid) -> Result<(Transaction, String)>;
     fn get_proof_key(&self, user_id: Uuid) -> Result<String>;
@@ -262,6 +264,11 @@ pub mod structs {
         pub state_chains: HashMap<Uuid, bool>,
         pub finalized_data_vec: Vec<TransferFinalizeData>,
         pub start_time: NaiveDateTime,
+    }
+
+    pub struct BackupTxID {
+        pub tx: Transaction,
+        pub id: Uuid,
     }
 
     #[derive(Debug)]
