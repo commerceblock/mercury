@@ -295,6 +295,7 @@ mod tests {
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
         db.expect_get_root().returning(|_| Ok(None));
         db.expect_root_update().returning(|_| Ok(1));
+        db.expect_remove_backup_tx().returning(|_| Ok(()));
 
         let sc_entity = test_sc_entity(db);
         let _m = mocks::ms::post_commitment().create();        //Mainstay post commitment mock
