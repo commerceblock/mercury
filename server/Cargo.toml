@@ -34,9 +34,8 @@ jsonwebtoken = "5.0.1"
 rust-crypto = "0.2"
 hex = "0.3.2"
 floating-duration = "0.1.2"
-bitcoin = { version = "0.20", features = [ "use-serde" ] }
+bitcoin = { version = "0.25", features = [ "use-serde" ] }
 rand = "0.6.5"
-electrumx_client = { git = "https://github.com/commerceblock/rust-electrumx-client", tag="v0.1.0" }
 env_logger = "0.7.1"
 log4rs = "0.12.0"
 postgres = { version = "0.15.2", features = ["with-uuid","with-chrono"] }
@@ -52,6 +51,10 @@ jsonrpc = "0.11.0"
 
 [dev-dependencies]
 mockito = "0.27.0"
+
+[dependencies.electrumx_client]
+git = "https://github.com/commerceblock/rust-electrumx-client"
+tag = "v0.1.1" 
 
 [dependencies.zk-paillier]
 git = "https://github.com/KZen-networks/zk-paillier"

@@ -118,7 +118,7 @@ impl Default for PrepareSignTxMsg {
 
     fn default() -> Self {
         let default_tx = Transaction{
-            version: u32::default(), 
+            version: i32::default(), 
             lock_time: u32::default(), 
             input: Vec::<TxIn>::default(), 
             output: Vec::<TxOut>::default()
@@ -479,6 +479,7 @@ mod tests{
             tx_backup_psm: PrepareSignTxMsg::default(),
             rec_addr: SCEAddress{tx_backup_addr: Address::from_str("1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h").unwrap(), 
             proof_key: PublicKey::from_secret_key(&secp, &SecretKey::new(&mut rng))}
+                //::new(&mut rng))}
         };
         
         let msg_clone = msg.clone();

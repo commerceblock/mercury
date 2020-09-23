@@ -11,7 +11,7 @@ use crate::Verifiable;
 use bitcoin::{
     blockdata::script::Builder,
     hashes::sha256d::Hash,
-    {blockdata::opcodes::OP_TRUE, util::bip143::SighashComponents, OutPoint},
+    {blockdata::opcodes::OP_TRUE, util::bip143::SigHashCache, OutPoint},
     {Address, Network, Transaction, TxIn, TxOut},
 };
 
@@ -43,6 +43,7 @@ pub fn reverse_hex_str(hex_str: String) -> Result<String> {
     Ok(result)
 }
 
+
 /// Get sig hash for some transaction input.
 /// Arguments: tx, index of input, address being spent from and amount
 pub fn get_sighash(
@@ -52,19 +53,22 @@ pub fn get_sighash(
     amount: &u64,
     network: &String,
 ) -> Hash {
-    let comp = SighashComponents::new(&tx);
-    comp.sighash_all(
-        &tx.input[*tx_index],
+    let mut comp = SigHashCache::new(tx);
+    let pk_btc = bitcoin::secp256k1::PublicKey::from_slice(&address_pk.serialize()).expect("failed to convert public key");
+    comp.signature_hash(
+        tx_index.to_owned(),
         &bitcoin::Address::p2pkh(
             &bitcoin::util::key::PublicKey {
                 compressed: true,
-                key: *address_pk,
+                key: pk_btc,
             },
             network.parse::<Network>().unwrap(),
         )
         .script_pubkey(),
         *amount,
-    )
+        bitcoin::blockdata::transaction::SigHashType::All
+    ).as_hash()
+
 }
 
 /// Check withdraw tx is valid
@@ -163,7 +167,7 @@ pub fn tx_kickoff_build(
 
 /// Build backup tx spending P output of txK to given backup address
 pub fn tx_backup_build(
-    funding_txid: &Hash,
+    funding_txid: &bitcoin::Txid,
     b_address: &Address,
     amount: &u64,
     locktime: &u32,
@@ -199,7 +203,7 @@ pub fn tx_backup_build(
 ///     - amount-fee to receive address, and
 ///     - amount 'fee' to State Entity fee address 'fee_addr'
 pub fn tx_withdraw_build(
-    funding_txid: &Hash,
+    funding_txid: &bitcoin::Txid,
     rec_address: &Address,
     amount: &u64,
     fee: &u64,
@@ -250,7 +254,7 @@ pub mod keygen {
        let secp = Secp256k1::new();
         let secret_key = generate_secret_key();
         let priv_key = util::key::PrivateKey {
-            compressed: false,
+            compressed: true,
             network: NETWORK,
             key: secret_key,
         };
@@ -276,6 +280,7 @@ pub mod tests {
     use super::keygen::*;
     use super::*;
     use bitcoin::hashes::sha256d;
+    use bitcoin::hash_types::Txid;
     use serde_json;
 
     #[test]
@@ -283,10 +288,20 @@ pub mod tests {
         let secp = Secp256k1::new();
 
         let (priv_key, pub_key) = generate_keypair();
-        let addr = Address::p2wpkh(&pub_key, NETWORK);
+
+        //let pk_compressed = pub_key.
+
+        let addr = match Address::p2wpkh(&pub_key, NETWORK){
+            Ok(r) => r,
+            Err(e) => {
+                assert!(false, "{}", e); 
+                return;
+            },
+        };
+        
         let inputs = vec![TxIn {
             previous_output: OutPoint {
-                txid: sha256d::Hash::default(),
+                txid: Txid::from_hash(sha256d::Hash::default()),
                 vout: 0,
             },
             sequence: RBF,
