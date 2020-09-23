@@ -33,6 +33,7 @@ rand = "0.6.5"
 base64 = "0.12.2"
 env_logger = "0.7.1"
 pyo3 = "0.11.1"
+secp256k1 = "0.19.0"
 
 [dependencies.electrumx_client]
 git = "https://github.com/commerceblock/rust-electrumx-client"
@@ -62,8 +63,8 @@ git = "https://github.com/KZen-networks/multi-party-schnorr"
 tag = "v0.3.1"
 
 [dependencies.curv]
-git = "https://github.com/KZen-networks/curv"
-tag = "v0.2.2"
+git = "https://github.com/commerceblock/curv"
+tag = "v0.2.6.1"
 features =  ["ec_secp256k1"]
 
 [dependencies.centipede]

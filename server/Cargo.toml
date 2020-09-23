@@ -77,8 +77,8 @@ git = "https://github.com/KZen-networks/multi-party-schnorr"
 tag = "v0.3.1"
 
 [dependencies.curv]
-git = "https://github.com/KZen-networks/curv"
-tag = "v0.2.2"
+git = "https://github.com/commerceblock/curv"
+tag = "v0.2.6.1"
 features =  ["ec_secp256k1"]
 
 [dependencies.monotree]

@@ -251,7 +251,7 @@ pub fn try_o2(
         .private_key
         .key;
     let mut o2: FE = ECScalar::zero();
-    o2.set_element(key_share_priv);
+    o2.set_element(secp256k1::key::SecretKey::from_str(&key_share_priv.to_string())?);
 
     let g: GE = ECPoint::generator();
     let o2_pub: GE = g * o2;
@@ -303,7 +303,7 @@ pub fn transfer_receiver_finalize(
     // Make shared key with new private share
     wallet.gen_shared_key_fixed_secret_key(
         &finalize_data.new_shared_key_id,
-        &finalize_data.o2.get_element(),
+        &bitcoin::secp256k1::SecretKey::from_str(&finalize_data.o2.get_element().to_string())?,
         &finalize_data.state_chain_data.amount,
     )?;
 
