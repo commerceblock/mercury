@@ -32,6 +32,8 @@ use std::str::FromStr;
 use std::{thread, time::Duration};
 use uuid::Uuid;
 
+const MAX_LOCKTIME: u32 = 500000000; // bitcoin tx nlocktime cutoff
+
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
 cfg_if! {
@@ -276,7 +278,7 @@ impl Utilities for SCE {
                 }
 
                 //check that the locktime is height and not epoch
-                if (prepare_sign_msg.tx.lock_time as u32) >= (500000000 as u32) {
+                if (prepare_sign_msg.tx.lock_time as u32) >= MAX_LOCKTIME {
                     return Err(SEError::Generic(String::from(
                         "Backup tx locktime specified as Unix epoch time not block height.",
                     )));

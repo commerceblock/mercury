@@ -8,7 +8,7 @@ lh_decrement = 10
 
 # Fees
 fee_address = "bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x"
-fee_deposit = 400
+fee_deposit = 300
 fee_withdraw = 300
 
 # Swap parameters
@@ -16,7 +16,7 @@ punishment_duration = "3600" # 1 hour
 batch_lifetime = "3600" # 1 hour
 
 #Mainstay config
-mainstay_config = {url = "https://mainstay.xyz/api/v1", position = 6, token = "4135fe4d-a687-4f78-8f44-30aa57d88299"}
+mainstay_config = ""
 
 #Watch config
 watch_only = false

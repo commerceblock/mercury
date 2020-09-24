@@ -116,6 +116,7 @@ pub fn get_server<T: Database + Send + Sync + 'static, D: Database + MonotreeDat
     let bitcoind = sc_entity.config.bitcoind.clone();
 
     if sc_entity.config.watch_only {
+        info!("Server running in watch-only mode.");
         thread::spawn(|| watch_node(bitcoind));
         let rock = rocket::custom(rocket_config)
             .register(catchers![internal_error, not_found, bad_request])

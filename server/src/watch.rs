@@ -1,23 +1,31 @@
 pub use super::Result;
 extern crate shared_lib;
-use crate::Database;
-use crate::PGDatabase;
 use crate::config::Config;
-
 use std::{thread, time};
-
+use crate::Database;
 use bitcoincore_rpc::{Auth, Client, RpcApi, Error};
 use bitcoin::consensus;
 use jsonrpc;
+use cfg_if::cfg_if;
 
 const SCAN_INTERVAL: u64 = 60000; // check blockchain once per minute
 
-pub fn watch_node(rpc_path: String) {
+pub fn watch_node(rpc_path: String) -> Result<()> {
 
     let config_rs = Config::load().unwrap();
-    let mut sc_entity = PGDatabase::get_new();
 
-    sc_entity.set_connection_from_config(&config_rs);
+    cfg_if! {
+        if #[cfg(any(test,feature="mockdb"))]{
+            use crate::MockDatabase;
+            let mut sc_entity = MockDatabase::new();
+        } else {
+            use crate::PGDatabase;
+            let mut sc_entity = PGDatabase::get_new();
+        }
+    }
+
+    //set db connection
+    sc_entity.set_connection_from_config(&config_rs)?;
 
     //check interval 
     let interval = time::Duration::from_millis(SCAN_INTERVAL);
@@ -31,9 +39,16 @@ pub fn watch_node(rpc_path: String) {
         panic!("Invalid bitcoind RPC credentials")
     };
 
-    let rpc = Client::new(rpc_path_parts[1].to_string(),
+    cfg_if! {
+        if #[cfg(any(test,feature="mockdb"))]{
+            use shared_lib::mocks::mock_client::MockClient;
+            let rpc = MockClient::new();
+        } else {
+            let rpc = Client::new(rpc_path_parts[1].to_string(),
                           Auth::UserPass(rpc_cred[0].to_string(),
                                          rpc_cred[1].to_string())).unwrap();
+        }
+    }
 
     // main watch loop
     loop {
@@ -65,7 +80,7 @@ pub fn watch_node(rpc_path: String) {
                     if rpcerr.code == -27 =>  // "transaction already in block chain"
                         {
                             // transaction successfully confirmed - remove from backup DB
-                            sc_entity.remove_backup_tx(&tx.id);
+                            sc_entity.remove_backup_tx(&tx.id)?;
                             info!(
                                 "Backup txid {} already confirmed. ID {} removed from BackupTx database.",
                                 tx.tx.txid(),
@@ -75,8 +90,8 @@ pub fn watch_node(rpc_path: String) {
                         }
                 Err(e) => {
                     info!(
-                        "Error sending backup tx {}",
-                        tx.tx.txid()
+                        "Error sending backup tx {} {}",
+                        tx.tx.txid(),e
                     );
                     continue;
                 }
