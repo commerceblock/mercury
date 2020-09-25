@@ -191,7 +191,7 @@ impl Tor {
 
 #[derive(Debug, Clone)]
 pub struct ClientShim {
-    pub client: reqwest::Client,
+    pub client: reqwest::blocking::Client,
     pub tor: Option<Tor>,
     pub auth_token: Option<String>,
     pub endpoint: String,
@@ -217,14 +217,14 @@ impl ClientShim {
         cs
     }
 
-    pub fn new_client(tor: Option<&Tor>) -> reqwest::Client {
+    pub fn new_client(tor: Option<&Tor>) -> reqwest::blocking::Client {
         match tor {
-            None => reqwest::Client::new(),
+            None => reqwest::blocking::Client::new(),
             Some(t) => match t.enable {
-                true => reqwest::Client::builder()
+                true => reqwest::blocking::Client::builder()
                         .proxy(reqwest::Proxy::all(&t.proxy).unwrap())
                         .build().unwrap(),
-                false => reqwest::Client::new(),
+                false => reqwest::blocking::Client::new(),
             }
         }
     }
