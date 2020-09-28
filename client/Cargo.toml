@@ -22,7 +22,7 @@ serde_derive = "1.0"
 log = "0.4"
 clap = { version = "2.33.3", features = ["yaml"] }
 reqwest = { version = "0.10", features = ["socks", "blocking", "json"] }
-failure = "0.1.5"
+failure = "0.1.8"
 uuid = { version = "0.5", features = ["v4", "serde"] }
 itertools = "0.8.0"
 hex = "0.3.2"
