@@ -34,8 +34,8 @@ jsonwebtoken = "5.0.1"
 rust-crypto = "0.2"
 hex = "0.3.2"
 floating-duration = "0.1.2"
-bitcoin = { version = "0.20", features = [ "use-serde" ] }
-electrumx_client = { git = "https://github.com/commerceblock/rust-electrumx-client", tag="v0.1.0" }
+bitcoin = { version = "0.22", features = [ "use-serde" ] }
+electrumx_client = { git = "https://github.com/commerceblock/rust-electrumx-client", tag="v0.1.1" }
 env_logger = "0.7.1"
 log4rs = "0.13.0"
 postgres = { version = "0.15.2", features = ["with-uuid","with-chrono"] }

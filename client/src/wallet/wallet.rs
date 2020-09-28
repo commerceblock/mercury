@@ -603,7 +603,7 @@ impl Wallet {
 fn basic_input(txid: &String, vout: &u32) -> TxIn {
     TxIn {
         previous_output: OutPoint {
-            txid: sha256d::Hash::from_str(txid).unwrap(),
+            txid: bitcoin::Txid::from_str(txid).unwrap(),
             vout: *vout,
         },
         sequence: 0xFFFFFFFF,

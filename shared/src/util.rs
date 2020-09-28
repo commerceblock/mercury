@@ -9,11 +9,14 @@ use crate::structs::PrepareSignTxMsg;
 use crate::Verifiable;
 
 use bitcoin::{
+    Txid,
     blockdata::script::Builder,
     hashes::sha256d::Hash,
     {blockdata::opcodes::OP_TRUE, util::bip143::SighashComponents, OutPoint},
     {Address, Network, Transaction, TxIn, TxOut},
 };
+
+use crate::bitcoin_hashes::hex::{ToHex, FromHex};
 
 use curv::PK;
 use std::str::FromStr;
@@ -64,7 +67,7 @@ pub fn get_sighash(
         )
         .script_pubkey(),
         *amount,
-    )
+    ).as_hash()
 }
 
 /// Check backup tx is valid
@@ -179,7 +182,7 @@ pub fn tx_kickoff_build(
 
 /// Build backup tx spending P output of txK to given backup address
 pub fn tx_backup_build(
-    funding_txid: &Hash,
+    funding_txid: &Txid,
     b_address: &Address,
     amount: &u64,
 ) -> Result<Transaction> {
@@ -188,6 +191,7 @@ pub fn tx_backup_build(
             "Not enough value to cover fee.",
         )));
     }
+
     let txin = TxIn {
         previous_output: OutPoint {
             txid: *funding_txid,
@@ -214,7 +218,7 @@ pub fn tx_backup_build(
 ///     - amount-fee to receive address, and
 ///     - amount 'fee' to State Entity fee address 'fee_addr'
 pub fn tx_withdraw_build(
-    funding_txid: &Hash,
+    funding_txid: &Txid,
     rec_address: &Address,
     amount: &u64,
     fee: &u64,
@@ -301,7 +305,7 @@ pub mod tests {
         let addr = Address::p2wpkh(&pub_key, NETWORK);
         let inputs = vec![TxIn {
             previous_output: OutPoint {
-                txid: sha256d::Hash::default(),
+                txid: Txid::default(),
                 vout: 0,
             },
             sequence: RBF,
