@@ -32,7 +32,7 @@ error-chain = "0.12.0"
 failure = "0.1.8"
 jsonwebtoken = "5.0.1"
 rust-crypto = "0.2"
-hex = "0.3.2"
+hex = "0.4.2"
 floating-duration = "0.1.2"
 bitcoin = { version = "0.20", features = [ "use-serde" ] }
 rand = "0.6.5"
