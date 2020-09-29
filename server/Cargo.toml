@@ -34,7 +34,7 @@ jsonwebtoken = "5.0.1"
 rust-crypto = "0.2"
 hex = "0.3.2"
 floating-duration = "0.1.2"
-bitcoin = { version = "0.22", features = [ "use-serde" ] }
+bitcoin = { version = "0.25", features = [ "use-serde" ] }
 electrumx_client = { git = "https://github.com/commerceblock/rust-electrumx-client", tag="v0.1.1" }
 env_logger = "0.7.1"
 log4rs = "0.13.0"
@@ -55,24 +55,24 @@ git = "https://github.com/KZen-networks/zk-paillier"
 tag = "v0.2.4"
 
 [dependencies.kms]
-git = "https://github.com/KZen-networks/kms-secp256k1"
-tag = "v0.2.0"
+git = "https://github.com/commerceblock/kms-secp256k1"
+tag = "v0.1.1"
 
 [dependencies.multi-party-ecdsa]
-git = "https://github.com/KZen-networks/multi-party-ecdsa"
-tag = "v0.2.5"
+git = "https://github.com/commerceblock/multi-party-ecdsa"
+tag = "v0.2.7"
 
 [dependencies.multi-party-eddsa]
 git = "https://github.com/KZen-networks/multi-party-eddsa"
 tag = "v0.2.1"
 
 [dependencies.multi-party-schnorr]
-git = "https://github.com/KZen-networks/multi-party-schnorr"
-tag = "v0.3.1"
+git = "https://github.com/commerceblock/multi-party-schnorr"
+tag = "v0.3.4"
 
 [dependencies.curv]
-git = "https://github.com/KZen-networks/curv"
-tag = "v0.2.2"
+git = "https://github.com/commerceblock/curv"
+tag = "v0.2.7"
 features =  ["ec_secp256k1"]
 
 [dependencies.monotree]

@@ -588,11 +588,11 @@ impl Wallet {
         resp
     }
 
-    pub fn to_p2wpkh_address(&self, pub_key: &PublicKey) -> bitcoin::Address {
+    pub fn to_p2wpkh_address(&self, pub_key: &PublicKey) -> Result<bitcoin::Address> {
         bitcoin::Address::p2wpkh(
             &to_bitcoin_public_key(pub_key.key),
             self.get_bitcoin_network(),
-        )
+        ).map_err(|e| e.into())
     }
 
     pub fn get_bitcoin_network(&self) -> Network {

@@ -269,7 +269,7 @@ pub mod keygen {
        let secp = Secp256k1::new();
         let secret_key = generate_secret_key();
         let priv_key = util::key::PrivateKey {
-            compressed: false,
+            compressed: true,
             network: NETWORK,
             key: secret_key,
         };
@@ -302,7 +302,16 @@ pub mod tests {
         let secp = Secp256k1::new();
 
         let (priv_key, pub_key) = generate_keypair();
-        let addr = Address::p2wpkh(&pub_key, NETWORK);
+
+        let addr = match Address::p2wpkh(&pub_key, NETWORK){
+            Ok(r) => r,
+            Err(e) => {
+                assert!(false, "{}", e); 
+                return;
+            },
+        };
+        
+        let addr = Address::p2wpkh(&pub_key, NETWORK).expect("failed to get address");
         let inputs = vec![TxIn {
             previous_output: OutPoint {
                 txid: Txid::default(),
