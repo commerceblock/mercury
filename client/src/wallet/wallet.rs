@@ -16,7 +16,6 @@ use crate::wallet::shared_key::SharedKey;
 use crate::ClientShim;
 
 use bitcoin::{
-    hashes::sha256d,
     secp256k1::{key::SecretKey, All, Message, Secp256k1},
     util::bip32::{ChildNumber, ExtendedPrivKey},
     {Address, Network, OutPoint, PublicKey, TxIn},

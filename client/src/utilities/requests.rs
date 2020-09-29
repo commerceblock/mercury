@@ -36,7 +36,7 @@ where
 
     // catch reqwest errors
     let value = match b.json(&body).send() {
-        Ok(mut v) => v.text().unwrap(),
+        Ok(v) => v.text().unwrap(),
         Err(e) => return Err(CError::from(e)),
     };
 
@@ -73,7 +73,7 @@ where
 
     // catch reqwest errors
     let value = match b.send() {
-        Ok(mut v) => v.text().unwrap(),
+        Ok(v) => v.text().unwrap(),
         Err(e) => return Err(CError::from(e)),
     };
 

@@ -265,7 +265,7 @@ impl Request {
 
 fn get(command: &str, config: &MainstayConfig) -> Result<serde_json::Value> {
     let url = reqwest::Url::parse(&format!("{}/{}", config.url(), command))?;
-    let mut resp = reqwest::blocking::get(url)?;
+    let resp = reqwest::blocking::get(url)?;
     let resp_json = resp.json()?;
     Ok(resp_json)
 }
@@ -294,7 +294,7 @@ pub trait Attestable {
             signature,
         )?
         .0;
-        let mut res = req.send()?;
+        let res = req.send()?;
         let err_base = "commitment failed";
 
         if res.status().is_success() {

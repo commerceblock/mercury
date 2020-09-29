@@ -12,11 +12,9 @@ use bitcoin::{
     Txid,
     blockdata::script::Builder,
     hashes::sha256d::Hash,
-    {blockdata::opcodes::OP_TRUE, util::bip143::SighashCache, OutPoint},
+    {blockdata::opcodes::OP_TRUE, util::bip143::SigHashCache, OutPoint},
     {Address, Network, Transaction, TxIn, TxOut},
 };
-
-use crate::bitcoin_hashes::hex;
 
 use curv::PK;
 use std::str::FromStr;
@@ -55,18 +53,20 @@ pub fn get_sighash(
     amount: &u64,
     network: &String,
 ) -> Hash {
-    let comp = SighashComponents::new(&tx);
-    comp.sighash_all(
-        &tx.input[*tx_index],
+    let mut comp = SigHashCache::new(tx);
+    let pk_btc = bitcoin::secp256k1::PublicKey::from_slice(&address_pk.serialize()).expect("failed to convert public key");
+    comp.signature_hash(
+        tx_index.to_owned(),
         &bitcoin::Address::p2pkh(
             &bitcoin::util::key::PublicKey {
                 compressed: true,
-                key: *address_pk,
+                key: pk_btc,
             },
             network.parse::<Network>().unwrap(),
         )
         .script_pubkey(),
         *amount,
+        bitcoin::blockdata::transaction::SigHashType::All
     ).as_hash()
 }
 
@@ -309,8 +309,7 @@ pub mod tests {
                 return;
             },
         };
-        
-        let addr = Address::p2wpkh(&pub_key, NETWORK).expect("failed to get address");
+ 
         let inputs = vec![TxIn {
             previous_output: OutPoint {
                 txid: Txid::default(),
