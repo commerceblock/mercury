@@ -12,11 +12,11 @@ use bitcoin::{
     Txid,
     blockdata::script::Builder,
     hashes::sha256d::Hash,
-    {blockdata::opcodes::OP_TRUE, util::bip143::SighashComponents, OutPoint},
+    {blockdata::opcodes::OP_TRUE, util::bip143::SighashCache, OutPoint},
     {Address, Network, Transaction, TxIn, TxOut},
 };
 
-use crate::bitcoin_hashes::hex::{ToHex, FromHex};
+use crate::bitcoin_hashes::hex;
 
 use curv::PK;
 use std::str::FromStr;
@@ -294,7 +294,6 @@ pub mod keygen {
 pub mod tests {
     use super::keygen::*;
     use super::*;
-    use bitcoin::hashes::sha256d;
     use serde_json;
 
     #[test]

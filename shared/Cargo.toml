@@ -13,7 +13,7 @@ name = "shared_lib"
 path = "src/lib.rs"
 
 [dependencies]
-hex = "0.3.2"
+hex = "0.4.2"
 libsecp256k1 = "0.3.5"
 bitcoin = { version = "0.25", features = [ "use-serde", "rand" ] }
 bitcoin_hashes = "0.9"
