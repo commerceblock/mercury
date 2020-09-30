@@ -187,14 +187,13 @@ pub fn transfer_receiver(
                 done = true;
             }
             Err(e) => {
-                if !e
-                    .to_string()
-                    .contains(&String::from("Error: Invalid o2, try again."))
-                {
-                    return Err(e);
+                match e {
+                    CError::TryAgain => {
+                        num_tries = num_tries + 1;
+                        debug!("try o2 failure. Trying again...");
+                    }
+                    _ => return Err(e),
                 }
-                num_tries = num_tries + 1;
-                debug!("try o2 failure. Trying again...");
             }
         }
     }

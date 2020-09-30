@@ -24,6 +24,8 @@ pub enum SharedLibError {
     Generic(String),
     /// Invalid argument error
     FormatError(String),
+    /// Try again error
+    TryAgain,
 }
 
 impl From<AddressError> for SharedLibError {
@@ -67,6 +69,7 @@ impl fmt::Display for SharedLibError {
         match *self {
             SharedLibError::Generic(ref e) => write!(f, "Error: {}", e),
             SharedLibError::FormatError(ref e) => write!(f, "Format Error: {}", e),
+            SharedLibError::TryAgain => write!(f, "Invalid, try again"),
         }
     }
 }

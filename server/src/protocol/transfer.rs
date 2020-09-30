@@ -161,7 +161,7 @@ impl Transfer for SCE {
         let sk_bigint = s2.to_big_int();
         let q_third = FE::q();
         if sk_bigint >= q_third.div_floor(&BigInt::from(3)) {
-            return Err(SEError::Generic(format!("Invalid o2, try again.")));
+            return Err(SEError::TryAgain);
         }
 
         let g: GE = ECPoint::generator();
