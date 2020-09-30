@@ -233,12 +233,35 @@ pub fn try_o2(
     num_tries: &u32,
     batch_data: &Option<BatchData>,
 ) -> Result<(FE, TransferMsg5)> {
+
+    let t1 = match transfer_msg3.t1.get_fe(){
+        Ok(r) => r,
+        Err(e) => 
+            return Err(CError::Generic(format!("Failed to get FE from transfer_msg_3 {:?} error: {}", 
+                transfer_msg3,
+                e.to_string()))),
+    };
+
     // generate o2 private key and corresponding 02 public key
     let mut encoded_txid = num_tries.to_string();
     encoded_txid.push_str(&state_chain_data.utxo.txid.to_string());
-    let key_share_pub = wallet
+    let funding_txid_int = match funding_txid_to_int(&encoded_txid){
+        Ok(r) => r,
+        Err(e) => 
+            return Err(CError::Generic(format!("Failed to get funding txid int from state_chain_data: {:?} error: {}", 
+                state_chain_data,
+                e.to_string()))),
+    };
+    let key_share_pub =  match wallet
         .se_key_shares
-        .get_new_key_encoded_id(funding_txid_to_int(&encoded_txid)?)?;
+        .get_new_key_encoded_id(funding_txid_int){
+            Ok(r) => r,
+            Err(e) =>
+                return Err(CError::Generic(format!("Failed to get new key encoded id from funding_txid_int: {} error: {}", 
+                    funding_txid_int,
+                    e.to_string()))),
+        };
+
     let key_share_priv = wallet
         .se_key_shares
         .get_key_derivation(&key_share_pub)
@@ -253,7 +276,7 @@ pub fn try_o2(
 
 
     // t2 = t1*o2_inv = o1*x1*o2_inv
-    let t1 = transfer_msg3.t1.get_fe()?;
+   
     let t2 = t1 * (o2.invert());
 
 
