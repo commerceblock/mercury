@@ -56,7 +56,8 @@ tag = "v0.2.4"
 
 [dependencies.kms]
 git = "https://github.com/commerceblock/kms-secp256k1"
-tag = "v0.1.1"
+tag = "v0.1.2"
+default-features = false
 
 [dependencies.multi-party-ecdsa]
 git = "https://github.com/commerceblock/multi-party-ecdsa"
