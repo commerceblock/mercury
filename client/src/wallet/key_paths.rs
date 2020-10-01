@@ -212,7 +212,7 @@ impl KeyPath {
     }
 
     /// Get corresponding private key for a public key. Return None if key not derived in this path (at least not yet).
-    pub fn get_key_derivation(&self, public_key: &PublicKey) -> Option<KeyDer]ivation> {
+    pub fn get_key_derivation(&self, public_key: &PublicKey) -> Option<KeyDerivation> {
         match self.key_derivation_map.get(public_key) {
             Some(entry) => {
                 let mut full_derivation = entry.clone();
