@@ -12,6 +12,8 @@ use bitcoin::{
     util::bip32::{ChildNumber, ExtendedPrivKey, ExtendedPubKey},
     {PrivateKey, PublicKey},
 };
+use curv::FE;
+use crate::curv::elliptic::curves::traits::ECScalar;
 
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -186,8 +188,8 @@ impl KeyPath {
             .map_err(|e| CError::from(e))
     }
 
-    /// generate new key using BIP-175-style encoding of the funding TxID
-    pub fn get_new_key_encoded_id(&mut self, child_id: u32) -> Result<PublicKey> {
+    /// generate new key using BIP-175-style encoding of the funding TxID, and generate o2 if the optional variable is supplied
+    pub fn get_new_key_encoded_id(&mut self, child_id: u32, maybe_o2: Option<&mut FE>) -> Result<PublicKey> {
         let secp = Secp256k1::new();
 
         let new_ext_priv_key =
@@ -199,11 +201,18 @@ impl KeyPath {
             KeyDerivation::new(child_id, new_ext_priv_key.private_key, None),
         );
 
+        match maybe_o2 {
+            None => (),
+            Some(v) => {
+                v.set_element(new_ext_priv_key.private_key.key);
+            }
+        };
+
         Ok(new_ext_pub_key.public_key)
     }
 
     /// Get corresponding private key for a public key. Return None if key not derived in this path (at least not yet).
-    pub fn get_key_derivation(&self, public_key: &PublicKey) -> Option<KeyDerivation> {
+    pub fn get_key_derivation(&self, public_key: &PublicKey) -> Option<KeyDer]ivation> {
         match self.key_derivation_map.get(public_key) {
             Some(entry) => {
                 let mut full_derivation = entry.clone();
@@ -256,7 +265,7 @@ mod tests {
         let mut key_path = KeyPath::new(gen_ext_priv_key());
         let key1 = key_path.get_new_key().unwrap();
         assert!(key_path.get_key_derivation(&key1).is_some());
-        let key2 = key_path.get_new_key_encoded_id(9999999).unwrap();
+        let key2 = key_path.get_new_key_encoded_id(9999999, None).unwrap();
         assert!(key_path.get_key_derivation(&key2).is_some());
 
         let _ = key_path.get_new_key();
@@ -297,7 +306,7 @@ mod tests {
             child1pub
         );
 
-        let key2 = key_path.get_new_key_encoded_id(9999999).unwrap();
+        let key2 = key_path.get_new_key_encoded_id(9999999, None).unwrap();
         assert_eq!(key_path.get_key_derivation(&key2).unwrap().pos, 9999999);
     }
 }

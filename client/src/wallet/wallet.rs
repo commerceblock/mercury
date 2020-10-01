@@ -232,7 +232,7 @@ impl Wallet {
             // is not empty
             let se_proof_keys_pos: Vec<u32> = serde_json::from_str(se_proof_keys_pos_str).unwrap();
             for pos in se_proof_keys_pos {
-                wallet.se_proof_keys.get_new_key_encoded_id(pos)?;
+                wallet.se_proof_keys.get_new_key_encoded_id(pos, None)?;
             }
         }
 
@@ -241,7 +241,7 @@ impl Wallet {
             // is not empty
             let se_key_shares_pos: Vec<u32> = serde_json::from_str(se_key_shares_pos_str).unwrap();
             for pos in se_key_shares_pos {
-                wallet.se_key_shares.get_new_key_encoded_id(pos)?;
+                wallet.se_key_shares.get_new_key_encoded_id(pos, None)?;
             }
         }
 
@@ -318,7 +318,7 @@ impl Wallet {
             .get_new_address_encoded_id(funding_txid_to_int(funding_txid)?)?;
         let proof_key = self
             .se_proof_keys
-            .get_new_key_encoded_id(funding_txid_to_int(funding_txid)?)?;
+            .get_new_key_encoded_id(funding_txid_to_int(funding_txid)?, None)?;
         let proof_key = bitcoin::secp256k1::PublicKey::from_slice(&proof_key.to_bytes().as_slice())?;
         Ok(SCEAddress {
             tx_backup_addr,
@@ -651,7 +651,7 @@ mod tests {
         let proof_key2 = wallet.se_proof_keys.get_new_key().unwrap();
         let key_shares1 = wallet
             .se_key_shares
-            .get_new_key_encoded_id(9999999)
+            .get_new_key_encoded_id(9999999, None)
             .unwrap();
         let key_shares2 = wallet.se_key_shares.get_new_key().unwrap();
 
