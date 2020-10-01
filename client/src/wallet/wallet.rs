@@ -16,7 +16,6 @@ use crate::wallet::shared_key::SharedKey;
 use crate::ClientShim;
 
 use bitcoin::{
-    hashes::sha256d,
     secp256k1::{key::SecretKey, All, Message, Secp256k1},
     util::bip32::{ChildNumber, ExtendedPrivKey},
     {Address, Network, OutPoint, PublicKey, TxIn},
@@ -588,11 +587,11 @@ impl Wallet {
         resp
     }
 
-    pub fn to_p2wpkh_address(&self, pub_key: &PublicKey) -> bitcoin::Address {
+    pub fn to_p2wpkh_address(&self, pub_key: &PublicKey) -> Result<bitcoin::Address> {
         bitcoin::Address::p2wpkh(
             &to_bitcoin_public_key(pub_key.key),
             self.get_bitcoin_network(),
-        )
+        ).map_err(|e| e.into())
     }
 
     pub fn get_bitcoin_network(&self) -> Network {
@@ -603,7 +602,7 @@ impl Wallet {
 fn basic_input(txid: &String, vout: &u32) -> TxIn {
     TxIn {
         previous_output: OutPoint {
-            txid: sha256d::Hash::from_str(txid).unwrap(),
+            txid: bitcoin::Txid::from_str(txid).unwrap(),
             vout: *vout,
         },
         sequence: 0xFFFFFFFF,
