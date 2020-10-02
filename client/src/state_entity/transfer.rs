@@ -195,13 +195,14 @@ pub fn transfer_receiver(
                 done = true;
             }
             Err(e) => {
-                match e {
-                    CError::TryAgain => {
-                        num_tries = num_tries + 1;
-                        debug!("try o2 failure. Trying again...");
-                    }
-                    _ => return Err(e),
+                if !e
+                    .to_string()
+                    .contains(&String::from("try again"))
+                {
+                    return Err(e);
                 }
+                num_tries = num_tries + 1;
+                debug!("try o2 failure. Trying again...");
             }
         }
     }

@@ -25,8 +25,6 @@ pub enum CError {
     SharedLibError(String),
     /// Tor error
     TorError(String),
-    /// Try again
-    TryAgain,
 }
 
 impl From<String> for CError {
@@ -42,10 +40,7 @@ impl From<&str> for CError {
 
 impl From<SharedLibError> for CError {
     fn from(e: SharedLibError) -> CError {
-        match e {
-            SharedLibError::TryAgain => CError::TryAgain,
-            _ => CError::Generic(e.to_string()),
-        }
+        CError::Generic(e.to_string())
     }
 }
 impl From<Box<dyn error::Error>> for CError {
@@ -141,7 +136,6 @@ impl fmt::Display for CError {
             CError::SchnorrError(ref e) => write!(f, "Schnorr Error: {}", e),
             CError::SharedLibError(ref e) => write!(f, "SharedLib Error: {}", e),
             CError::TorError(ref e) => write!(f, "Tor Error: {}", e),
-            CError::TryAgain => write!(f, "Invalid, try again"),
         }
     }
 }
