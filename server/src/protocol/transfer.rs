@@ -160,7 +160,6 @@ impl Transfer for SCE {
         // Check s2 is valid for Lindell protocol (s2<q/3)
         let sk_bigint = s2.to_big_int();
         if sk_bigint >= FE::q().div_floor(&BigInt::from(3)) {
-            println!("returning try again");
             return Err(SEError::TryAgain("o2".to_string()));
         }
 
