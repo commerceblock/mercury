@@ -40,7 +40,7 @@ impl From<&str> for CError {
 
 impl From<SharedLibError> for CError {
     fn from(e: SharedLibError) -> CError {
-        CError::Generic(e.to_string())
+        CError::SharedLibError(e.to_string())
     }
 }
 impl From<Box<dyn error::Error>> for CError {
