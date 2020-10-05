@@ -152,22 +152,37 @@ impl Transfer for SCE {
 
         let s1 = kp.party_1_private.get_private_key();
 
-        // Note:
-        //  s2 = o1*o2_inv*s1
-        //  t2 = o1*x1*o2_inv
-        let s2 = t2 * (td.x1.invert()) * s1;
-
-        // Check s2 is valid for Lindell protocol (s2<q/3)
-        let sk_bigint = s2.to_big_int();
-        if sk_bigint >= FE::q().div_floor(&BigInt::from(3)) {
-            return Err(SEError::TryAgain("o2".to_string()));
+        //let mut rng = OsRng::new().expect("OsRng");
+        let mut theta;
+        let mut s2_theta;
+        let mut s1_theta;
+        let s2 : FE;
+                
+        loop {
+            theta = FE::new_random();
+            // Note:
+            //  s2 = o1*o2_inv*s1
+            //  t2 = o1*x1*o2_inv
+            s1_theta = s1 * theta;
+            s2_theta = t2 * (td.x1.invert()) * s1 * theta;
+            
+            // Check s2 is valid for Lindell protocol (s2<q/3)
+            let sk_bigint = s2_theta.to_big_int();
+            if sk_bigint < FE::q().div_floor(&BigInt::from(3)) {
+                s2 = t2 * (td.x1.invert()) * s1;
+                break;
+            }
         }
+    
+         //   if sk_bigint >= FE::q().div_floor(&BigInt::from(3)) {
+         //       return Err(SEError::TryAgain("o2".to_string()));
+         //   }
 
         let g: GE = ECPoint::generator();
         let s2_pub: GE = g * s2;
 
-        let p1_pub = kp.party_2_public * s1;
-        let p2_pub = transfer_msg4.o2_pub * s2;
+        let p1_pub = kp.party_2_public * s1_theta;
+        let p2_pub = transfer_msg4.o2_pub * s2_theta;
 
         // Check P1 = o1_pub*s1 === p2 = o2_pub*s2
         if p1_pub != p2_pub {
@@ -231,6 +246,7 @@ impl Transfer for SCE {
         Ok(TransferMsg5 {
             new_shared_key_id,
             s2_pub,
+            theta,
         })
     }
 
