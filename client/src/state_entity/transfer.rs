@@ -173,7 +173,10 @@ pub fn transfer_receiver(
     let mut transfer_msg5 = TransferMsg5::default();
     let mut o2 = FE::zero();
     let mut num_tries = 0;
-    let t1_plain = match transfer_msg3.t1.get_fe(){
+    // t1 in transfer_msg3 is ECIES encrypted. 
+    // t1 is decrypted here before passing to try_o2 because try_o2 could
+    // be executed multiple times and t1 is a constant
+    let t1 = match transfer_msg3.t1.get_fe(){
         Ok(r) => r,
         Err(e) => 
             return Err(CError::Generic(format!("Failed to get FE from transfer_msg_3 {:?} error: {}", 
@@ -185,7 +188,7 @@ pub fn transfer_receiver(
             wallet,
             &state_chain_data,
             &transfer_msg3,
-            &t1_plain,
+            &t1,
             &num_tries,
             batch_data,
         ) {
@@ -238,7 +241,7 @@ pub fn try_o2(
     wallet: &mut Wallet,
     state_chain_data: &StateChainDataAPI,
     transfer_msg3: &TransferMsg3,
-    t1_plain: &FE,
+    t1: &FE,
     num_tries: &u32,
     batch_data: &Option<BatchData>,
 ) -> Result<(FE, TransferMsg5)> {
