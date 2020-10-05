@@ -16,7 +16,6 @@ use std::fmt;
 use std::io::Cursor;
 
 
-
 /// Shared library specific errors
 #[derive(Debug, Deserialize)]
 pub enum SharedLibError {
