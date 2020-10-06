@@ -219,6 +219,7 @@ pub fn transfer_receiver(
         new_shared_key_id: transfer_msg5.new_shared_key_id,
         o2,
         s2_pub: transfer_msg5.s2_pub,
+        theta: transfer_msg5.theta,
         state_chain_data,
         proof_key: transfer_msg3.rec_addr.proof_key.clone().to_string(),
         state_chain_id: transfer_msg3.state_chain_id,
@@ -299,6 +300,7 @@ pub struct TransferFinalizeData {
     pub new_shared_key_id: Uuid,
     pub o2: FE,
     pub s2_pub: GE,
+    pub theta: FE,
     pub state_chain_data: StateChainDataAPI,
     pub proof_key: String,
     pub state_chain_id: Uuid,
@@ -313,10 +315,13 @@ pub fn transfer_receiver_finalize(
     finalize_data: TransferFinalizeData,
 ) -> Result<()> {
     println!("gen shared key fixed secret key");
+
+    let o2_theta = finalize_data.o2 * finalize_data.theta;
+
     // Make shared key with new private share
     wallet.gen_shared_key_fixed_secret_key(
         &finalize_data.new_shared_key_id,
-        &finalize_data.o2.get_element(),
+        &o2_theta.get_element(),
         &finalize_data.state_chain_data.amount,
     )?;
 
