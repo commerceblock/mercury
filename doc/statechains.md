@@ -213,7 +213,7 @@ The SE key share update then proceeds as follows:
 
 > The SE can keep a database of backup transactions for the users, and broadcast them at the appropriate time in case the users are off-line. Alternatively this can be outsourced to a 'watchtower-like' third party. 
 
-### Improvement to the Transfer protocol
+### Proposed Improvement to the Transfer protocol
 
 In Lindell's protocol the range proof only works for `x1 < q/3` where q is the field. Therefore 2/3 of the possible `s2` values computed by the SE will be outside of the required range. In the original protocol, steps 12-15 are repeated until the SE signals that a useable `s2` has been found.
 

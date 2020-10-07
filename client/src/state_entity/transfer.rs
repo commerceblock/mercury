@@ -321,19 +321,19 @@ pub fn transfer_receiver_finalize(
     // Make shared key with new private share
     wallet.gen_shared_key_fixed_secret_key(
         &finalize_data.new_shared_key_id,
-        &o2_theta.get_element(),
+        &finalize_data.o2.get_element(),
         &finalize_data.state_chain_data.amount,
     )?;
 
     // Check shared key master public key == private share * SE public share
     println!("check shared key");
-    if (finalize_data.s2_pub * finalize_data.o2).get_element()
+    if (finalize_data.s2_pub * finalize_data.o2 * finalize_data.theta).get_element()
         != wallet
             .get_shared_key(&finalize_data.new_shared_key_id)?
             .share
             .public
             .q
-            .get_element()
+            .get_element() 
     {
         return Err(CError::StateEntityError(String::from(
             "Transfer failed. Incorrect master public key generated.",

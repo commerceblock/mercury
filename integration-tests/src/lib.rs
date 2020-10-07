@@ -27,6 +27,8 @@ use std::thread;
 use uuid::Uuid;
 use monotree::database::{Database as monotreeDatabase, MemoryDB};
 
+use curv::FE;
+
 extern crate stoppable_thread;
 
 #[cfg(test)]
@@ -199,7 +201,7 @@ pub fn run_transfer(
     sender_index: usize,
     receiver_index: usize,
     state_chain_id: &Uuid,
-) -> Uuid {
+) -> (Uuid, FE) {
     let funding_txid: String;
     {
         funding_txid = wallets[sender_index]
@@ -223,17 +225,18 @@ pub fn run_transfer(
     .unwrap();
 
     println!("transfer receiver...");
-    let new_shared_key_id = state_entity::transfer::transfer_receiver(
+    let tfd = state_entity::transfer::transfer_receiver(
         &mut wallets[receiver_index],
         &mut tranfer_sender_resp,
         &None,
     )
-    .unwrap()
-    .new_shared_key_id;
+    .unwrap();
+    let new_shared_key_id = tfd.new_shared_key_id;
+    let theta = tfd.theta;
 
     println!("(Transfer Took: {})", TimeFormat(start.elapsed()));
 
-    return new_shared_key_id;
+    return (new_shared_key_id, theta);
 }
 
 /// Run a transfer with commitments between two wallets. Input vector of wallets with sender and receiver indexes in vector.

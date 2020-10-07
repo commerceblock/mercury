@@ -120,7 +120,7 @@ mod tests {
             .unwrap();
 
         println!("running transfer...");
-        let new_shared_key_id = run_transfer(&mut wallets, 0, 1, &state_chain_id);
+        let (new_shared_key_id, theta) = run_transfer(&mut wallets, 0, 1, &state_chain_id);
         println!("...finished running transfer");
 
         // check shared keys have the same master public key
@@ -130,7 +130,7 @@ mod tests {
                 .unwrap()
                 .share
                 .public
-                .q,
+                .q * theta,
             wallets[1]
                 .get_shared_key(&new_shared_key_id)
                 .unwrap()
@@ -201,7 +201,7 @@ mod tests {
             .get_new_state_entity_address(&funding_txid)
             .unwrap();
 
-        let new_shared_key_id1 = run_transfer(&mut wallets, 0, 1, state_chain_id);
+        let (new_shared_key_id1,theta1) = run_transfer(&mut wallets, 0, 1, state_chain_id);
 
         // Get state chain owned by wallets[1]
         let state_chains_info = wallets[0].get_state_chains_info();
@@ -231,7 +231,7 @@ mod tests {
             .get_new_state_entity_address(&funding_txid)
             .unwrap();
 
-        let new_shared_key_id2 = run_transfer(&mut wallets, 1, 2, state_chain_id);
+        let (new_shared_key_id2,theta2) = run_transfer(&mut wallets, 1, 2, state_chain_id);
 
         // check shared keys have the same master public key
         assert_eq!(
@@ -240,7 +240,7 @@ mod tests {
                 .unwrap()
                 .share
                 .public
-                .q,
+                .q * theta1,
             wallets[1]
                 .get_shared_key(shared_key_id1)
                 .unwrap()
@@ -254,7 +254,7 @@ mod tests {
                 .unwrap()
                 .share
                 .public
-                .q,
+                .q * theta2,
             wallets[2]
                 .get_shared_key(&new_shared_key_id2)
                 .unwrap()
