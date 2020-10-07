@@ -445,7 +445,14 @@ mod tests {
     }
 
     #[test]
-    fn test_transfer_receiver() {
+    fn test_multi_transfer() {
+        sc_entity.transfer_receiver(transfer_msg_4)
+
+        // Expected successful batch transfer run
+        assert!(transfer_msg_5.is_ok());
+    }
+
+    fn do_transfer_receiver() -> Result<TransferMsg5>{
         let transfer_msg_4 =
             serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap();
         let shared_key_id = transfer_msg_4.shared_key_id;
@@ -597,7 +604,7 @@ mod tests {
                 .to_string()
                 .contains("Error: Transfer batch ended. Too late to complete transfer.")),
         }
-        // Expected successful batch transfer run
-        assert!(sc_entity.transfer_receiver(transfer_msg_4).is_ok());
+
+        sc_entity.transfer_receiver(transfer_msg_4)
     }
 }
