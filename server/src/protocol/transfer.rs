@@ -157,21 +157,22 @@ impl Transfer for SCE {
         let mut theta;
         let mut s2_theta;
         let mut s1_theta;
-        let s2 : FE;
-                
+        let s2 = t2 * (td.x1.invert()) * s1;
+        let q_third = FE::q().div_floor(&BigInt::from(3));     
+
         loop {
             theta = FE::new_random();
             // Note:
             //  s2 = o1*o2_inv*s1
             //  t2 = o1*x1*o2_inv
             s1_theta = s1 * theta;
-            s2_theta = t2 * (td.x1.invert()) * s1 * theta;
-            
-            // Check s2 is valid for Lindell protocol (s2<q/3)
-            let sk_bigint = s2_theta.to_big_int();
-            if sk_bigint < FE::q().div_floor(&BigInt::from(3)) {
-                s2 = t2 * (td.x1.invert()) * s1;
-                break;
+            // Check s1_theta is valid for Lindell protocol (s1<q/3)
+            if s1_theta.to_big_int() < q_third {
+                s2_theta = s2 * theta;    
+                // Check s2_theta is valid for Lindell protocol (s2<q/3)
+                if s2_theta.to_big_int() < q_third {
+                    break;
+                }
             }
         }
     
@@ -446,11 +447,14 @@ mod tests {
 
     #[test]
     fn test_multi_transfer() {
-        sc_entity.transfer_receiver(transfer_msg_4)
-
-        // Expected successful batch transfer run
+        let transfer_msg_5 = do_transfer_receiver();
         assert!(transfer_msg_5.is_ok());
     }
+
+    #[test]
+    fn test_transfer_receiver() {
+        assert!(do_transfer_receiver().is_ok())
+    }   
 
     fn do_transfer_receiver() -> Result<TransferMsg5>{
         let transfer_msg_4 =

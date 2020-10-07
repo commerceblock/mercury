@@ -223,7 +223,7 @@ impl PGDatabase {
                 txwithdraw varchar,
                 proofkey varchar,
                 txbackup varchar,
-                PRIMARY KEY (id),
+                PRIMARY KEY (id)
             );",
                 Table::UserSession.to_string(),
             ),

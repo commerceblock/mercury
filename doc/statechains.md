@@ -213,6 +213,20 @@ The SE key share update then proceeds as follows:
 
 > The SE can keep a database of backup transactions for the users, and broadcast them at the appropriate time in case the users are off-line. Alternatively this can be outsourced to a 'watchtower-like' third party. 
 
+### Improvement to the Transfer protocol
+
+In Lindell's protocol the range proof only works for `x1 < q/3` where q is the field. Therefore 2/3 of the possible `s2` values computed by the SE will be outside of the required range. In the original protocol, steps 12-15 are repeated until the SE signals that a useable `s2` has been found.
+
+An alternative to the the above would be for the SE to apply an additional factor `theta` to the calculation as follows, by substituting the follwing steps beginning at step `16`:
+
+16. Generate a random number `theta <- Z_q` such that both `s1_theta = s1 * theta` and `s2_theta = s2 * theta` are less than `q/3`
+17. The SE then verifies that `s2.theta.O2 = theta.P` and deletes the key share `s1`. If the SE operations are run in a secure enclave, a remote attestation of this can be sent to Owner 2.
+
+> `s2` and `o2` are now key the private key shares of `P = s2*o2.G` which remains unchanged (i.e. `s2*o2 = s1*o1`), without anyone having learnt the full private key. Provided the SE deletes `s1`, then there is no way anyone but the current owner (with `o2`) can spend the output. 
+
+17. The SE sends Owner 2 `S2 = s2.G` and `theta` who verifies that `theta.o2.S2 = theta.P`
+18. The SE then adds the public key `C1` to the leaf of the SMT at position TxID of `Tx0`. The root of the SMT is then attested to Bitcoin via the Mainstay protocol in slot `slot_id`. 
+
 ### Orderly Withdrawal
 
 The current owner of a deposit can at any time withdraw from the platform to either gain complete control of the shared key or broadcast a jointly signed transaction. The current owner can request that the SE cooperates in signing a transaction paying the UTXO to certain addresses specified by the owner. The SE may wish to charge a withdrawal fee for providing the service (`F`), which can be included in this transaction.
