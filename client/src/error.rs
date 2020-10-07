@@ -37,6 +37,7 @@ impl From<&str> for CError {
         CError::Generic(e.to_string())
     }
 }
+
 impl From<SharedLibError> for CError {
     fn from(e: SharedLibError) -> CError {
         CError::SharedLibError(e.to_string())

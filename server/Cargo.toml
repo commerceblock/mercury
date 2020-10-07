@@ -21,28 +21,27 @@ rocket_contrib = { version = "0.4.5", default-features = false,features = ["json
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
-rusoto_dynamodb = "0.36.0"
-rusoto_core = "0.36.0"
-time-test = "0.2.1"
+rusoto_dynamodb = "0.45.0"
+rusoto_core = "0.45.0"
+time-test = "0.2.2"
 log = "0.4"
-config = "0.9.2"
+config = "0.10"
 uuid = { version = "0.5", features = ["v4", "serde"] }
-error-chain = "0.12.0"
-failure = "0.1.5"
+error-chain = "0.12.4"
+failure = "0.1.8"
 jsonwebtoken = "5.0.1"
 rust-crypto = "0.2"
-hex = "0.3.2"
+hex = "0.4.2"
 floating-duration = "0.1.2"
-bitcoin = { version = "0.20", features = [ "use-serde" ] }
-rand = "0.6.5"
-electrumx_client = { git = "https://github.com/commerceblock/rust-electrumx-client" }
+bitcoin = { version = "0.25", features = [ "use-serde" ] }
+electrumx_client = { git = "https://github.com/commerceblock/rust-electrumx-client", tag="v0.1.2" }
 env_logger = "0.7.1"
-log4rs = "0.12.0"
+log4rs = "0.13.0"
 postgres = { version = "0.15.2", features = ["with-uuid","with-chrono"] }
 chrono = "0.4"
-serial_test = "0.4.0"
+serial_test = "0.5.0"
 stoppable_thread = "0.2.1"
-mockall = "0.7.2"
+mockall = "0.8.1"
 cfg-if = "0.1.10"
 unborrow = "0.3.1"
 bisetmap = "0.1.6"
@@ -55,28 +54,30 @@ git = "https://github.com/KZen-networks/zk-paillier"
 tag = "v0.2.4"
 
 [dependencies.kms]
-git = "https://github.com/KZen-networks/kms-secp256k1"
-tag = "v0.2.0"
+git = "https://github.com/commerceblock/kms-secp256k1"
+tag = "v0.1.2"
+default-features = false
 
 [dependencies.multi-party-ecdsa]
-git = "https://github.com/KZen-networks/multi-party-ecdsa"
-tag = "v0.2.5"
+git = "https://github.com/commerceblock/multi-party-ecdsa"
+tag = "v0.2.7"
 
 [dependencies.multi-party-eddsa]
 git = "https://github.com/KZen-networks/multi-party-eddsa"
 tag = "v0.2.1"
 
 [dependencies.multi-party-schnorr]
-git = "https://github.com/KZen-networks/multi-party-schnorr"
-tag = "v0.3.1"
+git = "https://github.com/commerceblock/multi-party-schnorr"
+tag = "v0.3.4"
 
 [dependencies.curv]
-git = "https://github.com/KZen-networks/curv"
-tag = "v0.2.2"
+git = "https://github.com/commerceblock/curv"
+tag = "v0.2.7"
 features =  ["ec_secp256k1"]
 
 [dependencies.monotree]
 git = "https://github.com/commerceblock/monotree"
+tag = "0.1.3.1"
 default-features = false
 features=["hasher-blake3"]
 

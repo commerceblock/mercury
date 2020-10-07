@@ -1,11 +1,5 @@
 [workspace]
 members = ["client", "server", "shared", "integration-tests"]
 
-[patch.'https://github.com/KZen-networks/multi-party-ecdsa']
-multi-party-ecdsa = { git = "https://github.com/commerceblock/multi-party-ecdsa" }
-
-[patch.'https://github.com/KZen-networks/kms-secp256k1']
-kms = { git = "https://github.com/commerceblock/kms-secp256k1" }
-
 [patch.crates-io]
 rust-gmp = { version = "0.5.0", features = ["serde_support"], git = "https://github.com/KZen-networks/rust-gmp" }
