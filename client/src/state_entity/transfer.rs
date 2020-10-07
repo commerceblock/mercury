@@ -316,8 +316,6 @@ pub fn transfer_receiver_finalize(
 ) -> Result<()> {
     println!("gen shared key fixed secret key");
 
-    let o2_theta = finalize_data.o2 * finalize_data.theta;
-
     // Make shared key with new private share
     wallet.gen_shared_key_fixed_secret_key(
         &finalize_data.new_shared_key_id,
