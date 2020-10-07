@@ -119,9 +119,7 @@ mod tests {
             .get_new_state_entity_address(&funding_txid)
             .unwrap();
 
-        println!("running transfer...");
         let (new_shared_key_id, theta) = run_transfer(&mut wallets, 0, 1, &state_chain_id);
-        println!("...finished running transfer");
 
         // check shared keys have the same master public key
         assert_eq!(

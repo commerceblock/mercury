@@ -217,7 +217,7 @@ The SE key share update then proceeds as follows:
 
 In Lindell's protocol the range proof only works for `x1 < q/3` where q is the field. Therefore 2/3 of the possible `s2` values computed by the SE will be outside of the required range. In the original protocol, steps 12-15 are repeated until the SE signals that a useable `s2` has been found.
 
-An alternative to the the above would be for the SE to apply an additional factor `theta` to the calculation as follows, by substituting the follwing steps beginning at step `16`:
+An alternative to the the above would be for the SE to apply an additional factor `theta` to the calculation as follows, by substituting the following steps beginning at step `16`:
 
 16. Generate a random number `theta <- Z_q` such that both `s1_theta = s1 * theta` and `s2_theta = s2 * theta` are less than `q/3`
 17. The SE then verifies that `s2.theta.O2 = theta.P` and deletes the key share `s1`. If the SE operations are run in a secure enclave, a remote attestation of this can be sent to Owner 2.

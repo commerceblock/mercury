@@ -314,8 +314,7 @@ pub fn transfer_receiver_finalize(
     wallet: &mut Wallet,
     finalize_data: TransferFinalizeData,
 ) -> Result<()> {
-    println!("gen shared key fixed secret key");
-
+    
     // Make shared key with new private share
     wallet.gen_shared_key_fixed_secret_key(
         &finalize_data.new_shared_key_id,
@@ -324,7 +323,6 @@ pub fn transfer_receiver_finalize(
     )?;
 
     // Check shared key master public key == private share * SE public share
-    println!("check shared key");
     if (finalize_data.s2_pub * finalize_data.o2 * finalize_data.theta).get_element()
         != wallet
             .get_shared_key(&finalize_data.new_shared_key_id)?
@@ -339,7 +337,6 @@ pub fn transfer_receiver_finalize(
     }
 
     // TODO when node is integrated: Should also check that funding tx output address is address derived from shared key.
-    println!("get rec proof key");
     let rec_proof_key = finalize_data.proof_key.clone();
 
     // Verify proof key inclusion in SE sparse merkle tree

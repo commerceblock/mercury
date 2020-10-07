@@ -166,20 +166,15 @@ impl Transfer for SCE {
             //  s2 = o1*o2_inv*s1
             //  t2 = o1*x1*o2_inv
             s1_theta = s1 * theta;
-            // Check s1_theta is valid for Lindell protocol (s1<q/3)
+            // Check s1_theta and s2_theta are valid for Lindell protocol (s1<q/3)
             if s1_theta.to_big_int() < q_third {
                 s2_theta = s2 * theta;    
-                // Check s2_theta is valid for Lindell protocol (s2<q/3)
                 if s2_theta.to_big_int() < q_third {
                     break;
                 }
             }
         }
     
-         //   if sk_bigint >= FE::q().div_floor(&BigInt::from(3)) {
-         //       return Err(SEError::TryAgain("o2".to_string()));
-         //   }
-
         let g: GE = ECPoint::generator();
         let s2_pub: GE = g * s2;
 

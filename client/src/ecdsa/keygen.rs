@@ -18,7 +18,6 @@ pub fn get_master_key(
     value: &u64,
     protocol: Protocol,
 ) -> Result<SharedKey> {
-    println!("first message");
     let (id, kg_party_one_first_message): (Uuid, party_one::KeyGenFirstMsg) = requests::postb(
         client_shim,
         &format!("{}/first", KG_PATH_PRE),
@@ -27,7 +26,7 @@ pub fn get_master_key(
             protocol,
         },
     )?;
-    println!("first message predefined");
+
     let (kg_party_two_first_message, kg_ec_key_pair_party2) =
         MasterKey2::key_gen_first_message_predefined(secret_key);
 
@@ -35,7 +34,7 @@ pub fn get_master_key(
         shared_key_id: *shared_key_id,
         dlog_proof: kg_party_two_first_message.d_log_proof,
     };
-    println!("second message");
+    
     let kg_party_one_second_message: party1::KeyGenParty1Message2 = requests::postb(
         client_shim,
         &format!("{}/second", KG_PATH_PRE),

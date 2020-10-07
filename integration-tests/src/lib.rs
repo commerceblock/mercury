@@ -216,7 +216,6 @@ pub fn run_transfer(
         .unwrap();
 
     let start = Instant::now();
-    println!("transfer sender...");
     let mut tranfer_sender_resp = state_entity::transfer::transfer_sender(
         &mut wallets[sender_index],
         state_chain_id,
@@ -224,7 +223,6 @@ pub fn run_transfer(
     )
     .unwrap();
 
-    println!("transfer receiver...");
     let tfd = state_entity::transfer::transfer_receiver(
         &mut wallets[receiver_index],
         &mut tranfer_sender_resp,
