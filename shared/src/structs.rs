@@ -239,6 +239,7 @@ pub struct TransferMsg4 {
 pub struct TransferMsg5 {
     pub new_shared_key_id: Uuid,
     pub s2_pub: GE,
+    pub theta: FE,
 }
 
 /// Conductor -> StateEntity
@@ -318,6 +319,7 @@ impl Default for TransferMsg5 {
         TransferMsg5 {
             new_shared_key_id: Uuid::new_v4(),
             s2_pub: GE::base_point2(),
+            theta: ECScalar::zero(),
         }
     }
 }

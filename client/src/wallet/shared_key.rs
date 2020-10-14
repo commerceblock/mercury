@@ -42,7 +42,9 @@ impl SharedKey {
         protocol: Protocol,
     ) -> Result<SharedKey> {
         let mut key_share_priv: FE = ECScalar::zero(); // convert to curv lib
+        println!("setting element...");
         key_share_priv.set_element(*secret_key);
+        println!("getting master key...");
         ecdsa::get_master_key(id, client_shim, &key_share_priv, value, protocol)
     }
 

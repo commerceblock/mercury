@@ -218,6 +218,7 @@ pub fn transfer_receiver(
         new_shared_key_id: transfer_msg5.new_shared_key_id,
         o2,
         s2_pub: transfer_msg5.s2_pub,
+        theta: transfer_msg5.theta,
         state_chain_data,
         proof_key: transfer_msg3.rec_addr.proof_key.clone().to_string(),
         state_chain_id: transfer_msg3.state_chain_id,
@@ -294,6 +295,7 @@ pub struct TransferFinalizeData {
     pub new_shared_key_id: Uuid,
     pub o2: FE,
     pub s2_pub: GE,
+    pub theta: FE,
     pub state_chain_data: StateChainDataAPI,
     pub proof_key: String,
     pub state_chain_id: Uuid,
@@ -307,6 +309,7 @@ pub fn transfer_receiver_finalize(
     wallet: &mut Wallet,
     finalize_data: TransferFinalizeData,
 ) -> Result<()> {
+    
     // Make shared key with new private share
     wallet.gen_shared_key_fixed_secret_key(
         &finalize_data.new_shared_key_id,
@@ -315,13 +318,13 @@ pub fn transfer_receiver_finalize(
     )?;
 
     // Check shared key master public key == private share * SE public share
-    if (finalize_data.s2_pub * finalize_data.o2).get_element()
+    if (finalize_data.s2_pub * finalize_data.o2 * finalize_data.theta).get_element()
         != wallet
             .get_shared_key(&finalize_data.new_shared_key_id)?
             .share
             .public
             .q
-            .get_element()
+            .get_element() 
     {
         return Err(CError::StateEntityError(String::from(
             "Transfer failed. Incorrect master public key generated.",
@@ -329,7 +332,6 @@ pub fn transfer_receiver_finalize(
     }
 
     // TODO when node is integrated: Should also check that funding tx output address is address derived from shared key.
-
     let rec_proof_key = finalize_data.proof_key.clone();
 
     // Verify proof key inclusion in SE sparse merkle tree
