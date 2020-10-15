@@ -42,7 +42,7 @@ pub fn watch_node(rpc_path: String) -> Result<()> {
     cfg_if! {
         if #[cfg(any(test,feature="mockdb"))]{
             use shared_lib::mocks::mock_client::MockClient;
-            let rpc = MockClient::new();
+            let mut rpc = MockClient::new();
         } else {
             let rpc = Client::new(rpc_path_parts[1].to_string(),
                           Auth::UserPass(rpc_cred[0].to_string(),
@@ -68,6 +68,7 @@ pub fn watch_node(rpc_path: String) -> Result<()> {
             debug!("WATCH: TxID: {}",consensus::encode::serialize_hex(&tx.tx.txid()));
 
             let txinfo = rpc.send_raw_transaction(&consensus::serialize(&tx.tx));
+
             match txinfo {
                 Ok(ret) => {
                     info!(
@@ -97,6 +98,106 @@ pub fn watch_node(rpc_path: String) -> Result<()> {
                 }
             }
         }
+
+        cfg_if! {
+            if #[cfg(any(test,feature="mockdb"))]{
+                break;
+            }
+        }
+
         thread::sleep(interval);
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use crate::protocol::util::{
+        mocks,
+        tests::{test_sc_entity, BACKUP_TX_NOT_SIGNED, BACKUP_TX_SIGNED},
+    };
+    use bitcoin::Transaction;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_deposit_init() {
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_create_user_session().returning(|_, _, _| Ok(()));
+
+        let sc_entity = test_sc_entity(db);
+
+        // Invalid proof key
+        match sc_entity.deposit_init(DepositMsg1 {
+            auth: String::from("auth"),
+            proof_key: String::from(""),
+        }) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Proof key not in correct format.")),
+        }
+        // Invalid proof key
+        match sc_entity.deposit_init(DepositMsg1 {
+            auth: String::from("auth"),
+            proof_key: String::from(
+                "65aab40995d3ed5d03a0567b04819ff12641b84c17f5e9d5dd075571e18346",
+            ),
+        }) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Proof key not in correct format.")),
+        }
+
+        assert!(sc_entity
+            .deposit_init(DepositMsg1 {
+                auth: String::from("auth"),
+                proof_key: String::from(
+                    "026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e"
+                )
+            })
+            .is_ok());
+    }
+
+    #[test]
+    fn test_deposit_confirm() {
+        let user_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let proof_key =
+            String::from("026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e");
+        let tx_backup: Transaction = serde_json::from_str(&BACKUP_TX_NOT_SIGNED).unwrap();
+        let tx_backup_signed = serde_json::from_str::<Transaction>(&BACKUP_TX_SIGNED).unwrap();
+
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_user_auth().returning(move |_| Ok(user_id));
+        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
+        db.expect_get_root().returning(|_| Ok(None));
+        db.expect_root_update().returning(|_| Ok(1));
+        // First return unsigned back up tx
+        db.expect_get_backup_transaction_and_proof_key()
+            .times(1)
+            .returning(move |_| Ok((tx_backup.clone(), "".to_string())));
+        // Second time return signed back up tx
+        db.expect_get_backup_transaction_and_proof_key()
+            .returning(move |_| Ok((tx_backup_signed.clone(), proof_key.clone())));
+        db.expect_create_statechain().returning(|_, _, _, _| Ok(()));
+        db.expect_create_backup_transaction()
+            .returning(|_, _| Ok(()));
+        db.expect_update_statechain_id().returning(|_, _| Ok(()));
+
+        let sc_entity = test_sc_entity(db);
+
+        // Backup tx not signed error
+        match sc_entity.deposit_confirm(DepositMsg2 {
+            shared_key_id: user_id,
+        }) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Signed Back up transaction not found.")),
+        }
+
+        // Clean protocol run
+        let _m = mocks::ms::post_commitment().create();         //Mainstay post commitment mock
+        assert!(sc_entity
+            .deposit_confirm(DepositMsg2 {
+                shared_key_id: user_id
+            })
+            .is_ok());
     }
 }
