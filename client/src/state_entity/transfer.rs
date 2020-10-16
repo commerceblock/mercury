@@ -178,11 +178,22 @@ pub fn transfer_receiver(
     let mut transfer_msg5 = TransferMsg5::default();
     let mut o2 = FE::zero();
     let mut num_tries = 0;
+    // t1 in transfer_msg3 is ECIES encrypted. 
+    // t1 is decrypted here before passing to try_o2 because try_o2 could
+    // be executed multiple times and t1 is a constant
+    let t1 = match transfer_msg3.t1.get_fe(){
+        Ok(r) => r,
+        Err(e) => 
+            return Err(CError::Generic(format!("Failed to get FE from transfer_msg_3 {:?} error: {}", 
+                transfer_msg3,
+                e.to_string()))),
+    };
     while !done {
         match try_o2(
             wallet,
             &state_chain_data,
             &transfer_msg3,
+            &t1,
             &num_tries,
             batch_data,
         ) {
@@ -194,7 +205,7 @@ pub fn transfer_receiver(
             Err(e) => {
                 if !e
                     .to_string()
-                    .contains(&String::from("Error: Invalid o2, try again."))
+                    .contains(&String::from("try again"))
                 {
                     return Err(e);
                 }
@@ -235,32 +246,38 @@ pub fn try_o2(
     wallet: &mut Wallet,
     state_chain_data: &StateChainDataAPI,
     transfer_msg3: &TransferMsg3,
+    t1: &FE,
     num_tries: &u32,
     batch_data: &Option<BatchData>,
 ) -> Result<(FE, TransferMsg5)> {
+
     // generate o2 private key and corresponding 02 public key
     let mut encoded_txid = num_tries.to_string();
     encoded_txid.push_str(&state_chain_data.utxo.txid.to_string());
-    let key_share_pub = wallet
-        .se_key_shares
-        .get_new_key_encoded_id(funding_txid_to_int(&encoded_txid)?)?;
-    let key_share_priv = wallet
-        .se_key_shares
-        .get_key_derivation(&key_share_pub)
-        .unwrap()
-        .private_key
-        .key;
+    let funding_txid_int = match funding_txid_to_int(&encoded_txid){
+        Ok(r) => r,
+        Err(e) => 
+          return Err(CError::Generic(format!("Failed to get funding txid int from state_chain_data: {:?} error: {}", 
+              state_chain_data,
+              e.to_string()))),
+    };
     let mut o2: FE = ECScalar::zero();
-    o2.set_element(key_share_priv);
-
+    let _key_share_pub =  match wallet
+          .se_key_shares
+          .get_new_key_encoded_id(funding_txid_int, Some(&mut o2)){
+          Ok(r) => r,
+          Err(e) =>
+              return Err(CError::Generic(format!("Failed to get new key encoded id from funding_txid_int: {} error: {}", 
+                  funding_txid_int,
+                  e.to_string()))),
+    };
+ 
     let g: GE = ECPoint::generator();
     let o2_pub: GE = g * o2;
 
-
     // t2 = t1*o2_inv = o1*x1*o2_inv
-    let t1 = transfer_msg3.t1.get_fe()?;
-    let t2 = t1 * (o2.invert());
-
+   
+    let t2 = *t1 * (o2.invert());
 
     // encrypt t2 with SE key and sign with Receiver proof key (se_addr.proof_key)
 

@@ -159,9 +159,8 @@ impl Transfer for SCE {
 
         // Check s2 is valid for Lindell protocol (s2<q/3)
         let sk_bigint = s2.to_big_int();
-        let q_third = FE::q();
-        if sk_bigint >= q_third.div_floor(&BigInt::from(3)) {
-            return Err(SEError::Generic(format!("Invalid o2, try again.")));
+        if sk_bigint >= FE::q().div_floor(&BigInt::from(3)) {
+            return Err(SEError::TryAgain("o2".to_string()));
         }
 
         let g: GE = ECPoint::generator();

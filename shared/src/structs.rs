@@ -118,7 +118,7 @@ impl Default for PrepareSignTxMsg {
 
     fn default() -> Self {
         let default_tx = Transaction{
-            version: u32::default(), 
+            version: i32::default(), 
             lock_time: u32::default(), 
             input: Vec::<TxIn>::default(), 
             output: Vec::<TxOut>::default()
