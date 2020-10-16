@@ -266,6 +266,7 @@ pub mod structs {
         pub start_time: NaiveDateTime,
     }
 
+    #[derive(Clone)]
     pub struct BackupTxID {
         pub tx: Transaction,
         pub id: Uuid,
