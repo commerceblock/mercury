@@ -20,25 +20,25 @@ fn main() {
     let matches = App::from_yaml(yaml).get_matches();
 
     let conf_rs = client_lib::get_config().unwrap();
-    
-    let endpoint : String = conf_rs.get("endpoint").unwrap();
+
+    let endpoint: String = conf_rs.get("endpoint").unwrap();
     let electrum_server: String = conf_rs.get("electrum_server").unwrap();
-    let testing_mode : bool = conf_rs.get("testing_mode").unwrap();
+    let testing_mode: bool = conf_rs.get("testing_mode").unwrap();
     let mut tor = Tor::from_config(&conf_rs);
     let tor = match tor.enable {
         true => {
-            tor.control_password = conf_rs.get("tor_control_password")
-            .expect("tor enabled - tor_control_password required");
+            tor.control_password = conf_rs
+                .get("tor_control_password")
+                .expect("tor enabled - tor_control_password required");
             Some(tor)
-        },
+        }
         false => None,
     };
-    
-    
+
     println!("config tor: {:?}", tor);
-        
+
     let _ = env_logger::try_init();
-    
+
     // TODO: random generating of seed and allow input of mnemonic phrase
     let seed = [0xcd; 32];
     let client_shim = ClientShim::new(endpoint, None, tor);
@@ -177,9 +177,12 @@ fn main() {
             if let Some(matches) = matches.subcommand_matches("transfer-receiver") {
                 let mut transfer_msg: TransferMsg3 =
                     serde_json::from_str(matches.value_of("message").unwrap()).unwrap();
-                let finalized_data =
-                    state_entity::transfer::transfer_receiver(&mut wallet, &mut transfer_msg, &None)
-                        .unwrap();
+                let finalized_data = state_entity::transfer::transfer_receiver(
+                    &mut wallet,
+                    &mut transfer_msg,
+                    &None,
+                )
+                .unwrap();
                 wallet.save();
                 println!(
                     "\nNetwork: [{}], \n\nTransfer complete for StateChain ID: {}.",

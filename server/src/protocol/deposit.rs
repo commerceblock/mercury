@@ -245,11 +245,13 @@ pub mod tests {
             shared_key_id: user_id,
         }) {
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("Signed Back up transaction not found.")),
+            Err(e) => assert!(e
+                .to_string()
+                .contains("Signed Back up transaction not found.")),
         }
 
         // Clean protocol run
-        let _m = mocks::ms::post_commitment().create();         //Mainstay post commitment mock
+        let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
         assert!(sc_entity
             .deposit_confirm(DepositMsg2 {
                 shared_key_id: user_id

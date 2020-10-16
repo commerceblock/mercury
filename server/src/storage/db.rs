@@ -10,7 +10,7 @@ use crate::protocol::transfer::TransferFinalizeData;
 use crate::server::get_postgres_url;
 use crate::{
     error::{
-        DBErrorType::{NoDataForID, UpdateFailed, ConnectionFailed},
+        DBErrorType::{ConnectionFailed, NoDataForID, UpdateFailed},
         SEError,
     },
     structs::*,
@@ -97,6 +97,7 @@ pub enum Column {
     TxWithdraw,
     SigHash,
     S2,
+    Theta,
     WithdrawScSig,
 
     // StateChain
@@ -156,40 +157,53 @@ impl Column {
     }
 }
 
-
 impl PGDatabase {
-    fn get_postgres_connection_pool(rocket_url: &String) -> Result<r2d2::Pool<PostgresConnectionManager>> {
-        let url : String = rocket_url.clone().to_string();
+    fn get_postgres_connection_pool(
+        rocket_url: &String,
+    ) -> Result<r2d2::Pool<PostgresConnectionManager>> {
+        let url: String = rocket_url.clone().to_string();
         let manager = PostgresConnectionManager::new(url.clone(), TlsMode::None)?;
-        match r2d2::Pool::new(manager){
+        match r2d2::Pool::new(manager) {
             Ok(m) => Ok(m),
-            Err(e) => Err(SEError::DBError(ConnectionFailed,
-                format!("Failed to get postgres connection manager for rocket url {}: {}",
-                        url, e)))
+            Err(e) => Err(SEError::DBError(
+                ConnectionFailed,
+                format!(
+                    "Failed to get postgres connection managerfor rocket url {}: {}",
+                    url, e
+                ),
+            )),
         }
     }
 
     pub fn database_r(&self) -> Result<DatabaseR> {
         match &self.pool {
             Some(p) => match p.get() {
-                        Ok(c) => Ok(DatabaseR(c)),
-                        Err(e) => Err(SEError::DBError(ConnectionFailed,
-                        format!("Failed to get pooled connection for read: {}", e))),
-                    },
-            None =>  Err(SEError::DBError(ConnectionFailed,
-                        "Failed to get pooled connection for read: pool not set".to_string())),
+                Ok(c) => Ok(DatabaseR(c)),
+                Err(e) => Err(SEError::DBError(
+                    ConnectionFailed,
+                    format!("Failed to get pooled connection for read: {}", e),
+                )),
+            },
+            None => Err(SEError::DBError(
+                ConnectionFailed,
+                "Failed to get pooled connection for read: pool not set".to_string(),
+            )),
         }
     }
 
     pub fn database_w(&self) -> Result<DatabaseW> {
         match &self.pool {
             Some(p) => match p.get() {
-                        Ok(c) => Ok(DatabaseW(c)),
-                        Err(e) => Err(SEError::DBError(ConnectionFailed,
-                        format!("Failed to get pooled connection for write: {}", e))),
-                    },
-            None =>  Err(SEError::DBError(ConnectionFailed,
-                        "Failed to get pooled connection for write: pool not set".to_string())),
+                Ok(c) => Ok(DatabaseW(c)),
+                Err(e) => Err(SEError::DBError(
+                    ConnectionFailed,
+                    format!("Failed to get pooled connection for write: {}", e),
+                )),
+            },
+            None => Err(SEError::DBError(
+                ConnectionFailed,
+                "Failed to get pooled connection for write: pool not set".to_string(),
+            )),
         }
     }
 
@@ -197,26 +211,32 @@ impl PGDatabase {
     pub fn make_tables(&self) -> Result<()> {
         // Create Schemas if they do not already exist
         let _ = self.database_w()?.execute(
-            &format!("
+            &format!(
+                "
             CREATE SCHEMA IF NOT EXISTS statechainentity;
-            "),
+            "
+            ),
             &[],
         )?;
         let _ = self.database_w()?.execute(
-            &format!("
+            &format!(
+                "
             CREATE SCHEMA IF NOT EXISTS watcher;
-            "),
+            "
+            ),
             &[],
         )?;
 
         // Create tables if they do not already exist
         self.database_w()?.execute(
-            &format!("
+            &format!(
+                "
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 statechainid uuid,
                 authentication varchar,
                 s2 varchar,
+                theta varchar,
                 sighash varchar,
                 withdrawscsig varchar,
                 txwithdraw varchar,
@@ -230,7 +250,8 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!("
+            &format!(
+                "
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 keygenfirstmsg varchar,
@@ -255,7 +276,8 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!("
+            &format!(
+                "
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 chain varchar,
@@ -270,7 +292,8 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!("
+            &format!(
+                "
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 statechainsig varchar,
@@ -283,7 +306,8 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!("
+            &format!(
+                "
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 starttime timestamp,
@@ -299,7 +323,8 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!("
+            &format!(
+                "
             CREATE TABLE IF NOT EXISTS {} (
                 id BIGSERIAL,
                 value varchar,
@@ -312,7 +337,8 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!("
+            &format!(
+                "
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 txbackup varchar,
@@ -325,7 +351,8 @@ impl PGDatabase {
         )?;
 
         self.database_w()?.execute(
-            &format!("
+            &format!(
+                "
             CREATE TABLE IF NOT EXISTS {} (
                 key varchar,
                 value varchar,
@@ -608,25 +635,25 @@ impl Database for PGDatabase {
 
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self {
         Self {
-           pool: Some(pool),
-           smt: PGDatabaseSmt {
-               table_name: Table::Smt.to_string(),
-               cache: MemCache::new(),
-               batch_on: false,
-               batch: HashMap::new()
-           }
+            pool: Some(pool),
+            smt: PGDatabaseSmt {
+                table_name: Table::Smt.to_string(),
+                cache: MemCache::new(),
+                batch_on: false,
+                batch: HashMap::new(),
+            },
         }
     }
 
     fn get_new() -> Self {
         Self {
-            pool : None,
+            pool: None,
             smt: PGDatabaseSmt {
                 table_name: Table::Smt.to_string(),
                 cache: MemCache::new(),
                 batch_on: false,
-                batch: HashMap::new()
-            }
+                batch: HashMap::new(),
+            },
         }
     }
 
@@ -636,19 +663,21 @@ impl Database for PGDatabase {
             config.storage.db_port_w.clone(),
             config.storage.db_user_w.clone(),
             config.storage.db_pass_w.clone(),
-            config.storage.db_database_w.clone()
+            config.storage.db_database_w.clone(),
         );
         self.set_connection(&rocket_url)
     }
 
     fn set_connection(&mut self, url: &String) -> Result<()> {
-        match Self::get_postgres_connection_pool(url){
+        match Self::get_postgres_connection_pool(url) {
             Ok(p) => {
                 self.pool = Some(p.clone());
                 Ok(())
-            },
-            Err(e) => Err(SEError::DBError(ConnectionFailed,
-                        format!("Error obtaining pool address for url {}: {}",url, e)))
+            }
+            Err(e) => Err(SEError::DBError(
+                ConnectionFailed,
+                format!("Error obtaining pool address for url {}: {}", url, e),
+            )),
         }
     }
 
@@ -715,12 +744,8 @@ impl Database for PGDatabase {
         )
     }
 
-    fn get_user_backup_tx(&self,user_id: Uuid) -> Result<Transaction> {
-        Self::deser(self.get_1(
-            user_id,
-            Table::UserSession,
-            vec![Column::TxBackup]
-        )?)
+    fn get_user_backup_tx(&self, user_id: Uuid) -> Result<Transaction> {
+        Self::deser(self.get_1(user_id, Table::UserSession, vec![Column::TxBackup])?)
     }
 
     fn update_backup_tx(&self,state_chain_id: &Uuid, tx: Transaction) -> Result<()> {
@@ -1030,11 +1055,8 @@ impl Database for PGDatabase {
     }
 
     fn get_proof_key(&self, user_id: Uuid) -> Result<String> {
-        let proof_key = self.get_1::<String>(
-            user_id,
-            Table::UserSession,
-            vec![Column::ProofKey],
-        )?;
+        let proof_key =
+            self.get_1::<String>(user_id, Table::UserSession, vec![Column::ProofKey])?;
         Ok(proof_key)
     }
 
@@ -1226,6 +1248,12 @@ impl Database for PGDatabase {
 
     fn get_ecdsa_s2(&self, user_id: Uuid) -> Result<FE> {
         let s2_str = self.get_1(user_id, Table::UserSession, vec![Column::S2])?;
+        let s2: FE = Self::deser(s2_str)?;
+        Ok(s2)
+    }
+
+    fn get_ecdsa_theta(&self, user_id: Uuid) -> Result<FE> {
+        let s2_str = self.get_1(user_id, Table::UserSession, vec![Column::Theta])?;
         let s2: FE = Self::deser(s2_str)?;
         Ok(s2)
     }
@@ -1462,6 +1490,7 @@ impl Database for PGDatabase {
                 Column::TxBackup,
                 Column::StateChainId,
                 Column::S2,
+                Column::Theta,
             ],
             vec![
                 &String::from("auth"),
@@ -1469,6 +1498,7 @@ impl Database for PGDatabase {
                 &Self::ser(finalized_data.new_tx_backup.clone())?,
                 &state_chain_id,
                 &Self::ser(finalized_data.s2)?,
+                &Self::ser(finalized_data.theta)?,
             ],
         )
     }
@@ -1479,7 +1509,6 @@ impl Database for PGDatabase {
         eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg,
         eph_ec_key_pair_party1: party_one::EphEcKeyPair,
     ) -> Result<()> {
-
         self.update(
             &user_id,
             Table::Ecdsa,

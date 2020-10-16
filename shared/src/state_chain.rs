@@ -19,16 +19,15 @@ use bitcoin::{
     secp256k1::{Message, PublicKey, Secp256k1, SecretKey, Signature},
 };
 use monotree::{
-    hasher::{Hasher, Blake3},
+    hasher::{Blake3, Hasher},
     tree::verify_proof,
     {Monotree, Proof},
 };
 
 use chrono::{Duration, NaiveDateTime, Utc};
-use std::{convert::TryInto, panic::AssertUnwindSafe, str::FromStr};
 use std::panic;
 use std::sync::{Arc, Mutex};
-
+use std::{convert::TryInto, panic::AssertUnwindSafe, str::FromStr};
 
 /// A list of States in which each State signs for the next State.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -146,7 +145,9 @@ impl StateChainSig {
     /// Verify self's signature for transfer or withdraw
     pub fn verify(&self, pk: &String) -> Result<()> {
         let message = StateChainSig::to_message(&self.purpose, &self.data)?;
-        Signature::from_str(&self.sig).unwrap().verify(&PublicKey::from_str(&pk).unwrap(),&message)
+        Signature::from_str(&self.sig)
+            .unwrap()
+            .verify(&PublicKey::from_str(&pk).unwrap(), &message)
     }
 }
 
@@ -268,18 +269,34 @@ mod tests {
         let tree = Arc::new(Mutex::new(Monotree::<MemoryDB, Blake3>::new("")));
         let root: Option<monotree::Hash> = None;
 
-        let root = update_statechain_smt::<monotree::database::MemoryDB>(tree.clone(), &root, &funding_txid, &proof_key).unwrap();
+        let root = update_statechain_smt::<monotree::database::MemoryDB>(
+            tree.clone(),
+            &root,
+            &funding_txid,
+            &proof_key,
+        )
+        .unwrap();
 
-        let sc_smt_proof1 = gen_proof_smt::<monotree::database::MemoryDB>(tree.clone(), &root, &funding_txid).unwrap();
+        let sc_smt_proof1 =
+            gen_proof_smt::<monotree::database::MemoryDB>(tree.clone(), &root, &funding_txid)
+                .unwrap();
 
         assert!(verify_statechain_smt(&root, &proof_key, &sc_smt_proof1));
 
         // update with new proof key and try again
         let proof_key =
             String::from("13b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3");
-        let root = update_statechain_smt::<monotree::database::MemoryDB>(tree.clone(), &root, &funding_txid, &proof_key).unwrap();
+        let root = update_statechain_smt::<monotree::database::MemoryDB>(
+            tree.clone(),
+            &root,
+            &funding_txid,
+            &proof_key,
+        )
+        .unwrap();
 
-        let sc_smt_proof2 = gen_proof_smt::<monotree::database::MemoryDB>(tree.clone(), &root, &funding_txid).unwrap();
+        let sc_smt_proof2 =
+            gen_proof_smt::<monotree::database::MemoryDB>(tree.clone(), &root, &funding_txid)
+                .unwrap();
         assert!(verify_statechain_smt(&root, &proof_key, &sc_smt_proof2));
     }
 }

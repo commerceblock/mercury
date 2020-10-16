@@ -80,12 +80,12 @@ pub struct PGDatabaseSmt {
     pub cache: monotree::database::MemCache,
     pub batch_on: bool,
     pub batch: HashMap<Vec<u8>, Vec<u8>>,
-    pub table_name: String
+    pub table_name: String,
 }
 /// POstgres database struct for Mercury. Contains database connection pool and SMT DB items.
 pub struct PGDatabase {
     pub pool: Option<r2d2::Pool<PostgresConnectionManager>>,
-    pub smt: PGDatabaseSmt
+    pub smt: PGDatabaseSmt,
 }
 
 use structs::*;
@@ -106,9 +106,9 @@ pub trait Database {
         tx: Transaction,
     ) -> Result<()>;
     fn update_sighash(&self, user_id: &Uuid, sig_hash: Hash) -> Result<()>;
-    fn update_user_backup_tx(&self,user_id: &Uuid, tx: Transaction) -> Result<()>;
-    fn get_user_backup_tx(&self,user_id: Uuid) -> Result<Transaction>;
-    fn update_backup_tx(&self,state_chain_id: &Uuid, tx: Transaction) -> Result<()>;
+    fn update_user_backup_tx(&self, user_id: &Uuid, tx: Transaction) -> Result<()>;
+    fn get_user_backup_tx(&self, user_id: Uuid) -> Result<Transaction>;
+    fn update_backup_tx(&self, state_chain_id: &Uuid, tx: Transaction) -> Result<()>;
     fn get_withdraw_confirm_data(&self, user_id: Uuid) -> Result<WithdrawConfirmData>;
     /// Update root value in DB. Update root with ID or insert new DB item.
     fn root_update(&self, rt: &Root) -> Result<i64>;
@@ -181,6 +181,7 @@ pub trait Database {
         user_id: Uuid,
     ) -> Result<(party_one::CommWitness, party_one::EcKeyPair)>;
     fn get_ecdsa_s2(&self, user_id: Uuid) -> Result<FE>;
+    fn get_ecdsa_theta(&self, user_id: Uuid) -> Result<FE>;
     fn update_keygen_first_msg(
         &self,
         user_id: &Uuid,

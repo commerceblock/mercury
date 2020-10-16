@@ -25,8 +25,7 @@ use crate::state_entity::{
 };
 use crate::wallet::{key_paths::funding_txid_to_int, wallet::Wallet};
 use crate::{utilities::requests, ClientShim};
-use shared_lib::{state_chain::StateChainSig, structs::*, 
-    ecies::WalletDecryptable};
+use shared_lib::{ecies::WalletDecryptable, state_chain::StateChainSig, structs::*};
 
 use bitcoin::{Address, PublicKey};
 use curv::elliptic::curves::traits::{ECPoint, ECScalar};
@@ -107,7 +106,7 @@ pub fn transfer_sender(
 
     let mut transfer_msg3 = TransferMsg3 {
         shared_key_id: shared_key_id.to_owned(),
-        t1: t1_encryptable, 
+        t1: t1_encryptable,
         state_chain_sig,
         state_chain_id: state_chain_id.to_owned(),
         tx_backup_psm: prepare_sign_msg.to_owned(),
@@ -135,7 +134,7 @@ pub fn transfer_receiver(
 ) -> Result<TransferFinalizeData> {
     //Decrypt the message on receipt
     wallet.decrypt(transfer_msg3)?;
-    //Mae immutable 
+    //Mae immutable
     let transfer_msg3 = &*transfer_msg3;
     // Get statechain data (will Err if statechain not yet finalized)
     let state_chain_data: StateChainDataAPI =
@@ -224,6 +223,7 @@ pub fn transfer_receiver(
         new_shared_key_id: transfer_msg5.new_shared_key_id,
         o2,
         s2_pub: transfer_msg5.s2_pub,
+        theta: transfer_msg5.theta,
         state_chain_data,
         proof_key: transfer_msg3.rec_addr.proof_key.clone().to_string(),
         state_chain_id: transfer_msg3.state_chain_id,
@@ -278,24 +278,20 @@ pub fn try_o2(
     // t2 = t1*o2_inv = o1*x1*o2_inv
    
     let t2 = *t1 * (o2.invert());
-
     // encrypt t2 with SE key and sign with Receiver proof key (se_addr.proof_key)
 
     let msg4 = &mut TransferMsg4 {
         shared_key_id: transfer_msg3.shared_key_id,
         state_chain_id: transfer_msg3.state_chain_id,
-        t2: t2, 
+        t2: t2,
         state_chain_sig: transfer_msg3.state_chain_sig.clone(),
         o2_pub,
         tx_backup: transfer_msg3.tx_backup_psm.tx.clone(),
         batch_data: batch_data.to_owned(),
     };
 
-    let transfer_msg5: TransferMsg5 = requests::postb(
-        &wallet.client_shim,
-        &format!("transfer/receiver"),
-        msg4,
-    )?;
+    let transfer_msg5: TransferMsg5 =
+        requests::postb(&wallet.client_shim, &format!("transfer/receiver"), msg4)?;
     Ok((o2, transfer_msg5))
 }
 
@@ -304,6 +300,7 @@ pub struct TransferFinalizeData {
     pub new_shared_key_id: Uuid,
     pub o2: FE,
     pub s2_pub: GE,
+    pub theta: FE,
     pub state_chain_data: StateChainDataAPI,
     pub proof_key: String,
     pub state_chain_id: Uuid,
@@ -317,6 +314,7 @@ pub fn transfer_receiver_finalize(
     wallet: &mut Wallet,
     finalize_data: TransferFinalizeData,
 ) -> Result<()> {
+    
     // Make shared key with new private share
     wallet.gen_shared_key_fixed_secret_key(
         &finalize_data.new_shared_key_id,
@@ -325,13 +323,13 @@ pub fn transfer_receiver_finalize(
     )?;
 
     // Check shared key master public key == private share * SE public share
-    if (finalize_data.s2_pub * finalize_data.o2).get_element()
+    if (finalize_data.s2_pub * finalize_data.o2 * finalize_data.theta).get_element()
         != wallet
             .get_shared_key(&finalize_data.new_shared_key_id)?
             .share
             .public
             .q
-            .get_element()
+            .get_element() 
     {
         return Err(CError::StateEntityError(String::from(
             "Transfer failed. Incorrect master public key generated.",
@@ -339,7 +337,6 @@ pub fn transfer_receiver_finalize(
     }
 
     // TODO when node is integrated: Should also check that funding tx output address is address derived from shared key.
-
     let rec_proof_key = finalize_data.proof_key.clone();
 
     // Verify proof key inclusion in SE sparse merkle tree

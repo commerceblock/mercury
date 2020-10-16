@@ -16,7 +16,6 @@ use mockito;
 #[cfg(test)]
 use server_lib::MockDatabase;
 
-
 #[cfg(test)]
 #[serial]
 pub fn run_simulation() {

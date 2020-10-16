@@ -1,5 +1,5 @@
 #[cfg(test)]
-#[cfg(not(feature="mockdb"))]
+#[cfg(not(feature = "mockdb"))]
 mod tests {
     use crate::*;
     extern crate bitcoin;
@@ -11,7 +11,6 @@ mod tests {
 
     use curv::elliptic::curves::traits::ECScalar;
     use curv::FE;
-
 
     #[test]
     #[serial]
@@ -94,7 +93,8 @@ mod tests {
         assert!(err.is_err());
         let deposit = run_deposit(&mut wallet, &10000);
 
-        let state_chain = state_entity::api::get_statechain(&wallet.client_shim, &deposit.1.clone()).unwrap();
+        let state_chain =
+            state_entity::api::get_statechain(&wallet.client_shim, &deposit.1.clone()).unwrap();
         assert_eq!(
             state_chain.chain.last().unwrap().data,
             deposit.5.to_string()
@@ -119,7 +119,7 @@ mod tests {
             .get_new_state_entity_address(&funding_txid)
             .unwrap();
 
-        let new_shared_key_id = run_transfer(&mut wallets, 0, 1, &state_chain_id);
+        let (new_shared_key_id, theta) = run_transfer(&mut wallets, 0, 1, &state_chain_id);
 
         // check shared keys have the same master public key
         assert_eq!(
@@ -128,7 +128,7 @@ mod tests {
                 .unwrap()
                 .share
                 .public
-                .q,
+                .q * theta,
             wallets[1]
                 .get_shared_key(&new_shared_key_id)
                 .unwrap()
@@ -199,7 +199,7 @@ mod tests {
             .get_new_state_entity_address(&funding_txid)
             .unwrap();
 
-        let new_shared_key_id1 = run_transfer(&mut wallets, 0, 1, state_chain_id);
+        let (new_shared_key_id1,theta1) = run_transfer(&mut wallets, 0, 1, state_chain_id);
 
         // Get state chain owned by wallets[1]
         let state_chains_info = wallets[0].get_state_chains_info();
@@ -229,7 +229,7 @@ mod tests {
             .get_new_state_entity_address(&funding_txid)
             .unwrap();
 
-        let new_shared_key_id2 = run_transfer(&mut wallets, 1, 2, state_chain_id);
+        let (new_shared_key_id2,theta2) = run_transfer(&mut wallets, 1, 2, state_chain_id);
 
         // check shared keys have the same master public key
         assert_eq!(
@@ -238,7 +238,7 @@ mod tests {
                 .unwrap()
                 .share
                 .public
-                .q,
+                .q * theta1,
             wallets[1]
                 .get_shared_key(shared_key_id1)
                 .unwrap()
@@ -252,7 +252,7 @@ mod tests {
                 .unwrap()
                 .share
                 .public
-                .q,
+                .q * theta2,
             wallets[2]
                 .get_shared_key(&new_shared_key_id2)
                 .unwrap()
@@ -391,7 +391,7 @@ mod tests {
     }
 }
 
-#[cfg(feature="mockdb")]
+#[cfg(feature = "mockdb")]
 #[cfg(test)]
 mod tests {
     use crate::*;
@@ -400,9 +400,9 @@ mod tests {
     extern crate server_lib;
     extern crate shared_lib;
 
-    use shared_lib::mainstay;
     use mockito::mock;
     use server_lib::MockDatabase;
+    use shared_lib::mainstay;
 
     #[test]
     //This test starts a rocket server so is ignored by default
@@ -412,43 +412,39 @@ mod tests {
     fn test_get_statechain() {
         let mockito_server_url = mockito::server_url();
         let _m = mock("GET", "/ping").create();
-        let mainstay_config = mainstay::MainstayConfig::mock_from_url(
-            &mockito_server_url);
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito_server_url);
         let mut db = MockDatabase::new();
         let wallet = gen_wallet();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_reset().returning(|| Ok(()));
         let invalid_scid = Uuid::new_v4();
-        db.expect_get_statechain_amount().
-        returning(|_x|Err(server_lib::error::SEError::DBError(server_lib::error::DBErrorType::NoDataForID, "".to_string())));
-        db.expect_create_user_session().
-        returning(|_user_id, _auth, _proof_key| Ok(()));
-        db.expect_get_user_auth().
-        returning(|_user_id| Ok(Uuid::new_v4()));
+        db.expect_get_statechain_amount().returning(|_x| {
+            Err(server_lib::error::SEError::DBError(
+                server_lib::error::DBErrorType::NoDataForID,
+                "".to_string(),
+            ))
+        });
+        db.expect_create_user_session()
+            .returning(|_user_id, _auth, _proof_key| Ok(()));
+        db.expect_get_user_auth()
+            .returning(|_user_id| Ok(Uuid::new_v4()));
         //Key generation not completed for this ID yet
-        db.expect_get_ecdsa_master().
-        returning(|_user_id| Ok(None));
+        db.expect_get_ecdsa_master().returning(|_user_id| Ok(None));
         db.expect_update_keygen_first_msg()
-        .returning(|_user_id, _fm, _cw, _ec_kp| Ok(()));
+            .returning(|_user_id, _fm, _cw, _ec_kp| Ok(()));
 
         let (_key_gen_first_msg, comm_witness, ec_key_pair) =
             server_lib::protocol::ecdsa::MasterKey1::key_gen_first_message();
 
-
         db.expect_get_ecdsa_witness_keypair()
-        .returning(move |_user_id| Ok((
-            comm_witness.clone(),
-            ec_key_pair.clone()
-        )));
+            .returning(move |_user_id| Ok((comm_witness.clone(), ec_key_pair.clone())));
 
         db.expect_update_keygen_second_msg()
-        .returning(|_,_,_,_|Ok(()));
+            .returning(|_, _, _, _| Ok(()));
 
         let _handle = db.spawn_server(Some(mainstay_config));
 
         let err = state_entity::api::get_statechain(&wallet.client_shim, &invalid_scid);
         assert!(err.is_err());
     }
-
-
 }
