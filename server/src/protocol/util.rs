@@ -11,7 +11,7 @@ use shared_lib::{
     mocks::mock_electrum::MockElectrum,
     state_chain::*,
     structs::*,
-    util::{get_sighash, tx_backup_verify, tx_withdraw_verify},
+    util::{get_sighash, tx_withdraw_verify},
     Root,
 };
 
