@@ -7,6 +7,7 @@ use crate::error::SEError;
 use shared_lib::{
     blinded_token::{BSTSenderData, BlindedSpendSignature, BlindedSpendToken},
     structs::*,
+    swap_data::*,
     util::keygen::Message,
     Verifiable,
 };
@@ -126,61 +127,6 @@ pub trait Conductor {
     // list of those StateChains that have caused recent failures. Participants that completed their
     // transfers can reveal the nonce to the their Comm(state_chain_id, nonce) and thus prove which
     // StateChain they own and should not take any responsibility for the failure.
-}
-
-#[allow(dead_code)]
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, Copy)]
-pub enum SwapStatus {
-    Phase1,
-    Phase2,
-    Phase3,
-    Phase4,
-}
-
-/// Struct defines a Swap. This is signed by each participant as agreement to take part in the swap.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SwapToken {
-    id: Uuid,
-    amount: u64,
-    time_out: u64,
-    state_chain_ids: Vec<Uuid>,
-}
-
-impl SwapToken {
-    /// Create message to be signed
-    fn to_message(&self) -> Result<Message> {
-        let mut str = self.amount.to_string();
-        str.push_str(&self.time_out.to_string());
-        str.push_str(&format!("{:?}", self.state_chain_ids));
-        let hash = sha256d::Hash::hash(&str.as_bytes());
-        Ok(Message::from_slice(&hash)?)
-    }
-
-    /// Generate Signature for change of state chain ownership
-    pub fn sign(&self, proof_key_priv: &SecretKey) -> Result<Signature> {
-        let secp = Secp256k1::new();
-        let message = self.to_message()?;
-        Ok(secp.sign(&message, &proof_key_priv))
-    }
-
-    /// Verify self's signature for transfer or withdraw
-    pub fn verify_sig(&self, pk: &PublicKey, sig: Signature) -> Result<()> {
-        match sig.verify(pk, &self.to_message()?) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(SEError::SwapError(format!(
-                "signature does not sign for token: {}",
-                e
-            ))),
-        }
-    }
-}
-
-#[allow(dead_code)]
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct SwapInfo {
-    status: SwapStatus,
-    swap_token: SwapToken,
-    bst_sender_data: BSTSenderData,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

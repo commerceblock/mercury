@@ -3,8 +3,10 @@ use super::protocol::*;
 use crate::config::Config;
 use crate::structs::StateChainOwner;
 use crate::Database;
-use shared_lib::mainstay;
-use shared_lib::state_chain::StateChainSig;
+use shared_lib::{mainstay,
+    state_chain::StateChainSig,
+    swap_data::*
+};
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
@@ -203,7 +205,7 @@ pub fn get_postgres_url(
 
 //Mock all the traits implemented by StateChainEntity so that they can
 //be called from MockStateChainEntity
-use crate::protocol::conductor::{Conductor, SwapInfo, SwapStatus};
+use crate::protocol::conductor::Conductor;
 use crate::protocol::deposit::Deposit;
 use crate::protocol::ecdsa::Ecdsa;
 use crate::protocol::transfer::{Transfer, TransferFinalizeData};
