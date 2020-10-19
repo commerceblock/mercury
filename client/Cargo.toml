@@ -15,6 +15,10 @@ path = "src/lib.rs"
 name = "cli"
 path = "src/main.rs"
 
+[[bin]]
+name = "run_wallet_process"
+path = "run_wallet_process.rs"
+
 [dependencies]
 serde = "1.0"
 serde_json = "1.0"

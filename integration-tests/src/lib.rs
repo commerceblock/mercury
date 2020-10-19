@@ -15,7 +15,6 @@ use server_lib::{server, Database, MockDatabase, PGDatabase};
 use shared_lib::{
     commitment::make_commitment,
     mainstay,
-    mocks::mock_electrum::MockElectrum,
     state_chain::StateChainSig,
     structs::{BatchData, PrepareSignTxMsg},
 };
@@ -28,7 +27,6 @@ use std::time::Instant;
 use uuid::Uuid;
 
 use curv::FE;
-use wallet::wallet::ElectrumxBox;
 
 extern crate stoppable_thread;
 
@@ -147,7 +145,6 @@ pub fn gen_wallet() -> Wallet {
         &[0xcd; 32],
         &"regtest".to_string(),
         ClientShim::new("http://localhost:8000".to_string(), None, None),
-        ElectrumxBox::new_mock(),
     );
 
     let _ = wallet.keys.get_new_address();
@@ -162,7 +159,6 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
         &[0xcd; 32],
         &"regtest".to_string(),
         ClientShim::new("http://localhost:8000".to_string(), None, None),
-        ElectrumxBox::new_mock(),
     );
 
     let _ = wallet.keys.get_new_address();

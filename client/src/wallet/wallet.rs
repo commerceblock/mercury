@@ -53,7 +53,7 @@ pub struct Wallet {
     pub id: String,
     pub network: String,
     secp: Secp256k1<All>,
-    pub electrumx_client: ElectrumxBox,
+    pub electrumx_client: ElectrumxBox, // Default MockElectrum
     pub client_shim: ClientShim,
 
     pub master_priv_key: ExtendedPrivKey,
@@ -70,7 +70,6 @@ impl Wallet {
         seed: &[u8],
         network: &String,
         client_shim: ClientShim,
-        electrumx_client: ElectrumxBox,
     ) -> Wallet {
         let secp = Secp256k1::new();
         let master_priv_key =
@@ -100,7 +99,7 @@ impl Wallet {
             id: Uuid::new_v4().to_string(),
             network: network.to_string(),
             secp,
-            electrumx_client,
+            electrumx_client: ElectrumxBox::new_mock(),
             client_shim,
             master_priv_key,
             keys,
@@ -115,6 +114,10 @@ impl Wallet {
     //pub fn shared_keys_mutable<'a>(&'a mut self) -> &'a mut Vec<SharedKey> {
     //&mut self.shared_keys
     //}
+
+    pub fn set_electrumx_client(&mut self, electrumx_client: ElectrumxBox) {
+        self.electrumx_client = electrumx_client;
+    }
 
     pub fn set_require_mainstay(&mut self, val: bool) {
         self.require_mainstay = val;
@@ -165,7 +168,6 @@ impl Wallet {
     pub fn from_json(
         json: serde_json::Value,
         client_shim: ClientShim,
-        electrumx_client: ElectrumxBox,
     ) -> Result<Self> {
         let secp = Secp256k1::new();
         let network = json["network"].as_str().unwrap().to_string();
@@ -207,7 +209,7 @@ impl Wallet {
             id: json["id"].as_str().unwrap().to_string(),
             network,
             secp,
-            electrumx_client,
+            electrumx_client: ElectrumxBox::new_mock(),
             client_shim,
             master_priv_key,
             keys,
@@ -285,19 +287,17 @@ impl Wallet {
     pub fn load_from(
         filepath: &str,
         client_shim: ClientShim,
-        electrumx_client: ElectrumxBox,
     ) -> Result<Wallet> {
-        let data = fs::read_to_string(filepath).expect("Unable to load wallet!");
+        let data = fs::read_to_string(filepath)?;
         let serde_json_data = serde_json::from_str(&data).unwrap();
-        let wallet: Wallet = Wallet::from_json(serde_json_data, client_shim, electrumx_client)?;
+        let wallet: Wallet = Wallet::from_json(serde_json_data, client_shim)?;
         debug!("(wallet id: {}) Loaded wallet to memory", wallet.id);
         Ok(wallet)
     }
-    pub fn load(client_shim: ClientShim, electrumx_client: ElectrumxBox) -> Result<Wallet> {
+    pub fn load(client_shim: ClientShim) -> Result<Wallet> {
         Ok(Wallet::load_from(
             WALLET_FILENAME,
             client_shim,
-            electrumx_client,
         )?)
     }
 
@@ -642,15 +642,12 @@ pub fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
 mod tests {
     use super::*;
     extern crate shared_lib;
-    use shared_lib::mocks::mock_electrum::MockElectrum;
 
     fn gen_wallet() -> Wallet {
-        // let electrum = ElectrumxClient::new("dummy").unwrap();
         let mut wallet = Wallet::new(
             &[0xcd; 32],
             &"regtest".to_string(),
             ClientShim::new("http://localhost:8000".to_string(), None, None),
-            ElectrumxBox::new_mock(),
         );
         let _ = wallet.keys.get_new_address();
         let _ = wallet.keys.get_new_address();
@@ -678,7 +675,6 @@ mod tests {
         let wallet_rebuilt = super::Wallet::from_json(
             wallet_json,
             ClientShim::new("http://localhost:8000".to_string(), None, None),
-            ElectrumxBox::new_mock(),
         )
         .unwrap();
 

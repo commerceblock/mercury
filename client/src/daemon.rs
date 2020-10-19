@@ -6,16 +6,14 @@
 use super::Result;
 use crate::wallet;
 use crate::state_entity::deposit;
-use crate::{state_entity::api::get_statechain_fee_info, ClientShim, error::CError};
+use crate::{state_entity::api::get_statechain_fee_info, ClientShim, error::CError, get_config, Tor};
 
 use tokio::prelude::*;
 use tokio::{spawn, run};
 use serde::{Serialize, Deserialize};
-use daemon_engine::{DaemonError, UnixServer, UnixConnection, JsonCodec};
+use daemon_engine::{UnixServer, UnixConnection, JsonCodec};
 use std::{thread, time::Duration};
 
-use std::str::FromStr;
-use std::convert::From;
 use wallet::wallet::ElectrumxBox;
 
 const UNIX_SERVER_ADDR: &str = "/tmp/rustd.sock";
@@ -46,16 +44,47 @@ impl DaemonResponse {
 
 /// Start Wallet's UnixServer process
 pub fn make_server() -> Result<()> {
+    println!("Configuring and building UnixServer...");
+
+    // Check if server already running
     let server = future::lazy(move || {
         let mut s = UnixServer::<JsonCodec<DaemonResponse, DaemonRequest>>::new(UNIX_SERVER_ADDR, JsonCodec::new()).unwrap();
 
-        // Should be passed in from Electron
-        let seed = [0xcd; 32];
-        let client_shim = ClientShim::new("http://localhost:8000".to_string(), None, None);
-        let network = "testnet".to_string();
-        let electrumx_client = ElectrumxBox::new_mock();
+        let _ = env_logger::try_init();
 
-        let mut wallet = wallet::wallet::Wallet::new(&seed, &network, client_shim, electrumx_client);
+        let conf_rs = get_config().unwrap();
+        let endpoint: String = conf_rs.get("endpoint").unwrap();
+        let electrum_server: String = conf_rs.get("electrum_server").unwrap();
+        let testing_mode: bool = conf_rs.get("testing_mode").unwrap();
+        let mut tor = Tor::from_config(&conf_rs);
+        let tor = match tor.enable {
+            true => {
+                tor.control_password = conf_rs
+                    .get("tor_control_password")
+                    .expect("tor enabled - tor_control_password required");
+                Some(tor)
+            }
+            false => None,
+        };
+        println!("config tor: {:?}", tor);
+
+        let client_shim = ClientShim::new(endpoint, None, tor);
+
+        // Try load wallet. If no wallet make new.
+        let mut wallet = match wallet::wallet::Wallet::load(client_shim.clone()) {
+            Ok(wallet) => wallet,
+            Err(_) => {
+                // TODO: random generating of seed and allow input of mnemonic phrase
+                let seed = [0xcd; 32];
+                let network = "testnet".to_string();
+                wallet::wallet::Wallet::new(&seed, &network, client_shim)
+            }
+        };
+
+        // Set electrumx_client to non-MockElectrumx. Throw if electrumx server error.
+        if testing_mode == false {
+            wallet.set_electrumx_client(ElectrumxBox::new(electrum_server).unwrap())
+        };
 
         let server_handle = s
             .incoming()
@@ -101,12 +130,8 @@ pub fn make_server() -> Result<()> {
         Ok(())
     });
 
-    let _ = thread::spawn(||{
-        run(server);
-    });
-
-    // Allow server to boot
-    thread::sleep(Duration::from_millis(200));
+    println!("Running wallet UnixServer...");
+    run(server);
 
     Ok(())
 }
