@@ -22,6 +22,9 @@ const UNIX_SERVER_ADDR: &str = "/tmp/rustd.sock";
 /// Example request object
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DaemonRequest {
+    GetWalletBalance,
+    GetStateChainsInfo,
+    GetListUnspent,
     GenAddressBTC,
     GenAddressSE(String),
     GetFeeInfo,
@@ -40,13 +43,22 @@ impl DaemonResponse {
     pub fn to_string(&self) -> String {
         format!("{:?}",self)
     }
+
+    // Values and Errors serialized to string for pasing to JS
+    pub fn value_to_deamon_response<T>(value: Result<T>) -> DaemonResponse
+    where T: Serialize
+    {
+        match value { // Values and Errors serialized to string for pasing to JS
+            Ok(val) => DaemonResponse::Value(serde_json::to_string(&val).unwrap()),
+            Err(e) => DaemonResponse::Error(serde_json::to_string(&e).unwrap())
+        }
+
+    }
 }
 
 /// Start Wallet's UnixServer process
 pub fn make_server() -> Result<()> {
     println!("Configuring and building UnixServer...");
-
-    // Check if server already running
     let server = future::lazy(move || {
         let mut s = UnixServer::<JsonCodec<DaemonResponse, DaemonRequest>>::new(UNIX_SERVER_ADDR, JsonCodec::new()).unwrap();
 
@@ -92,34 +104,33 @@ pub fn make_server() -> Result<()> {
             .for_each(move |r| {
                 let data = r.data();
                 match data {
+                    DaemonRequest::GetWalletBalance => {
+                        let balance = wallet.get_all_addresses_balance();
+                        r.send(DaemonResponse::value_to_deamon_response(balance))
+                    },
+                    DaemonRequest::GetStateChainsInfo => {
+                        let balance = wallet.get_state_chains_info();
+                        r.send(DaemonResponse::value_to_deamon_response(balance))
+                    },
+                    DaemonRequest::GetListUnspent => {
+                        let list_unspent = wallet.list_unspent();
+                        r.send(DaemonResponse::value_to_deamon_response(list_unspent))
+                    },
                     DaemonRequest::GenAddressBTC => {
                         let address = wallet.keys.get_new_address();
-                        // Values and Errors serialized to string for pasing to JS
-                        match address { // Values and Errors serialized to string for pasing to JS
-                            Ok(val) => r.send(DaemonResponse::Value(serde_json::to_string(&val).unwrap())),
-                            Err(e) => r.send(DaemonResponse::Error(serde_json::to_string(&e).unwrap()))
-                        }
+                        r.send(DaemonResponse::value_to_deamon_response(address))
                     },
                     DaemonRequest::GenAddressSE(txid) => {
                         let address = wallet.get_new_state_entity_address(&txid);
-                        match address { // Values and Errors serialized to string for pasing to JS
-                            Ok(val) => r.send(DaemonResponse::Value(serde_json::to_string(&val).unwrap())),
-                            Err(e) => r.send(DaemonResponse::Error(serde_json::to_string(&e).unwrap()))
-                        }
+                        r.send(DaemonResponse::value_to_deamon_response(address))
                     },
                     DaemonRequest::GetFeeInfo => {
                         let fee_info_res = get_statechain_fee_info(&wallet.client_shim);
-                        match fee_info_res {    // Values and Errors serialized to string for pasing to JS
-                            Ok(val) => r.send(DaemonResponse::Value(serde_json::to_string(&val).unwrap())),
-                            Err(e) => r.send(DaemonResponse::Error(serde_json::to_string(&e).unwrap()))
-                        }
+                        r.send(DaemonResponse::value_to_deamon_response(fee_info_res))
                     }
                     DaemonRequest::Deposit(amount) => {
                         let deposit_res = deposit::deposit(&mut wallet, &amount);
-                        match deposit_res { // Values and Errors serialized to string for pasing to JS
-                            Ok(val) => r.send(DaemonResponse::Value(serde_json::to_string(&val).unwrap())),
-                            Err(e) => r.send(DaemonResponse::Error(serde_json::to_string(&e).unwrap()))
-                        }
+                        r.send(DaemonResponse::value_to_deamon_response(deposit_res))
                     }
                 }.wait()
                 .unwrap();

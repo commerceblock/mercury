@@ -307,7 +307,7 @@ impl Wallet {
         amount: &u64,
     ) -> Result<(Vec<TxIn>, Vec<Address>, Vec<u64>)> {
         // Greedy coin selection.
-        let (unspent_addrs, unspent_utxos) = self.list_unspent();
+        let (unspent_addrs, unspent_utxos) = self.list_unspent()?;
         let mut inputs: Vec<TxIn> = vec![];
         let mut addrs: Vec<Address> = vec![]; // corresponding addresses for inputs
         let mut amounts: Vec<u64> = vec![]; // corresponding amounts for inputs
@@ -514,9 +514,7 @@ impl Wallet {
 
     /// return balance of address
     fn get_address_balance(&mut self, address: &bitcoin::Address) -> GetBalanceResponse {
-        self.electrumx_client.instance
-            .get_balance(&address.to_string())
-            .unwrap()
+        self.electrumx_client.instance.get_balance(&address.to_string()).unwrap()
     }
 
     fn zero_balance(&self, addr: &GetBalanceResponse) -> bool {
@@ -537,7 +535,7 @@ impl Wallet {
 
     pub fn get_all_addresses_balance(
         &mut self,
-    ) -> (Vec<bitcoin::Address>, Vec<GetBalanceResponse>) {
+    ) -> Result<(Vec<bitcoin::Address>, Vec<GetBalanceResponse>)> {
         let all_addrs = self.get_all_wallet_addresses();
         let all_bals: Vec<GetBalanceResponse> = all_addrs
             .clone()
@@ -554,24 +552,24 @@ impl Wallet {
                 bals.push(balance);
             }
         }
-        (addrs, bals)
+        Ok((addrs, bals))
     }
 
     /// Return total balance of addresses in wallet.
-    pub fn get_balance(&mut self) -> GetBalanceResponse {
+    pub fn get_balance(&mut self) -> Result<GetBalanceResponse> {
         let mut aggregated_balance = GetBalanceResponse {
             confirmed: 0,
             unconfirmed: 0,
         };
-        for b in self.get_all_addresses_balance().1 {
+        for b in self.get_all_addresses_balance()?.1 {
             aggregated_balance.unconfirmed += b.unconfirmed;
             aggregated_balance.confirmed += b.confirmed;
         }
-        aggregated_balance
+        Ok(aggregated_balance)
     }
 
     /// Return balances of unspent state chains
-    pub fn get_state_chains_info(&self) -> (Vec<Uuid>, Vec<Uuid>, Vec<GetBalanceResponse>) {
+    pub fn get_state_chains_info(&self) -> Result<(Vec<Uuid>, Vec<Uuid>, Vec<GetBalanceResponse>)> {
         let mut shared_key_ids: Vec<Uuid> = vec![];
         let mut state_chain_ids: Vec<Uuid> = vec![];
         let mut state_chain_balances: Vec<GetBalanceResponse> = vec![];
@@ -587,23 +585,25 @@ impl Wallet {
                 }
             }
         }
-        (shared_key_ids, state_chain_ids, state_chain_balances)
+        Ok((shared_key_ids, state_chain_ids, state_chain_balances))
     }
 
     /// List unspent outputs for addresses derived by this wallet.
-    pub fn list_unspent(&mut self) -> (Vec<bitcoin::Address>, Vec<Vec<GetListUnspentResponse>>) {
+    pub fn list_unspent(&mut self) -> Result<(Vec<bitcoin::Address>, Vec<Vec<GetListUnspentResponse>>)> {
         let addresses = self.get_all_wallet_addresses();
         let mut unspent_list: Vec<Vec<GetListUnspentResponse>> = vec![];
         for addr in &addresses {
-            let addr_unspent_list = self.list_unspent_for_address(addr.to_string());
+            let addr_unspent_list = self.list_unspent_for_address(addr.to_string())?;
             unspent_list.push(addr_unspent_list);
         }
-        (addresses, unspent_list)
+        Ok((addresses, unspent_list))
     }
 
-    fn list_unspent_for_address(&mut self, address: String) -> Vec<GetListUnspentResponse> {
-        let resp = self.electrumx_client.instance.get_list_unspent(&address).unwrap();
-        resp
+    fn list_unspent_for_address(&mut self, address: String) -> Result<Vec<GetListUnspentResponse>> {
+        match self.electrumx_client.instance.get_list_unspent(&address) {
+            Ok(val) => Ok(val),
+            Err(e) => Err(CError::Generic(e.to_string()))
+        }
     }
 
     pub fn to_p2wpkh_address(&self, pub_key: &PublicKey) -> Result<bitcoin::Address> {
