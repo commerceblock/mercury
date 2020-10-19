@@ -1,7 +1,3 @@
-#[macro_use]
-extern crate clap;
-use clap::App;
-
 use client_lib::state_entity;
 use client_lib::wallet::wallet;
 use client_lib::{ClientShim, Tor};
@@ -14,6 +10,8 @@ use bitcoin::consensus;
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
 use std::str::FromStr;
 use uuid::Uuid;
+use clap::{load_yaml, App};
+use wallet::ElectrumxBox;
 
 fn main() {
     let yaml = load_yaml!("../cli.yml");
@@ -43,10 +41,10 @@ fn main() {
     let seed = [0xcd; 32];
     let client_shim = ClientShim::new(endpoint, None, tor);
 
-    let electrum: Box<dyn Electrumx> = if testing_mode {
-        Box::new(MockElectrum::new())
+    let electrum: ElectrumxBox = if testing_mode {
+        ElectrumxBox::new_mock()
     } else {
-        Box::new(ElectrumxClient::new(electrum_server).unwrap())
+        ElectrumxBox::new(electrum_server).unwrap()
     };
 
     let network = "testnet".to_string();

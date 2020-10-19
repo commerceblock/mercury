@@ -28,6 +28,7 @@ use std::time::Instant;
 use uuid::Uuid;
 
 use curv::FE;
+use wallet::wallet::ElectrumxBox;
 
 extern crate stoppable_thread;
 
@@ -146,7 +147,7 @@ pub fn gen_wallet() -> Wallet {
         &[0xcd; 32],
         &"regtest".to_string(),
         ClientShim::new("http://localhost:8000".to_string(), None, None),
-        Box::new(MockElectrum::new()),
+        ElectrumxBox::new_mock(),
     );
 
     let _ = wallet.keys.get_new_address();
@@ -161,7 +162,7 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
         &[0xcd; 32],
         &"regtest".to_string(),
         ClientShim::new("http://localhost:8000".to_string(), None, None),
-        Box::new(MockElectrum::new()),
+        ElectrumxBox::new_mock(),
     );
 
     let _ = wallet.keys.get_new_address();

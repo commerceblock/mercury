@@ -12,6 +12,11 @@ extern crate serde;
 extern crate serde_json;
 
 #[macro_use]
+extern crate clap;
+extern crate tokio;
+extern crate daemon_engine;
+
+#[macro_use]
 extern crate log;
 
 #[macro_use]
@@ -30,6 +35,7 @@ pub mod ecdsa;
 pub mod error;
 pub mod state_entity;
 pub mod wallet;
+pub mod daemon;
 
 mod utilities;
 
@@ -172,10 +178,10 @@ impl Tor {
             from stem.control import Controller
             with Controller.from_port(port = tordata.as_tuple()[2]) as controller:
                 controller.authenticate(tordata.as_tuple()[3])  # provide the password here if you set one
-        
+
                 bytes_read = controller.get_info("traffic/read")
                 bytes_written = controller.get_info("traffic/written")
-        
+
                 print("My Tor relay has read %s bytes and written %s bytes." % (bytes_read, bytes_written))
         "#
         );

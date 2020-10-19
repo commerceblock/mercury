@@ -34,7 +34,8 @@ electrumx_client = { git = "https://github.com/commerceblock/rust-electrumx-clie
 base64 = "0.12.3"
 env_logger = "0.7.1"
 pyo3 = "0.12.1"
-
+tokio = { version = "0.1.18" }
+daemon-engine = "0.6.0"
 
 [dev-dependencies]
 mockito = "0.27.0"

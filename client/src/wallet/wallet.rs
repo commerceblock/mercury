@@ -7,7 +7,7 @@ use shared_lib::{
     ecies,
     ecies::{SelfEncryptable, WalletDecryptable},
     structs::{Protocol, SCEAddress},
-    util::get_sighash,
+    util::get_sighash, mocks::mock_electrum::MockElectrum,
 };
 
 use super::key_paths::{funding_txid_to_int, KeyPath, KeyPathWithAddresses};
@@ -23,7 +23,7 @@ use bitcoin::{
 
 use electrumx_client::{
     interface::Electrumx,
-    response::{GetBalanceResponse, GetListUnspentResponse},
+    response::{GetBalanceResponse, GetListUnspentResponse}, electrumx_client::ElectrumxClient,
 };
 
 use serde_json::json;
@@ -33,12 +33,27 @@ use uuid::Uuid;
 
 const WALLET_FILENAME: &str = "wallet/wallet.data";
 
+// Struct wrapper for Electrumx client instance
+pub struct ElectrumxBox {
+    pub instance: Box<dyn Electrumx>
+}
+impl ElectrumxBox {
+    pub fn new(electrum_server: String) -> Result<Self> {
+        Ok(ElectrumxBox { instance: Box::new(ElectrumxClient::new(electrum_server)?) })
+    }
+    pub fn new_mock() -> Self {
+        ElectrumxBox { instance: Box::new(MockElectrum::new()) }
+    }
+}
+unsafe impl Send for ElectrumxBox {}
+unsafe impl Sync for ElectrumxBox {}
+
 /// Standard Bitcoin Wallet
 pub struct Wallet {
     pub id: String,
     pub network: String,
     secp: Secp256k1<All>,
-    pub electrumx_client: Box<dyn Electrumx>,
+    pub electrumx_client: ElectrumxBox,
     pub client_shim: ClientShim,
 
     pub master_priv_key: ExtendedPrivKey,
@@ -55,7 +70,7 @@ impl Wallet {
         seed: &[u8],
         network: &String,
         client_shim: ClientShim,
-        electrumx_client: Box<dyn Electrumx>,
+        electrumx_client: ElectrumxBox,
     ) -> Wallet {
         let secp = Secp256k1::new();
         let master_priv_key =
@@ -150,7 +165,7 @@ impl Wallet {
     pub fn from_json(
         json: serde_json::Value,
         client_shim: ClientShim,
-        electrumx_client: Box<dyn Electrumx>,
+        electrumx_client: ElectrumxBox,
     ) -> Result<Self> {
         let secp = Secp256k1::new();
         let network = json["network"].as_str().unwrap().to_string();
@@ -270,7 +285,7 @@ impl Wallet {
     pub fn load_from(
         filepath: &str,
         client_shim: ClientShim,
-        electrumx_client: Box<dyn Electrumx>,
+        electrumx_client: ElectrumxBox,
     ) -> Result<Wallet> {
         let data = fs::read_to_string(filepath).expect("Unable to load wallet!");
         let serde_json_data = serde_json::from_str(&data).unwrap();
@@ -278,7 +293,7 @@ impl Wallet {
         debug!("(wallet id: {}) Loaded wallet to memory", wallet.id);
         Ok(wallet)
     }
-    pub fn load(client_shim: ClientShim, electrumx_client: Box<dyn Electrumx>) -> Result<Wallet> {
+    pub fn load(client_shim: ClientShim, electrumx_client: ElectrumxBox) -> Result<Wallet> {
         Ok(Wallet::load_from(
             WALLET_FILENAME,
             client_shim,
@@ -499,7 +514,7 @@ impl Wallet {
 
     /// return balance of address
     fn get_address_balance(&mut self, address: &bitcoin::Address) -> GetBalanceResponse {
-        self.electrumx_client
+        self.electrumx_client.instance
             .get_balance(&address.to_string())
             .unwrap()
     }
@@ -587,7 +602,7 @@ impl Wallet {
     }
 
     fn list_unspent_for_address(&mut self, address: String) -> Vec<GetListUnspentResponse> {
-        let resp = self.electrumx_client.get_list_unspent(&address).unwrap();
+        let resp = self.electrumx_client.instance.get_list_unspent(&address).unwrap();
         resp
     }
 
@@ -635,7 +650,7 @@ mod tests {
             &[0xcd; 32],
             &"regtest".to_string(),
             ClientShim::new("http://localhost:8000".to_string(), None, None),
-            Box::new(MockElectrum::new()),
+            ElectrumxBox::new_mock(),
         );
         let _ = wallet.keys.get_new_address();
         let _ = wallet.keys.get_new_address();
@@ -663,7 +678,7 @@ mod tests {
         let wallet_rebuilt = super::Wallet::from_json(
             wallet_json,
             ClientShim::new("http://localhost:8000".to_string(), None, None),
-            Box::new(MockElectrum::new()),
+            ElectrumxBox::new_mock(),
         )
         .unwrap();
 
