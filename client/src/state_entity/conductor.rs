@@ -27,7 +27,6 @@ use uuid::Uuid;
 pub fn swap_register_utxo(
     wallet: &Wallet,
     state_chain_id: &Uuid,
-    signature: &StateChainSig,
     swap_size: &u64
 ) -> Result<()> {
 
@@ -162,4 +161,15 @@ pub fn swap_second_message(
             blinded_spend_token: bst
         }
     )
+}
+
+pub fn do_swap(
+    wallet: &Wallet,
+    state_chain_id: &Uuid,
+    swap_size: &u64
+) -> Result<SCEAddress> {
+    swap_register_utxo(wallet, state_chain_id, swap_size)?;
+    loop {
+        
+    }
 }
