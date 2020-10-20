@@ -5,16 +5,18 @@
 
 use super::Result;
 use crate::wallet;
-use crate::state_entity::deposit;
-use crate::{state_entity::api::get_statechain_fee_info, ClientShim, error::CError, get_config, Tor};
+use crate::{state_entity,
+    {state_entity::api::get_statechain_fee_info, ClientShim, error::CError, get_config, Tor}};
 
 use tokio::prelude::*;
 use tokio::{spawn, run};
 use serde::{Serialize, Deserialize};
 use daemon_engine::{UnixServer, UnixConnection, JsonCodec};
-use std::{thread, time::Duration};
 
 use wallet::wallet::ElectrumxBox;
+use uuid::Uuid;
+use shared_lib::structs::{TransferMsg3, SCEAddress};
+use state_entity::api::get_statechain;
 
 const UNIX_SERVER_ADDR: &str = "/tmp/rustd.sock";
 
@@ -22,13 +24,19 @@ const UNIX_SERVER_ADDR: &str = "/tmp/rustd.sock";
 /// Example request object
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DaemonRequest {
+    // Wallet fns
+    GenAddressBTC,
+    GenAddressSE(String),
     GetWalletBalance,
     GetStateChainsInfo,
     GetListUnspent,
-    GenAddressBTC,
-    GenAddressSE(String),
+    // State Entity fns
     GetFeeInfo,
-    Deposit(u64)
+    GetStateChain(Uuid),
+    Deposit(u64),
+    Withdraw(Uuid),
+    TransferSender(Uuid, SCEAddress),
+    TransferReceiver(TransferMsg3)
 }
 
 /// Example response object
@@ -104,6 +112,16 @@ pub fn make_server() -> Result<()> {
             .for_each(move |r| {
                 let data = r.data();
                 match data {
+                    DaemonRequest::GenAddressBTC => {
+                        let address = wallet.keys.get_new_address();
+                        wallet.save();
+                        r.send(DaemonResponse::value_to_deamon_response(address))
+                    },
+                    DaemonRequest::GenAddressSE(txid) => {
+                        let address = wallet.get_new_state_entity_address(&txid);
+                        wallet.save();
+                        r.send(DaemonResponse::value_to_deamon_response(address))
+                    },
                     DaemonRequest::GetWalletBalance => {
                         let balance = wallet.get_all_addresses_balance();
                         r.send(DaemonResponse::value_to_deamon_response(balance))
@@ -116,21 +134,33 @@ pub fn make_server() -> Result<()> {
                         let list_unspent = wallet.list_unspent();
                         r.send(DaemonResponse::value_to_deamon_response(list_unspent))
                     },
-                    DaemonRequest::GenAddressBTC => {
-                        let address = wallet.keys.get_new_address();
-                        r.send(DaemonResponse::value_to_deamon_response(address))
-                    },
-                    DaemonRequest::GenAddressSE(txid) => {
-                        let address = wallet.get_new_state_entity_address(&txid);
-                        r.send(DaemonResponse::value_to_deamon_response(address))
-                    },
                     DaemonRequest::GetFeeInfo => {
                         let fee_info_res = get_statechain_fee_info(&wallet.client_shim);
                         r.send(DaemonResponse::value_to_deamon_response(fee_info_res))
+                    },
+                    DaemonRequest::GetStateChain(state_chain_id) => {
+                        let fee_info_res = get_statechain(&wallet.client_shim, &state_chain_id);
+                        r.send(DaemonResponse::value_to_deamon_response(fee_info_res))
                     }
                     DaemonRequest::Deposit(amount) => {
-                        let deposit_res = deposit::deposit(&mut wallet, &amount);
+                        let deposit_res = state_entity::deposit::deposit(&mut wallet, &amount);
+                        wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(deposit_res))
+                    },
+                    DaemonRequest::Withdraw(state_chain_id) => {
+                        let deposit_res = state_entity::withdraw::withdraw(&mut wallet, &state_chain_id);
+                        wallet.save();
+                        r.send(DaemonResponse::value_to_deamon_response(deposit_res))
+                    },
+                    DaemonRequest::TransferSender(state_chain_id, receiver_addr) => {
+                        let transfer_sender_resp = state_entity::transfer::transfer_sender(&mut wallet, &state_chain_id, receiver_addr);
+                        wallet.save();
+                        r.send(DaemonResponse::value_to_deamon_response(transfer_sender_resp))
+                    },
+                    DaemonRequest::TransferReceiver(mut transfer_msg) => {
+                        let transfer_receiver_resp = state_entity::transfer::transfer_receiver(&mut wallet, &mut transfer_msg, &None);
+                        wallet.save();
+                        r.send(DaemonResponse::value_to_deamon_response(transfer_receiver_resp))
                     }
                 }.wait()
                 .unwrap();

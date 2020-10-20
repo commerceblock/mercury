@@ -11,8 +11,6 @@ extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 
-#[macro_use]
-extern crate clap;
 extern crate tokio;
 extern crate daemon_engine;
 
