@@ -290,7 +290,7 @@ pub fn try_o2(
     Ok((o2, transfer_msg5))
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TransferFinalizeData {
     pub new_shared_key_id: Uuid,
     pub o2: FE,

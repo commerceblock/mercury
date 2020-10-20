@@ -1,5 +1,5 @@
 use shared_lib::structs::{SCEAddress, TransferMsg3, PrepareSignTxMsg, StateChainDataAPI, StateEntityFeeInfoAPI};
-use client_lib::daemon::{make_unix_conn_call, DaemonRequest, DaemonResponse};
+use client_lib::{state_entity::transfer::TransferFinalizeData, daemon::{make_unix_conn_call, DaemonRequest, DaemonResponse}};
 
 use bitcoin::{Transaction, consensus};
 use bitcoin::util::key::PublicKey;
@@ -11,14 +11,9 @@ use electrumx_client::response::{GetListUnspentResponse, GetBalanceResponse};
 fn main() {
     let yaml = load_yaml!("../cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
-
     let _ = env_logger::try_init();
 
-    // TODO: random generating of seed and allow input of mnemonic phrase
-
-    if let Some(_matches) = matches.subcommand_matches("create-wallet") {
-        println!("Not implemented yet.");
-    } else if let Some(matches) = matches.subcommand_matches("wallet") {
+    if let Some(_matches) = matches.subcommand_matches("wallet") {
         if matches.is_present("new-address") {
             let address: String = match make_unix_conn_call(DaemonRequest::GenAddressBTC).unwrap() {
                 DaemonResponse::Value(val) => val,
@@ -40,7 +35,7 @@ fn main() {
                 };
 
                 println!(
-                    "\nAddress: [{}]\n",
+                    "\nAddress: {:?}\n",
                     address
                 );
             }
@@ -118,6 +113,7 @@ fn main() {
                 };
                 println!("\nWithdrawn {} satoshi's. \nFrom StateChain ID: {}",amount, state_chain_id);
                 println!("\nWithdraw Txid: {}", txid);
+            }
         } else if matches.is_present("transfer-sender") {
             if let Some(matches) = matches.subcommand_matches("transfer-sender") {
                 let state_chain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
@@ -131,12 +127,11 @@ fn main() {
                 };
                 println!("\nTransfer initiated for StateChain ID: {}.",state_chain_id);
                 println!("\nTransfer message: {:?}",serde_json::to_string(&transfer_msg3).unwrap());
-                }
             }
         } else if matches.is_present("transfer-receiver") {
             if let Some(matches) = matches.subcommand_matches("transfer-receiver") {
                 let transfer_msg3: TransferMsg3 = serde_json::from_str(matches.value_of("message").unwrap()).unwrap();
-                let finalized_data: TransferMsg3
+                let finalized_data: TransferFinalizeData
                     = match make_unix_conn_call(DaemonRequest::TransferReceiver(transfer_msg3)).unwrap() {
                         DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
                         DaemonResponse::Error(e) => panic!(e.to_string()),
