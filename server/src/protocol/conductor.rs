@@ -1030,8 +1030,8 @@ mod tests {
                 &proof_key_priv_vec.last().unwrap(),
             ));
             sce_addresses.push(SCEAddress {
-                tx_backup_addr: Address::from_str("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
-                    .unwrap(),
+                tx_backup_addr: Some(Address::from_str("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
+                    .unwrap()),
                 proof_key: proof_key_vec.last().unwrap().clone(),
             })
         }
@@ -1287,8 +1287,8 @@ mod tests {
         let mut guard = sc_entity.scheduler.lock().unwrap();
         let sce_addr_biset_map = guard.out_addr_map.get_mut(&swap_id).unwrap();
         let sce_addr = SCEAddress {
-            tx_backup_addr: Address::from_str("tb1q7gjz7dnzpz06svq7v3z2wpt33erx086x66jgtn")
-                .unwrap(),
+            tx_backup_addr: Some(Address::from_str("tb1q7gjz7dnzpz06svq7v3z2wpt33erx086x66jgtn")
+                .unwrap()),
             proof_key: PublicKey::from_str(
                 "03b97f69f86f42c65787bfcaebc9c717993fec405973f6368b3d158cb79aa27791",
             )
@@ -1381,8 +1381,8 @@ mod tests {
         let mut guard = sc_entity.scheduler.lock().unwrap();
         let sce_addr_biset_map = guard.out_addr_map.get_mut(&swap_id).unwrap();
         let sce_addr = SCEAddress {
-            tx_backup_addr: Address::from_str("tb1q7gjz7dnzpz06svq7v3z2wpt33erx086x66jgtn")
-                .unwrap(),
+            tx_backup_addr: Some(Address::from_str("tb1q7gjz7dnzpz06svq7v3z2wpt33erx086x66jgtn")
+                .unwrap()),
             proof_key: PublicKey::from_str(
                 "03b97f69f86f42c65787bfcaebc9c717993fec405973f6368b3d158cb79aa27791",
             )
@@ -1471,10 +1471,10 @@ mod tests {
                     println!("Swap token signature: {:?}", signature);
                     // Generate an SCE-address
                     let sce_address = SCEAddress {
-                        tx_backup_addr: Address::from_str(
+                        tx_backup_addr: Some(Address::from_str(
                             "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
                         )
-                        .unwrap(),
+                        .unwrap()),
                         proof_key,
                     };
                     println!("SCE-Address: {:?}", sce_address);
@@ -1581,8 +1581,8 @@ mod tests {
         conductor.expect_swap_second_message().returning(|_| {
             Ok(SCEAddress {
                 // Second message
-                tx_backup_addr: Address::from_str("bc13rgtzzwf6e0sr5mdq3lydnw9re5r7xfkvy5l649")
-                    .unwrap(),
+                tx_backup_addr: Some(Address::from_str("bc13rgtzzwf6e0sr5mdq3lydnw9re5r7xfkvy5l649")
+                    .unwrap()),
                 proof_key: PublicKey::from_str(
                     "65aab40995d3ed5d03a0567b04819ff12641b84c17f5e9d5dd075571e183469c8f",
                 )

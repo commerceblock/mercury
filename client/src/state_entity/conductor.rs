@@ -22,6 +22,7 @@ use curv::{FE, GE};
 use std::str::FromStr;
 use uuid::Uuid;
 use std::{thread, time};
+use crate::serde::Serialize;
 
 // Register a state chain for participation in a swap (request a swap)
 // with swap_size participants
@@ -168,7 +169,7 @@ pub fn do_swap(
     wallet: &mut Wallet,
     state_chain_id: &Uuid,
     swap_size: &u64
-) -> Result<PublicKey> {
+) -> Result<SCEAddress> {
     swap_register_utxo(wallet, state_chain_id, swap_size)?;
     let swap_id;
     //Wait for swap to commence
@@ -207,10 +208,15 @@ pub fn do_swap(
         }
         thread::sleep(time::Duration::from_millis(10000));
     }
-    let new_proof_key = wallet.se_proof_keys.get_new_key()?;
+    let proof_key = wallet.se_proof_keys.get_new_key()?;
+
+    let proof_key =
+    bitcoin::secp256k1::PublicKey::from_slice(&proof_key.to_bytes().as_slice())?;
+
+    let address = SCEAddress {tx_backup_addr: None, proof_key};
 
     //let new_address = wallet.get_new_state_entity_address();
     //Swap first message
     //let bst_req_dat = swap_first_message(&swap_info, &state_chain_id, )
-    Ok(new_proof_key)
+    Ok(address)
 }

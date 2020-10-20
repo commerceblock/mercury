@@ -194,7 +194,7 @@ pub struct DepositMsg2 {
 /// Address generated for State Entity transfer protocol
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash)]
 pub struct SCEAddress {
-    pub tx_backup_addr: Address,
+    pub tx_backup_addr: Option<Address>,
     pub proof_key: PublicKey,
 }
 impl Eq for SCEAddress {}
@@ -440,7 +440,7 @@ mod tests {
             state_chain_id: Uuid::new_v4(),
             tx_backup_psm: PrepareSignTxMsg::default(),
             rec_addr: SCEAddress {
-                tx_backup_addr: Address::from_str("1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h").unwrap(),
+                tx_backup_addr: Some(Address::from_str("1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h").unwrap()),
                 proof_key: PublicKey::from_secret_key(&secp, &SecretKey::new(&mut rng)),
             },
         };

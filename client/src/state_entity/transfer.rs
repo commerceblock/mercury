@@ -82,7 +82,7 @@ pub fn transfer_sender(
     // Update prepare_sign_msg with new owners address, proof key
     prepare_sign_msg.protocol = Protocol::Transfer;
     prepare_sign_msg.tx.output.get_mut(0).unwrap().script_pubkey =
-        receiver_addr.tx_backup_addr.script_pubkey();
+        receiver_addr.tx_backup_addr.clone().unwrap().script_pubkey();
     prepare_sign_msg.proof_key = Some(receiver_addr.proof_key.clone().to_string());
 
     // Sign new back up tx
