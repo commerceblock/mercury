@@ -210,6 +210,7 @@ pub fn make_unix_conn_call(cmd: DaemonRequest) -> Result<DaemonResponse> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{thread, time::Duration};
 
     #[test]
     fn test_make_server() {
@@ -217,7 +218,11 @@ mod tests {
         assert!(request.is_err());
         assert!(format!("{}",serde_json::to_string(&request).unwrap()).contains("Connection refused"));
 
-        let _ = make_server();
+        thread::spawn(|| {
+            let _ = make_server();
+        });
+        thread::sleep(Duration::from_millis(200));
+
         let request = make_unix_conn_call(DaemonRequest::GenAddressBTC);
         assert!(request.is_ok());
     }

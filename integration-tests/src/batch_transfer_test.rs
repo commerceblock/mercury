@@ -135,7 +135,7 @@ mod tests {
 
         // Check deposits exist
         for i in 0..num_state_chains {
-            let (_, _, bals) = wallets[i].get_state_chains_info();
+            let (_, _, bals) = wallets[i].get_state_chains_info().unwrap();
             assert_eq!(bals.len(), 1);
             assert_eq!(
                 bals.last().expect("expected state chain info").confirmed,
@@ -196,7 +196,7 @@ mod tests {
 
         // Check each wallet has only one state chain available
         for i in 0..swap_map.len() {
-            let (_, _, bals) = wallets[i].get_state_chains_info();
+            let (_, _, bals) = wallets[i].get_state_chains_info().unwrap();
             assert_eq!(bals.len(), 1); // Only one active StateChain owned
         }
 
@@ -241,7 +241,7 @@ mod tests {
         }
         // Check deposits exist
         for i in 0..num_state_chains {
-            let (_, _, bals) = wallets[i].get_state_chains_info();
+            let (_, _, bals) = wallets[i].get_state_chains_info().unwrap();
             assert_eq!(bals.len(), 1);
             assert_eq!(bals.last().unwrap().confirmed, amounts[i]);
         }
