@@ -16,8 +16,8 @@ name = "cli"
 path = "src/main.rs"
 
 [[bin]]
-name = "run_wallet_process"
-path = "run_wallet_process.rs"
+name = "run_wallet_daemon"
+path = "run_wallet_daemon.rs"
 
 [dependencies]
 serde = "1.0"

@@ -8,7 +8,7 @@ state chain implementation.
 Mercury server is required to interact with the client, for instruction on how to run it see [here](../server/README.md).
 
 ### Requirements for Tor
-In order to enable Tor, openssl and python3 should be installed. The python package "stem" is also required. 
+In order to enable Tor, openssl and python3 should be installed. The python package "stem" is also required.
 
 #### MacOs
 Install openssl and python3 via homebrew:
@@ -19,7 +19,7 @@ brew install python3
 Install stem via pip3:
 ```bash
 pip3 install stem
-``` 
+```
 
 ## Installation
 ```bash
@@ -29,7 +29,7 @@ cargo build --release
 ```
 
 ## Connecting via Tor
-Requests can be routed via Tor using a socks5 proxy as follows. 
+Requests can be routed via Tor using a socks5 proxy as follows.
 ### Installing and configuring Tor for MacOS
 1) Install tor via homebrew:
 ```bash
@@ -87,6 +87,12 @@ Export mercury endpoint:
 export MERC_ENDPOINT="https://fakeapi.mercurywallet.io"
 ```
 
+Start Wallet State Manager Daemon:
+```bash
+../target/release/run_wallet_daemon
+```
+
+Then in a separate terminal you can send commands to the wallet:
 ```bash
 ../target/release/cli --help            
 ```
