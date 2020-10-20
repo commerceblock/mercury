@@ -21,6 +21,7 @@ use curv::elliptic::curves::traits::{ECPoint, ECScalar};
 use curv::{FE, GE};
 use std::str::FromStr;
 use uuid::Uuid;
+use std::{thread, time};
 
 // Register a state chain for participation in a swap (request a swap)
 // with swap_size participants
@@ -164,12 +165,52 @@ pub fn swap_second_message(
 }
 
 pub fn do_swap(
-    wallet: &Wallet,
+    wallet: &mut Wallet,
     state_chain_id: &Uuid,
     swap_size: &u64
-) -> Result<SCEAddress> {
+) -> Result<PublicKey> {
     swap_register_utxo(wallet, state_chain_id, swap_size)?;
+    let swap_id;
+    //Wait for swap to commence
     loop {
-        
+        match swap_poll_swap(&wallet.client_shim, &state_chain_id)?{
+            Some(v) => {
+                match v {
+                    SwapStatus::Phase1 => {
+                        swap_id = swap_poll_utxo(&wallet.client_shim, &state_chain_id)?.expect("expected swap id");
+                    },
+                    SwapStatus::Phase2 => {
+                        swap_id = swap_poll_utxo(&wallet.client_shim, &state_chain_id)?.expect("expected swap id");
+                    },
+                    SwapStatus::Phase3 => {
+                        return Err(CError::Generic("Swap already in phase 3. Expected phase 1 or 2".to_string()));
+                    },
+                    SwapStatus::Phase4 => {
+                        return Err(CError::Generic("Swap already in phase 3. Expected phase 1 or 2".to_string()));
+                    },
+                }
+                break;
+            },
+            None => (),
+        }
+        thread::sleep(time::Duration::from_millis(10000));
     }
+    //Wait for swap info to become available
+    let info: SwapInfo;
+    loop {
+        match swap_info(&wallet.client_shim, &swap_id)?{
+            Some(v) => {
+                info = v;
+                break;
+            },
+            None => (),
+        }
+        thread::sleep(time::Duration::from_millis(10000));
+    }
+    let new_proof_key = wallet.se_proof_keys.get_new_key()?;
+
+    //let new_address = wallet.get_new_state_entity_address();
+    //Swap first message
+    //let bst_req_dat = swap_first_message(&swap_info, &state_chain_id, )
+    Ok(new_proof_key)
 }

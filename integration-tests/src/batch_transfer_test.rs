@@ -323,7 +323,7 @@ mod tests {
 
         // Check ended
         match state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id) {
-            Err(e) => assert!(e.to_string().contains("Transfer Batch ended.")),
+            Err(e) => assert!(e.to_string().contains("Batch transfer timeout")),
             _ => assert!(false),
         }
 

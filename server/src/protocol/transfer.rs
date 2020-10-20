@@ -219,8 +219,8 @@ impl Transfer for SCE {
 
             // Ensure batch transfer is still active
             if transfer_batch_is_ended(tbd.start_time, self.config.batch_lifetime as i64) {
-                return Err(SEError::Generic(String::from(
-                    "Transfer batch ended. Too late to complete transfer.",
+                return Err(SEError::TransferBatchEnded(String::from(
+                    "Too late to complete transfer.",
                 )));
             }
 

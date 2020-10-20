@@ -27,7 +27,7 @@ use mockall::predicate::*;
 use mockall::*;
 use rocket::State;
 use rocket_contrib::json::Json;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 #[cfg(test)]
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
@@ -65,7 +65,7 @@ impl BlindedSpentTokenMessage {
 /// Conductor protocol trait. Comments explain client and server side of swap protocol.
 #[automock]
 pub trait Conductor {
-    /// API: Poll Conductor to check for status of registered utxo. Return Ok if still waiting
+    /// API: Poll Conductor to check for status of registered utxo. Return Ok(None) if still waiting
     /// or swap_id if swap round has begun.
     fn poll_utxo(&self, state_chain_id: &Uuid) -> Result<Option<Uuid>>;
 
@@ -149,7 +149,6 @@ pub struct Scheduler {
     bst_e_prime_map: HashMap<Uuid, HashMap<Uuid, FE>>,
     //map of swap_id to map of state chain id to blinded spend signatures
     bst_sig_map: HashMap<Uuid, HashMap<Uuid, BlindedSpendSignature>>,
-    //map of swap_id to map to state chian id to bool of signalling whether blinded spend signature has been rec
 }
 
 impl Scheduler {
@@ -362,25 +361,40 @@ impl Scheduler {
                             ))
                         }
                     };
-                    // Check if there are any uncalimed SCEAddresses
+                    // Check if there are any unclaimed SCEAddresses
                     if sce_addr_list.rev_get(&None).len() == 0 {
                         swap_info.status = SwapStatus::Phase3;
                     }
                     info!("SCHEDULER: Swap ID: {} moved on to Phase3", swap_id);
                 }
-                SwapStatus::Phase3 => {
-                    //Phase3 - Query StateChainEntity for batch-transfer status
-                    // let trasfer_batch_status = self.get_transfer_batch_status(swap_id);
-
-                    //   If complete - Remove swap data
-                    // self.remove_swap_info(swap_id);
-                    //   Else move on to phase4
-                    swap_info.status = SwapStatus::Phase4;
-                    info!("SCHEDULER: Swap ID: {} moved on to Phase4", swap_id);
-                }
+                SwapStatus::Phase3 => {}
                 SwapStatus::Phase4 => {}
             };
         }
+        Ok(())
+    }
+
+    pub fn transfer_ended(&mut self, id: &Uuid) -> Result<()> {
+        let mut b_ended = false;
+        match self.swap_info_map.get_mut(id) {
+            Some(i) => {
+                match i.status {
+                    SwapStatus::Phase3 => {
+                        i.status = SwapStatus::Phase4;
+                        info!("SCHEDULER: Swap ID: {} moved on to Phase4", id);
+                        b_ended = true;
+                    },
+                    SwapStatus::Phase4 => return Err(SEError::SwapError("Sheduler: transfer_ended: swap already ended".to_string())),
+                    _ => return Err(SEError::SwapError("Sheduler: transfer_ended: swap not yet in transfer phase".to_string())),
+                }
+            },
+            None => return Err(SEError::SwapError(format!("Sheduler: transfer_ended: swap id not found: {}", id))),
+        };
+
+        if b_ended {
+            self.remove_swap_info(id);
+        }
+
         Ok(())
     }
 
@@ -444,10 +458,36 @@ impl Conductor for SCE {
         Ok(guard.get_swap_id(state_chain_id))
     }
     fn poll_swap(&self, swap_id: &Uuid) -> Result<Option<SwapStatus>> {
-        let guard = self.scheduler.lock()?;
-        Ok(guard.get_swap_status(swap_id))
+        let mut guard = self.scheduler.lock()?;
+        let status = guard.get_swap_status(swap_id);
+        // If in the batch transfer phase, poll the status of the transfer
+        match status {
+            Some(v) => match v {
+                SwapStatus::Phase3 => {
+                    match self.get_transfer_batch_status(swap_id.to_owned()){
+                        Ok(res) => {
+                            if res.finalized {
+                                let _ = guard.transfer_ended(swap_id)?;
+                            }
+                        },
+                        Err(e) => {
+                            match e {
+                                SEError::TransferBatchEnded(_) => {
+                                    let _ = guard.transfer_ended(swap_id)?;
+                                },
+                                _ => (),
+                            }
+                        }
+                    }    
+                },
+                _ => (),
+            }
+            None => (),
+        }
+        Ok(status)
     }
     fn get_swap_info(&self, swap_id: &Uuid) -> Result<Option<SwapInfo>> {
+        let _ = self.poll_swap(swap_id)?;
         let guard = self.scheduler.lock()?;
         Ok(guard.get_swap_info(swap_id))
     }
