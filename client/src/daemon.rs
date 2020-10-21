@@ -24,6 +24,7 @@ const UNIX_SERVER_ADDR: &str = "/tmp/rustd.sock";
 /// Example request object
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DaemonRequest {
+    LifeCheck,
     // Wallet fns
     GenAddressBTC,
     GenAddressSE(String),
@@ -66,11 +67,16 @@ impl DaemonResponse {
 
 /// Start Wallet's UnixServer process
 pub fn make_server() -> Result<()> {
+    // Check if server already running
+    if let Ok(_) = make_unix_conn_call(DaemonRequest::LifeCheck) {
+        panic!("Wallet daemon already running.")
+    }
+
     println!("Configuring and building WalletStateManager...");
     let server = future::lazy(move || {
-        let mut s = UnixServer::<JsonCodec<DaemonResponse, DaemonRequest>>::new(UNIX_SERVER_ADDR, JsonCodec::new()).unwrap();
-
         let _ = env_logger::try_init();
+
+        let mut s = UnixServer::<JsonCodec<DaemonResponse, DaemonRequest>>::new(UNIX_SERVER_ADDR, JsonCodec::new()).unwrap();
 
         let conf_rs = get_config().unwrap();
         let endpoint: String = conf_rs.get("endpoint").unwrap();
@@ -114,6 +120,9 @@ pub fn make_server() -> Result<()> {
             .for_each(move |r| {
                 let data = r.data();
                 match data {
+                    DaemonRequest::LifeCheck => {
+                        r.send(DaemonResponse::None)
+                    },
                     DaemonRequest::GenAddressBTC => {
                         debug!("Daemon: GenAddressBTC");
                         let address = wallet.keys.get_new_address();
