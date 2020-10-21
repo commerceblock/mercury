@@ -32,6 +32,8 @@ use std::collections::{HashMap, HashSet};
 #[cfg(test)]
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
+use std::iter::FromIterator;
+use crate::protocol::transfer_batch::BatchTransfer;
 
 static DEFAULT_TIMEOUT: u64 = 100;
 
@@ -370,9 +372,8 @@ impl Scheduler {
                         swap_info.status = SwapStatus::Phase3;
                     }
                     info!("SCHEDULER: Swap ID: {} moved on to Phase3", swap_id);
-                }
-                SwapStatus::Phase3 => {}
-                SwapStatus::Phase4 => {}
+                },
+                _ => {}
             };
         }
         Ok(())
@@ -383,12 +384,12 @@ impl Scheduler {
         match self.swap_info_map.get_mut(id) {
             Some(i) => {
                 match i.status {
-                    SwapStatus::Phase3 => {
-                        i.status = SwapStatus::Phase4;
+                    SwapStatus::Phase4 => {
+                        i.status = SwapStatus::End;
                         info!("SCHEDULER: Swap ID: {} moved on to Phase4", id);
                         b_ended = true;
                     },
-                    SwapStatus::Phase4 => return Err(SEError::SwapError("Sheduler: transfer_ended: swap already ended".to_string())),
+                    SwapStatus::End => return Err(SEError::SwapError("Sheduler: transfer_ended: swap already ended".to_string())),
                     _ => return Err(SEError::SwapError("Sheduler: transfer_ended: swap not yet in transfer phase".to_string())),
                 }
             },
@@ -463,11 +464,23 @@ impl Conductor for SCE {
     }
     fn poll_swap(&self, swap_id: &Uuid) -> Result<Option<SwapStatus>> {
         let mut guard = self.scheduler.lock()?;
-        let status = guard.get_swap_status(swap_id);
+        let mut status = guard.get_swap_status(swap_id);
         // If in the batch transfer phase, poll the status of the transfer
         match status {
             Some(v) => match v {
                 SwapStatus::Phase3 => {
+                    let signatures = match guard.tb_sig_map.get(&swap_id).cloned(){
+                        Some(s) => Vec::from_iter(s),
+                        None => return Err(SEError::SwapError("batch transfer signatures not found".to_string())),
+                    };
+                    let msg = TransferBatchInitMsg {
+                        id: swap_id.to_owned(),
+                        signatures
+                    };
+                    self.transfer_batch_init(msg)?;
+                    status = Some(SwapStatus::Phase4);
+                },
+                SwapStatus::Phase4 => {
                     match self.get_transfer_batch_status(swap_id.to_owned()){
                         Ok(res) => {
                             if res.finalized {
@@ -1570,7 +1583,7 @@ mod tests {
                     println!("Server responds with SCE-Address: {:?}", second_msg_resp);
                     break; // end poll swap loop
                 }
-                SwapStatus::Phase4 => {}
+                _ => {}
             }
         }
         println!("\nPolling of Swap loop ended. Client now has SCE-Address to transfer to. This is the end of our Client's interaction with Conductor.");

@@ -187,6 +187,9 @@ pub fn do_swap(
                     SwapStatus::Phase4 => {
                         return Err(CError::Generic("Swap already in phase 3. Expected phase 1 or 2".to_string()));
                     },
+                    SwapStatus::End => {
+                        return Err(CError::Generic("Swap already in phase End. Expected phase 1 or 2".to_string()));
+                    },
                 }
                 break;
             },
