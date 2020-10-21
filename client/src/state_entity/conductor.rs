@@ -164,6 +164,10 @@ pub fn do_swap(
     state_chain_id: &Uuid,
     swap_size: &u64
 ) -> Result<SCEAddress> {
+    if !wallet.client_shim.has_tor() {
+        return Err(CError::SwapError("tor not enabled".to_string()))
+    }
+
     let (_shared_key_ids, wallet_sc_ids, bals) = wallet.get_state_chains_info();
     println!("initial wallet state chain ids: {:?}", wallet_sc_ids);
     println!("initial wallet balances: {:?}", bals);
@@ -224,6 +228,8 @@ pub fn do_swap(
     let my_bst_data = swap_first_message(&wallet, &info, &state_chain_id, &transfer_batch_sig, &address)?;
 
     let bss = swap_get_blinded_spend_signature(&wallet.client_shim, &swap_id, &state_chain_id)?;
+
+    wallet.client_shim.new_tor_id()?;
 
     let receiver_addr = swap_second_message(&wallet, &swap_id, &my_bst_data, &bss)?;
 
