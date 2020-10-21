@@ -8,8 +8,6 @@ use shared_lib::{
     blinded_token::{BSTSenderData, BlindedSpendSignature, BlindedSpendToken},
     structs::*,
     swap_data::*,
-    util::keygen::Message,
-    Verifiable,
     state_chain::StateChainSig
 };
 extern crate shared_lib;
@@ -18,10 +16,6 @@ use crate::server::StateChainEntity;
 use crate::protocol::withdraw::Withdraw;
 use crate::Database;
 use bisetmap::BisetMap;
-use bitcoin::{
-    hashes::{sha256d, Hash},
-    secp256k1::{PublicKey, Secp256k1, SecretKey, Signature},
-};
 use cfg_if::cfg_if;
 use curv::FE;
 use mockall::predicate::*;
@@ -379,15 +373,32 @@ impl Scheduler {
         Ok(())
     }
 
+    pub fn transfer_started(&mut self, id: &Uuid) -> Result<()> {
+        match self.swap_info_map.get_mut(id) {
+            Some(i) => {
+                match i.status {
+                    SwapStatus::Phase3 => {
+                        i.status = SwapStatus::Phase4;
+                        info!("SCHEDULER: Swap ID: {} moved to Phase4", id);
+                    },
+                    SwapStatus::Phase4 => return Err(SEError::SwapError("Sheduler: transfer_started: swap already started".to_string())),
+                    SwapStatus::End => return Err(SEError::SwapError("Sheduler: transfer_started: swap already ended".to_string())),
+                    _ => return Err(SEError::SwapError("Sheduler: transfer_started: swap not yet in phase 3".to_string())),
+                }
+            },
+            None => return Err(SEError::SwapError(format!("Sheduler: transfer_started: swap id not found: {}", id))),
+        };
+        Ok(())
+
+    }
+
     pub fn transfer_ended(&mut self, id: &Uuid) -> Result<()> {
-        let mut b_ended = false;
         match self.swap_info_map.get_mut(id) {
             Some(i) => {
                 match i.status {
                     SwapStatus::Phase4 => {
                         i.status = SwapStatus::End;
-                        info!("SCHEDULER: Swap ID: {} moved on to Phase4", id);
-                        b_ended = true;
+                        info!("SCHEDULER: Swap ID: {} moved to phase End", id);
                     },
                     SwapStatus::End => return Err(SEError::SwapError("Sheduler: transfer_ended: swap already ended".to_string())),
                     _ => return Err(SEError::SwapError("Sheduler: transfer_ended: swap not yet in transfer phase".to_string())),
@@ -396,10 +407,7 @@ impl Scheduler {
             None => return Err(SEError::SwapError(format!("Sheduler: transfer_ended: swap id not found: {}", id))),
         };
 
-        if b_ended {
-            self.remove_swap_info(id);
-        }
-
+        self.remove_swap_info(id);
         Ok(())
     }
 
@@ -464,7 +472,7 @@ impl Conductor for SCE {
     }
     fn poll_swap(&self, swap_id: &Uuid) -> Result<Option<SwapStatus>> {
         let mut guard = self.scheduler.lock()?;
-        let mut status = guard.get_swap_status(swap_id);
+        let status = guard.get_swap_status(swap_id);
         // If in the batch transfer phase, poll the status of the transfer
         match status {
             Some(v) => match v {
@@ -478,7 +486,7 @@ impl Conductor for SCE {
                         signatures
                     };
                     self.transfer_batch_init(msg)?;
-                    status = Some(SwapStatus::Phase4);
+                    let _ = guard.transfer_started(swap_id)?;
                 },
                 SwapStatus::Phase4 => {
                     match self.get_transfer_batch_status(swap_id.to_owned()){
@@ -805,10 +813,12 @@ mod tests {
     use shared_lib::{
         blinded_token::{BSTRequestorData, BlindedSpendToken},
         state_chain::{State as SCState, StateChain, StateChainSig},
+        util::keygen::Message,
     };
     use std::collections::HashSet;
     use std::str::FromStr;
     use std::{thread, time::Duration};
+    use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
 
     #[test]
     fn test_swap_token_sig_verify() {

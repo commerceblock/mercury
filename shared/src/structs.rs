@@ -2,10 +2,8 @@
 //!
 //! Struct definitions used in State entity protocols
 
-use crate::blinded_token::{BlindedSpendToken, BSTSenderData};
 use crate::state_chain::{State, StateChainSig};
 use crate::Root;
-use crate::Signature;
 use bitcoin::{OutPoint, Transaction, TxIn, TxOut};
 use curv::{cryptographic_primitives::proofs::sigma_dlog::DLogProof, BigInt, FE, GE, PK};
 use kms::ecdsa::two_party::party2;

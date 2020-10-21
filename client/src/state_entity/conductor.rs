@@ -6,24 +6,20 @@ use super::super::Result;
 
 use crate::error::{CError, WalletErrorType};
 use crate::state_entity::{
-    api::{get_smt_proof, get_smt_root, get_statechain, get_statechain_fee_info},
-    util::{cosign_tx_input, verify_statechain_smt},
+    api::{get_statechain, get_transfer_batch_status},
     transfer,
 };
-use crate::wallet::{key_paths::funding_txid_to_int, wallet::Wallet};
+use crate::wallet::wallet::Wallet;
 use crate::{utilities::requests, ClientShim};
-use shared_lib::{ecies::WalletDecryptable, state_chain::StateChainSig, structs::*, blinded_token::*};
+use shared_lib::{state_chain::StateChainSig, structs::*};
 
-use shared_lib::blinded_token::{BlindedSpendSignature, BlindedSpendToken, BSTSenderData, BSTRequestorData};
-use shared_lib::{structs::*, swap_data::*};
+use shared_lib::blinded_token::{BlindedSpendSignature, BSTRequestorData};
+use shared_lib::{swap_data::*, commitment};
 
-use bitcoin::{Address, PublicKey};
-use curv::elliptic::curves::traits::{ECPoint, ECScalar};
-use curv::{FE, GE};
+use bitcoin::PublicKey;
 use std::str::FromStr;
 use uuid::Uuid;
 use std::{thread, time};
-use crate::serde::Serialize;
 
 // Register a state chain for participation in a swap (request a swap)
 // with swap_size participants
@@ -164,10 +160,15 @@ pub fn swap_second_message(
 }
 
 pub fn do_swap(
-    wallet: &mut Wallet,
+    mut wallet: &mut Wallet,
     state_chain_id: &Uuid,
     swap_size: &u64
 ) -> Result<SCEAddress> {
+    let (_shared_key_ids, wallet_sc_ids, bals) = wallet.get_state_chains_info();
+    println!("initial wallet state chain ids: {:?}", wallet_sc_ids);
+    println!("initial wallet balances: {:?}", bals);
+
+
     swap_register_utxo(wallet, state_chain_id, swap_size)?;
     let swap_id;
     //Wait for swap to commence
@@ -210,33 +211,32 @@ pub fn do_swap(
         thread::sleep(time::Duration::from_millis(10000));
     }
     let proof_key = wallet.se_proof_keys.get_new_key()?;
-
+    
+    let swap_id = info.swap_token.id;
+    
     let proof_key =
     bitcoin::secp256k1::PublicKey::from_slice(&proof_key.to_bytes().as_slice())?;
 
     let address = SCEAddress {tx_backup_addr: None, proof_key};
 
-    let transfer_batch_sig = transfer::transfer_batch_sign(wallet, &state_chain_id, &info.swap_token.id)?;
+    let transfer_batch_sig = transfer::transfer_batch_sign(wallet, &state_chain_id, &swap_id)?;
 
     let my_bst_data = swap_first_message(&wallet, &info, &state_chain_id, &transfer_batch_sig, &address)?;
 
-    let bss = swap_get_blinded_spend_signature(&wallet.client_shim, &info.swap_token.id, &state_chain_id)?;
+    let bss = swap_get_blinded_spend_signature(&wallet.client_shim, &swap_id, &state_chain_id)?;
 
-    let send_to_address = swap_second_message(&wallet, &info.swap_token.id, &my_bst_data, &bss)?;
+    let receiver_addr = swap_second_message(&wallet, &swap_id, &my_bst_data, &bss)?;
 
 
-    //Wait until swap is in phase3  or phase 4
+    //Wait until swap is in phase4 then transfer sender
     loop {
         match swap_poll_swap(&wallet.client_shim, &state_chain_id)?{
             Some(v) => {
                 match v {
-                    _ => (),
-                    SwapStatus::Phase3 => {
-                        
-                    },
                     SwapStatus::Phase4 => {
                         break;
                     },
+                    _ => (),
                 }
             },
             None => (),
@@ -244,6 +244,53 @@ pub fn do_swap(
         thread::sleep(time::Duration::from_millis(1000));
     }
 
+    let mut tranfer_sender_resp = transfer::transfer_sender(
+        &mut wallet,
+        state_chain_id,
+        receiver_addr,
+    )?;
+
+    let (commit, _nonce) = commitment::make_commitment(&state_chain_id.to_string());
+
+    let batch_id = &swap_id;
+
+    let transfer_finalized_data = transfer::transfer_receiver(
+        &mut wallet,
+        &mut tranfer_sender_resp,
+        &Some(BatchData {
+            id: batch_id.clone(),
+            commitment: commit.clone(),
+        }),
+    )?;
+
+    //Wait until swap is in phase End
+    loop {
+        match swap_poll_swap(&wallet.client_shim, &state_chain_id)?{
+            Some(v) => {
+                match v {
+                    SwapStatus::End => {
+                        break;
+                    },
+                    _ => (),
+                }
+            },
+            None => (),
+        };
+        thread::sleep(time::Duration::from_millis(1000));
+    }
+
+    //Confirm batch transfer status and finalize the transfer in the wallet
+    let bt_status = get_transfer_batch_status(&wallet.client_shim, &batch_id)?;
+
+    if !bt_status.finalized {
+        return Err(CError::SwapError("batch transfer not finalized".to_string()));
+    }
+
+    transfer::transfer_receiver_finalize(&mut wallet, transfer_finalized_data)?;
+    let (_shared_key_ids, wallet_sc_ids, bals) = wallet.get_state_chains_info();
+    
+    println!("final wallet state chain ids: {:?}", wallet_sc_ids);
+    println!("final wallet balances: {:?}", bals);
 
     Ok(address)
 }
