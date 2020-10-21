@@ -28,6 +28,7 @@ use chrono::{Duration, NaiveDateTime, Utc};
 use std::panic;
 use std::sync::{Arc, Mutex};
 use std::{convert::TryInto, panic::AssertUnwindSafe, str::FromStr};
+use uuid::Uuid;
 
 /// A list of States in which each State signs for the next State.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -140,6 +141,13 @@ impl StateChainSig {
             data: data.clone(),
             sig: sig.to_string(),
         })
+    }
+
+    /// Generate signature to request participation in a batch transfer
+    pub fn new_transfer_batch_sig(proof_key_priv: &SecretKey, batch_id: &Uuid, state_chain_id: &Uuid) -> Result<Self> {
+        let purpose = &format!("TRANSFER_BATCH:{}", batch_id.to_owned());
+        let data = & state_chain_id.to_string();
+        Self::new(proof_key_priv, purpose, data)
     }
 
     /// Verify self's signature for transfer or withdraw

@@ -368,12 +368,13 @@ pub fn transfer_batch_sign(
     let proof_key_derivation = wallet
         .se_proof_keys
         .get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap());
-    Ok(StateChainSig::new(
-        &proof_key_derivation.unwrap().private_key.key,
-        &format!("TRANSFER_BATCH:{}", batch_id.to_owned()),
-        &state_chain_id.to_string(),
-    )?)
+    
+    match StateChainSig::new_transfer_batch_sig(&proof_key_derivation.unwrap().private_key.key, &batch_id, &state_chain_id){
+        Ok(r) => Ok(r),
+        Err(e) => Err(e.into())
+    }
 }
+
 
 /// Request StateEntity start transfer_batch protocol
 pub fn transfer_batch_init(

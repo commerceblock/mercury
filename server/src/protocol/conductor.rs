@@ -1053,10 +1053,14 @@ mod tests {
         swap_token_no_sc.state_chain_ids = Vec::new();
 
         let swap_token_sig = swap_token_no_sc.sign(&proof_key_priv_vec[0]).unwrap();
+        let state_chain_id = statechain_ids[0];
+        let transfer_batch_sig = StateChainSig::new_transfer_batch_sig(&proof_key_priv_vec[0], &swap_id, &state_chain_id).unwrap();
+
         let mut swap_msg_1 = SwapMsg1 {
-            state_chain_id: statechain_ids[0],
+            state_chain_id,
             swap_id,
             swap_token_sig,
+            transfer_batch_sig,
             address: sce_addresses[0].clone(),
             bst_e_prime: FE::zero(),
         };
@@ -1100,10 +1104,12 @@ mod tests {
 
         //Send valid first messages for all participants
         for i in 0..proof_key_vec.len() {
+            let transfer_batch_sig = StateChainSig::new_transfer_batch_sig(&proof_key_priv_vec[i], &swap_id, &statechain_ids[i]).unwrap();
             let swap_msg_1 = SwapMsg1 {
                 state_chain_id: statechain_ids[i],
                 swap_id,
                 swap_token_sig: swap_token.sign(&proof_key_priv_vec[i]).unwrap(),
+                transfer_batch_sig,
                 address: sce_addresses[i].clone(),
                 bst_e_prime: FE::new_random(),
             };
@@ -1468,6 +1474,7 @@ mod tests {
                     // Sign swap token
                     let swap_token = poll_swap_res.swap_token;
                     let signature = swap_token.sign(&proof_key_priv).unwrap();
+                    let transfer_batch_sig = StateChainSig::new_transfer_batch_sig(&proof_key_priv, &swap_token.id, &state_chain_id).unwrap();
                     println!("Swap token signature: {:?}", signature);
                     // Generate an SCE-address
                     let sce_address = SCEAddress {
@@ -1484,6 +1491,7 @@ mod tests {
                         state_chain_id,
                         swap_id: swap_token.id.clone(),
                         swap_token_sig: signature,
+                        transfer_batch_sig,
                         address: sce_address,
                         bst_e_prime: FE::zero(),
                     });

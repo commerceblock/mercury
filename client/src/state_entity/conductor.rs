@@ -90,6 +90,7 @@ swap_id: &Uuid) -> Result<Option<SwapInfo>> {
 pub fn swap_first_message(wallet: &Wallet,
     swap_info: &SwapInfo,
     state_chain_id: &Uuid,
+    transfer_batch_sig: &StateChainSig,
     new_address: &SCEAddress
 ) -> Result<BSTRequestorData> {
     let swap_token = swap_info.swap_token.clone();
@@ -106,11 +107,9 @@ pub fn swap_first_message(wallet: &Wallet,
 
     let swap_token_sig = &swap_token.sign(&proof_key_priv)?;
 
-
-
     //Requester
     let m = swap_token.id.to_string();
-    // Requester setup BST generation
+    // Requester setup BST generation   
     let my_bst_data = BSTRequestorData::setup(
         swap_info.bst_sender_data.get_r_prime(),
         &m)?;
@@ -122,9 +121,8 @@ pub fn swap_first_message(wallet: &Wallet,
             swap_id: swap_token.id.to_owned(),
             state_chain_id: state_chain_id.to_owned(),
             swap_token_sig: swap_token_sig.to_owned(),
-            //Address::from_str("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"), //What are these variables?
+            transfer_batch_sig: transfer_batch_sig.to_owned(),
             address: new_address.to_owned(),
-            //FE::new_random
             bst_e_prime: my_bst_data.get_e_prime().clone()
         }
     )?;
@@ -215,16 +213,13 @@ pub fn do_swap(
 
     let address = SCEAddress {tx_backup_addr: None, proof_key};
 
-    let my_bst_data = swap_first_message(&wallet, &info, &state_chain_id, &address)?;
+    let transfer_batch_sig = transfer::transfer_batch_sign(wallet, &state_chain_id, &info.swap_token.id)?;
+
+    let my_bst_data = swap_first_message(&wallet, &info, &state_chain_id, &transfer_batch_sig, &address)?;
 
     let bss = swap_get_blinded_spend_signature(&wallet.client_shim, &info.swap_token.id, &state_chain_id)?;
 
     let send_to_address = swap_second_message(&wallet, &info.swap_token.id, &my_bst_data, &bss)?;
-
-    //let transfer_batch_sig = transfer::transfer_batch_sign(&wallet, &state_chain_id, &info.swap_id)?;
-
-
-
 
 
     //Wait until swap is in phase3  or phase 4
