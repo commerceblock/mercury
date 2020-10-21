@@ -10,6 +10,7 @@ use shared_lib::{
     swap_data::*,
     util::keygen::Message,
     Verifiable,
+    state_chain::StateChainSig
 };
 extern crate shared_lib;
 use crate::server::StateChainEntity;
@@ -149,6 +150,8 @@ pub struct Scheduler {
     bst_e_prime_map: HashMap<Uuid, HashMap<Uuid, FE>>,
     //map of swap_id to map of state chain id to blinded spend signatures
     bst_sig_map: HashMap<Uuid, HashMap<Uuid, BlindedSpendSignature>>,
+    //map of swap_id to transfer batch sigs
+    tb_sig_map: HashMap<Uuid, HashSet<StateChainSig>>,
 }
 
 impl Scheduler {
@@ -163,6 +166,7 @@ impl Scheduler {
             out_addr_map: HashMap::new(),
             bst_e_prime_map: HashMap::new(),
             bst_sig_map: HashMap::new(),
+            tb_sig_map: HashMap::new(),
         }
     }
 
@@ -524,7 +528,32 @@ impl Conductor for SCE {
                 i.swap_token
                     .verify_sig(proof_key, swap_msg1.swap_token_sig)?;
 
-                //Signature ok. Add the SCEAddress to the list.
+                //Swap token signature ok
+                //Verify purpose and data of batch transfer signature
+                if !swap_msg1.transfer_batch_sig.is_transfer_batch(Some(swap_id)){
+                    return Err(SEError::SwapError("swap_first_message: signature is not transfer batch".to_string()));
+                }
+
+                if swap_msg1.state_chain_id.to_string() != swap_msg1.transfer_batch_sig.data {
+                    return Err(SEError::SwapError("swap first message: state chain id does not match signature data".to_string()));
+                }
+
+                let _ = self.verify_statechain_sig(
+                                &swap_msg1.state_chain_id, 
+                                &swap_msg1.transfer_batch_sig, None)?;
+                //Add the transfer batch signature to the list. If it doesn't exist, make a new one.
+                match guard.tb_sig_map.get_mut(swap_id) {
+                    Some(v) => {
+                        v.insert(swap_msg1.transfer_batch_sig.clone());
+                    },
+                    None => {
+                        let mut tbs_set = HashSet::<StateChainSig>::new();
+                        tbs_set.insert(swap_msg1.transfer_batch_sig.clone());
+                        guard.tb_sig_map.insert(swap_id.to_owned(), tbs_set);
+                    }
+                }
+                
+                //Add the SCEAddress to the list.
                 match guard.out_addr_map.get_mut(swap_id) {
                     Some(sce_address_list) => {
                         sce_address_list.insert(swap_msg1.address.clone(), None);
@@ -813,6 +842,7 @@ mod tests {
             out_addr_map: HashMap::new(),
             bst_e_prime_map: HashMap::new(),
             bst_sig_map: HashMap::new(),
+            tb_sig_map: HashMap::new(),
         }
     }
 
@@ -1023,6 +1053,10 @@ mod tests {
         let mut proof_key_vec = Vec::<PublicKey>::new();
         let mut proof_key_priv_vec = Vec::<SecretKey>::new();
         let mut sce_addresses = Vec::<SCEAddress>::new();
+
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+
         for i in 1..4 {
             proof_key_priv_vec.push(SecretKey::from_slice(&[i; 32]).unwrap());
             proof_key_vec.push(PublicKey::from_secret_key(
@@ -1030,14 +1064,30 @@ mod tests {
                 &proof_key_priv_vec.last().unwrap(),
             ));
             sce_addresses.push(SCEAddress {
-                tx_backup_addr: Some(Address::from_str("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
-                    .unwrap()),
+                tx_backup_addr: None,
                 proof_key: proof_key_vec.last().unwrap().clone(),
-            })
+            });
+
+            //Mock database responses
+            let mut chain = Vec::<SCState>::new();
+            chain.push(SCState {
+                data: proof_key_vec.last().unwrap().to_string(),
+                next_state: None,
+            });
+            let statechain = StateChain {
+                chain: chain.clone(),
+            };
+            db.expect_get_statechain_owner()
+                .times(1)
+                .returning(move |_| {
+                Ok(StateChainOwner {
+                    locked_until: chrono::prelude::Utc::now().naive_utc(),
+                    owner_id: Uuid::new_v4(),
+                    chain: statechain.clone(),
+                })
+            });
         }
 
-        let mut db = MockDatabase::new();
-        db.expect_set_connection_from_config().returning(|_| Ok(()));
         let mut sc_entity = test_sc_entity(db);
         sc_entity.scheduler = Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)])));
         let mut guard = sc_entity.scheduler.lock().unwrap();
@@ -1064,6 +1114,7 @@ mod tests {
             address: sce_addresses[0].clone(),
             bst_e_prime: FE::zero(),
         };
+
         match sc_entity.swap_first_message(&swap_msg_1) {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(
@@ -1104,7 +1155,10 @@ mod tests {
 
         //Send valid first messages for all participants
         for i in 0..proof_key_vec.len() {
+            println!("participant: {}", i);
             let transfer_batch_sig = StateChainSig::new_transfer_batch_sig(&proof_key_priv_vec[i], &swap_id, &statechain_ids[i]).unwrap();
+            transfer_batch_sig.verify(&proof_key_vec[i].to_string()).unwrap();
+            println!("transfer batch signature ok");
             let swap_msg_1 = SwapMsg1 {
                 state_chain_id: statechain_ids[i],
                 swap_id,
