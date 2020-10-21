@@ -8,6 +8,7 @@ use crate::error::{CError, WalletErrorType};
 use crate::state_entity::{
     api::{get_smt_proof, get_smt_root, get_statechain, get_statechain_fee_info},
     util::{cosign_tx_input, verify_statechain_smt},
+    transfer,
 };
 use crate::wallet::{key_paths::funding_txid_to_int, wallet::Wallet};
 use crate::{utilities::requests, ClientShim};
@@ -89,8 +90,7 @@ swap_id: &Uuid) -> Result<Option<SwapInfo>> {
 pub fn swap_first_message(wallet: &Wallet,
     swap_info: &SwapInfo,
     state_chain_id: &Uuid,
-    new_address: &SCEAddress,
-    e_prime: &FE,
+    new_address: &SCEAddress
 ) -> Result<BSTRequestorData> {
     let swap_token = swap_info.swap_token.clone();
 
@@ -215,8 +215,37 @@ pub fn do_swap(
 
     let address = SCEAddress {tx_backup_addr: None, proof_key};
 
-    //let new_address = wallet.get_new_state_entity_address();
-    //Swap first message
-    //let bst_req_dat = swap_first_message(&swap_info, &state_chain_id, )
+    let my_bst_data = swap_first_message(&wallet, &info, &state_chain_id, &address)?;
+
+    let bss = swap_get_blinded_spend_signature(&wallet.client_shim, &info.swap_token.id, &state_chain_id)?;
+
+    let send_to_address = swap_second_message(&wallet, &info.swap_token.id, &my_bst_data, &bss)?;
+
+    //let transfer_batch_sig = transfer::transfer_batch_sign(&wallet, &state_chain_id, &info.swap_id)?;
+
+
+
+
+
+    //Wait until swap is in phase3  or phase 4
+    loop {
+        match swap_poll_swap(&wallet.client_shim, &state_chain_id)?{
+            Some(v) => {
+                match v {
+                    _ => (),
+                    SwapStatus::Phase3 => {
+                        
+                    },
+                    SwapStatus::Phase4 => {
+                        break;
+                    },
+                }
+            },
+            None => (),
+        };
+        thread::sleep(time::Duration::from_millis(1000));
+    }
+
+
     Ok(address)
 }
