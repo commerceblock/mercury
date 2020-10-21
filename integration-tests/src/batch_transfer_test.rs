@@ -12,6 +12,8 @@ mod tests {
     use bitcoin::PublicKey;
     use client_lib::state_entity;
     use std::{str::FromStr, thread, time::Duration};
+    use std::thread::spawn;
+    use std::sync::{Arc, Mutex};
 
     /// Test batch transfer signature generation
     #[test]
@@ -402,5 +404,43 @@ mod tests {
             Err(e) => assert!(e.to_string().contains("State Chain locked for")),
             _ => assert!(false),
         };
+    }
+
+
+    #[test]
+    #[serial]
+    fn test_swap() {
+        let _handle = start_server();
+
+        let num_state_chains: u64 = 10; 
+        let amount: u64 = 10000;// = u64::from_str(&format!("10000")).unwrap();
+        
+        // Gen some wallets and deposit coins into SCE 
+        //let mut wallets = vec![];
+        //let mut deposits = vec![];
+        let mut thread_handles = vec![];
+
+        for i in 0..num_state_chains as usize {
+            //wallets.push(gen_wallet());
+            /*for _ in 0..i {
+                // Gen keys so different wallets have different proof keys (since wallets have the same seed)
+                let _ = wallets[i].se_proof_keys.get_new_key();
+            }*/
+            //deposits.push(run_deposit(&mut wallets[i], &amount));
+            //let mut wallet = Arc::new(Mutex::new(wallets[i].clone()));
+            thread_handles.push(
+                spawn(move || {
+                        let mut wallet=gen_wallet();
+                        let deposit = run_deposit(&mut wallet, &amount);
+                        state_entity::conductor::do_swap_without_tor(&mut wallet, &deposit.1, &num_state_chains)
+                    }
+                )
+            );
+        }
+
+        for handle in thread_handles {
+            handle.join().unwrap().unwrap();
+        }
+
     }
 }

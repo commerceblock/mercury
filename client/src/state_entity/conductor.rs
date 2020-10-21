@@ -159,12 +159,29 @@ pub fn swap_second_message(
     )
 }
 
-pub fn do_swap(
+pub fn do_swap_with_tor(
     mut wallet: &mut Wallet,
     state_chain_id: &Uuid,
     swap_size: &u64
 ) -> Result<SCEAddress> {
-    if !wallet.client_shim.has_tor() {
+    do_swap(wallet, state_chain_id, swap_size, true)
+}
+
+pub fn do_swap_without_tor(
+    mut wallet: &mut Wallet,
+    state_chain_id: &Uuid,
+    swap_size: &u64
+) -> Result<SCEAddress> {
+    do_swap(wallet, state_chain_id, swap_size, false)
+}
+
+fn do_swap(
+    mut wallet: &mut Wallet,
+    state_chain_id: &Uuid,
+    swap_size: &u64,
+    with_tor: bool
+) -> Result<SCEAddress> {
+    if with_tor &! wallet.client_shim.has_tor() {
         return Err(CError::SwapError("tor not enabled".to_string()))
     }
 
@@ -229,7 +246,9 @@ pub fn do_swap(
 
     let bss = swap_get_blinded_spend_signature(&wallet.client_shim, &swap_id, &state_chain_id)?;
 
-    wallet.client_shim.new_tor_id()?;
+    if with_tor {
+        wallet.client_shim.new_tor_id()?;
+    }
 
     let receiver_addr = swap_second_message(&wallet, &swap_id, &my_bst_data, &bss)?;
 
