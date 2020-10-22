@@ -30,7 +30,6 @@ use serde_json::json;
 use std::fs;
 use std::str::FromStr;
 use uuid::Uuid;
-use rand::random;
 
 const WALLET_FILENAME: &str = "wallet/wallet.data";
 
@@ -632,10 +631,6 @@ mod tests {
 
     fn gen_wallet() -> Wallet {
         gen_wallet_with_seed(&[0xcd; 32])
-    }
-
-    fn gen_random_wallet() -> Wallet {
-        gen_wallet_with_seed(&random::<[u8; 32]>())
     }
 
     fn gen_wallet_with_seed(seed: &[u8]) -> Wallet {

@@ -13,7 +13,6 @@ mod tests {
     use client_lib::state_entity;
     use std::{str::FromStr, thread, time::Duration};
     use std::thread::spawn;
-    use std::sync::{Arc, Mutex};
 
     /// Test batch transfer signature generation
     #[test]
@@ -419,20 +418,16 @@ mod tests {
         let mut wallets = vec![];
         let mut deposits = vec![];
         let mut thread_handles = vec![];
-        
-        const WF_BASE: &str = "test/wallet/swap_wallet_";
-        const WF_SUFFIX: &str = ".data";
 
         for i in 0..num_state_chains as usize {
-            println!("gen wallet number {}", i);
+          
             wallets.push(gen_wallet());
             for _ in 0..i {
                 // Gen keys so different wallets have different proof keys (since wallets have the same seed)
                 let _ = wallets[i].se_proof_keys.get_new_key();
             }
-            println!("running deposit number {}", i);
+           
             deposits.push(run_deposit(&mut wallets[i], &amount));
-            //let mut wallet = Arc::new(Mutex::new(wallets[i].clone()));
             let deposit = deposits.last().unwrap().clone();
 
             let (_shared_key_ids, wallet_sc_ids, bals) = wallets.last().unwrap().get_state_chains_info();
@@ -448,10 +443,6 @@ mod tests {
                             ClientShim::new("http://localhost:8000".to_string(), None, None),
                             Box::new(MockElectrum::new())
                         )?;
-                        //for _ in 0..i {
-                       //     let _ = wallet.se_proof_keys.get_new_key();
-                       // }
-                        //let deposit = run_deposit(&mut wallet, &amount);
                         state_entity::conductor::do_swap_without_tor(&mut wallet, &deposit.1, &num_state_chains)
                     }
                 )
@@ -460,7 +451,6 @@ mod tests {
 
         let mut i = 0;
         for handle in thread_handles {
-            println!("joined handle number {}", i);
             handle.join().unwrap().unwrap();
             i = i+1;
         }

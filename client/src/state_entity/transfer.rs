@@ -127,7 +127,31 @@ pub fn transfer_sender(
         shared_key.unspent = false;
     }
 
+    //store transfer_msg_3 in db
+
+
+    // Update server database with transfer message 3 so that 
+    // the receiver can get the message
+    requests::postb(
+        &wallet.client_shim,
+        &format!("transfer/update_msg"),
+        &transfer_msg3,
+    )?;
+
     Ok(transfer_msg3)
+}
+
+// Get the transfer message 3 
+// created by the sender and stored in the SE database
+pub fn transfer_get_msg(
+    wallet: &mut Wallet,
+    state_chain_id: &Uuid,
+) -> Result<TransferMsg3> {
+    requests::postb(
+        &wallet.client_shim,
+        &format!("transfer/get_msg"),
+        &state_chain_id,
+    )
 }
 
 /// Receiver side of Transfer protocol.
@@ -137,19 +161,17 @@ pub fn transfer_receiver(
     batch_data: &Option<BatchData>,
 ) -> Result<TransferFinalizeData> {
     //Decrypt the message on receipt
-    println!("transfer receiver: decrypt message");
     match wallet.decrypt(transfer_msg3){
         Ok(_) => (),
         Err(e) => return Err(CError::Generic(format!("error decrypting message: {}", e.to_string())))
     };
-    //Mae immutable
+    //Make immutable
     let transfer_msg3 = &*transfer_msg3;
     // Get statechain data (will Err if statechain not yet finalized)
     let state_chain_data: StateChainDataAPI =
         get_statechain(&wallet.client_shim, &transfer_msg3.state_chain_id)?;
 
     let tx_backup = transfer_msg3.tx_backup_psm.tx.clone();
-    println!("transfer receiver: ensure backup tx funds are sent to address owned by this wallet");
     // Ensure backup tx funds are sent to address owned by this wallet
     let back_up_rec_addr = Address::from_script(
         &tx_backup.output[0].script_pubkey,
@@ -158,7 +180,6 @@ pub fn transfer_receiver(
     .ok_or(CError::Generic(String::from(
         "Failed to decode ScriptpubKey.",
     )))?;
-    println!("transfer receiver: ensure receiving address found in this wallet");
     wallet
         .se_backup_keys
         .get_address_derivation(&back_up_rec_addr.to_string())
@@ -174,7 +195,6 @@ pub fn transfer_receiver(
     debug!("State chain signature is valid.");
 
     // Check signature is for proof key owned by this wallet
-    println!("transfer receiver: check sig is for proof key owned by this wallet");
     let new_owner_proof_key = transfer_msg3.state_chain_sig.data.clone();
     wallet
         .se_proof_keys

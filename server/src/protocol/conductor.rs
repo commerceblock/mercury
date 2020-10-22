@@ -318,13 +318,11 @@ impl Scheduler {
                 //    - Generate a Blind Spend Tokens for each participant
                 //    - Move swap to phase 2
                 SwapStatus::Phase1 => {
-                    println!("update_swaps: get out_addr_map");
                     let out_addr_map: &BisetMap<SCEAddress, Option<Uuid>> =
                         match self.out_addr_map.get(&swap_id) {
                             Some(out_addr_map) => out_addr_map,
                             None => return Ok(()), // BisetMap not yet created means no participants have completed swap_msg_1 yet
                         };
-                    println!("update_swaps: test if out_addr_map complete");
                     if (swap_info.swap_token.state_chain_ids.len() == out_addr_map.len()) {
                         //All output addresses received.
                         //Generate a list of blinded spend tokens and proceed to phase 2.
@@ -334,15 +332,11 @@ impl Scheduler {
                             self.bst_e_prime_map.get(&swap_id),
                         )?;
                         self.bst_sig_map.insert(swap_id, scid_bst_map);
-                        println!("update_swaps: move to phase 2");
                         swap_info.status = SwapStatus::Phase2;
                         info!("SCHEDULER: Swap ID: {} moved on to Phase2", swap_id);
-                    } else {
-                        println!("update_swaps: did not move to phase 2");
-                    }
+                    } 
                 }
                 SwapStatus::Phase2 => {
-                    println!("update_swaps: now in phase 2");
                     //Phase 2 - Return BST and SCEAddresses for corresponding valid signtures
                     //Signature ok. Add the SCEAddress to the list.
                     let sce_addr_list = match self.out_addr_map.get(swap_id) {
@@ -391,7 +385,6 @@ impl Scheduler {
                 match i.status {
                     SwapStatus::Phase4 => {
                         i.status = SwapStatus::End;
-                        println!("going to phase End");
                         info!("SCHEDULER: Swap ID: {} moved to phase End", id);
                     },
                     SwapStatus::End => return Err(SEError::SwapError("Sheduler: transfer_ended: swap already ended".to_string())),
@@ -471,7 +464,6 @@ impl Conductor for SCE {
         match status {
             Some(v) => match v {
                 SwapStatus::Phase3 => {
-                    println!("in phase 3");
                     let signatures = match guard.tb_sig_map.get(&swap_id).cloned(){
                         Some(s) => Vec::from_iter(s),
                         None => return Err(SEError::SwapError("batch transfer signatures not found".to_string())),
@@ -484,19 +476,13 @@ impl Conductor for SCE {
                     let _ = guard.transfer_started(swap_id)?;
                 },
                 SwapStatus::Phase4 => {
-                    println!("in phase 4");
                     match self.get_transfer_batch_status(swap_id.to_owned()){
                         Ok(res) => {
-                            println!("in phase 4 - ok");
                             if res.finalized {
-                                println!("in phase 4 - finalized");
                                 let _ = guard.transfer_ended(swap_id)?;
-                            } else {
-                                println!("in phase 4 - not finalized");
-                            }
+                            } 
                         },
                         Err(e) => {
-                            println!("in phase 4 - err");
                             match e {
                                 SEError::TransferBatchEnded(_) => {
                                     let _ = guard.transfer_ended(swap_id)?;
@@ -506,9 +492,14 @@ impl Conductor for SCE {
                         }
                     }    
                 },
+                SwapStatus::End => {
+                    ()
+                },
                 _ => (),
             }
-            None => (),
+            None => {
+                ()
+            },
         }
         Ok(status)
     }
@@ -541,8 +532,6 @@ impl Conductor for SCE {
     }
 
     fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> Result<()> {
-
-
 
         let state_chain = self.get_statechain(swap_msg1.state_chain_id)?.chain;
         let proof_key_str = &state_chain.last().unwrap().data.clone();
@@ -1089,8 +1078,18 @@ mod tests {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
 
-        for i in 1..4 {
-            proof_key_priv_vec.push(SecretKey::from_slice(&[i; 32]).unwrap());
+        let mut seq = Sequence::new();
+
+        let mut scheduler = get_scheduler(vec![(3, 10), (3, 10), (3, 10)]);
+        scheduler.update_swap_info().unwrap();
+        //let swap_id_valid = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let swap_id = scheduler.swap_id_map.iter().next().unwrap().1.to_owned();
+        // Sign swap token with no state_chain_ids
+        let swap_token = scheduler.get_swap_info(&swap_id).unwrap().swap_token;
+        let statechain_ids = swap_token.state_chain_ids.clone();
+
+        for i in 0..3 {
+            proof_key_priv_vec.push(SecretKey::from_slice(&[i+1; 32]).unwrap());
             proof_key_vec.push(PublicKey::from_secret_key(
                 &Secp256k1::new(),
                 &proof_key_priv_vec.last().unwrap(),
@@ -1109,6 +1108,8 @@ mod tests {
             let statechain = StateChain {
                 chain: chain.clone(),
             };
+            let statechain2 = statechain.clone();
+       
             db.expect_get_statechain_owner()
                 .times(1)
                 .returning(move |_| {
@@ -1118,19 +1119,18 @@ mod tests {
                     chain: statechain.clone(),
                 })
             });
+
+            db.expect_get_statechain()
+            .with(eq(statechain_ids[i as usize]))
+            .returning(move |_| {
+                Ok(statechain2.clone())
+            });
+
         }
 
         let mut sc_entity = test_sc_entity(db);
-        sc_entity.scheduler = Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)])));
-        let mut guard = sc_entity.scheduler.lock().unwrap();
-        guard.update_swap_info().unwrap();
-        //let swap_id_valid = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
-        let swap_id = guard.swap_id_map.iter().next().unwrap().1.to_owned();
-        // Sign swap token with no state_chain_ids
-        let swap_token = guard.get_swap_info(&swap_id).unwrap().swap_token;
-        let statechain_ids = swap_token.state_chain_ids.clone();
-        drop(guard);
-
+        sc_entity.scheduler = Arc::new(Mutex::new(scheduler));
+        
         let mut swap_token_no_sc = swap_token.clone();
         swap_token_no_sc.state_chain_ids = Vec::new();
 
@@ -1187,10 +1187,8 @@ mod tests {
 
         //Send valid first messages for all participants
         for i in 0..proof_key_vec.len() {
-            println!("participant: {}", i);
             let transfer_batch_sig = StateChainSig::new_transfer_batch_sig(&proof_key_priv_vec[i], &swap_id, &statechain_ids[i]).unwrap();
             transfer_batch_sig.verify(&proof_key_vec[i].to_string()).unwrap();
-            println!("transfer batch signature ok");
             let swap_msg_1 = SwapMsg1 {
                 state_chain_id: statechain_ids[i],
                 swap_id,

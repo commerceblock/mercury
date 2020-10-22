@@ -62,10 +62,8 @@ impl<
     }
 
     pub fn start_conductor_thread(scheduler: Arc<Mutex<Scheduler>>) -> std::thread::JoinHandle<()> {
-        println!("start conductor thread");
         std::thread::spawn(move || loop {
             let mut guard = scheduler.lock().unwrap();
-            println!("conductor thread: update swap info");
             if let Err(e) = guard.update_swap_info() {
                 error!("{}", &e.to_string());
             }
@@ -150,6 +148,8 @@ pub fn get_server<
                 deposit::deposit_confirm,
                 transfer::transfer_sender,
                 transfer::transfer_receiver,
+                transfer::transfer_update_msg,
+                transfer::transfer_get_msg,
                 transfer_batch::transfer_batch_init,
                 transfer_batch::transfer_reveal_nonce,
                 withdraw::withdraw_init,
@@ -293,6 +293,8 @@ mock! {
             &self,
             finalized_data: &TransferFinalizeData,
         ) -> transfer::Result<()>;
+        fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> transfer::Result<()>;
+        fn transfer_get_msg(&self, state_chain_id: Uuid) -> transfer::Result<TransferMsg3>;
     }
     trait BatchTransfer {
         fn transfer_batch_init(

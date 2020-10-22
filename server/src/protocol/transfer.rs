@@ -63,6 +63,12 @@ pub trait Transfer {
     /// This function is called immediately in the regular transfer case or after confirmation of atomic
     /// transfers completion in the batch transfer case.
     fn transfer_finalize(&self, finalized_data: &TransferFinalizeData) -> Result<()>;
+
+    /// API: Update the state entity database with transfer message 3
+    fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> Result<()>;
+
+    /// API: Get the transfer message 3 set by update_transfer_msg
+    fn transfer_get_msg(&self, state_chain_id: Uuid) -> Result<TransferMsg3>;
 }
 
 impl Transfer for SCE {
@@ -321,6 +327,16 @@ impl Transfer for SCE {
 
         Ok(())
     }
+
+    /// API: Update the state entity database with transfer message 3
+    fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> Result<()>{
+        self.database.update_transfer_msg(&transfer_msg3.state_chain_id, &transfer_msg3)
+    }
+
+    /// API: Get the transfer message 3 set by update_transfer_msg
+    fn transfer_get_msg(&self, state_chain_id: Uuid) -> Result<TransferMsg3>{
+        self.database.get_transfer_msg(&state_chain_id)
+    }
 }
 
 #[post("/transfer/sender", format = "json", data = "<transfer_msg1>")]
@@ -344,6 +360,28 @@ pub fn transfer_receiver(
         Err(e) => return Err(e),
     }
 }
+
+#[post("/transfer/update_msg", format = "json", data = "<transfer_msg3>")]
+pub fn transfer_update_msg(
+    sc_entity: State<SCE>,
+    transfer_msg3: Json<TransferMsg3>,
+) -> Result<Json<()>>{
+    match sc_entity.transfer_update_msg(transfer_msg3.into_inner()){
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+} 
+
+#[post("/transfer/get_msg", format = "json", data = "<state_chain_id>")]
+pub fn transfer_get_msg(
+    sc_entity: State<SCE>,
+    state_chain_id: Json<Uuid>,
+) -> Result<Json<TransferMsg3>>{
+    match sc_entity.transfer_get_msg(state_chain_id.into_inner()){
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+} 
 
 #[cfg(test)]
 mod tests {
@@ -430,6 +468,7 @@ mod tests {
                 })
             });
         db.expect_create_transfer().returning(|_, _, _| Ok(()));
+        db.expect_update_transfer_msg().returning(|_, _| Ok(()));
 
         let sc_entity = test_sc_entity(db);
 

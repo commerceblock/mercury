@@ -26,9 +26,8 @@ use std::sync::mpsc::RecvTimeoutError;
 use std::thread;
 use std::time::Instant;
 use uuid::Uuid;
-
 use curv::FE;
-use rand::random;
+
 
 extern crate stoppable_thread;
 
@@ -142,16 +141,13 @@ impl SpawnServer for MockDatabase {
 }
 
 /// Create a wallet and generate some addresses 
+#[cfg(test)]
 fn gen_wallet() -> Wallet {
     gen_wallet_with_seed(&[0xcd; 32])
 }
 
-/// Create a wallet with a random seed and generate some addresses 
-fn gen_random_wallet() -> Wallet {
-    gen_wallet_with_seed(&random::<[u8; 32]>())
-}
-
 /// Create a wallet with a specified seed and generate some addresses 
+#[cfg(test)]
 fn gen_wallet_with_seed(seed: &[u8]) -> Wallet {
     // let electrum = ElectrumxClient::new("dummy").unwrap();
     let mut wallet = Wallet::new(
