@@ -62,13 +62,15 @@ impl<
     }
 
     pub fn start_conductor_thread(scheduler: Arc<Mutex<Scheduler>>) -> std::thread::JoinHandle<()> {
+        println!("start conductor thread");
         std::thread::spawn(move || loop {
             let mut guard = scheduler.lock().unwrap();
+            println!("conductor thread: update swap info");
             if let Err(e) = guard.update_swap_info() {
                 error!("{}", &e.to_string());
             }
             drop(guard);
-            std::thread::sleep(std::time::Duration::from_secs(60));
+            std::thread::sleep(std::time::Duration::from_secs(10));
         })
     }
 }
@@ -151,7 +153,14 @@ pub fn get_server<
                 transfer_batch::transfer_batch_init,
                 transfer_batch::transfer_reveal_nonce,
                 withdraw::withdraw_init,
-                withdraw::withdraw_confirm
+                withdraw::withdraw_confirm, 
+                conductor::poll_utxo,
+                conductor::poll_swap,
+                conductor::get_swap_info,
+                conductor::get_blinded_spend_signature,
+                conductor::register_utxo,
+                conductor::swap_first_message,
+                conductor::swap_second_message,
             ],
         )
         .manage(sc_entity);

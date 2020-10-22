@@ -5,7 +5,7 @@
 pub use super::super::Result;
 use crate::error::SEError;
 use shared_lib::{
-    blinded_token::{BSTSenderData, BlindedSpendSignature, BlindedSpendToken},
+    blinded_token::{BSTSenderData, BlindedSpendSignature, BlindedSpendToken, BlindedSpentTokenMessage},
     structs::*,
     swap_data::*,
     state_chain::StateChainSig
@@ -28,6 +28,8 @@ use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 use std::iter::FromIterator;
 use crate::protocol::transfer_batch::BatchTransfer;
+use crate::storage::Storage;
+use std::str::FromStr;
 
 static DEFAULT_TIMEOUT: u64 = 100;
 
@@ -41,21 +43,6 @@ cfg_if! {
     } else {
         use crate::PGDatabase;
         type SCE = StateChainEntity::<PGDatabase, PGDatabase>;
-    }
-}
-
-/// Struct serialized to string to be used as Blind sign token message
-#[derive(Serialize, Deserialize, Debug)]
-pub struct BlindedSpentTokenMessage {
-    swap_id: Uuid,
-    nonce: Uuid,
-}
-impl BlindedSpentTokenMessage {
-    pub fn new(swap_id: Uuid) -> Self {
-        BlindedSpentTokenMessage {
-            swap_id,
-            nonce: Uuid::new_v4(),
-        }
     }
 }
 
@@ -331,11 +318,13 @@ impl Scheduler {
                 //    - Generate a Blind Spend Tokens for each participant
                 //    - Move swap to phase 2
                 SwapStatus::Phase1 => {
+                    println!("update_swaps: get out_addr_map");
                     let out_addr_map: &BisetMap<SCEAddress, Option<Uuid>> =
                         match self.out_addr_map.get(&swap_id) {
                             Some(out_addr_map) => out_addr_map,
                             None => return Ok(()), // BisetMap not yet created means no participants have completed swap_msg_1 yet
                         };
+                    println!("update_swaps: test if out_addr_map complete");
                     if (swap_info.swap_token.state_chain_ids.len() == out_addr_map.len()) {
                         //All output addresses received.
                         //Generate a list of blinded spend tokens and proceed to phase 2.
@@ -345,11 +334,15 @@ impl Scheduler {
                             self.bst_e_prime_map.get(&swap_id),
                         )?;
                         self.bst_sig_map.insert(swap_id, scid_bst_map);
+                        println!("update_swaps: move to phase 2");
                         swap_info.status = SwapStatus::Phase2;
+                        info!("SCHEDULER: Swap ID: {} moved on to Phase2", swap_id);
+                    } else {
+                        println!("update_swaps: did not move to phase 2");
                     }
-                    info!("SCHEDULER: Swap ID: {} moved on to Phase2", swap_id);
                 }
                 SwapStatus::Phase2 => {
+                    println!("update_swaps: now in phase 2");
                     //Phase 2 - Return BST and SCEAddresses for corresponding valid signtures
                     //Signature ok. Add the SCEAddress to the list.
                     let sce_addr_list = match self.out_addr_map.get(swap_id) {
@@ -398,6 +391,7 @@ impl Scheduler {
                 match i.status {
                     SwapStatus::Phase4 => {
                         i.status = SwapStatus::End;
+                        println!("going to phase End");
                         info!("SCHEDULER: Swap ID: {} moved to phase End", id);
                     },
                     SwapStatus::End => return Err(SEError::SwapError("Sheduler: transfer_ended: swap already ended".to_string())),
@@ -477,6 +471,7 @@ impl Conductor for SCE {
         match status {
             Some(v) => match v {
                 SwapStatus::Phase3 => {
+                    println!("in phase 3");
                     let signatures = match guard.tb_sig_map.get(&swap_id).cloned(){
                         Some(s) => Vec::from_iter(s),
                         None => return Err(SEError::SwapError("batch transfer signatures not found".to_string())),
@@ -489,13 +484,19 @@ impl Conductor for SCE {
                     let _ = guard.transfer_started(swap_id)?;
                 },
                 SwapStatus::Phase4 => {
+                    println!("in phase 4");
                     match self.get_transfer_batch_status(swap_id.to_owned()){
                         Ok(res) => {
+                            println!("in phase 4 - ok");
                             if res.finalized {
+                                println!("in phase 4 - finalized");
                                 let _ = guard.transfer_ended(swap_id)?;
+                            } else {
+                                println!("in phase 4 - not finalized");
                             }
                         },
                         Err(e) => {
+                            println!("in phase 4 - err");
                             match e {
                                 SEError::TransferBatchEnded(_) => {
                                     let _ = guard.transfer_ended(swap_id)?;
@@ -540,14 +541,22 @@ impl Conductor for SCE {
     }
 
     fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> Result<()> {
-        let proof_key = &swap_msg1.address.proof_key;
+
+
+
+        let state_chain = self.get_statechain(swap_msg1.state_chain_id)?.chain;
+        let proof_key_str = &state_chain.last().unwrap().data.clone();
+        let proof_key = bitcoin::secp256k1::PublicKey::from_str(&proof_key_str)?;
+
+    
+        //let proof_key = &swap_msg1.address.proof_key;
         //Find the correct swap token and verify
         let mut guard = self.scheduler.lock()?;
         let swap_id = &swap_msg1.swap_id;
         match guard.get_swap_info(swap_id) {
             Some(i) => {
                 i.swap_token
-                    .verify_sig(proof_key, swap_msg1.swap_token_sig)?;
+                    .verify_sig(&proof_key, swap_msg1.swap_token_sig)?;
 
                 //Swap token signature ok
                 //Verify purpose and data of batch transfer signature
@@ -621,7 +630,7 @@ impl Conductor for SCE {
                 Ok(v) => v,
                 Err(_) => {
                     return Err(SEError::SwapError(
-                        "Failed to deserialize message.".to_string(),
+                        "swap_second_message: Failed to deserialize message.".to_string(),
                     ))
                 }
             };

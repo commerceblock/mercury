@@ -412,34 +412,57 @@ mod tests {
     fn test_swap() {
         let _handle = start_server();
 
-        let num_state_chains: u64 = 10; 
+        let num_state_chains: u64 = 3; 
         let amount: u64 = 10000;// = u64::from_str(&format!("10000")).unwrap();
         
         // Gen some wallets and deposit coins into SCE 
-        //let mut wallets = vec![];
-        //let mut deposits = vec![];
+        let mut wallets = vec![];
+        let mut deposits = vec![];
         let mut thread_handles = vec![];
+        
+        const WF_BASE: &str = "test/wallet/swap_wallet_";
+        const WF_SUFFIX: &str = ".data";
 
         for i in 0..num_state_chains as usize {
-            //wallets.push(gen_wallet());
-            /*for _ in 0..i {
+            println!("gen wallet number {}", i);
+            wallets.push(gen_wallet());
+            for _ in 0..i {
                 // Gen keys so different wallets have different proof keys (since wallets have the same seed)
                 let _ = wallets[i].se_proof_keys.get_new_key();
-            }*/
-            //deposits.push(run_deposit(&mut wallets[i], &amount));
+            }
+            println!("running deposit number {}", i);
+            deposits.push(run_deposit(&mut wallets[i], &amount));
             //let mut wallet = Arc::new(Mutex::new(wallets[i].clone()));
+            let deposit = deposits.last().unwrap().clone();
+
+            let (_shared_key_ids, wallet_sc_ids, bals) = wallets.last().unwrap().get_state_chains_info();
+            println!("deposit wallet state chain ids: {:?}", wallet_sc_ids);
+            println!("deposit wallet balances: {:?}", bals);
+
+            let wallet_ser = wallets.last().unwrap().to_json();
+
             thread_handles.push(
                 spawn(move || {
-                        let mut wallet=gen_wallet();
-                        let deposit = run_deposit(&mut wallet, &amount);
+                        let mut wallet=wallet::wallet::Wallet::from_json(
+                            wallet_ser,
+                            ClientShim::new("http://localhost:8000".to_string(), None, None),
+                            Box::new(MockElectrum::new())
+                        )?;
+                        //for _ in 0..i {
+                       //     let _ = wallet.se_proof_keys.get_new_key();
+                       // }
+                        //let deposit = run_deposit(&mut wallet, &amount);
                         state_entity::conductor::do_swap_without_tor(&mut wallet, &deposit.1, &num_state_chains)
                     }
                 )
             );
         }
 
+        let mut i = 0;
         for handle in thread_handles {
+            println!("joined handle number {}", i);
             handle.join().unwrap().unwrap();
+            i = i+1;
         }
 
     }

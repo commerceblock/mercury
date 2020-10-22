@@ -16,6 +16,7 @@ use curv::{
     elliptic::curves::traits::{ECPoint, ECScalar},
     BigInt, FE, GE,
 };
+use uuid::Uuid;
 
 // Notation:
 //  x: Signer Priv key
@@ -226,6 +227,21 @@ pub fn verify_blind_sig(s: FE, m: &String, q: GE, r: GE) -> Result<bool> {
         return Ok(true);
     }
     Ok(false)
+}
+
+/// Struct serialized to string to be used as Blind sign token message
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BlindedSpentTokenMessage {
+    pub swap_id: Uuid,
+    pub nonce: Uuid,
+}
+impl BlindedSpentTokenMessage {
+    pub fn new(swap_id: Uuid) -> Self {
+        BlindedSpentTokenMessage {
+            swap_id,
+            nonce: Uuid::new_v4(),
+        }
+    }
 }
 
 #[cfg(test)]
