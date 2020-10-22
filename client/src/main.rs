@@ -189,6 +189,25 @@ fn main() {
                     network, finalized_data.state_chain_id
                 );
             }
+        } else if matches.is_present("swap") {
+            if let Some(matches) = matches.subcommand_matches("swap") {
+                                
+                let state_chain_id = Uuid::from_str(matches.value_of("state-chain-id").unwrap()).unwrap();
+                let swap_size = u64::from_str(matches.value_of("swap-size").unwrap()).unwrap();
+            
+                let _ = state_entity::conductor::do_swap(
+                    &mut wallet, 
+                    &state_chain_id,
+                    &swap_size,
+                    matches.is_present("force-no-tor")
+                ).unwrap();                    
+                     
+                wallet.save();
+                println!(
+                    "\nNetwork: [{}], \n\nSwap complete from StateChain ID: {}.",
+                    network, state_chain_id
+                );
+            }
 
         // backup
         } else if matches.is_present("backup") {

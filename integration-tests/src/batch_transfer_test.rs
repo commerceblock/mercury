@@ -443,7 +443,7 @@ mod tests {
                             ClientShim::new("http://localhost:8000".to_string(), None, None),
                             Box::new(MockElectrum::new())
                         )?;
-                        state_entity::conductor::do_swap_without_tor(&mut wallet, &deposit.1, &num_state_chains)
+                        state_entity::conductor::do_swap(&mut wallet, &deposit.1, &num_state_chains, false)
                     }
                 )
             );

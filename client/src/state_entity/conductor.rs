@@ -164,22 +164,6 @@ pub fn swap_second_message(
     )
 }
 
-pub fn do_swap_with_tor(
-    wallet: &mut Wallet,
-    state_chain_id: &Uuid,
-    swap_size: &u64
-) -> Result<SCEAddress> {
-    do_swap(wallet, state_chain_id, swap_size, true)
-}
-
-pub fn do_swap_without_tor(
-    wallet: &mut Wallet,
-    state_chain_id: &Uuid,
-    swap_size: &u64
-) -> Result<SCEAddress> {
-    do_swap(wallet, state_chain_id, swap_size, false)
-}
-
 // Loop throught the state chain ids
 // Do transfer_receiver returning TransferFinalizedData if message is mine
 fn do_transfer_receiver(
@@ -217,7 +201,7 @@ fn do_transfer_receiver(
     Err(CError::SwapError("no transfer messages addressed to me".to_string()))
 }
 
-fn do_swap(
+pub fn do_swap(
     mut wallet: &mut Wallet,
     state_chain_id: &Uuid,
     swap_size: &u64,
