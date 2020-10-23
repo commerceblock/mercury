@@ -7,8 +7,11 @@ A new wallet will be automatically created upon startup.
 
 
 ## Config
-testing_mode: Use Mock Electrum Server and generate generic Seed ([0xcd; 32]).
-
+enpoint:                Mercury Server network address
+electrum_server:        Network address of Electrum Server. Leave blank for Mock Electrum Server.
+testing_mode:           Use Mock Electrum Server and generate generic Seed ([0xcd; 32]).
+network:                Bitcoin networks: "testnet", "mainnet", "regtest"
+daemon_address:         File system address of Client's state manager daemon
 
 ## Requirements
 Mercury server is required to interact with the client, for instruction on how to run it see [here](../server/README.md).

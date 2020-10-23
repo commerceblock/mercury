@@ -17,8 +17,7 @@ use wallet::wallet::ElectrumxBox;
 use uuid::Uuid;
 use shared_lib::structs::{TransferMsg3, SCEAddress};
 use state_entity::api::get_statechain;
-
-const UNIX_SERVER_ADDR: &str = "/tmp/rustd.sock";
+use rand::Rng;
 
 
 /// Example request object
@@ -76,12 +75,14 @@ pub fn make_server() -> Result<()> {
     let server = future::lazy(move || {
         let _ = env_logger::try_init();
 
-        let mut s = UnixServer::<JsonCodec<DaemonResponse, DaemonRequest>>::new(UNIX_SERVER_ADDR, JsonCodec::new()).unwrap();
 
         let conf_rs = get_config().unwrap();
         let endpoint: String = conf_rs.get("endpoint").unwrap();
         let electrum_server: String = conf_rs.get("electrum_server").unwrap();
         let testing_mode: bool = conf_rs.get("testing_mode").unwrap();
+        let network: String = conf_rs.get("network").unwrap();
+        let daemon_address: String = conf_rs.get("daemon_address").unwrap();
+
         let mut tor = Tor::from_config(&conf_rs);
         let tor = match tor.enable {
             true => {
@@ -102,19 +103,29 @@ pub fn make_server() -> Result<()> {
             Err(_) => {
                 println!("No wallet file found. Creating new...");
 
-                // TODO: random generating of seed and allow input of mnemonic phrase
-                let seed = [0xcd; 32];
-                let network = "testnet".to_string();
+                // Defaults to generic seed
+                let mut seed: [u8; 32] = [0xcd; 32];
+
+                if testing_mode == false {
+                    seed = rand::thread_rng().gen(); // Generate fresh seed
+                };
+
                 let wallet = wallet::wallet::Wallet::new(&seed, &network, client_shim);
                 wallet.save();
                 wallet
             }
         };
 
-        // Set electrumx_client to non-MockElectrumx. Throw if electrumx server error.
+        // Set electrumx client. Default is Mock
         if testing_mode == false {
-            wallet.set_electrumx_client(ElectrumxBox::new(electrum_server).unwrap())
-        };
+            if electrum_server.len() > 0 {   // Use mock electrum server if no server address provided
+                wallet.set_electrumx_client(ElectrumxBox::new(electrum_server).unwrap()) // Throw if electrumx server error.
+            } else {
+                println!("No Electrum server address provided. Defaulted to Mock Electrum server.")
+            }
+        }
+
+        let mut s = UnixServer::<JsonCodec<DaemonResponse, DaemonRequest>>::new(&daemon_address, JsonCodec::new()).unwrap();
 
         let server_handle = s
             .incoming()
@@ -204,7 +215,10 @@ pub fn make_server() -> Result<()> {
 
 /// Create UnixConnection and make example request to UnixServer
 pub fn make_unix_conn_call(cmd: DaemonRequest) -> Result<DaemonResponse> {
-    let client = UnixConnection::<JsonCodec<DaemonRequest, DaemonResponse>>::new(UNIX_SERVER_ADDR, JsonCodec::new()).wait()?;
+    let conf_rs = get_config().unwrap();
+    let daemon_address: String = conf_rs.get("daemon_address")?;
+
+    let client = UnixConnection::<JsonCodec<DaemonRequest, DaemonResponse>>::new(&daemon_address, JsonCodec::new()).wait()?;
     let (tx, rx) = client.split();
 
     if let Err(_) = tx.send(cmd).wait() {

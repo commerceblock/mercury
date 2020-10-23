@@ -297,7 +297,7 @@ impl Wallet {
     pub fn load(client_shim: ClientShim) -> Result<Wallet> {
         Ok(Wallet::load_from(
             WALLET_FILENAME,
-            client_shim,
+            client_shim
         )?)
     }
 
@@ -647,7 +647,7 @@ mod tests {
         let mut wallet = Wallet::new(
             &[0xcd; 32],
             &"regtest".to_string(),
-            ClientShim::new("http://localhost:8000".to_string(), None, None),
+            ClientShim::new("http://localhost:8000".to_string(), None, None)
         );
         let _ = wallet.keys.get_new_address();
         let _ = wallet.keys.get_new_address();
@@ -674,7 +674,7 @@ mod tests {
 
         let wallet_rebuilt = super::Wallet::from_json(
             wallet_json,
-            ClientShim::new("http://localhost:8000".to_string(), None, None),
+            ClientShim::new("http://localhost:8000".to_string(), None, None)
         )
         .unwrap();
 
