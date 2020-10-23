@@ -3,7 +3,7 @@ extern crate shared_lib;
 use crate::config::Config;
 use std::{thread, time};
 use crate::Database;
-use bitcoincore_rpc::{Auth, Client, RpcApi, Error};
+use bitcoincore_rpc::Error;
 use bitcoin::consensus;
 use jsonrpc;
 use cfg_if::cfg_if;
@@ -44,6 +44,7 @@ pub fn watch_node(rpc_path: String) -> Result<()> {
             use shared_lib::mocks::mock_client::MockClient;
             let mut rpc = MockClient::new();
         } else {
+            use bitcoincore_rpc::{Auth, Client};
             let rpc = Client::new(rpc_path_parts[1].to_string(),
                           Auth::UserPass(rpc_cred[0].to_string(),
                                          rpc_cred[1].to_string())).unwrap();
