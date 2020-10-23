@@ -11,7 +11,12 @@
 
 use super::Result;
 use bitcoin::hashes::{sha256d, Hash};
-use curv::{GE, elliptic::curves::traits::{ECPoint, ECScalar}, FE, BigInt, arithmetic::traits::Converter};
+use curv::{
+    arithmetic::traits::Converter,
+    elliptic::curves::traits::{ECPoint, ECScalar},
+    BigInt, FE, GE,
+};
+use uuid::Uuid;
 
 // Notation:
 //  x: Signer Priv key
@@ -39,15 +44,16 @@ use curv::{GE, elliptic::curves::traits::{ECPoint, ECScalar}, FE, BigInt, arithm
 // And verifies
 //      sp=eq+r
 
-
 /// blind spend signature
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BlindedSpendSignature {
-    s_prime: FE
+    s_prime: FE,
 }
 impl Default for BlindedSpendSignature {
     fn default() -> Self {
-        BlindedSpendSignature{ s_prime: FE::zero() }
+        BlindedSpendSignature {
+            s_prime: FE::zero(),
+        }
     }
 }
 
@@ -56,23 +62,23 @@ impl Default for BlindedSpendSignature {
 pub struct BlindedSpendToken {
     s: FE,
     r: GE,
-    m: String
+    m: String,
 }
 impl Default for BlindedSpendToken {
     fn default() -> Self {
-        BlindedSpendToken{
+        BlindedSpendToken {
             s: FE::zero(),
             r: GE::generator(),
-            m: String::default()
+            m: String::default(),
         }
     }
 }
 impl BlindedSpendToken {
     pub fn new_random() -> Self {
-        BlindedSpendToken{
+        BlindedSpendToken {
             s: FE::new_random(),
             r: GE::random_point(),
-            m: String::default()
+            m: String::default(),
         }
     }
     pub fn get_msg(&self) -> String {
@@ -89,21 +95,16 @@ pub struct BSTSenderData {
     x: FE,
     q: GE,
     k: FE,
-    r_prime: GE
+    r_prime: GE,
 }
 impl BSTSenderData {
     /// Generate new BSTSenderData for Swap
     pub fn setup() -> Self {
         let p: GE = ECPoint::generator(); // gen
         let x = FE::new_random(); // priv
-        let q = p*x; //pub
+        let q = p * x; //pub
         let (k, r_prime) = signer_gen_r_prime();
-        BSTSenderData {
-            x,
-            q,
-            k,
-            r_prime
-        }
+        BSTSenderData { x, q, k, r_prime }
     }
 
     pub fn get_r_prime(&self) -> GE {
@@ -112,7 +113,9 @@ impl BSTSenderData {
 
     /// Create a blind signature for some e_prime value
     pub fn gen_blind_signature(&self, e_prime: FE) -> BlindedSpendSignature {
-        BlindedSpendSignature{ s_prime: sender_calc_s_prime(self.x, e_prime, self.k) }
+        BlindedSpendSignature {
+            s_prime: sender_calc_s_prime(self.x, e_prime, self.k),
+        }
     }
 
     /// Verify blind spend token
@@ -128,7 +131,7 @@ pub struct BSTRequestorData {
     v: FE,
     r: GE,
     e_prime: FE,
-    m: String
+    m: String,
 }
 impl BSTRequestorData {
     /// Generate new BSTRequestorData with senders r_prime value and a message m
@@ -139,7 +142,7 @@ impl BSTRequestorData {
             v,
             r,
             e_prime,
-            m: m.to_owned()
+            m: m.to_owned(),
         })
     }
 
@@ -157,24 +160,26 @@ impl BSTRequestorData {
         BlindedSpendToken {
             s,
             r: self.r,
-            m: self.m.clone()
+            m: self.m.clone(),
         }
     }
 }
-
 
 ///  Signer generates
 ///      r' = kp
 pub fn signer_gen_r_prime() -> (FE, GE) {
     let k: FE = FE::new_random();
     let p: GE = ECPoint::generator();
-    (k, p*k)
+    (k, p * k)
 }
-
 
 fn calc_e(r: GE, m: &String) -> Result<FE> {
     let mut data_vec = m.as_bytes().iter().cloned().collect::<Vec<u8>>();
-    let mut r_vec = serde_json::to_string(&r)?.as_bytes().iter().cloned().collect::<Vec<u8>>();
+    let mut r_vec = serde_json::to_string(&r)?
+        .as_bytes()
+        .iter()
+        .cloned()
+        .collect::<Vec<u8>>();
     data_vec.append(&mut r_vec);
     let e = sha256d::Hash::hash(&data_vec);
     let hex = hex::encode(e);
@@ -191,7 +196,7 @@ pub fn requester_calc_e_prime(r_prime: GE, m: &String) -> Result<(FE, FE, GE, FE
     let v: FE = FE::new_random();
     let p: GE = ECPoint::generator();
 
-    let r: GE = r_prime*u + p*v;
+    let r: GE = r_prime * u + p * v;
 
     let e = calc_e(r, m)?;
 
@@ -216,14 +221,28 @@ pub fn requester_calc_s(s_prime: FE, u: FE, v: FE) -> FE {
 pub fn verify_blind_sig(s: FE, m: &String, q: GE, r: GE) -> Result<bool> {
     let p: GE = ECPoint::generator();
     let e = calc_e(r, m)?;
-    let sp = p*s;
-    let eq_plus_r = q*e + r;
+    let sp = p * s;
+    let eq_plus_r = q * e + r;
     if sp == eq_plus_r {
         return Ok(true);
     }
     Ok(false)
 }
 
+/// Struct serialized to string to be used as Blind sign token message
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BlindedSpentTokenMessage {
+    pub swap_id: Uuid,
+    pub nonce: Uuid,
+}
+impl BlindedSpentTokenMessage {
+    pub fn new(swap_id: Uuid) -> Self {
+        BlindedSpentTokenMessage {
+            swap_id,
+            nonce: Uuid::new_v4(),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -233,7 +252,7 @@ mod tests {
         // Sender init vars for BST
         let p: GE = ECPoint::generator(); // gen
         let x = FE::new_random(); // priv
-        let q = p*x; //pub
+        let q = p * x; //pub
         let (k, r_prime) = signer_gen_r_prime();
 
         let m = "swap ID".to_string();

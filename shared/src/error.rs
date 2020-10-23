@@ -1,4 +1,3 @@
-
 use bitcoin::secp256k1::Error as SecpError;
 use bitcoin::util::address::Error as AddressError;
 use monotree::Errors as MonotreeErrors;
@@ -15,7 +14,6 @@ use rocket::Response;
 use std::fmt;
 use std::io::Cursor;
 
-
 /// Shared library specific errors
 #[derive(Debug, Deserialize)]
 pub enum SharedLibError {
@@ -23,6 +21,8 @@ pub enum SharedLibError {
     Generic(String),
     /// Invalid argument error
     FormatError(String),
+    /// Swap error
+    SwapError(String),
 }
 
 impl From<AddressError> for SharedLibError {
@@ -66,6 +66,7 @@ impl fmt::Display for SharedLibError {
         match *self {
             SharedLibError::Generic(ref e) => write!(f, "Error: {}", e),
             SharedLibError::FormatError(ref e) => write!(f, "Format Error: {}", e),
+            SharedLibError::SwapError(ref e) => write!(f, "Swap Error: {}", e),
         }
     }
 }

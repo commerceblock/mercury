@@ -23,16 +23,17 @@ extern crate base64;
 extern crate merkletree;
 extern crate reqwest;
 
-pub mod commitment;
 pub mod blinded_token;
+pub mod swap_data;
+pub mod commitment;
+pub mod ecies;
 pub mod error;
 pub mod mainstay;
 pub mod state_chain;
 pub mod structs;
 pub mod util;
-pub mod ecies;
 
-use bitcoin::secp256k1::{Message, Secp256k1, Signature, PublicKey};
+use bitcoin::secp256k1::{Message, PublicKey, Secp256k1, Signature};
 
 type Result<T> = std::result::Result<T, error::SharedLibError>;
 
@@ -165,17 +166,13 @@ pub trait Verifiable {
 }
 
 impl Verifiable for Signature {
-    fn verify_btc(&self, key: &bitcoin::util::key::PublicKey, message: &Message) -> Result<()>{
+    fn verify_btc(&self, key: &bitcoin::util::key::PublicKey, message: &Message) -> Result<()> {
         let key = &PublicKey::from_slice(key.to_bytes().as_slice())?;
         self.verify(key, message)
     }
 
-    fn verify(&self, key: &PublicKey, message: &Message) -> Result<()>{
-         let secp = Secp256k1::new();
-         Ok(secp.verify(
-            message,
-            &self,
-            key
-        )?)
+    fn verify(&self, key: &PublicKey, message: &Message) -> Result<()> {
+        let secp = Secp256k1::new();
+        Ok(secp.verify(message, &self, key)?)
     }
 }

@@ -63,7 +63,7 @@ pub fn deposit(
 
     // 2P-ECDSA with state entity to create a Shared key
     let shared_key = wallet.gen_shared_key(&shared_key_id, amount)?;
-    
+
     // Create funding tx
     let pk = shared_key.share.public.q.get_element(); // co-owned key address to send funds to (P_addr)
     let p_addr = bitcoin::Address::p2wpkh(&to_bitcoin_public_key(pk), wallet.get_bitcoin_network())?;
@@ -78,7 +78,6 @@ pub fn deposit(
         &change_addr,
         &change_amount,
     )?;
-
 
     let tx_funding_signed = wallet.sign_tx(
         &tx_0,
@@ -101,10 +100,9 @@ pub fn deposit(
         input_amounts: vec![*amount],
         proof_key: Some(proof_key.to_string()),
     };
-    
+
     let witness = cosign_tx_input(wallet, &tx_backup_psm)?;
-    
-    
+
     // Add witness to back up tx
     let mut tx_backup_signed = tx_backup_unsigned.clone();
     tx_backup_signed.input[0].witness = witness;
@@ -142,7 +140,6 @@ pub fn deposit(
         shared_key.tx_backup_psm = Some(tx_backup_psm.to_owned());
         shared_key.add_proof_data(&proof_key.to_string(), &root, &proof, &funding_txid);
     }
-
 
     Ok((
         shared_key_id,

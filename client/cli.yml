@@ -78,6 +78,23 @@ subcommands:
                   required: true
                   value_name: message
                   help: Transfer message from sender
+        - swap:
+            about: Perform Swap
+            version: "1.0"
+            args:
+              - state-chain-id:
+                  short: id
+                  required: true
+                  value_name: state_chain_id
+                  help: State chain ID
+              - swap-size:
+                  short: s
+                  required: true
+                  value_name: swap_size
+                  help: Number of state chains in swap
+              - force-no-tor:
+                  short: f
+                  help: Run without changing tor identity
         - send:
             about: Send a transaction
             version: "1.0"
