@@ -44,7 +44,7 @@ pub fn watch_node(rpc_path: String) -> Result<()> {
             use shared_lib::mocks::mock_client::MockClient;
             let mut rpc = MockClient::new();
         } else {
-            use bitcoincore_rpc::{Auth, Client};
+            use bitcoincore_rpc::{Auth, Client, RpcApi};
             let rpc = Client::new(rpc_path_parts[1].to_string(),
                           Auth::UserPass(rpc_cred[0].to_string(),
                                          rpc_cred[1].to_string())).unwrap();
