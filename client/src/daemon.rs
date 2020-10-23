@@ -105,7 +105,9 @@ pub fn make_server() -> Result<()> {
                 // TODO: random generating of seed and allow input of mnemonic phrase
                 let seed = [0xcd; 32];
                 let network = "testnet".to_string();
-                wallet::wallet::Wallet::new(&seed, &network, client_shim)
+                let wallet = wallet::wallet::Wallet::new(&seed, &network, client_shim);
+                wallet.save();
+                wallet
             }
         };
 

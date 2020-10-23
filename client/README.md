@@ -1,8 +1,14 @@
 # Mercury Client
 
 ## Introduction
-Mercury client is a bitcoin minimalist decentralized wallet CLI app with a client side
-state chain implementation.
+Mercury client is a client-side StateChain implementation.
+
+A new wallet will be automatically created upon startup.
+
+
+## Config
+testing_mode: Use Mock Electrum Server and generate generic Seed ([0xcd; 32]).
+
 
 ## Requirements
 Mercury server is required to interact with the client, for instruction on how to run it see [here](../server/README.md).

@@ -13,7 +13,7 @@ fn main() {
     let matches = App::from_yaml(yaml).get_matches();
     let _ = env_logger::try_init();
 
-    if let Some(_matches) = matches.subcommand_matches("wallet") {
+    if let Some(matches) = matches.subcommand_matches("wallet") {
         if matches.is_present("new-address") {
             let address: String = match make_unix_conn_call(DaemonRequest::GenAddressBTC).unwrap() {
                 DaemonResponse::Value(val) => val,
