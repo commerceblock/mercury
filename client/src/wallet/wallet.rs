@@ -313,9 +313,9 @@ impl Wallet {
     }
 
     pub fn get_new_state_entity_address(&mut self, funding_txid: &String) -> Result<SCEAddress> {
-        let tx_backup_addr = self
+        let tx_backup_addr = Some(self
             .se_backup_keys
-            .get_new_address_encoded_id(funding_txid_to_int(funding_txid)?)?;
+            .get_new_address_encoded_id(funding_txid_to_int(funding_txid)?)?);
         let proof_key = self
             .se_proof_keys
             .get_new_key_encoded_id(funding_txid_to_int(funding_txid)?, None)?;
@@ -630,9 +630,13 @@ mod tests {
     use shared_lib::mocks::mock_electrum::MockElectrum;
 
     fn gen_wallet() -> Wallet {
+        gen_wallet_with_seed(&[0xcd; 32])
+    }
+
+    fn gen_wallet_with_seed(seed: &[u8]) -> Wallet {
         // let electrum = ElectrumxClient::new("dummy").unwrap();
         let mut wallet = Wallet::new(
-            &[0xcd; 32],
+            &seed,
             &"regtest".to_string(),
             ClientShim::new("http://localhost:8000".to_string(), None, None),
             Box::new(MockElectrum::new()),

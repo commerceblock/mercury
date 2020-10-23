@@ -66,7 +66,7 @@ use mockall::*;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
 use rocket_contrib::databases::postgres;
-use shared_lib::{state_chain::*, Root};
+use shared_lib::{state_chain::*, Root, structs::TransferMsg3};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -164,6 +164,15 @@ pub trait Database {
         state_chain_sig: &StateChainSig,
         x1: &FE,
     ) -> Result<()>;
+    fn update_transfer_msg(
+        &self,
+        state_chain_id: &Uuid,
+        msg: &TransferMsg3
+    ) -> Result<()>;
+    fn get_transfer_msg(
+        &self,
+        state_chain_id: &Uuid
+    ) -> Result<TransferMsg3>;
     fn create_transfer_batch_data(
         &self,
         batch_id: &Uuid,

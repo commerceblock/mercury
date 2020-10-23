@@ -24,6 +24,7 @@ extern crate merkletree;
 extern crate reqwest;
 
 pub mod blinded_token;
+pub mod swap_data;
 pub mod commitment;
 pub mod ecies;
 pub mod error;

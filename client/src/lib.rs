@@ -258,6 +258,10 @@ impl ClientShim {
         let value = b.send()?.text()?;
         Ok(value)
     }
+
+    pub fn has_tor(&self) -> bool {
+        self.tor.is_some()
+    }
 }
 
 #[cfg(test)]

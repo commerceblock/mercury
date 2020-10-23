@@ -25,6 +25,8 @@ pub enum CError {
     SharedLibError(String),
     /// Tor error
     TorError(String),
+    /// Swap error
+    SwapError(String)
 }
 
 impl From<String> for CError {
@@ -136,6 +138,7 @@ impl fmt::Display for CError {
             CError::SchnorrError(ref e) => write!(f, "Schnorr Error: {}", e),
             CError::SharedLibError(ref e) => write!(f, "SharedLib Error: {}", e),
             CError::TorError(ref e) => write!(f, "Tor Error: {}", e),
+            CError::SwapError(ref e) => write!(f, "Swap Error: {}", e),
         }
     }
 }

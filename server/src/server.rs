@@ -3,8 +3,10 @@ use super::protocol::*;
 use crate::config::Config;
 use crate::structs::StateChainOwner;
 use crate::Database;
-use shared_lib::mainstay;
-use shared_lib::state_chain::StateChainSig;
+use shared_lib::{mainstay,
+    state_chain::StateChainSig,
+    swap_data::*
+};
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
@@ -66,7 +68,7 @@ impl<
                 error!("{}", &e.to_string());
             }
             drop(guard);
-            std::thread::sleep(std::time::Duration::from_secs(60));
+            std::thread::sleep(std::time::Duration::from_secs(10));
         })
     }
 }
@@ -146,10 +148,19 @@ pub fn get_server<
                 deposit::deposit_confirm,
                 transfer::transfer_sender,
                 transfer::transfer_receiver,
+                transfer::transfer_update_msg,
+                transfer::transfer_get_msg,
                 transfer_batch::transfer_batch_init,
                 transfer_batch::transfer_reveal_nonce,
                 withdraw::withdraw_init,
-                withdraw::withdraw_confirm
+                withdraw::withdraw_confirm, 
+                conductor::poll_utxo,
+                conductor::poll_swap,
+                conductor::get_swap_info,
+                conductor::get_blinded_spend_signature,
+                conductor::register_utxo,
+                conductor::swap_first_message,
+                conductor::swap_second_message,
             ],
         )
         .manage(sc_entity);
@@ -203,7 +214,7 @@ pub fn get_postgres_url(
 
 //Mock all the traits implemented by StateChainEntity so that they can
 //be called from MockStateChainEntity
-use crate::protocol::conductor::{Conductor, SwapInfo, SwapStatus};
+use crate::protocol::conductor::Conductor;
 use crate::protocol::deposit::Deposit;
 use crate::protocol::ecdsa::Ecdsa;
 use crate::protocol::transfer::{Transfer, TransferFinalizeData};
@@ -282,6 +293,8 @@ mock! {
             &self,
             finalized_data: &TransferFinalizeData,
         ) -> transfer::Result<()>;
+        fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> transfer::Result<()>;
+        fn transfer_get_msg(&self, state_chain_id: Uuid) -> transfer::Result<TransferMsg3>;
     }
     trait BatchTransfer {
         fn transfer_batch_init(
