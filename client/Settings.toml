@@ -1,4 +1,4 @@
-endpoint = "fakeapi.mercurywallet.io"
+endpoint = "https://fakeapi.mercurywallet.io"
 electrum_server = "electrum.blockstream.info:60001"
 testing_mode = "false"
 [tor]
