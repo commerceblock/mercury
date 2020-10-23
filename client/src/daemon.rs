@@ -241,7 +241,6 @@ mod tests {
     fn test_make_server() {
         let request = make_unix_conn_call(DaemonRequest::GenAddressBTC);
         assert!(request.is_err());
-        assert!(format!("{}",serde_json::to_string(&request).unwrap()).contains("Connection refused"));
 
         thread::spawn(|| {
             let _ = make_server();
