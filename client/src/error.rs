@@ -25,8 +25,6 @@ pub enum CError {
     SharedLibError(String),
     /// Tor error
     TorError(String),
-    /// Swap error
-    SwapError(String)
 }
 
 impl From<String> for CError {
@@ -97,7 +95,7 @@ impl From<()> for CError {
 
 impl From<pyo3::PyErr> for CError {
     fn from(e: pyo3::PyErr) -> CError {
-        CError::Generic(format!("a python error occured: {:?}", e))
+        CError::Generic(format!("a python error occured: {:?}",e))
     }
 }
 
@@ -138,7 +136,6 @@ impl fmt::Display for CError {
             CError::SchnorrError(ref e) => write!(f, "Schnorr Error: {}", e),
             CError::SharedLibError(ref e) => write!(f, "SharedLib Error: {}", e),
             CError::TorError(ref e) => write!(f, "Tor Error: {}", e),
-            CError::SwapError(ref e) => write!(f, "Swap Error: {}", e),
         }
     }
 }

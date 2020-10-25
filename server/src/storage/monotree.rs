@@ -1,9 +1,9 @@
 //! Postgres implementation for Monotree
 
-use crate::storage::db::Table;
-use crate::Database;
 use crate::PGDatabase;
-use monotree::database::{Database as MonotreeDatabase, MemCache, MemoryDB};
+use crate::Database;
+use crate::storage::db::Table;
+use monotree::database::{MemCache, Database as MonotreeDatabase, MemoryDB};
 use monotree::Errors;
 use std::collections::HashMap;
 
@@ -21,8 +21,8 @@ impl MonotreeDatabase for PGDatabase {
                 table_name: Table::Smt.to_string(),
                 cache: MemCache::new(),
                 batch_on: false,
-                batch: HashMap::new(),
-            },
+                batch: HashMap::new()
+            }
         }
     }
     /// Monotree get
@@ -33,21 +33,19 @@ impl MonotreeDatabase for PGDatabase {
 
         let dbr = match self.database_r() {
             Ok(v) => v,
-            Err(e) => return Err(Errors::new(&e.to_string())),
+            Err(e) => return Err(Errors::new(&e.to_string()))
         };
 
         let stmt = match dbr.prepare(&format!(
-            "SELECT value FROM {} WHERE key = ('{}')",
-            self.smt.table_name,
-            serde_json::to_string(&key).unwrap()
-        )) {
-            Ok(v) => v,
-            Err(e) => return Err(Errors::new(&e.to_string())),
-        };
+            "SELECT value FROM {} WHERE key = ('{}')"
+            ,self.smt.table_name, serde_json::to_string(&key).unwrap())) {
+                Ok(v) => v,
+                Err(e) => return Err(Errors::new(&e.to_string()))
+            };
 
-        let rows = match stmt.query(&[]) {
+        let rows = match stmt.query(&[]){
             Ok(v) => v,
-            Err(e) => return Err(Errors::new(&e.to_string())),
+            Err(e) => return Err(Errors::new(&e.to_string()))
         };
 
         if rows.is_empty() {
@@ -73,7 +71,7 @@ impl MonotreeDatabase for PGDatabase {
         } else {
             let dbw = match self.database_w() {
                 Ok(v) => v,
-                Err(e) => return Err(Errors::new(&e.to_string())),
+                Err(e) => return Err(Errors::new(&e.to_string()))
             };
 
             let stmt = match dbw.prepare(&format!(
@@ -83,14 +81,13 @@ impl MonotreeDatabase for PGDatabase {
                 SET value = EXCLUDED.value;",
                 self.smt.table_name,
                 serde_json::to_string(&key).unwrap(),
-                serde_json::to_string(&value).unwrap()
-            )) {
-                Ok(v) => v,
-                Err(e) => return Err(Errors::new(&e.to_string())),
-            };
+                serde_json::to_string(&value).unwrap())) {
+                    Ok(v) => v,
+                    Err(e) => return Err(Errors::new(&e.to_string()))
+                };
             match stmt.execute(&[]) {
                 Ok(v) => v,
-                Err(e) => return Err(Errors::new(&e.to_string())),
+                Err(e) => return Err(Errors::new(&e.to_string()))
             };
         };
         return Ok(());
@@ -103,19 +100,17 @@ impl MonotreeDatabase for PGDatabase {
         } else {
             let dbw = match self.database_w() {
                 Ok(v) => v,
-                Err(e) => return Err(Errors::new(&e.to_string())),
+                Err(e) => return Err(Errors::new(&e.to_string()))
             };
             let stmt = match dbw.prepare(&format!(
                 "DELETE FROM {} WHERE key = ('{}');",
-                self.smt.table_name,
-                serde_json::to_string(&key).unwrap()
-            )) {
-                Ok(v) => v,
-                Err(e) => return Err(Errors::new(&e.to_string())),
-            };
+                self.smt.table_name, serde_json::to_string(&key).unwrap())){
+                    Ok(v) => v,
+                    Err(e) => return Err(Errors::new(&e.to_string()))
+                };
             match stmt.execute(&[]) {
                 Ok(v) => v,
-                Err(e) => return Err(Errors::new(&e.to_string())),
+                Err(e) => return Err(Errors::new(&e.to_string()))
             };
         }
         return Ok(());
@@ -133,26 +128,24 @@ impl MonotreeDatabase for PGDatabase {
         if !self.smt.batch.is_empty() {
             let dbw = match self.database_w() {
                 Ok(v) => v,
-                Err(e) => return Err(Errors::new(&e.to_string())),
+                Err(e) => return Err(Errors::new(&e.to_string()))
             };
             let mut stmt_str = format!("INSERT INTO {} (key, value) VALUES", self.smt.table_name);
             for (key, value) in &self.smt.batch {
-                stmt_str.push_str(&format!(
-                    " ('{}','{}'),",
-                    serde_json::to_string(&key).unwrap(),
-                    serde_json::to_string(&value).unwrap()
-                ));
+                stmt_str.push_str(&format!(" ('{}','{}'),",
+                serde_json::to_string(&key).unwrap(),
+                serde_json::to_string(&value).unwrap()));
             }
             stmt_str.truncate(stmt_str.len() - 1);
             stmt_str.push_str(" ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;");
 
             let stmt = match dbw.prepare(&stmt_str) {
                 Ok(v) => v,
-                Err(e) => return Err(Errors::new(&e.to_string())),
+                Err(e) => return Err(Errors::new(&e.to_string()))
             };
             match stmt.execute(&[]) {
                 Ok(v) => v,
-                Err(e) => return Err(Errors::new(&e.to_string())),
+                Err(e) => return Err(Errors::new(&e.to_string()))
             };
         }
         Ok(())
@@ -160,11 +153,11 @@ impl MonotreeDatabase for PGDatabase {
 }
 
 #[cfg(test)]
-#[cfg(not(feature = "mockdb"))] // Run tests only if mockdb feature disabled
+#[cfg(not(feature="mockdb"))] // Run tests only if mockdb feature disabled
 pub mod tests {
     use super::*;
     use crate::config::Config;
-    use monotree::hasher::{Blake3, Hasher};
+    use monotree::hasher::{Hasher,Blake3};
     use monotree::Monotree;
 
     fn get_monotree_postgres_tree() -> Monotree<PGDatabase, Blake3> {
@@ -173,34 +166,20 @@ pub mod tests {
         db.set_connection_from_config(&config_rs).unwrap();
         let table_name = "testing.smt".to_string();
         // Create testing table
-        db.database_w()
-            .unwrap()
-            .execute(&format!("CREATE SCHEMA IF NOT EXISTS testing;"), &[])
-            .unwrap();
-        db.database_w()
-            .unwrap()
-            .execute(
-                &format!(
-                    "
+        db.database_w().unwrap().execute(
+            &format!("CREATE SCHEMA IF NOT EXISTS testing;"),&[],).unwrap();
+        db.database_w().unwrap().execute(&format!("
             CREATE TABLE IF NOT EXISTS {} (
                 key varchar,
                 value varchar,
                 PRIMARY KEY (key)
-            );",
-                    table_name
-                ),
-                &[],
-            )
-            .unwrap();
-        db.database_w()
-            .unwrap()
-            .execute(&format!("TRUNCATE {};", table_name), &[])
-            .unwrap();
+            );", table_name),&[]).unwrap();
+        db.database_w().unwrap().execute(&format!("TRUNCATE {};",table_name),&[]).unwrap();
         // set PGDatabaseSMT table name to testing table
         db.smt.table_name = table_name;
         Monotree {
             db,
-            hasher: Blake3::new(),
+            hasher: Blake3::new()
         }
     }
 
@@ -258,7 +237,7 @@ pub mod tests {
 }
 
 // Dummy implementation. Unused.
-use crate::{MockDatabase, PGDatabaseSmt};
+use crate::{PGDatabaseSmt, MockDatabase};
 impl monotree::database::Database for MockDatabase {
     fn new(_dbname: &str) -> Self {
         MockDatabase::new()
@@ -296,11 +275,7 @@ impl Database for MemoryDB {
     fn set_connection(&mut self, _url: &String) -> crate::Result<()> {
         unimplemented!()
     }
-    fn from_pool(
-        _pool: rocket_contrib::databases::r2d2::Pool<
-            rocket_contrib::databases::r2d2_postgres::PostgresConnectionManager,
-        >,
-    ) -> Self {
+    fn from_pool(_pool: rocket_contrib::databases::r2d2::Pool<rocket_contrib::databases::r2d2_postgres::PostgresConnectionManager>) -> Self {
         unimplemented!()
     }
     fn get_user_auth(&self, _user_id: uuid::Uuid) -> crate::Result<uuid::Uuid> {
@@ -309,11 +284,7 @@ impl Database for MemoryDB {
     fn has_withdraw_sc_sig(&self, _user_id: uuid::Uuid) -> crate::Result<()> {
         unimplemented!()
     }
-    fn update_withdraw_sc_sig(
-        &self,
-        _user_id: &uuid::Uuid,
-        _sig: shared_lib::state_chain::StateChainSig,
-    ) -> crate::Result<()> {
+    fn update_withdraw_sc_sig(&self, _user_id: &uuid::Uuid, _sig: shared_lib::state_chain::StateChainSig) -> crate::Result<()> {
         unimplemented!()
     }
     fn update_withdraw_tx_sighash(
@@ -327,27 +298,16 @@ impl Database for MemoryDB {
     fn update_sighash(&self, _user_id: &uuid::Uuid, _sig_hash: crate::Hash) -> crate::Result<()> {
         unimplemented!()
     }
-    fn update_user_backup_tx(
-        &self,
-        _user_id: &uuid::Uuid,
-        _tx: bitcoin::Transaction,
-    ) -> crate::Result<()> {
+    fn update_user_backup_tx(&self,_user_id: &uuid::Uuid, _tx: bitcoin::Transaction) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_user_backup_tx(&self, _user_id: uuid::Uuid) -> crate::Result<bitcoin::Transaction> {
+    fn get_user_backup_tx(&self,_user_id: uuid::Uuid) -> crate::Result<bitcoin::Transaction> {
         unimplemented!()
     }
-    fn update_backup_tx(
-        &self,
-        _state_chain_id: &uuid::Uuid,
-        _tx: bitcoin::Transaction,
-    ) -> crate::Result<()> {
+    fn update_backup_tx(&self,_state_chain_id: &uuid::Uuid, _tx: bitcoin::Transaction) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_withdraw_confirm_data(
-        &self,
-        _user_id: uuid::Uuid,
-    ) -> crate::Result<crate::structs::WithdrawConfirmData> {
+    fn get_withdraw_confirm_data(&self, _user_id: uuid::Uuid) -> crate::Result<crate::structs::WithdrawConfirmData> {
         unimplemented!()
     }
     fn root_update(&self, _rt: &super::Root) -> crate::Result<i64> {
@@ -368,17 +328,10 @@ impl Database for MemoryDB {
     fn get_statechain_id(&self, _user_id: uuid::Uuid) -> crate::Result<uuid::Uuid> {
         unimplemented!()
     }
-    fn update_statechain_id(
-        &self,
-        _user_id: &uuid::Uuid,
-        _state_chain_id: &uuid::Uuid,
-    ) -> crate::Result<()> {
+    fn update_statechain_id(&self, _user_id: &uuid::Uuid, _state_chain_id: &uuid::Uuid) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_statechain_amount(
-        &self,
-        _state_chain_id: uuid::Uuid,
-    ) -> crate::Result<crate::structs::StateChainAmount> {
+    fn get_statechain_amount(&self, _state_chain_id: uuid::Uuid) -> crate::Result<crate::structs::StateChainAmount> {
         unimplemented!()
     }
     fn update_statechain_amount(
@@ -419,38 +372,22 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_backup_transaction(
-        &self,
-        _state_chain_id: uuid::Uuid,
-    ) -> crate::Result<bitcoin::Transaction> {
+    fn get_backup_transaction(&self, _state_chain_id: uuid::Uuid) -> crate::Result<bitcoin::Transaction> {
         unimplemented!()
     }
-    fn get_backup_transaction_and_proof_key(
-        &self,
-        _user_id: uuid::Uuid,
-    ) -> crate::Result<(bitcoin::Transaction, String)> {
+    fn get_backup_transaction_and_proof_key(&self, _user_id: uuid::Uuid) -> crate::Result<(bitcoin::Transaction, String)> {
         unimplemented!()
     }
     fn get_proof_key(&self, _user_id: uuid::Uuid) -> crate::Result<String> {
         unimplemented!()
     }
-    fn get_sc_locked_until(
-        &self,
-        _state_chain_id: uuid::Uuid,
-    ) -> crate::Result<chrono::NaiveDateTime> {
+    fn get_sc_locked_until(&self, _state_chain_id: uuid::Uuid) -> crate::Result<chrono::NaiveDateTime> {
         unimplemented!()
     }
-    fn update_locked_until(
-        &self,
-        _state_chain_id: &uuid::Uuid,
-        _time: &chrono::NaiveDateTime,
-    ) -> crate::Result<()> {
+    fn update_locked_until(&self, _state_chain_id: &uuid::Uuid, _time: &chrono::NaiveDateTime) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_transfer_batch_data(
-        &self,
-        _batch_id: uuid::Uuid,
-    ) -> crate::Result<crate::structs::TransferBatchData> {
+    fn get_transfer_batch_data(&self, _batch_id: uuid::Uuid) -> crate::Result<crate::structs::TransferBatchData> {
         unimplemented!()
     }
     fn has_transfer_batch_id(&self, _batch_id: uuid::Uuid) -> bool {
@@ -470,19 +407,6 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
-    fn update_transfer_msg(
-        &self,
-        _state_chain_id: &uuid::Uuid,
-        _msg: &shared_lib::structs::TransferMsg3
-    ) -> crate::Result<()> {
-        unimplemented!()
-    }
-    fn get_transfer_msg(
-        &self,
-        _state_chain_id: &uuid::Uuid
-    ) -> crate::Result<shared_lib::structs::TransferMsg3>{
-        unimplemented!()
-    }
     fn create_transfer_batch_data(
         &self,
         _batch_id: &uuid::Uuid,
@@ -490,10 +414,7 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_transfer_data(
-        &self,
-        _state_chain_id: uuid::Uuid,
-    ) -> crate::Result<crate::structs::TransferData> {
+    fn get_transfer_data(&self, _state_chain_id: uuid::Uuid) -> crate::Result<crate::structs::TransferData> {
         unimplemented!()
     }
     fn remove_transfer_data(&self, _state_chain_id: &uuid::Uuid) -> crate::Result<()> {
@@ -508,16 +429,10 @@ impl Database for MemoryDB {
     fn get_ecdsa_witness_keypair(
         &self,
         _user_id: uuid::Uuid,
-    ) -> crate::Result<(
-        crate::protocol::ecdsa::party_one::CommWitness,
-        crate::protocol::ecdsa::party_one::EcKeyPair,
-    )> {
+    ) -> crate::Result<(crate::protocol::ecdsa::party_one::CommWitness, crate::protocol::ecdsa::party_one::EcKeyPair)> {
         unimplemented!()
     }
     fn get_ecdsa_s2(&self, _user_id: uuid::Uuid) -> crate::Result<curv::FE> {
-        unimplemented!()
-    }
-    fn get_ecdsa_theta(&self, _user_id: uuid::Uuid) -> crate::Result<curv::FE> {
         unimplemented!()
     }
     fn update_keygen_first_msg(
@@ -550,29 +465,16 @@ impl Database for MemoryDB {
     fn init_ecdsa(&self, _user_id: &uuid::Uuid) -> crate::Result<u64> {
         unimplemented!()
     }
-    fn get_ecdsa_party_1_private(
-        &self,
-        _user_id: uuid::Uuid,
-    ) -> crate::Result<crate::protocol::ecdsa::party_one::Party1Private> {
+    fn get_ecdsa_party_1_private(&self, _user_id: uuid::Uuid) -> crate::Result<crate::protocol::ecdsa::party_one::Party1Private> {
         unimplemented!()
     }
-    fn get_ecdsa_keypair(
-        &self,
-        _user_id: uuid::Uuid,
-    ) -> crate::Result<crate::structs::ECDSAKeypair> {
+    fn get_ecdsa_keypair(&self, _user_id: uuid::Uuid) -> crate::Result<crate::structs::ECDSAKeypair> {
         unimplemented!()
     }
-    fn update_punished(
-        &self,
-        _batch_id: &uuid::Uuid,
-        _punished_state_chains: Vec<uuid::Uuid>,
-    ) -> crate::Result<()> {
+    fn update_punished(&self, _batch_id: &uuid::Uuid, _punished_state_chains: Vec<uuid::Uuid>) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_finalize_batch_data(
-        &self,
-        _batch_id: uuid::Uuid,
-    ) -> crate::Result<crate::structs::TransferFinalizeBatchData> {
+    fn get_finalize_batch_data(&self, _batch_id: uuid::Uuid) -> crate::Result<crate::structs::TransferFinalizeBatchData> {
         unimplemented!()
     }
     fn update_finalize_batch_data(
@@ -583,25 +485,13 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
-    fn update_transfer_batch_finalized(
-        &self,
-        _batch_id: &uuid::Uuid,
-        _b_finalized: &bool,
-    ) -> crate::Result<()> {
+    fn update_transfer_batch_finalized(&self, _batch_id: &uuid::Uuid, _b_finalized: &bool) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_statechain_owner(
-        &self,
-        _state_chain_id: uuid::Uuid,
-    ) -> crate::Result<crate::structs::StateChainOwner> {
+    fn get_statechain_owner(&self, _state_chain_id: uuid::Uuid) -> crate::Result<crate::structs::StateChainOwner> {
         unimplemented!()
     }
-    fn create_user_session(
-        &self,
-        _user_id: &uuid::Uuid,
-        _auth: &String,
-        _proof_key: &String,
-    ) -> crate::Result<()> {
+    fn create_user_session(&self, _user_id: &uuid::Uuid, _auth: &String, _proof_key: &String) -> crate::Result<()> {
         unimplemented!()
     }
     fn transfer_init_user_session(
@@ -612,10 +502,7 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_ecdsa_fourth_message_input(
-        &self,
-        _user_id: uuid::Uuid,
-    ) -> crate::Result<crate::structs::ECDSAFourthMessageInput> {
+    fn get_ecdsa_fourth_message_input(&self, _user_id: uuid::Uuid) -> crate::Result<crate::structs::ECDSAFourthMessageInput> {
         unimplemented!()
     }
     fn update_ecdsa_sign_first(
@@ -626,20 +513,13 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_ecdsa_sign_second_input(
-        &self,
-        _user_id: uuid::Uuid,
-    ) -> crate::Result<crate::structs::ECDSASignSecondInput> {
+    fn get_ecdsa_sign_second_input(&self, _user_id: uuid::Uuid) -> crate::Result<crate::structs::ECDSASignSecondInput> {
         unimplemented!()
     }
     fn get_tx_withdraw(&self, _user_id: uuid::Uuid) -> crate::Result<bitcoin::Transaction> {
         unimplemented!()
     }
-    fn update_tx_withdraw(
-        &self,
-        _user_id: uuid::Uuid,
-        _tx: bitcoin::Transaction,
-    ) -> crate::Result<()> {
+    fn update_tx_withdraw(&self, _user_id: uuid::Uuid, _tx: bitcoin::Transaction) -> crate::Result<()> {
         unimplemented!()
     }
     fn reset(&self) -> crate::Result<()> {
@@ -648,20 +528,14 @@ impl Database for MemoryDB {
     fn init(&self) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_ecdsa_master_key_input(
-        &self,
-        _user_id: uuid::Uuid,
-    ) -> crate::Result<crate::structs::ECDSAMasterKeyInput> {
+    fn get_ecdsa_master_key_input(&self, _user_id: uuid::Uuid) -> crate::Result<crate::structs::ECDSAMasterKeyInput> {
         unimplemented!()
     }
-    fn update_ecdsa_master(
-        &self,
-        _user_id: &uuid::Uuid,
-        _master_key: crate::protocol::ecdsa::MasterKey1,
-    ) -> crate::Result<()> {
+    fn update_ecdsa_master(&self, _user_id: &uuid::Uuid, _master_key: crate::protocol::ecdsa::MasterKey1) -> crate::Result<()> {
         unimplemented!()
     }
     fn get_sighash(&self, _user_id: uuid::Uuid) -> crate::Result<bitcoin::hashes::sha256d::Hash> {
         unimplemented!()
     }
+
 }

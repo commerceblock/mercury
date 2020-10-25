@@ -1,13 +1,13 @@
 pub extern crate ecies;
-pub use bitcoin::util::key::PrivateKey;
-pub use bitcoin::util::key::PublicKey;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+pub use bitcoin::util::key::PrivateKey as PrivateKey;
+pub use bitcoin::util::key::PublicKey as PublicKey;
+use serde::{Serialize, Deserialize, de::DeserializeOwned};
 
-use rocket::http::{ContentType, Status};
+use rocket::http::{Status, ContentType};
 //use rocket::{Request, Response, Responder};
-use rocket::response::Responder;
+use std::{fmt, error};
 use std::io::Cursor;
-use std::{error, fmt};
+use rocket::{response::{Responder}};
 
 pub type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 
@@ -79,18 +79,18 @@ impl Responder<'static> for ECIESError {
     }
 }
 
-use ECIESError::DecryptError;
 use ECIESError::EncryptError;
+use ECIESError::DecryptError;
 
-impl Encryptable for String {}
+impl Encryptable for String{}
 
-impl SelfEncryptable for String {
+impl SelfEncryptable for String{
     fn decrypt(&mut self, privkey: &PrivateKey) -> Result<()> {
         let sb = hex::decode(self.clone())?;
         *self = Self::from_encrypted_bytes(privkey, &sb)?;
         Ok(())
     }
-    fn encrypt_with_pubkey(&mut self, pubkey: &PublicKey) -> Result<()> {
+    fn encrypt_with_pubkey(&mut self, pubkey: &PublicKey) -> Result<()>{
         let eb = self.to_encrypted_bytes(pubkey)?;
         *self = hex::encode(eb);
         Ok(())
@@ -103,42 +103,39 @@ pub trait WalletDecryptable: SelfEncryptable {
     fn get_public_key(&self) -> Result<Option<PublicKey>> {
         Ok(None)
     }
-    fn encrypt(&mut self) -> Result<()> {
-        match self.get_public_key()? {
-            Some(k) => self.encrypt_with_pubkey(&k),
-            None => Err(EncryptError(
-                "struct does not have a public key for encryption".to_string(),
-            )
-            .into()),
+    fn encrypt(&mut self) -> Result<()>{
+        match self.get_public_key()?{
+            Some(k)=>self.encrypt_with_pubkey(&k),
+            None=>Err(EncryptError("struct does not have a public key for encryption".to_string()).into()),
         }
     }
 }
 
 //Encrypted serialization/deserialization
 pub trait Encryptable: Serialize + Sized + DeserializeOwned {
-    fn to_encrypted_bytes(&self, pubkey: &PublicKey) -> Result<Vec<u8>> {
+    fn to_encrypted_bytes(&self, pubkey: &PublicKey) -> Result<Vec<u8>>{
         let str_self = serde_json::to_string(self)?;
         let serialized = str_self.as_bytes();
         Self::encrypt_with_pubkey(pubkey, serialized)
     }
 
-    fn encrypt_with_pubkey(key: &PublicKey, msg: &[u8]) -> Result<Vec<u8>> {
+    fn encrypt_with_pubkey(key: &PublicKey, msg: &[u8]) -> Result<Vec<u8>>{
         let key_bytes = &key.to_bytes();
-        match ecies::encrypt(key_bytes, msg) {
+        match ecies::encrypt(key_bytes, msg){
             Ok(v) => Ok(v),
-            Err(e) => Err(EncryptError(e.to_string()).into()),
+            Err(e) => Err(EncryptError(e.to_string()).into())
         }
     }
 
-    fn decrypt_with_privkey(key: &PrivateKey, msg: &[u8]) -> Result<Vec<u8>> {
+    fn decrypt_with_privkey(key: &PrivateKey, msg: &[u8]) -> Result<Vec<u8>>{
         let key_bytes = &key.to_bytes();
-        match ecies::decrypt(key_bytes, msg) {
+        match ecies::decrypt(key_bytes, msg){
             Ok(v) => Ok(v),
             Err(e) => Err(DecryptError(e.to_string()).into()),
         }
     }
 
-    fn from_encrypted_bytes(privkey: &PrivateKey, ec: &[u8]) -> Result<Self> {
+    fn from_encrypted_bytes(privkey: &PrivateKey, ec: &[u8]) ->Result<Self>{   
         let db = Self::decrypt_with_privkey(privkey, ec)?;
         let serialized = std::str::from_utf8(&db)?;
         let deser: Self = serde_json::from_str(&serialized)?;
@@ -147,7 +144,7 @@ pub trait Encryptable: Serialize + Sized + DeserializeOwned {
 }
 
 pub trait SelfEncryptable {
-    fn decrypt(&mut self, privkey: &PrivateKey) -> Result<()>;
+    fn decrypt(&mut self, privkey: &PrivateKey) -> Result<()>; 
     fn encrypt_with_pubkey(&mut self, pubkey: &PublicKey) -> Result<()>;
 }
 
@@ -162,7 +159,7 @@ mod tests {
         second_item: u32,
     }
 
-    impl Encryptable for TestStruct {}
+    impl Encryptable for TestStruct{}
 
     //Encryptable modified to only encrypt selected members of a struct
     //In this example first_item is encrypted
@@ -172,7 +169,7 @@ mod tests {
             Ok(())
         }
 
-        fn encrypt_with_pubkey(&mut self, pubkey: &PublicKey) -> Result<()> {
+        fn encrypt_with_pubkey(&mut self, pubkey: &PublicKey) -> Result<()>{
             self.first_item.encrypt_with_pubkey(pubkey)?;
             Ok(())
         }
@@ -180,25 +177,22 @@ mod tests {
 
     #[test]
     fn test_encrypt_decrypt_struct() {
-        let ts = TestStruct {
-            first_item: "test message".to_string(),
-            second_item: 42,
-        };
+        let ts = TestStruct{first_item: "test message".to_string(), second_item: 42};
         let (sk, pk) = generate_keypair();
         let tse = ts.to_encrypted_bytes(&pk).unwrap();
         let tsu = TestStruct::from_encrypted_bytes(&sk, &tse).unwrap();
-
+        
         assert_eq!(ts, tsu, "unencrypted != plain");
 
         let (sk2, _) = generate_keypair();
         let tse = ts.to_encrypted_bytes(&pk).unwrap();
 
-        match TestStruct::from_encrypted_bytes(&sk2, &tse) {
+        match TestStruct::from_encrypted_bytes(&sk2, &tse){
             Ok(_) => assert!(false, "decryption should have failed"),
             Err(e) => match e.downcast_ref::<ECIESError>() {
                 Some(_) => assert!(true),
-                None => assert!(false, format!("wrong error: {}", e)),
-            },
+                None => assert!(false, format!("wrong error: {}",e)),
+            }
         }
     }
 
@@ -215,25 +209,13 @@ mod tests {
 
     #[test]
     fn test_self_encrypt_decrypt_struct() {
-        let mut ts = TestStruct {
-            first_item: "test message".to_string(),
-            second_item: 42,
-        };
+        let mut ts = TestStruct{first_item: "test message".to_string(), second_item: 42};
         let ts_clone = ts.clone();
         let (sk, pk) = generate_keypair();
         ts.encrypt_with_pubkey(&pk).unwrap();
-        assert_ne!(
-            ts.first_item, ts_clone.first_item,
-            "first item should have changed"
-        );
-        assert_eq!(
-            ts.second_item, ts_clone.second_item,
-            "second item should not have changed"
-        );
+        assert_ne!(ts.first_item, ts_clone.first_item, "first item should have changed");
+        assert_eq!(ts.second_item, ts_clone.second_item, "second item should not have changed");
         ts.decrypt(&sk).unwrap();
-        assert_eq!(
-            ts, ts_clone,
-            "decrypted struct should equal original struct"
-        );
+        assert_eq!(ts, ts_clone, "decrypted struct should equal original struct");
     }
 }

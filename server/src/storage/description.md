@@ -108,7 +108,6 @@ CREATE TABLE "statechainentity"."usersession" (
     "statechainid" uuid,
     "authentication" varchar,
     "s2" varchar,
-    "theta" varchar,
     "sighash" varchar,
     "withdrawscsig" varchar,
     "txwithdraw" varchar,
