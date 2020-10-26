@@ -128,7 +128,8 @@ mod tests {
                 .unwrap()
                 .share
                 .public
-                .q * theta,
+                .q
+                * theta,
             wallets[1]
                 .get_shared_key(&new_shared_key_id)
                 .unwrap()
@@ -199,7 +200,7 @@ mod tests {
             .get_new_state_entity_address(&funding_txid)
             .unwrap();
 
-        let (new_shared_key_id1,theta1) = run_transfer(&mut wallets, 0, 1, state_chain_id);
+        let (new_shared_key_id1, theta1) = run_transfer(&mut wallets, 0, 1, state_chain_id);
 
         // Get state chain owned by wallets[1]
         let state_chains_info = wallets[0].get_state_chains_info().unwrap();
@@ -229,7 +230,7 @@ mod tests {
             .get_new_state_entity_address(&funding_txid)
             .unwrap();
 
-        let (new_shared_key_id2,theta2) = run_transfer(&mut wallets, 1, 2, state_chain_id);
+        let (new_shared_key_id2, theta2) = run_transfer(&mut wallets, 1, 2, state_chain_id);
 
         // check shared keys have the same master public key
         assert_eq!(
@@ -238,7 +239,8 @@ mod tests {
                 .unwrap()
                 .share
                 .public
-                .q * theta1,
+                .q
+                * theta1,
             wallets[1]
                 .get_shared_key(shared_key_id1)
                 .unwrap()
@@ -252,7 +254,8 @@ mod tests {
                 .unwrap()
                 .share
                 .public
-                .q * theta2,
+                .q
+                * theta2,
             wallets[2]
                 .get_shared_key(&new_shared_key_id2)
                 .unwrap()
@@ -369,7 +372,7 @@ mod tests {
         let wallet_json = wallet.to_json();
         let wallet_rebuilt = wallet::wallet::Wallet::from_json(
             wallet_json,
-            ClientShim::new("http://localhost:8000".to_string(), None, None)
+            ClientShim::new("http://localhost:8000".to_string(), None, None),
         )
         .unwrap();
 

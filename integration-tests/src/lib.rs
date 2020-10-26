@@ -2,14 +2,31 @@ pub mod batch_transfer_test;
 pub mod simulation;
 pub mod test;
 
+extern crate bitcoin;
+extern crate floating_duration;
+extern crate rand;
+extern crate rocket;
+extern crate stoppable_thread;
+extern crate uuid;
+
+extern crate curv;
+extern crate monotree;
+
+extern crate client_lib;
+extern crate server_lib;
+extern crate shared_lib;
+
+#[cfg(test)]
+extern crate mockito;
+
 use client_lib::state_entity::transfer::TransferFinalizeData;
 use client_lib::wallet::wallet::Wallet;
 use client_lib::*;
 
 use bitcoin::{PublicKey, Transaction};
+use curv::FE;
 use floating_duration::TimeFormat;
 use monotree::database::{Database as monotreeDatabase, MemoryDB};
-use rocket;
 use rocket::error::LaunchError;
 use server_lib::{server, Database, MockDatabase, PGDatabase};
 use shared_lib::{
@@ -25,10 +42,6 @@ use std::sync::mpsc::RecvTimeoutError;
 use std::thread;
 use std::time::Instant;
 use uuid::Uuid;
-use curv::FE;
-
-
-extern crate stoppable_thread;
 
 #[cfg(test)]
 #[macro_use]
@@ -139,20 +152,20 @@ impl SpawnServer for MockDatabase {
     }
 }
 
-/// Create a wallet and generate some addresses 
+/// Create a wallet and generate some addresses
 #[cfg(test)]
 fn gen_wallet() -> Wallet {
     gen_wallet_with_seed(&[0xcd; 32])
 }
 
-/// Create a wallet with a specified seed and generate some addresses 
+/// Create a wallet with a specified seed and generate some addresses
 #[cfg(test)]
 fn gen_wallet_with_seed(seed: &[u8]) -> Wallet {
     // let electrum = ElectrumxClient::new("dummy").unwrap();
     let mut wallet = Wallet::new(
         &seed,
         &"regtest".to_string(),
-        ClientShim::new("http://localhost:8000".to_string(), None, None)
+        ClientShim::new("http://localhost:8000".to_string(), None, None),
     );
     let _ = wallet.keys.get_new_address();
     let _ = wallet.keys.get_new_address();
@@ -164,7 +177,7 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
-        ClientShim::new("http://localhost:8000".to_string(), None, None)
+        ClientShim::new("http://localhost:8000".to_string(), None, None),
     );
 
     let _ = wallet.keys.get_new_address();

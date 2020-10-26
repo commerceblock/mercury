@@ -6,8 +6,9 @@ use super::super::Result;
 use shared_lib::{
     ecies,
     ecies::{SelfEncryptable, WalletDecryptable},
+    mocks::mock_electrum::MockElectrum,
     structs::{Protocol, SCEAddress},
-    util::get_sighash, mocks::mock_electrum::MockElectrum,
+    util::get_sighash,
 };
 
 use super::key_paths::{funding_txid_to_int, KeyPath, KeyPathWithAddresses};
@@ -22,8 +23,9 @@ use bitcoin::{
 };
 
 use electrumx_client::{
+    electrumx_client::ElectrumxClient,
     interface::Electrumx,
-    response::{GetBalanceResponse, GetListUnspentResponse}, electrumx_client::ElectrumxClient,
+    response::{GetBalanceResponse, GetListUnspentResponse},
 };
 
 use serde_json::json;
@@ -35,14 +37,18 @@ const WALLET_FILENAME: &str = "wallet/wallet.data";
 
 // Struct wrapper for Electrumx client instance
 pub struct ElectrumxBox {
-    pub instance: Box<dyn Electrumx>
+    pub instance: Box<dyn Electrumx>,
 }
 impl ElectrumxBox {
     pub fn new(electrum_server: String) -> Result<Self> {
-        Ok(ElectrumxBox { instance: Box::new(ElectrumxClient::new(electrum_server)?) })
+        Ok(ElectrumxBox {
+            instance: Box::new(ElectrumxClient::new(electrum_server)?),
+        })
     }
     pub fn new_mock() -> Self {
-        ElectrumxBox { instance: Box::new(MockElectrum::new()) }
+        ElectrumxBox {
+            instance: Box::new(MockElectrum::new()),
+        }
     }
 }
 unsafe impl Send for ElectrumxBox {}
@@ -66,11 +72,7 @@ pub struct Wallet {
     pub require_mainstay: bool,
 }
 impl Wallet {
-    pub fn new(
-        seed: &[u8],
-        network: &String,
-        client_shim: ClientShim,
-    ) -> Wallet {
+    pub fn new(seed: &[u8], network: &String, client_shim: ClientShim) -> Wallet {
         let secp = Secp256k1::new();
         let master_priv_key =
             ExtendedPrivKey::new_master(network.parse::<Network>().unwrap(), seed).unwrap();
@@ -165,10 +167,7 @@ impl Wallet {
     }
 
     /// load wallet from json
-    pub fn from_json(
-        json: serde_json::Value,
-        client_shim: ClientShim,
-    ) -> Result<Self> {
+    pub fn from_json(json: serde_json::Value, client_shim: ClientShim) -> Result<Self> {
         let secp = Secp256k1::new();
         let network = json["network"].as_str().unwrap().to_string();
 
@@ -284,10 +283,7 @@ impl Wallet {
     }
 
     /// load wallet from disk
-    pub fn load_from(
-        filepath: &str,
-        client_shim: ClientShim,
-    ) -> Result<Wallet> {
+    pub fn load_from(filepath: &str, client_shim: ClientShim) -> Result<Wallet> {
         let data = fs::read_to_string(filepath)?;
         let serde_json_data = serde_json::from_str(&data).unwrap();
         let wallet: Wallet = Wallet::from_json(serde_json_data, client_shim)?;
@@ -295,10 +291,7 @@ impl Wallet {
         Ok(wallet)
     }
     pub fn load(client_shim: ClientShim) -> Result<Wallet> {
-        Ok(Wallet::load_from(
-            WALLET_FILENAME,
-            client_shim
-        )?)
+        Ok(Wallet::load_from(WALLET_FILENAME, client_shim)?)
     }
 
     /// Select unspent coins greedily. Return TxIns along with corresponding spending addresses and amounts
@@ -328,9 +321,10 @@ impl Wallet {
     }
 
     pub fn get_new_state_entity_address(&mut self, funding_txid: &String) -> Result<SCEAddress> {
-        let tx_backup_addr = Some(self
-            .se_backup_keys
-            .get_new_address_encoded_id(funding_txid_to_int(funding_txid)?)?);
+        let tx_backup_addr = Some(
+            self.se_backup_keys
+                .get_new_address_encoded_id(funding_txid_to_int(funding_txid)?)?,
+        );
         let proof_key = self
             .se_proof_keys
             .get_new_key_encoded_id(funding_txid_to_int(funding_txid)?, None)?;
@@ -514,7 +508,10 @@ impl Wallet {
 
     /// return balance of address
     fn get_address_balance(&mut self, address: &bitcoin::Address) -> GetBalanceResponse {
-        self.electrumx_client.instance.get_balance(&address.to_string()).unwrap()
+        self.electrumx_client
+            .instance
+            .get_balance(&address.to_string())
+            .unwrap()
     }
 
     fn zero_balance(&self, addr: &GetBalanceResponse) -> bool {
@@ -589,7 +586,9 @@ impl Wallet {
     }
 
     /// List unspent outputs for addresses derived by this wallet.
-    pub fn list_unspent(&mut self) -> Result<(Vec<bitcoin::Address>, Vec<Vec<GetListUnspentResponse>>)> {
+    pub fn list_unspent(
+        &mut self,
+    ) -> Result<(Vec<bitcoin::Address>, Vec<Vec<GetListUnspentResponse>>)> {
         let addresses = self.get_all_wallet_addresses();
         let mut unspent_list: Vec<Vec<GetListUnspentResponse>> = vec![];
         for addr in &addresses {
@@ -602,7 +601,7 @@ impl Wallet {
     fn list_unspent_for_address(&mut self, address: String) -> Result<Vec<GetListUnspentResponse>> {
         match self.electrumx_client.instance.get_list_unspent(&address) {
             Ok(val) => Ok(val),
-            Err(e) => Err(CError::Generic(e.to_string()))
+            Err(e) => Err(CError::Generic(e.to_string())),
         }
     }
 
@@ -610,7 +609,8 @@ impl Wallet {
         bitcoin::Address::p2wpkh(
             &to_bitcoin_public_key(pub_key.key),
             self.get_bitcoin_network(),
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     pub fn get_bitcoin_network(&self) -> Network {
@@ -652,7 +652,7 @@ mod tests {
         let mut wallet = Wallet::new(
             &seed,
             &"regtest".to_string(),
-            ClientShim::new("http://localhost:8000".to_string(), None, None)
+            ClientShim::new("http://localhost:8000".to_string(), None, None),
         );
         let _ = wallet.keys.get_new_address();
         let _ = wallet.keys.get_new_address();
@@ -679,7 +679,7 @@ mod tests {
 
         let wallet_rebuilt = super::Wallet::from_json(
             wallet_json,
-            ClientShim::new("http://localhost:8000".to_string(), None, None)
+            ClientShim::new("http://localhost:8000".to_string(), None, None),
         )
         .unwrap();
 

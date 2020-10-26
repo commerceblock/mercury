@@ -11,8 +11,8 @@ mod tests {
 
     use bitcoin::PublicKey;
     use client_lib::state_entity;
-    use std::{str::FromStr, thread, time::Duration};
     use std::thread::spawn;
+    use std::{str::FromStr, thread, time::Duration};
 
     /// Test batch transfer signature generation
     #[test]
@@ -405,14 +405,13 @@ mod tests {
         };
     }
 
-
     #[test]
     #[serial]
     fn test_swap() {
         let _handle = start_server();
 
         let num_state_chains: u64 = 3;
-        let amount: u64 = 10000;// = u64::from_str(&format!("10000")).unwrap();
+        let amount: u64 = 10000; // = u64::from_str(&format!("10000")).unwrap();
 
         // Gen some wallets and deposit coins into SCE
         let mut wallets = vec![];
@@ -420,7 +419,6 @@ mod tests {
         let mut thread_handles = vec![];
 
         for i in 0..num_state_chains as usize {
-
             wallets.push(gen_wallet());
             for _ in 0..i {
                 // Gen keys so different wallets have different proof keys (since wallets have the same seed)
@@ -430,29 +428,26 @@ mod tests {
             deposits.push(run_deposit(&mut wallets[i], &amount));
             let deposit = deposits.last().unwrap().clone();
 
-            let (_shared_key_ids, wallet_sc_ids, bals) = wallets.last().unwrap().get_state_chains_info().unwrap();
+            let (_shared_key_ids, wallet_sc_ids, bals) =
+                wallets.last().unwrap().get_state_chains_info().unwrap();
             println!("deposit wallet state chain ids: {:?}", wallet_sc_ids);
             println!("deposit wallet balances: {:?}", bals);
 
             let wallet_ser = wallets.last().unwrap().to_json();
 
-            thread_handles.push(
-                spawn(move || {
-                        let mut wallet=wallet::wallet::Wallet::from_json(
-                            wallet_ser,
-                            ClientShim::new("http://localhost:8000".to_string(), None, None)
-                        )?;
-                        state_entity::conductor::do_swap(&mut wallet, &deposit.1, &num_state_chains, false)
-                    }
-                )
-            );
+            thread_handles.push(spawn(move || {
+                let mut wallet = wallet::wallet::Wallet::from_json(
+                    wallet_ser,
+                    ClientShim::new("http://localhost:8000".to_string(), None, None),
+                )?;
+                state_entity::conductor::do_swap(&mut wallet, &deposit.1, &num_state_chains, false)
+            }));
         }
 
         let mut i = 0;
         for handle in thread_handles {
             handle.join().unwrap().unwrap();
-            i = i+1;
+            i = i + 1;
         }
-
     }
 }
