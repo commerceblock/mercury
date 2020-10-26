@@ -4,8 +4,8 @@
 
 pub use super::super::Result;
 extern crate shared_lib;
-use shared_lib::{state_chain::*, structs::*, ecies, ecies::{WalletDecryptable}};
 use super::transfer_batch::transfer_batch_is_ended;
+use shared_lib::{ecies, ecies::WalletDecryptable, state_chain::*, structs::*};
 
 use crate::error::SEError;
 use crate::Database;
@@ -19,8 +19,8 @@ use curv::{
 };
 use rocket::State;
 use rocket_contrib::json::Json;
-use uuid::Uuid;
 use std::str::FromStr;
+use uuid::Uuid;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -40,6 +40,7 @@ pub struct TransferFinalizeData {
     pub state_chain_id: Uuid,
     pub state_chain_sig: StateChainSig,
     pub s2: FE,
+    pub theta: FE,
     pub new_tx_backup: Transaction,
     pub batch_data: Option<BatchData>,
 }
@@ -62,6 +63,12 @@ pub trait Transfer {
     /// This function is called immediately in the regular transfer case or after confirmation of atomic
     /// transfers completion in the batch transfer case.
     fn transfer_finalize(&self, finalized_data: &TransferFinalizeData) -> Result<()>;
+
+    /// API: Update the state entity database with transfer message 3
+    fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> Result<()>;
+
+    /// API: Get the transfer message 3 set by update_transfer_msg
+    fn transfer_get_msg(&self, state_chain_id: Uuid) -> Result<TransferMsg3>;
 }
 
 impl Transfer for SCE {
@@ -107,19 +114,24 @@ impl Transfer for SCE {
         debug!("TRANSFER: Sender side complete. State Chain ID: {}. State Chain Signature: {:?}. x1: {:?}.", state_chain_id, transfer_msg1.state_chain_sig, x1);
 
         // encrypt x1 with Senders proof key
-        let proof_key = match ecies::PublicKey::from_str(&self.database.get_proof_key(user_id)?){
+        let proof_key = match ecies::PublicKey::from_str(&self.database.get_proof_key(user_id)?) {
             Ok(k) => k,
-            Err(e) => return Err(SEError::SharedLibError(format!("error deserialising proof key: {}", e))),
+            Err(e) => {
+                return Err(SEError::SharedLibError(format!(
+                    "error deserialising proof key: {}",
+                    e
+                )))
+            }
         };
 
         let mut msg2 = TransferMsg2 {
             x1: x1_ser,
-            proof_key
+            proof_key,
         };
 
         match msg2.encrypt() {
             Ok(_) => (),
-            Err(e) => return Err(SEError::SharedLibError(format!("{}",e))),
+            Err(e) => return Err(SEError::SharedLibError(format!("{}", e))),
         };
 
         let msg2 = msg2;
@@ -146,28 +158,38 @@ impl Transfer for SCE {
 
         let kp = self.database.get_ecdsa_keypair(user_id)?;
 
-
         // let x1 = transfer_data.x1;
         let t2 = transfer_msg4.t2;
 
         let s1 = kp.party_1_private.get_private_key();
 
-        // Note:
-        //  s2 = o1*o2_inv*s1
-        //  t2 = o1*x1*o2_inv
+        //let mut rng = OsRng::new().expect("OsRng");
+        let mut theta;
+        let mut s2_theta;
+        let mut s1_theta;
         let s2 = t2 * (td.x1.invert()) * s1;
+        let q_third = FE::q().div_floor(&BigInt::from(3));     
 
-        // Check s2 is valid for Lindell protocol (s2<q/3)
-        let sk_bigint = s2.to_big_int();
-        if sk_bigint >= FE::q().div_floor(&BigInt::from(3)) {
-            return Err(SEError::TryAgain("o2".to_string()));
+        loop {
+            theta = FE::new_random();
+            // Note:
+            //  s2 = o1*o2_inv*s1
+            //  t2 = o1*x1*o2_inv
+            s1_theta = s1 * theta;
+            // Check s1_theta and s2_theta are valid for Lindell protocol (s1<q/3)
+            if s1_theta.to_big_int() < q_third {
+                s2_theta = s2 * theta;    
+                if s2_theta.to_big_int() < q_third {
+                    break;
+                }
+            }
         }
-
+    
         let g: GE = ECPoint::generator();
         let s2_pub: GE = g * s2;
 
-        let p1_pub = kp.party_2_public * s1;
-        let p2_pub = transfer_msg4.o2_pub * s2;
+        let p1_pub = kp.party_2_public * s1_theta;
+        let p2_pub = transfer_msg4.o2_pub * s2_theta;
 
         // Check P1 = o1_pub*s1 === p2 = o2_pub*s2
         if p1_pub != p2_pub {
@@ -185,6 +207,7 @@ impl Transfer for SCE {
             state_chain_id: state_chain_id.clone(),
             state_chain_sig: td.state_chain_sig,
             s2,
+            theta,
             new_tx_backup: transfer_msg4.tx_backup.clone(),
             batch_data: transfer_msg4.batch_data.clone(),
         };
@@ -202,8 +225,8 @@ impl Transfer for SCE {
 
             // Ensure batch transfer is still active
             if transfer_batch_is_ended(tbd.start_time, self.config.batch_lifetime as i64) {
-                return Err(SEError::Generic(String::from(
-                    "Transfer batch ended. Too late to complete transfer.",
+                return Err(SEError::TransferBatchEnded(String::from(
+                    "Too late to complete transfer.",
                 )));
             }
 
@@ -231,6 +254,7 @@ impl Transfer for SCE {
         Ok(TransferMsg5 {
             new_shared_key_id,
             s2_pub,
+            theta,
         })
     }
 
@@ -303,6 +327,16 @@ impl Transfer for SCE {
 
         Ok(())
     }
+
+    /// API: Update the state entity database with transfer message 3
+    fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> Result<()>{
+        self.database.update_transfer_msg(&transfer_msg3.state_chain_id, &transfer_msg3)
+    }
+
+    /// API: Get the transfer message 3 set by update_transfer_msg
+    fn transfer_get_msg(&self, state_chain_id: Uuid) -> Result<TransferMsg3>{
+        self.database.get_transfer_msg(&state_chain_id)
+    }
 }
 
 #[post("/transfer/sender", format = "json", data = "<transfer_msg1>")]
@@ -327,6 +361,28 @@ pub fn transfer_receiver(
     }
 }
 
+#[post("/transfer/update_msg", format = "json", data = "<transfer_msg3>")]
+pub fn transfer_update_msg(
+    sc_entity: State<SCE>,
+    transfer_msg3: Json<TransferMsg3>,
+) -> Result<Json<()>>{
+    match sc_entity.transfer_update_msg(transfer_msg3.into_inner()){
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+} 
+
+#[post("/transfer/get_msg", format = "json", data = "<state_chain_id>")]
+pub fn transfer_get_msg(
+    sc_entity: State<SCE>,
+    state_chain_id: Json<Uuid>,
+) -> Result<Json<TransferMsg3>>{
+    match sc_entity.transfer_get_msg(state_chain_id.into_inner()){
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+} 
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -350,25 +406,33 @@ mod tests {
 
     // static TRANSFER_MSG_3: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"t1\":\"34c9a329617b8dd3cdeb3d491fa09f023f84f28005bdf40f0682eb020969183b\",\"state_chain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"},\"state_chain_id\":\"9b0ba36b-406a-499c-8c83-696b77f003a9\",\"tx_backup_psm\":{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"protocol\":\"Transfer\",\"tx\":{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"53e1d67d837fdaddb016c5de85d8903bc033f7f2208d3ff40430fc42edeab4cb:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,69,2,33,0,177,248,103,71,170,95,47,217,222,7,130,181,12,9,254,115,96,166,180,164,162,4,14,110,145,113,106,97,155,231,190,22,2,32,63,119,90,178,253,249,43,242,42,177,250,25,29,251,156,37,12,61,70,252,201,155,252,188,56,242,36,211,50,136,203,95,1],[2,108,195,112,80,86,19,121,166,106,134,63,140,162,115,194,178,158,147,92,173,6,188,127,94,107,131,160,62,11,191,241,230]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"0014a5c378a7de7311e6836253a28830b48cc6b9e252\"}]},\"input_addrs\":[\"026cc37050561379a66a863f8ca273c2b29e935cad06bc7f5e6b83a03e0bbff1e6\"],\"input_amounts\":[10000],\"proof_key\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\"},\"rec_addr\":{\"tx_backup_addr\":\"bcrt1q5hph3f77wvg7dqmz2w3gsv953nrtncjjzyj3m9\",\"proof_key\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\"}}";
     static TRANSFER_MSG_4: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"state_chain_id\":\"9b0ba36b-406a-499c-8c83-696b77f003a9\",\"t2\":\"a1563a0006e1dac1cdb89d592327f7c5e292193365a0f15ebf805900261f9bb2\",\"state_chain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"},\"o2_pub\":{\"x\":\"e60171f570be0c6b673acbb5df775001b634e474e7ad329ab07b0fb50fead479\",\"y\":\"1ef781c8cde5310eb748a305dcab6b3ee302160d49d83b7ae8e7fde67979eb13\"},\"tx_backup\":{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"53e1d67d837fdaddb016c5de85d8903bc033f7f2208d3ff40430fc42edeab4cb:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,69,2,33,0,177,248,103,71,170,95,47,217,222,7,130,181,12,9,254,115,96,166,180,164,162,4,14,110,145,113,106,97,155,231,190,22,2,32,63,119,90,178,253,249,43,242,42,177,250,25,29,251,156,37,12,61,70,252,201,155,252,188,56,242,36,211,50,136,203,95,1],[2,108,195,112,80,86,19,121,166,106,134,63,140,162,115,194,178,158,147,92,173,6,188,127,94,107,131,160,62,11,191,241,230]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"0014a5c378a7de7311e6836253a28830b48cc6b9e252\"}]},\"batch_data\":null}";
-    static FINALIZED_DATA: &str = "{\"new_shared_key_id\":\"22f73737-efde-49a0-977a-ffaf8ba1e0f0\",\"state_chain_id\":\"9b0ba36b-406a-499c-8c83-696b77f003a9\",\"state_chain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"},\"s2\":\"28d85004c2a896df7f205882930ead6c7a95d84b3978174c51ebd06a4bd1589a\",\"new_tx_backup\":{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"53e1d67d837fdaddb016c5de85d8903bc033f7f2208d3ff40430fc42edeab4cb:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,69,2,33,0,177,248,103,71,170,95,47,217,222,7,130,181,12,9,254,115,96,166,180,164,162,4,14,110,145,113,106,97,155,231,190,22,2,32,63,119,90,178,253,249,43,242,42,177,250,25,29,251,156,37,12,61,70,252,201,155,252,188,56,242,36,211,50,136,203,95,1],[2,108,195,112,80,86,19,121,166,106,134,63,140,162,115,194,178,158,147,92,173,6,188,127,94,107,131,160,62,11,191,241,230]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"0014a5c378a7de7311e6836253a28830b48cc6b9e252\"}]},\"batch_data\":null}";
+    static FINALIZED_DATA: &str = "{\"new_shared_key_id\":\"22f73737-efde-49a0-977a-ffaf8ba1e0f0\",\"state_chain_id\":\"9b0ba36b-406a-499c-8c83-696b77f003a9\",\"state_chain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"},\"s2\":\"28d85004c2a896df7f205882930ead6c7a95d84b3978174c51ebd06a4bd1589a\",\"theta\":\"28d85004c2a896df7f205882930ead6c7a95d84b3978174c51ebd06a4bd1589a\",\"new_tx_backup\":{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"53e1d67d837fdaddb016c5de85d8903bc033f7f2208d3ff40430fc42edeab4cb:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,69,2,33,0,177,248,103,71,170,95,47,217,222,7,130,181,12,9,254,115,96,166,180,164,162,4,14,110,145,113,106,97,155,231,190,22,2,32,63,119,90,178,253,249,43,242,42,177,250,25,29,251,156,37,12,61,70,252,201,155,252,188,56,242,36,211,50,136,203,95,1],[2,108,195,112,80,86,19,121,166,106,134,63,140,162,115,194,178,158,147,92,173,6,188,127,94,107,131,160,62,11,191,241,230]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"0014a5c378a7de7311e6836253a28830b48cc6b9e252\"}]},\"batch_data\":null}";
     pub static PARTY_1_PRIVATE: &str = "{\"x1\":\"827089d12423e80ac4d6cd463d524326e3aa89c4623178df41a6581fec42fc4\",\"paillier_priv\":{\"p\":\"175105153600741631732008635643568979650827093652618445865555498830310239779193993937919065748609864882562533521325401979357004940357735331137242744377931301179917304999674039005453503946248939473532166164488354001195043141677905998318715771948374633284282386723061505364048790027483575020641965955188382828043\",\"q\":\"176107056094363704009530683741685388080833654947191096034654854567664678756371593133182239495448766868278040275902304993107585397542355074990977649321727244853545689372964609905231205840920297987033622047920439606987774726496544858149573923439784574804611753120265479364394401830948243108767573192431824915223\"},\"c_key_randomness\":\"c3d4d31f59de5dc74bd5f89a92d498197ea5fd93069556cde819db50b0fa9fc4649ee5f89404d943c2a227453defb2c58908869f13ec12897b150778c41dd037a6c88015e53be46beeed355ce2e41d8351005b06264f397cde4adde9d881e9abf3d4278a89b1d66beb335a4f81128e1e78e069a8ddfee1756585ff3aa80f714fe4f4ced8822b73a1d8c9c04375b76f055791a60b683443eb959ffb292aa152fd23561a69bfe20c1d711cc8be4a404591bf04cab07c472ca013e06b9b370cdb53a668af4f1646854a225a7cf07ea12e6c53f7d55014d445d2a1ed061e2320656a4afad19593f9de4fef4f0c73f018373a0eb61b7cd8c1d5efd1c485bd90b845bb\"}";
     pub static PARTY_2_PUBLIC: &str = "{\"x\":\"5220bc6ebcc83d0a1e4482ab1f2194cb69648100e8be78acde47ca56b996bd9e\",\"y\":\"8dfbb36ef76f2197598738329ffab7d3b3a06d80467db8e739c6b165abc20231\"}";
 
     #[test]
     fn test_transfer_sender() {
-        let transfer_msg_4 = serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap();
+        let transfer_msg_4 =
+            serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap();
         let shared_key_id = transfer_msg_4.shared_key_id;
         let no_sc_shared_key_id = Uuid::from_str("deadb33f-1111-46f9-aaaa-0678c891b2d3").unwrap(); // random Uuid
         let state_chain_id = transfer_msg_4.state_chain_id;
         let state_chain_sig: StateChainSig =
-            serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap().state_chain_sig;
-        let transfer_msg_1 = TransferMsg1 {shared_key_id,state_chain_sig};
+            serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string())
+                .unwrap()
+                .state_chain_sig;
+        let transfer_msg_1 = TransferMsg1 {
+            shared_key_id,
+            state_chain_sig,
+        };
 
         let mut db = MockDatabase::new();
         let (_privkey, pubkey) = shared_lib::util::keygen::generate_keypair();
-        db.expect_get_proof_key().returning(move |_| Ok(pubkey.to_string()));
+        db.expect_get_proof_key()
+            .returning(move |_| Ok(pubkey.to_string()));
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_get_user_auth().returning(move |_| Ok(shared_key_id));
+        db.expect_get_user_auth()
+            .returning(move |_| Ok(shared_key_id));
         db.expect_get_statechain_id()
             .with(predicate::eq(shared_key_id))
             .returning(move |_| Ok(state_chain_id));
@@ -384,7 +448,7 @@ mod tests {
         db.expect_transfer_is_completed()
             .with(predicate::eq(state_chain_id))
             .returning(|_| false);
-        db.expect_get_statechain_owner()    // sc locked
+        db.expect_get_statechain_owner() // sc locked
             .with(predicate::eq(state_chain_id))
             .times(1)
             .returning(move |_| {
@@ -404,6 +468,7 @@ mod tests {
                 })
             });
         db.expect_create_transfer().returning(|_, _, _| Ok(()));
+        db.expect_update_transfer_msg().returning(|_, _| Ok(()));
 
         let sc_entity = test_sc_entity(db);
 
@@ -418,16 +483,26 @@ mod tests {
         // Sc locked
         match sc_entity.transfer_sender(transfer_msg_1.clone()) {
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("SharedLibError Error: Error: State Chain locked for 1 minutes.")),
+            Err(e) => assert!(e
+                .to_string()
+                .contains("SharedLibError Error: Error: State Chain locked for 1 minutes.")),
         }
 
-        assert!(sc_entity
-            .transfer_sender(transfer_msg_1)
-            .is_ok());
+        assert!(sc_entity.transfer_sender(transfer_msg_1).is_ok());
+    }
+
+    #[test]
+    fn test_multi_transfer() {
+        let transfer_msg_5 = do_transfer_receiver();
+        assert!(transfer_msg_5.is_ok());
     }
 
     #[test]
     fn test_transfer_receiver() {
+        assert!(do_transfer_receiver().is_ok())
+    }   
+
+    fn do_transfer_receiver() -> Result<TransferMsg5>{
         let transfer_msg_4 =
             serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap();
         let shared_key_id = transfer_msg_4.shared_key_id;
@@ -435,6 +510,9 @@ mod tests {
         let s2 = serde_json::from_str::<TransferFinalizeData>(&FINALIZED_DATA.to_string())
             .unwrap()
             .s2;
+        let theta = serde_json::from_str::<TransferFinalizeData>(&FINALIZED_DATA.to_string())
+            .unwrap()
+            .theta;
         let msg2: TransferMsg2 = serde_json::from_str(&TRANSFER_MSG_2.to_string()).unwrap();
         let x1 = msg2.x1.get_fe().expect("failed to get fe");
 
@@ -489,6 +567,7 @@ mod tests {
                         .unwrap()
                         .state_chain_sig,
                         s2: s2,
+                        theta,
                         new_tx_backup: serde_json::from_str::<Transaction>(
                             &BACKUP_TX_NOT_SIGNED.to_string(),
                         )
@@ -513,6 +592,7 @@ mod tests {
                     .unwrap()
                     .state_chain_sig,
                     s2: s2,
+                    theta,
                     new_tx_backup: serde_json::from_str::<Transaction>(
                         &BACKUP_TX_NOT_SIGNED.to_string(),
                     )
@@ -529,7 +609,7 @@ mod tests {
             .returning(|_, _, _| Ok(()));
 
         let sc_entity = test_sc_entity(db);
-        let _m = mocks::ms::post_commitment().create();        //Mainstay post commitment mock
+        let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
 
         // Input data to transfer_receiver
         let mut transfer_msg_4 =
@@ -574,7 +654,7 @@ mod tests {
                 .to_string()
                 .contains("Error: Transfer batch ended. Too late to complete transfer.")),
         }
-        // Expected successful batch transfer run
-        assert!(sc_entity.transfer_receiver(transfer_msg_4).is_ok());
+
+        sc_entity.transfer_receiver(transfer_msg_4)
     }
 }

@@ -5,11 +5,19 @@ extern crate kms;
 extern crate multi_party_ecdsa;
 extern crate reqwest;
 extern crate zk_paillier;
+extern crate monotree;
+extern crate floating_duration;
+
+#[cfg(test)]
+extern crate mockito;
 
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
+
+extern crate tokio;
+extern crate daemon_engine;
 
 #[macro_use]
 extern crate log;
@@ -22,29 +30,30 @@ extern crate bitcoin;
 extern crate electrumx_client;
 extern crate hex;
 extern crate itertools;
-extern crate uuid;
-extern crate shared_lib;
 extern crate pyo3;
-
+extern crate shared_lib;
+extern crate uuid;
+extern crate rand;
 pub mod ecdsa;
 pub mod error;
 pub mod state_entity;
 pub mod wallet;
+pub mod daemon;
 
 mod utilities;
 
 use serde::{Deserialize, Serialize};
 
 use pyo3::prelude::*;
-use pyo3::{PyCell, PyObjectProtocol, py_run};
+use pyo3::{py_run, PyCell, PyObjectProtocol};
 
-use error::CError;
 use config::Config as ConfigRs;
+use error::CError;
 
 type Result<T> = std::result::Result<T, CError>;
 
 pub mod tor {
-    pub static SOCKS5URL : &str = "socks5h://127.0.0.1:9050"; 
+    pub static SOCKS5URL: &str = "socks5h://127.0.0.1:9050";
     pub static IPIFYURL: &str = "https://api6.ipify.org?format=json";
 }
 
@@ -91,10 +100,11 @@ pub fn default_config() -> Result<ConfigRs> {
 pub fn get_config() -> Result<ConfigRs> {
     let mut conf_rs = default_config()?;
     // Add in `./Settings.toml`
-    conf_rs.merge(config::File::with_name("Settings").required(false))?
-    // Add in settings from the environment (with prefix "APP")
-    // Eg.. `APP_DEBUG=1 ./target/app` would set the `debug` key
-    .merge(config::Environment::with_prefix("MERC"))?;
+    conf_rs
+        .merge(config::File::with_name("Settings").required(false))?
+        // Add in settings from the environment (with prefix "APP")
+        // Eg.. `APP_DEBUG=1 ./target/app` would set the `debug` key
+        .merge(config::Environment::with_prefix("MERC"))?;
     Ok(conf_rs)
 }
 
@@ -110,7 +120,12 @@ pub struct Tor {
 #[pymethods]
 impl Tor {
     fn as_tuple(&self) -> (bool, String, u64, String) {
-        (self.enable, self.proxy.clone(), self.control_port, self.control_password.clone())
+        (
+            self.enable,
+            self.proxy.clone(),
+            self.control_port,
+            self.control_password.clone(),
+        )
     }
 }
 
@@ -122,12 +137,12 @@ impl PyObjectProtocol for Tor {
 }
 
 impl Default for Tor {
-   fn default() -> Self  {
-       Self{ 
-            enable: false, 
-            proxy: tor::SOCKS5URL.to_string(), 
-            control_port: 9051,  
-            control_password: String::default()
+    fn default() -> Self {
+        Self {
+            enable: false,
+            proxy: tor::SOCKS5URL.to_string(),
+            control_port: 9051,
+            control_password: String::default(),
         }
     }
 }
@@ -159,16 +174,20 @@ impl Tor {
         let py = gil.python();
         let tordata = PyCell::new(py, self.to_owned())?;
 
-        py_run!(py, tordata, r#"
+        py_run!(
+            py,
+            tordata,
+            r#"
             from stem.control import Controller
             with Controller.from_port(port = tordata.as_tuple()[2]) as controller:
                 controller.authenticate(tordata.as_tuple()[3])  # provide the password here if you set one
-        
+
                 bytes_read = controller.get_info("traffic/read")
                 bytes_written = controller.get_info("traffic/written")
-        
+
                 print("My Tor relay has read %s bytes and written %s bytes." % (bytes_read, bytes_written))
-        "#);
+        "#
+        );
         Ok(())
     }
 
@@ -177,14 +196,17 @@ impl Tor {
         let py = gil.python();
         let tordata = PyCell::new(py, self.to_owned())?;
 
-
-        py_run!(py, tordata, r#"
+        py_run!(
+            py,
+            tordata,
+            r#"
             from stem import Signal
             from stem.control import Controller
             with Controller.from_port(port = tordata.as_tuple()[2]) as controller:
                 controller.authenticate(tordata.as_tuple()[3])  # provide the password here if you set one
                 controller.signal(Signal.NEWNYM)
-        "#);
+        "#
+        );
         Ok(())
     }
 }
@@ -198,7 +220,6 @@ pub struct ClientShim {
 }
 
 impl ClientShim {
-
     pub fn from_config(config: &Config) -> ClientShim {
         match config.tor.enable {
             true => Self::new(config.endpoint.to_owned(), None, Some(config.tor.clone())),
@@ -222,10 +243,11 @@ impl ClientShim {
             None => reqwest::blocking::Client::new(),
             Some(t) => match t.enable {
                 true => reqwest::blocking::Client::builder()
-                        .proxy(reqwest::Proxy::all(&t.proxy).unwrap())
-                        .build().unwrap(),
+                    .proxy(reqwest::Proxy::all(&t.proxy).unwrap())
+                    .build()
+                    .unwrap(),
                 false => reqwest::blocking::Client::new(),
-            }
+            },
         }
     }
 
@@ -235,8 +257,8 @@ impl ClientShim {
                 t.newnym()?;
                 self.client = Self::new_client(self.tor.as_ref());
                 Ok(())
-            },
-            None => Err(CError::TorError("no Tor in ClientShim".to_string()))
+            }
+            None => Err(CError::TorError("no Tor in ClientShim".to_string())),
         }
     }
 
@@ -244,6 +266,10 @@ impl ClientShim {
         let b = self.client.get(tor::IPIFYURL);
         let value = b.send()?.text()?;
         Ok(value)
+    }
+
+    pub fn has_tor(&self) -> bool {
+        self.tor.is_some()
     }
 }
 
@@ -279,12 +305,16 @@ pub mod tests {
         let mut sum: f32 = 0.0;
         let mut max: f32 = 0.0;
         let mut min = std::f32::MAX;
-        let old_ip = cs.get_public_ip_address().expect("failed get_public_ip_address");
+        let old_ip = cs
+            .get_public_ip_address()
+            .expect("failed get_public_ip_address");
         for _ in 0..10 {
             let timer = Instant::now();
             cs.new_tor_id().expect("failed to get new tor id");
             let elapsed = timer.elapsed().as_millis() as f32;
-            let new_ip = cs.get_public_ip_address().expect("failed get_public_ip_address");
+            let new_ip = cs
+                .get_public_ip_address()
+                .expect("failed get_public_ip_address");
             assert!(new_ip != old_ip, "expected new ip address");
             buffer.push(elapsed);
             println!("{} ms", elapsed);
@@ -294,14 +324,18 @@ pub mod tests {
         }
         let count = buffer.len() as f32;
         let mean = sum / count;
-        let variance: f32 = buffer.iter().map(|val| {
-            let diff = mean  - val;
-            diff * diff
-        }).sum::<f32>() / count; 
+        let variance: f32 = buffer
+            .iter()
+            .map(|val| {
+                let diff = mean - val;
+                diff * diff
+            })
+            .sum::<f32>()
+            / count;
         let stdev = variance.sqrt();
 
         println!("Average time for new tor id is {} +/- {} ms", mean, stdev);
         println!("Longest time: {} ms", max);
         println!("Shortest time: {} ms", min);
     }
-}   
+}

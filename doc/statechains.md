@@ -1,4 +1,4 @@
-# Mercury statechain protocol specification
+# Mercury statechain protocol
 
 This document describes the specification and operation of the Mercury **statechain** [1] system to tranfer ownership of Bitcoin (or Elements based) *unspent transaction outputs* (UTXOs) between parties without performing on-chain transactions. The ability to perform this transfer without requiring the confirmation (mining) of on-chain transactions has several advantages in a variety of different applications:
 
@@ -12,32 +12,44 @@ This functionality requires a trusted third party - refered to as the *statechai
 
 A UTXO is the fundamental object that defines value and ownership in a cryptocurrency such as Bitcoin. A UTXO is identified by a transaction ID (`TxID`) and output index number (`n`) and has two properties: 1. A value (in BTC) and 2. Spending conditions (defined in Script). The spending conditions can be arbitrarily complex (within the limits of the consensus rules), but is most commonly defined by a single public key (or public key hash) and can only be spent by transaction signed with the corresponding public key. This is known as a pay-to-public-key-hash output (P2(W)PKH). Other more complex spending conditions include multisig outputs (where spending transactions need to be signed by `m` public keys where `n >= m` are specified in the spending conditions) and time-locked and hash-locked outputs (inlcuding HTLCs as utilised by the Lightning Network and DLCs). 
 
-The statechain model described here can be used to transfer the ability to sign a single public key spending condition between parties, or one part of a 2-of-2 multisig, allowing for the transfer (novation) of DLC counterparty positions or Lightning channels. 
+The statechain model described here can be used to transfer the ability to sign a single public key spending condition or one part of a 2-of-2 multisig, allowing for the transfer (novation) of DLC counterparty positions or Lightning channels. 
 
 ## P2PKH output transfer
 
-The simplest function of the Mercury system is to enable the transfer the ownership of individual UTXOs controlled by a single public key `P` from one party to another without an on-chain (Bitcoin) transaction (or change in the spending condition). The SE facilitates this change of ownership, but has no way to seize, confiscate or freeze the output. To enable this, the private key (`s`) for `P` (where `P = s.G`) is shared between the SE and the owner, such that neither party ever has knowledge of the full private key (which is `s = s1*o1` where `s1` is the SE private key share, and `o1` is the owner key share) and so cooperation of the owner and SE is required to spend the UTXO. However, by sharing the secret key in this way, the SE can change its key share (`s1 -> s2`) so that it combines with a new owner key share (`o2`) with the cooperation of the original owner, but without changing the full key (i.e. `s1*o1 = s2*o2`) all without any party revealing their key shares or learning the full key. The exclusive control of the UTXO then passes to the new owner without an on-chain transaction, and the SE only needs to be trusted to follow the protocol and delete/overwrite the key share corresponding to the previous owner. 
+The simplest function of the Mercury system is to enable the transfer the ownership of individual UTXOs controlled by a single public key `P` from one party to another without an on-chain (Bitcoin) transaction. The SE facilitates this change of ownership, but has no way to seize, confiscate or freeze the output. To enable this, the private key for `P` is shared between the SE and the owner, such that no party ever has knowledge of the full private key (which is `s1*o1` where `s1` is the SE private key share, and `o1` is the owner key share) and so cooperation of the owner is required to spend the UTXO. However, by sharing the secret key in this way, the SE can change its key share (`s1 -> s2`) so that it combines with a new owner key share (`o2`) with the cooperation of the original owner without changing the full key (i.e. `s1*o1 = s2*o2`) all without any party revealing their key shares or learning the full key. The exclusive control of the UTXO then passes to the new owner without an on-chain transaction, and the SE only needs to be trusted to follow the protocol and delete/overwrite the key share corresponding to the previous owner. 
 
-This key update/transfer mechanism is additionally be combined with a system of *backup* transactions which can be used to claim the value of the UTXO by the current owner in the case the SE does not cooperate or has disappeared. The backup transaction is cooperatively signed by the current owner and the SE at the point of transfer, paying to an address controlled by the new owner. To prevent a previous owner (i.e. not the current owner) from broadcasting their backup transaction and stealing the deposit, the `nLocktime` value of the transaction is set to a future specified block height. Each time the ownership of the UTXO is transfered, the `nLocktime` is decremented by a specified value, therefore enabling the current owner to claim the deposit before any of the previous owners. 
+This key update/transfer mechanism can additionally be combined with a system of *backup* transactions which can be used to claim the value of the UTXO by the current owner in the case the SE does not cooperate or has disappeared. The backup transactions are cooperatively signed by the owners and the SE at the point of transfer, and consist of a *kickoff* transaction (which initiates the timelocks) which can be spent by a second transaction with a relative time-lock (using the `nSequence` field as described in BIP68 [2]) paying to an owner generated address [3]. Each new owner is given the same kick-off transaction and a second signed transaction (paying to the new owner address) with a lower `nSequence` number than the previous owner (allowing them to claim the output of the kickoff transaction before any previous owner). 
 
 <br><br>
 <p align="center">
-<img src="images/fig1.png" align="middle" width="350" vspace="20">
+<img src="images/fig1.png" align="middle" width="440" vspace="20">
 </p>
 
 <p align="center">
-  <b>Fig. 1</b>: Schematic of confirmed funding transaction, and off-chain signed backup transactions with decrementing nLocktime for a sequence of 4 owners. 
+  <b>Fig. 1</b>: Schematic of confirmed funding transaction, and off-chain signed kick-off transaction and backup transactions for a sequence of 4 owners. 
 </p>
 <br><br>
 
-The decrementing timelock backup mechanism limits the number of tranfers that can be made within a reasonable lock-out time, and will be specified and enforced by the SE. In order to ensure that the valid backup transaction is broadcast to the Bitcoin network at the correct time, and prevent expired owners from attmepting to steal funds, the SE operates multiple *watch* servers that monitor the block height and send user backup transactions when required. If the SE is shut down then the user is responsible for submitting backup transactions to the Bitcoin network at the correct time, and applications are available to do this automatically. 
+As each previous owner will posses a signed copy of the kickoff transaction, any of these old owners can broadcast it to initiate the backup process, forcing the close of the UTXO and presenting a DoS risk (even though they will not be able to steal the funds). To provide an incentive against this, an anyone-can-spend (OP_TRUE) output can be added to the kickoff transaction (with a dust limit amount) and zero miner fee: this means that for an owner (current or old) to broadcast (and confirm) the kickoff transaction, they must at the same time send a second transaction that spends the anyone-can-spend output and that has sufficient fee to pay for both transactions (via Child Pays For Parent - CPFP). 
+
+<br><br>
+<p align="center">
+<img src="images/fig2.png" align="middle" width="440" vspace="20">
+</p>
+
+<p align="center">
+  <b>Fig. 2</b>: Schematic of the kick-off transaction requiring an additional CPFP spending transaction paying fees. 
+</p>
+<br><br>
+
+The decrementing relative timelock backup mechanism limits the number of tranfers that can be made within a reasonable lock-out time. This limitation can be substantially improved using an 'invalidation tree' structure of sequential transactions as described in [3]. 
 
 The life-cycle of a P2PKH deposit into the statechain, transfer and withdrawal is summarised as follows:
 
-1. The depositor (Owner 1) initiates a UTXO statechain with the SE by paying BTC to a P2PKH address where Owner 1 and the SE share the private key required to spend the UTXO. Additionally, the SE and the depositor can cooperate to sign a backup transaction spending the UTXO to a relative timelocked transaction spending to an address controlled by Owner 1 which can be confirmed after the `nLocktime` block height in case the SE stops cooperating. 
-3. Owner 1 can verifiably transfer ownership of the UTXO to a new party (Owner 2) via a key update procedure that overwrites the private key share of SE that invalidates the Owner 1 private key and *activates* the Owner 2 private key share. Additionally, the transfer can incorporate the cooperative signing of a new backup transaction paying to an address controlled by Owner 2 which can be confirmed after an `nLocktime` block height, which is shortened (by an accepted confirmation interval) than the previous owner. 
-5. This transfer can be repeated multiple times to new owners as required (up until the most recent recovery `nLocktime` reaches a lower limit determined by the current Bitcoin block height). 
-6. At any time the most recent owner and SE can cooperate to sign a transaction spending the UTXO to an address of the most recent owner's choice (i.e. withdrawal). 
+1. The depositor (Owner 1) initiates a UTXO statechain with the SE by paying BTC to a P2PKH address where Owner 1 and the SE share the private key required to spend the UTXO. Additionally, the SE and the depositor can cooperate to sign a kick-off and backup transaction spending the UTXO to a relative timelocked transaction spending to an address controlled by Owner 1 which can be confirmed after the `nSequence` locktime in case the SE stops cooperating. 
+3. Owner 1 can verifiably transfer ownership of the UTXO to a new party (Owner 2) via a key update procedure that overwrites the private key share of SE that invalidates the Owner 1 private key and *activates* the Owner 2 private key share. Additionally, the transfer can incorporate the cooperative signing of a new backup transaction paying to an address controlled by Owner 2 which can be confirmed after an `nSequence` locktime, which is shorted (by an accepted confirmation interval) than the previous owner. 
+5. This transfer can be repeated multiple times to new owners as required (up until the most recent recovery relative locktime reaches a limit > 0). 
+6. At any time the most recent owner and SE can cooperate to sign a transaction spending the UTXO to an address of the most recent owner's choice (withdrawal). 
 
 <br><br>
 <p align="center">
@@ -127,15 +139,17 @@ An owner wants to deposit an amount of BTC into the platform, and they request t
 3. The SE then generates a private key: `s1` (the SE private key share), calculates the corresponding public key and sends it to Owner 1: `S1 = s1.G`
 4. Both SE and Owner 1 then multiply the public keys they receive by their own private key shares to obtain the same shared public key `P` (which corresponds to a shared private key of `p = o1*s1`): `P = o1.(s1.G) = s1.(o1.G)`
 
-> The above key sharing scheme is the same as that used in the 2P ECDSA protocols [4,5]. The key generation routines of these existing 2P ECDSA implementations can be used in place of the above steps (which include additional verification and proof steps). 
+> The above key sharing scheme is the same as that used in the 2P ECDSA protocols [4,5]. The key generation routines of these existing 2P ECDSA implementations can be used in place of the above steps (which can include additional verification and proof steps). 
 
-5. Owner 1 genertes `b1` (the backup private key) and computes `B1 = b1.G`. 
-6. Owner 1 genertes `c1` (the proof private key) and computes `C1 = c1.G`.
-7. Owner 1 creates a funding transaction (`Tx0`) to pay an amount `A` to the address corresponding to `P` (but doesn't sign it) [this transaction may also have an output for a fee `F` paid to the SE]. This defines the UTXO `TxID` (the outpoint), which is sent to the SE.
-8. Owner 1 creates a *backup transaction* (`Tx1`) that pays the `P` output of `Tx0` to `B1`, and sets the `nLocktime` to the initial future block height `h0` (where `h0 = cheight + hinit`, `cheight` is the current Bitcoin block height and `hinit` is the specified initial locktime). 
-9. SE receives `Tx1` and `C1` from Owner 1 and verifies the `nLocktime` field. Owner 1 and the SE then sign `Tx1` with shared key (`P`) via 2P ECDSA, which Owner 1 then saves. 
-10. Owner 1 then signs and broadcasts their deposit transaction `Tx0`. Once the transaction is confirmed, the deposit is completed. 
-11. The SE then adds the public key `C1` to leaf of the SMT at position TxID of `Tx0`. The root of the SMT is then attested to Bitcoin via the Mainstay protocol in slot `slot_id`. 
+5. Owner 1 creates a funding transaction (`Tx0`) to pay an amount `A` to the address corresponding to `P` (but doesn't sign it) [this transaction may also have an output for a fee `F` paid to the SE]. This defines the UTXO `TxID` (the outpoint), which is sent to the SE.
+6. The SE creates a *kick-off transaction* (`TxK`) which spends `Tx0` and pays `A-D` to `P` and `D` to `OP_TRUE` (where `D` is the dust limit) and has zero miner fee. 
+7. Owner 1 and SE cooperatively sign `TxK` via 2P ECDSA. Both parties save this transaction. 
+8. Owner 1 genertes `b1` (the backup private key) and computes `B1 = b1.G`. 
+9. Owner 1 genertes `c1` (the proof private key) and computes `C1 = c1.G`.
+9. Owner 1 creates a *backup transaction* (`Tx1`) that pays the `P` output of `TxK` to `B1`, and sets the `nSequence` to the maximum relative locktime `t0` (according to BIP68). 
+10. SE receives `Tx1` and `C1` from Owner 1 and verifies the `nSequence` field. Owner 1 and the SE then sign `Tx1` with shared key (`P`) via 2P ECDSA, which Owner 1 then saves. 
+11. Owner 1 then signs and broadcasts their deposit transaction `Tx0`. Once the transaction is confirmed, the deposit is completed. 
+12. The SE then adds the public key `C1` to leaf of the SMT at position TxID of `Tx0`. The root of the SMT is then attested to Bitcoin via the Mainstay protocol in slot `slot_id`. 
 
 <br><br>
 <p align="center">
@@ -147,7 +161,7 @@ An owner wants to deposit an amount of BTC into the platform, and they request t
 </p>
 <br><br>
 
-This deposit protocol is designed so that no funds are lost if either party becomes uncooperative at any stage. The deposit is only paid to the shared public key once the backup transaction is signed. 
+This deposit protocol is designed so that no funds are lost if either party becomes uncooperative at any stage. The deposit is only paid to the shared public key once the kick-off and backup transactions are signed. 
 
 ### Transfer
 
@@ -159,16 +173,17 @@ Owner 1 wishes to transfer the value of the deposit `A` to a new owner (Owner 2)
 4. SE generates a random key `x1` and encrypts it with the Owner 2 statechain public key: `Enc(x1,C1)`
 5. `Enc(x1,C1)` is sent to Owner 1 who decrypts it with `c1` to learn `x1`: `Dec(x1,c1)`
 6. Owner 1 then computes `o1*x1` and encrypts it with the Owner 2 statechain public key (from the address): `Enc(o1*x1,C2)`
-7. Owner 1 creates a new *backup transaction* (`Tx2`) that pays the `P` output of `Tx0` to `B2`, and sets the `nLocktime` to the relative locktime `h0 - (n-1)*c` where `c` is the confirmation interval and `n` is the owner number (i.e. 2). 
-8. The SE receives `Tx2` and verifies the `nLoctime` field corresponds to `h0 - (n-1)*c`. Owner 1 and the SE then sign `Tx2` with shared key (`P`) via 2P ECDSA, which Owner 1 then saves. 
+7. Owner 1 creates a new *backup transaction* (`Tx2`) that pays the `P` output of `TxK` to `B2`, and sets the `nSequence` to the relative locktime `t0 - (n-1)*c` (according to BIP68) where `c` is the confirmation interval and `n` is the owner number (i.e. 2). 
+8. The SE receives `Tx2` and verifies the `nSequence` field corresponds to `t0 - (n-1)*c`. Owner 1 and the SE then sign `Tx2` with shared key (`P`) via 2P ECDSA, which Owner 1 then saves. 
 
 > The steps 3-8 only require interaction between the SE and owner 1, and can be performed at any time before the involvement of Owner 2 is required. 
 
 9. Owner 1 retrieves the UTXO statechain (ownership sequence) for `Tx0` and signs ownership to `C2` with private key `c1`: this is `SCTx1`
 10. Owner 1 then sends Owner 2 a message containing four objects:
-	a. `Tx2`
-	b. `SCTx1`
-	c. `Enc(o1*x1,C2)`
+	a. `TxK`
+	b. `Tx2`
+	c. `SCTx1`
+	d. `Enc(o1*x1,C2)`
 
 > At this point the Owner 1 has sent all the information required to complete the transfer to Owner 2 and is no longer involved in the protocol. Owner 2 verifies the correctness and validity of the four objects, and the payment is complete. Owner 1 can then complete the key update with the SE at any time. 
 
@@ -196,7 +211,21 @@ The SE key share update then proceeds as follows:
 </p>
 <br><br>
 
-> The SE keeps a database of backup transactions for the users, and broadcast them at the appropriate time in case the users are off-line. 
+> The SE can keep a database of backup transactions for the users, and broadcast them at the appropriate time in case the users are off-line. Alternatively this can be outsourced to a 'watchtower-like' third party. 
+
+### Proposed Improvement to the Transfer protocol
+
+In Lindell's protocol the range proof only works for `x1 < q/3` where q is the field. Therefore 2/3 of the possible `s2` values computed by the SE will be outside of the required range. In the original protocol, steps 12-15 are repeated until the SE signals that a useable `s2` has been found.
+
+An alternative to the the above would be for the SE to apply an additional factor `theta` to the calculation as follows, by substituting the following steps beginning at step `16`:
+
+16. Generate a random number `theta <- Z_q` such that both `s1_theta = s1 * theta` and `s2_theta = s2 * theta` are less than `q/3`
+17. The SE then verifies that `s2.theta.O2 = theta.P` and deletes the key share `s1`. If the SE operations are run in a secure enclave, a remote attestation of this can be sent to Owner 2.
+
+> `s2` and `o2` are now key the private key shares of `P = s2*o2.G` which remains unchanged (i.e. `s2*o2 = s1*o1`), without anyone having learnt the full private key. Provided the SE deletes `s1`, then there is no way anyone but the current owner (with `o2`) can spend the output. 
+
+17. The SE sends Owner 2 `S2 = s2.G` and `theta` who verifies that `theta.o2.S2 = theta.P`
+18. The SE then adds the public key `C1` to the leaf of the SMT at position TxID of `Tx0`. The root of the SMT is then attested to Bitcoin via the Mainstay protocol in slot `slot_id`. 
 
 ### Orderly Withdrawal
 
@@ -223,6 +252,52 @@ This would proceed as follows:
 
 > The owner must ensure they broadcast the backup transaction immediately after the timelock to prevent previous owners from claiming after longer timeouts. 
 
+### Backup attack
+
+Every previous owner of a statechain UTXO has a signed kick-off transaction, and a signed backup transaction with a longer `nSequence` timelock than the current owner. Any one of these previous owners can broadcast the kick-off transaction at any time in an attempt to steal the UTXO funds. So long as the current owner is watching the Bitcoin UTXO set (or has outsourced this to a watchtower), then the currrent owner will always be able to spend the kick-off output with their backup transaction before a previous owner. 
+
+However, this does present a mechanism for a previous owner to harrass the current owner and cause a denial of service. Past owners are incentivised against doing this, as the past owner has to pay twice for the kick-off transaction fees (via CPFP), however there is nothing to prevent it. In the case this does occur (and the SE is still operational), firstly the SE will act as a watchtower and ensure the current owners backup transaction is confirmed. Secondly, the SE will alert the current owner to the broadcast, and will cooperatively sign a transaction to spend the `TxK` `P` output immediately (before any backup transactions become valid) paying either to an address of the owners choosing, or `P` (initiating a new statechain). 
+
+## DLC novation
+
+The ownership of a position in a discreet log contract (DLC) can be transferred using this same basic mechanism, but with the key rotation and backup transactions applied to every output of the multiple Contract Execution Transactions (CETs) of the DLC. The essential protocol is summarised as follows:
+
+Either, or both, of the counterparties in a specific DLC can utilise the SE for novation, and this requires no changes to the DLC protocol. In fact, if one counterparty is using an SE service for novation, the other counterparty does not even need to be aware of this or of any of the changes of ownership. In the following, we decribe the set-up for one counterparty using the service. 
+
+### Initialisation
+
+A user wants to initiate a DLC using the SE service for novation. The following steps are followed as part of the DLC creation process:
+
+1. The first position owner (Owner 1) generates two private keys: `o1` (the UTXO private key share) and `b1` (the backup private key).
+2. Owner 1 then calculates the corresponding public key of the share `O1` and sends it to the SE: `O1 = o1.G`
+3. The SE then generates a private key: `s1` (the SE private key share), calculates the corresponding public key and sends it to Owner 1: `S1 = s1.G`
+4. Both SE and Owner 1 then multiply the public keys they receive by their own private key shares to obtain the same shared public key `P` (which corresponds to a shared private key of `p = o1*s1`): `P = o1.(s1.G) = s1.(o1.G)`
+5. Owner 1 and the DLC counterparty create the DLC funding transaction `Tx0` (with supplied inputs) to pay an amount `A` to a 2-of-2 multisig (one public key `P` and the other public key belonging to the counterpary's - `C`. This defines the opening UTXO (the outpoint). 
+6. The Owner 1 and the counterparty cooperate to generate the full set of unsigned CETs following the DLC protocol [6]: `TxDLC[i]` where `i = 1,...,n`, after agreeing on an oracle public key `O`. The counterparty partially signs all of them (1-of-2) and sends them to Owner 1. 
+7. Owner 1 and the SE then coorperate to partially sign (1-of-2) the full set of CETs with the shared key `P` with 2P ECDSA and sends them to the counterparty. 
+8. The SE creates a series of *kick-off transactions* that spend from the outputs that pay to `P` from the full set of CETs (two for each CET):  `TxK[i,1]` and `TxK[i,2]` where `i = 1,...,n`. 
+9. Owner 1 and the SE cooperatively sign each `TxK` via 2P ECDSA. Both parties save these transactions. 
+10. Owner 1 genertes `b1` (the backup private key) and computes `B1 = b1.G`.
+11. Owner 1 creates a series of *backup transactions* for each kick-off transaction that pays the `P` output of each `TxK` to `B1`, and sets the `nSequence` to the maximum relative locktime `t0` (according to BIP68): `Tx1[i,1]` and `Tx1[i,2]` where `i = 1,...,n`. These are sent to the SE. 
+10. The SE recieves all `Tx1[i,1]` and `Tx1[i,2]` where `i = 1,...,n` and verifies the `nSequence` field of each one. Owner 1 and the SE then sign each `Tx1` with shared key (`P`) via 2P ECDSA, which Owner 1 then saves. 
+10. Owner 1 then co-signs (with the couterparty) and broadcasts the deposit/opening transaction `Tx0`. Once the transaction is confirmed, the deposit is completed. 
+11. The SE then adds the UTXO outpoint with `O1` to the *statechain* which is then attested to Bitcoin via the Mainstay protocol. 
+
+### Transfer
+
+Owner 1 wishes to transfer their position in the DLT to a new owner (Owner 2) (as a payment or as part of a complex trade). For this to proceed, the new owner must be aware of the public key that is used to authenticate the SE (`SE`). The new owner may require the current owner prove their unique ownership by signing a message with their key share (`O1`) as published on the statechain. The protocol then proceeds as follows:
+
+Steps 1-14 in the transfer section above are followed to transfer the shared key. Then the following steps are followed:
+1. The SE sends Owner 2 the full set of signed kick-off transactions `TxK[i,1]` and `TxK[i,2]` where `i = 1,...,n`. 
+2. Owner 2 creates a series of *backup transactions* for each kick-off transaction that pays the `P` output of each `TxK` to `B2`, and sets the `nSequence` to the maximum relative locktime `t0 - c` (according to BIP68): `Tx2[i,1]` and `Tx2[i,2]` where `i = 1,...,n`. These are sent to the SE. 
+10. The SE recieves all `Tx2[i,1]` and `Tx2[i,2]` where `i = 1,...,n` and verifies the `nSequence` field of each one. Owner 2 and the SE then sign each `Tx2` with shared key (`P`) via 2P ECDSA, which Owner 2 then saves. 
+18. The SE then adds the UTXO outpoint with public key `O2` to the statechain which is then attested to Bitcoin via the Mainstay protocol. 
+
+This can then be repeated to transfer the DLC position to each new owner. 
+
+### DLC closure
+
+Once the oracle publishes the signature at the expiration of the DLC, making one of the CETs valid (`TxCET[j]`) - one of the counterparties submit their valid transaction (OR they can cooperate the sign a separate transaction that pays directly to each party's wallet address - this would also require the cooperation of the SE for the current Owner to sign their part of the opening/deposit transaction). If a CET is broadcast (and confirmed), the SE and the current owner can then cooperate to 'withdraw' the output from the CET (or if the SE is not-responsive, then the current owner can submit the corresponding kick-off backup transaction `TxK[j,1]` and after the timelock `Tx2[j,1]` to claim the CET output). If the SE is unresponsive AND the counterparty broadcasts an invalid state, the kick-off backup transaction `TxK[j,2]` can be broadcast followed by the backup transaction `Tx2[j,2]` after the timelock. 
 
 [1] https://github.com/RubenSomsen/rubensomsen.github.io/blob/master/img/statechains.pdf
 

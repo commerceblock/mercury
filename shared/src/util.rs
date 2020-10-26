@@ -259,14 +259,14 @@ pub fn tx_withdraw_build(
 }
 
 pub mod keygen {
-    pub use bitcoin::secp256k1::{key::SecretKey, Message, Secp256k1, PublicKey};
+    pub use bitcoin::secp256k1::{key::SecretKey, Message, PublicKey, Secp256k1};
     pub use bitcoin::util;
     pub use bitcoin::{Amount, Network, OutPoint, Script};
     pub use rand::rngs::OsRng;
     pub const NETWORK: bitcoin::network::constants::Network = Network::Regtest;
     /// generate bitcoin::util::key key pair
     pub fn generate_keypair() -> (util::key::PrivateKey, util::key::PublicKey) {
-       let secp = Secp256k1::new();
+        let secp = Secp256k1::new();
         let secret_key = generate_secret_key();
         let priv_key = util::key::PrivateKey {
             compressed: true,

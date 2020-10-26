@@ -6,12 +6,13 @@ use shared_lib::error::SharedLibError;
 
 use bitcoin::util::{address::Error as AddressError, bip32::Error as Bip32Error};
 use reqwest::Error as ReqwestError;
+use daemon_engine::DaemonError;
 use std::error;
 use std::fmt;
 use std::num::ParseIntError;
 
 /// Client specific errors
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum CError {
     /// Generic error from string error message
     Generic(String),
@@ -25,6 +26,8 @@ pub enum CError {
     SharedLibError(String),
     /// Tor error
     TorError(String),
+    /// Swap error
+    SwapError(String)
 }
 
 impl From<String> for CError {
@@ -87,6 +90,12 @@ impl From<bitcoin::secp256k1::Error> for CError {
     }
 }
 
+impl From<DaemonError> for CError {
+    fn from(e: DaemonError) -> CError {
+        CError::Generic(format!("{:?}",e))
+    }
+}
+
 impl From<()> for CError {
     fn from(_e: ()) -> CError {
         CError::Generic(String::default())
@@ -95,7 +104,7 @@ impl From<()> for CError {
 
 impl From<pyo3::PyErr> for CError {
     fn from(e: pyo3::PyErr) -> CError {
-        CError::Generic(format!("a python error occured: {:?}",e))
+        CError::Generic(format!("a python error occured: {:?}", e))
     }
 }
 
@@ -106,7 +115,7 @@ impl std::convert::From<config::ConfigError> for CError {
 }
 
 /// Wallet error types
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum WalletErrorType {
     NotEnoughFunds,
     KeyNotFound,
@@ -136,6 +145,7 @@ impl fmt::Display for CError {
             CError::SchnorrError(ref e) => write!(f, "Schnorr Error: {}", e),
             CError::SharedLibError(ref e) => write!(f, "SharedLib Error: {}", e),
             CError::TorError(ref e) => write!(f, "Tor Error: {}", e),
+            CError::SwapError(ref e) => write!(f, "Swap Error: {}", e),
         }
     }
 }

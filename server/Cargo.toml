@@ -19,7 +19,6 @@ path = "src/main.rs"
 rocket = { version = "0.4.5", features = ["tls"] }
 rocket_contrib = { version = "0.4.5", default-features = false,features = ["json","postgres_pool"] }
 serde = "1.0"
-rocksdb = "0.15.0"
 serde_json = "1.0"
 serde_derive = "1.0"
 rusoto_dynamodb = "0.45.0"
@@ -35,7 +34,7 @@ rust-crypto = "0.2"
 hex = "0.4.2"
 floating-duration = "0.1.2"
 bitcoin = { version = "0.25", features = [ "use-serde" ] }
-electrumx_client = { git = "https://github.com/commerceblock/rust-electrumx-client", tag="v0.1.2" }
+electrumx_client = { git = "https://github.com/commerceblock/rust-electrumx-client", tag="v0.1.3" }
 env_logger = "0.7.1"
 log4rs = "0.13.0"
 postgres = { version = "0.15.2", features = ["with-uuid","with-chrono"] }

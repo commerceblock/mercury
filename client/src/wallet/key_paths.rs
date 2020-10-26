@@ -235,6 +235,9 @@ impl KeyPath {
 }
 
 pub fn funding_txid_to_int(funding_txid: &String) -> Result<u32> {
+    if funding_txid.len() < 6 {
+        return Err(CError::Generic("Funding Txid too short.".to_string()))
+    }
     u32::from_str_radix(&funding_txid[0..6], 16).map_err(|e| CError::from(e))
 }
 

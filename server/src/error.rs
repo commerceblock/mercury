@@ -38,6 +38,8 @@ pub enum SEError {
     SwapError(String),
     /// Try again error
     TryAgain(String),
+    /// Batch transfer timeout
+    TransferBatchEnded(String)
 }
 
 impl From<String> for SEError {
@@ -76,10 +78,12 @@ impl From<ConfigError> for SEError {
     }
 }
 
-impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, 
-          crate::protocol::conductor::Scheduler>>> for SEError {
-    fn from(e: std::sync::PoisonError<std::sync::MutexGuard<'_, 
-    crate::protocol::conductor::Scheduler>>) -> SEError {
+impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, crate::protocol::conductor::Scheduler>>>
+    for SEError
+{
+    fn from(
+        e: std::sync::PoisonError<std::sync::MutexGuard<'_, crate::protocol::conductor::Scheduler>>,
+    ) -> SEError {
         SEError::Generic(e.to_string())
     }
 }
@@ -122,6 +126,7 @@ impl fmt::Display for SEError {
             SEError::SMTError(ref e) => write!(f, "SMT Error: {}", e),
             SEError::SwapError(ref e) => write!(f, "Swap Error: {}", e),
             SEError::TryAgain(ref e) => write!(f, "Error: try again: {}", e),
+            SEError::TransferBatchEnded(ref e) => write!(f, "Error: Transfer batch ended. {}", e),
         }
     }
 }

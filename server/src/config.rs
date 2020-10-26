@@ -68,7 +68,7 @@ impl Default for RocketConfig {
         RocketConfig {
             keep_alive: 100,
             address: "0.0.0.0".to_string(),
-            port: 8000
+            port: 8000,
         }
     }
 }
@@ -101,7 +101,7 @@ pub struct Config {
     /// Mainstay config
     pub mainstay: Option<MainstayConfig>,
     /// Rocket config
-    pub rocket: RocketConfig
+    pub rocket: RocketConfig,
 }
 
 impl Default for Config {
@@ -119,7 +119,7 @@ impl Default for Config {
             punishment_duration: 360, // 1 minute
             storage: StorageConfig::default(),
             mainstay: Some(MainstayConfig::default()),
-            rocket: RocketConfig::default()
+            rocket: RocketConfig::default(),
         }
     }
 }
@@ -199,7 +199,6 @@ impl Config {
         if let Ok(v) = env::var("MERC_ROCKET_PORT") {
             let _ = conf_rs.set("rocket.port", v)?;
         }
-
 
         // Type checks
         let fee_address = conf_rs.get_str("fee_address")?;

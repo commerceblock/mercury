@@ -8,13 +8,13 @@ use client_lib::*;
 
 use bitcoin::{PublicKey, Transaction};
 use floating_duration::TimeFormat;
+use monotree::database::{Database as monotreeDatabase, MemoryDB};
 use rocket;
 use rocket::error::LaunchError;
-use server_lib::{server, PGDatabase, Database, MockDatabase};
+use server_lib::{server, Database, MockDatabase, PGDatabase};
 use shared_lib::{
     commitment::make_commitment,
     mainstay,
-    mocks::mock_electrum::MockElectrum,
     state_chain::StateChainSig,
     structs::{BatchData, PrepareSignTxMsg},
 };
@@ -22,10 +22,11 @@ use std::env;
 use std::error;
 use std::fmt;
 use std::sync::mpsc::RecvTimeoutError;
-use std::time::Instant;
 use std::thread;
+use std::time::Instant;
 use uuid::Uuid;
-use monotree::database::{Database as monotreeDatabase, MemoryDB};
+use curv::FE;
+
 
 extern crate stoppable_thread;
 
@@ -75,21 +76,29 @@ impl From<RecvTimeoutError> for SpawnError {
 pub trait SpawnServer {
     /// Spawn a StateChain Entity server in testing mode if there isn't one running already.
     /// Returns Ok(()) if a new server was spawned, otherwise returns an error.
-    fn spawn_server(self, mainstay_config: Option<mainstay::MainstayConfig>)
-        -> thread::JoinHandle<SpawnError>;
+    fn spawn_server(
+        self,
+        mainstay_config: Option<mainstay::MainstayConfig>,
+    ) -> thread::JoinHandle<SpawnError>;
 }
 
 impl SpawnServer for PGDatabase {
-/// Spawn a StateChain Entity server in testing mode if there isn't one running already.
-/// Returns Ok(()) if a new server was spawned, otherwise returns an error.
-fn spawn_server(self, mainstay_config: Option<mainstay::MainstayConfig>)
--> thread::JoinHandle<SpawnError> {
-    // Set enviroment variable to testing_mode=true to override Settings.toml
-    env::set_var("MERC_TESTING_MODE", "true");
+    /// Spawn a StateChain Entity server in testing mode if there isn't one running already.
+    /// Returns Ok(()) if a new server was spawned, otherwise returns an error.
+    fn spawn_server(
+        self,
+        mainstay_config: Option<mainstay::MainstayConfig>,
+    ) -> thread::JoinHandle<SpawnError> {
+        // Set enviroment variable to testing_mode=true to override Settings.toml
+        env::set_var("MERC_TESTING_MODE", "true");
 
-    // Rocket server is blocking, so we spawn a new thread.
-    let handle = thread::spawn(||{
-            match server::get_server::<Self, PGDatabase>(mainstay_config, self, PGDatabase::get_new()) {
+        // Rocket server is blocking, so we spawn a new thread.
+        let handle = thread::spawn(|| {
+            match server::get_server::<Self, PGDatabase>(
+                mainstay_config,
+                self,
+                PGDatabase::get_new(),
+            ) {
                 Ok(s) => {
                     let try_launch = s.launch();
                     let _ = try_launch.kind(); // LaunchError needs to be accessed here for this to work. Be carfeul modifying this code.
@@ -97,49 +106,56 @@ fn spawn_server(self, mainstay_config: Option<mainstay::MainstayConfig>)
                 }
                 Err(_) => SpawnError::GetServer,
             }
-    });
-    std::thread::sleep(std::time::Duration::from_secs(7));
-    handle
+        });
+        std::thread::sleep(std::time::Duration::from_secs(7));
+        handle
     }
 }
 
 impl SpawnServer for MockDatabase {
     /// Spawn a StateChain Entity server in testing mode if there isn't one running already.
     /// Returns Ok(()) if a new server was spawned, otherwise returns an error.
-    fn spawn_server(self, mainstay_config: Option<mainstay::MainstayConfig>)
-    -> thread::JoinHandle<SpawnError> {
+    fn spawn_server(
+        self,
+        mainstay_config: Option<mainstay::MainstayConfig>,
+    ) -> thread::JoinHandle<SpawnError> {
         // Set enviroment variable to testing_mode=true to override Settings.toml
         env::set_var("MERC_TESTING_MODE", "true");
 
         // Rocket server is blocking, so we spawn a new thread.
-        let handle = thread::spawn(||{
+        let handle = thread::spawn(|| {
             let db_smt = MemoryDB::new("");
-                match server::get_server::<Self, MemoryDB>(mainstay_config, self, db_smt) {
-                    Ok(s) => {
-                        let try_launch = s.launch();
-                        let _ = try_launch.kind(); // LaunchError needs to be accessed here for this to work. Be carfeul modifying this code.
-                        try_launch.into()
-                    }
-                    Err(_) => SpawnError::GetServer,
+            match server::get_server::<Self, MemoryDB>(mainstay_config, self, db_smt) {
+                Ok(s) => {
+                    let try_launch = s.launch();
+                    let _ = try_launch.kind(); // LaunchError needs to be accessed here for this to work. Be carfeul modifying this code.
+                    try_launch.into()
                 }
+                Err(_) => SpawnError::GetServer,
+            }
         });
         std::thread::sleep(std::time::Duration::from_secs(5));
         handle
     }
 }
 
-/// Create a wallet and generate some addresses
-pub fn gen_wallet() -> Wallet {
+/// Create a wallet and generate some addresses 
+#[cfg(test)]
+fn gen_wallet() -> Wallet {
+    gen_wallet_with_seed(&[0xcd; 32])
+}
+
+/// Create a wallet with a specified seed and generate some addresses 
+#[cfg(test)]
+fn gen_wallet_with_seed(seed: &[u8]) -> Wallet {
+    // let electrum = ElectrumxClient::new("dummy").unwrap();
     let mut wallet = Wallet::new(
-        &[0xcd; 32],
+        &seed,
         &"regtest".to_string(),
-        ClientShim::new("http://localhost:8000".to_string(), None, None),
-        Box::new(MockElectrum::new()),
+        ClientShim::new("http://localhost:8000".to_string(), None, None)
     );
-
     let _ = wallet.keys.get_new_address();
     let _ = wallet.keys.get_new_address();
-
     wallet
 }
 
@@ -148,8 +164,7 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
-        ClientShim::new("http://localhost:8000".to_string(), None, None),
-        Box::new(MockElectrum::new()),
+        ClientShim::new("http://localhost:8000".to_string(), None, None)
     );
 
     let _ = wallet.keys.get_new_address();
@@ -199,7 +214,7 @@ pub fn run_transfer(
     sender_index: usize,
     receiver_index: usize,
     state_chain_id: &Uuid,
-) -> Uuid {
+) -> (Uuid, FE) {
     let funding_txid: String;
     {
         funding_txid = wallets[sender_index]
@@ -221,17 +236,18 @@ pub fn run_transfer(
     )
     .unwrap();
 
-    let new_shared_key_id = state_entity::transfer::transfer_receiver(
+    let tfd = state_entity::transfer::transfer_receiver(
         &mut wallets[receiver_index],
         &mut tranfer_sender_resp,
         &None,
     )
-    .unwrap()
-    .new_shared_key_id;
+    .unwrap();
+    let new_shared_key_id = tfd.new_shared_key_id;
+    let theta = tfd.theta;
 
     println!("(Transfer Took: {})", TimeFormat(start.elapsed()));
 
-    return new_shared_key_id;
+    return (new_shared_key_id, theta);
 }
 
 /// Run a transfer with commitments between two wallets. Input vector of wallets with sender and receiver indexes in vector.
@@ -376,7 +392,7 @@ pub fn batch_transfer_verify_amounts(
 ) {
     // Check amounts have correctly rotated
     for i in 0..swap_map.len() {
-        let (_, wallet_sc_ids, bals) = wallets[swap_map[i].1].get_state_chains_info();
+        let (_, wallet_sc_ids, bals) = wallets[swap_map[i].1].get_state_chains_info().unwrap();
         // check state chain id is in wallets shared keys
         let index = wallet_sc_ids
             .iter()
@@ -387,6 +403,6 @@ pub fn batch_transfer_verify_amounts(
     }
 }
 
-pub fn start_server() -> thread::JoinHandle<SpawnError>{
+pub fn start_server() -> thread::JoinHandle<SpawnError> {
     PGDatabase::get_new().spawn_server(None)
 }

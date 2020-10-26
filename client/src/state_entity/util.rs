@@ -15,7 +15,7 @@ use shared_lib::util::get_sighash;
 use curv::arithmetic::traits::Converter;
 use curv::BigInt;
 use monotree::{
-    hasher::{Hasher, Blake3},
+    hasher::{Blake3, Hasher},
     tree::verify_proof,
     {Hash, Proof},
 };

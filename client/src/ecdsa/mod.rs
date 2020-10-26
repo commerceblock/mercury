@@ -11,6 +11,6 @@ pub mod recover;
 pub mod sign;
 pub mod types;
 
-pub use keygen::get_master_key;
-pub use sign::sign;
-pub use types::PrivateShare;
+pub use self::keygen::get_master_key;
+pub use self::sign::sign;
+pub use self::types::PrivateShare;

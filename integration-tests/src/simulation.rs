@@ -16,7 +16,6 @@ use mockito;
 #[cfg(test)]
 use server_lib::MockDatabase;
 
-
 #[cfg(test)]
 #[serial]
 pub fn run_simulation() {
@@ -71,7 +70,7 @@ pub fn random_transfer(wallets: &mut Vec<Wallet>) {
     let receiver_index = rand::thread_rng().gen_range(0, wallets.len());
 
     // Get sender wallets available state chains
-    let state_chains_info = wallets[sender_index].get_state_chains_info();
+    let state_chains_info = wallets[sender_index].get_state_chains_info().unwrap();
     if state_chains_info.0.len() == 0 {
         println!("\nTransfer failed - no funds in wallet {}.", sender_index);
         return;
@@ -112,7 +111,7 @@ pub fn random_withdraw(wallets: &mut Vec<Wallet>) {
     let wallet_index = rand::thread_rng().gen_range(0, wallets.len());
 
     // Get random wallet owned state chains
-    let state_chains_info = wallets[wallet_index].get_state_chains_info();
+    let state_chains_info = wallets[wallet_index].get_state_chains_info().unwrap();
     if state_chains_info.0.len() == 0 {
         println!("\nNothing to Withdraw from {}.", wallet_index);
         return;
