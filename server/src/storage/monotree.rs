@@ -285,7 +285,7 @@ impl monotree::database::Database for MockDatabase {
     }
 }
 // Dummy implementation. Unused.
-use rocket_contrib;
+use crate::rocket_contrib;
 impl Database for MemoryDB {
     fn get_new() -> Self {
         unimplemented!()

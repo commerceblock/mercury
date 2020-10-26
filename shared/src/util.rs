@@ -305,11 +305,11 @@ pub mod tests {
         let addr = match Address::p2wpkh(&pub_key, NETWORK){
             Ok(r) => r,
             Err(e) => {
-                assert!(false, "{}", e); 
+                assert!(false, "{}", e);
                 return;
             },
         };
- 
+
         let inputs = vec![TxIn {
             previous_output: OutPoint {
                 txid: Txid::default(),

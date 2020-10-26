@@ -153,7 +153,7 @@ pub fn get_server<
                 transfer_batch::transfer_batch_init,
                 transfer_batch::transfer_reveal_nonce,
                 withdraw::withdraw_init,
-                withdraw::withdraw_confirm, 
+                withdraw::withdraw_confirm,
                 conductor::poll_utxo,
                 conductor::poll_swap,
                 conductor::get_swap_info,

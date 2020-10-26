@@ -7,40 +7,44 @@ extern crate rocket;
 extern crate rocket_contrib;
 extern crate chrono;
 extern crate config as config_rs;
+extern crate uuid;
+#[macro_use]
+extern crate failure;
+extern crate error_chain;
+#[macro_use]
+extern crate log;
+extern crate log4rs;
+extern crate cfg_if;
+extern crate crypto;
+extern crate jsonwebtoken as jwt;
+extern crate rusoto_dynamodb;
+extern crate serde_dynamodb;
+extern crate hex;
+extern crate bisetmap;
+extern crate bitcoin;
+
+extern crate monotree;
 extern crate curv;
 extern crate kms;
 extern crate multi_party_ecdsa;
-extern crate uuid;
 extern crate zk_paillier;
-#[macro_use]
-extern crate failure;
-
-extern crate error_chain;
+extern crate electrumx_client;
 
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 
-#[macro_use]
-extern crate log;
-
-#[cfg(test)]
-extern crate floating_duration;
-
-extern crate crypto;
-extern crate jsonwebtoken as jwt;
-extern crate rusoto_dynamodb;
-extern crate serde_dynamodb;
-
-extern crate hex;
-extern crate shared_lib;
-
 #[cfg(test)]
 #[macro_use]
 extern crate serial_test;
+#[cfg(test)]
+extern crate floating_duration;
+extern crate mockall;
+#[cfg(test)]
+extern crate mockito;
 
-extern crate bisetmap;
+extern crate shared_lib;
 
 pub mod config;
 pub mod error;

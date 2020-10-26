@@ -25,7 +25,7 @@ pub enum ECIESError {
 
 impl PartialEq for ECIESError {
     fn eq(&self, other: &Self) -> bool {
-        use ECIESError::*;
+        use self::ECIESError::*;
         match (self, other) {
             (Generic(ref a), Generic(ref b)) => a == b,
             (FormatError(ref a), FormatError(ref b)) => a == b,
@@ -79,8 +79,8 @@ impl Responder<'static> for ECIESError {
     }
 }
 
-use ECIESError::DecryptError;
-use ECIESError::EncryptError;
+use self::ECIESError::DecryptError;
+use self::ECIESError::EncryptError;
 
 impl Encryptable for String {}
 

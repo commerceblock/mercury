@@ -1,27 +1,32 @@
-//
 extern crate bitcoin;
 extern crate bitcoin_hashes;
 extern crate chrono;
 extern crate hex;
-extern crate kms;
-extern crate multi_party_ecdsa;
+extern crate rand;
 extern crate rocket;
 extern crate rocket_contrib;
 extern crate uuid;
+extern crate arrayvec;
+extern crate base64;
+extern crate merkletree;
+extern crate reqwest;
+extern crate itertools;
+
+extern crate multi_party_ecdsa;
+extern crate kms;
+extern crate monotree;
+extern crate curv;
+extern crate electrumx_client;
 
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 
+#[cfg(test)]
+extern crate mockito;
+
 pub mod mocks;
-
-extern crate itertools;
-
-extern crate arrayvec;
-extern crate base64;
-extern crate merkletree;
-extern crate reqwest;
 
 pub mod blinded_token;
 pub mod swap_data;

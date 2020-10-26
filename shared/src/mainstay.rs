@@ -68,7 +68,7 @@ pub enum MainstayError {
 
 impl PartialEq for MainstayError {
     fn eq(&self, other: &Self) -> bool {
-        use MainstayError::*;
+        use self::MainstayError::*;
         match (self, other) {
             (Generic(ref a), Generic(ref b)) => a == b,
             (FormatError(ref a), FormatError(ref b)) => a == b,
@@ -135,7 +135,7 @@ pub enum MainstayAPIError {
 
 impl PartialEq for MainstayAPIError {
     fn eq(&self, other: &Self) -> bool {
-        use MainstayAPIError::*;
+        use self::MainstayAPIError::*;
         match (self, other) {
             (Generic(ref a), Generic(ref b)) => a == b,
             (NotFoundError(ref a), NotFoundError(ref b)) => a == b,
@@ -187,8 +187,8 @@ impl Responder<'static> for MainstayAPIError {
     }
 }
 
-use MainstayError::FormatError;
-use MainstayError::NotFoundError;
+use self::MainstayError::FormatError;
+use self::MainstayError::NotFoundError;
 
 impl Commitment {
     pub fn to_hash(&self) -> Hash {
