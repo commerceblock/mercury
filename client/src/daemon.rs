@@ -251,7 +251,7 @@ mod tests {
         thread::spawn(|| {
             let _ = make_wallet_daemon();
         });
-        thread::sleep(Duration::from_millis(200));
+        thread::sleep(Duration::from_millis(500));
 
         let request = query_wallet_daemon(DaemonRequest::GenAddressBTC);
         assert!(request.is_ok());

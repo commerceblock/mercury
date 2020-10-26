@@ -6,11 +6,15 @@ Mercury client is a client-side StateChain implementation.
 A new wallet will be automatically created upon startup.
 
 
-## Config
+## Config (Settings.toml)
 enpoint:                Mercury Server network address
+
 electrum_server:        Network address of Electrum Server. Leave blank for Mock Electrum Server.
+
 testing_mode:           Use Mock Electrum Server and generate generic Seed ([0xcd; 32]).
+
 network:                Bitcoin networks: "testnet", "mainnet", "regtest"
+
 daemon_address:         File system address of Client's state manager daemon
 
 ## Requirements
@@ -144,6 +148,7 @@ FLAGS:
 SUBCOMMANDS:
     help                Prints this message or the help of the given subcommand(s)
     send                Send a transaction
+    swap                Perform Swap
     deposit             Depotis funds to State Entity
     Withdraw            Withdraw funds from State Entity
     Transfer-sender     Transfer protocol Sender side
@@ -156,8 +161,6 @@ SUBCOMMANDS:
 
 * Output:
 ```text
-Network: [regtest]
-
 Address: [bcrt1qq0znj64a5zukv7yew52zjzmdndch3r0vxu8668]
 ```
 
@@ -168,8 +171,6 @@ Address: [bcrt1qq0znj64a5zukv7yew52zjzmdndch3r0vxu8668]
 
 * Output:
 ```text
-Network: [regtest]
-
 Address:					Confirmed:	Unconfirmed:
 bcrt1qsuqsurhgfduhqw6ejquw54482sqpkfc22gytyh	100000		0
 
@@ -184,8 +185,6 @@ State Chain ID:					Confirmed:	Unconfirmed:
 
 * Output:
 ```text
-Network: [regtest]
-
 Unspent tx hashes:
 e0a97cb38e7e73617ef75a57eaf2841eb06833407c0eae08029bd04ea7e6115a
 40bf39ffdf4322e4d30ed783feec5bd9eb2804b81f23ebd5e24ea2aa2365a326
@@ -204,8 +203,6 @@ e0a97cb38e7e73617ef75a57eaf2841eb06833407c0eae08029bd04ea7e6115a
 
 * Output:
 ```text
-Network: [regtest]
-
 Deposited 1000 satoshi's.
 State Chain ID: c7c57bc7-db45-474f-86f6-109205eb6b99
 ```
@@ -222,8 +219,6 @@ State Chain ID: c7c57bc7-db45-474f-86f6-109205eb6b99
 
 * Output:
 ```text
-Network: [regtest]
-
 Withdrawn 9000 satoshi's.
 From State Chain ID: a3f8f121-7ae0-4be0-9793-101476fd141e
 
@@ -242,8 +237,6 @@ Withdraw Transaction hex: 02000000000101f712bceee061d....
 
 * Output:
 ```text
-Network: [regtest],
-
 New State Entity address:
 "{\"backup_tx_addr\":\"bcrt1qjh4cs26aur7uct8fjavmrzqgxxdkpgjusanarx\",\"proof_key\":\"02851ad2219901fc72ea97b4d21e803c625a339f07da8c7069ea33ddd0125da84f\"}"
 ```
@@ -267,7 +260,7 @@ Transfer message: "{\"shared_key_id\":\"665d2d2c-6c3b-4384-a410-15e8a48b7dc5\",\
 
 ### Transfer State Chain (Receiver)
 ```bash
-../target/release/cli wallet transfer-receiver -m [TRANSFER_MESAGE]
+../target/release/cli wallet transfer-receiver -m [TRANSFER_MESSAGE]
 ```
 
 * Example:
@@ -277,11 +270,24 @@ Transfer message: "{\"shared_key_id\":\"665d2d2c-6c3b-4384-a410-15e8a48b7dc5\",\
 
 * Output:
 ```text
-Network: [regtest],
-
 Transfer complete for StateChain ID: 03dadad7-91b9-45b5-9f17-5cd945565121.
 ```
 
+
+### Swap State Chain
+```bash
+../target/release/cli wallet swap -i [STATE_CHAIN_ID] -s [SWAP_SIZE]
+```
+
+* Example:
+```bash
+../target/debug/cli wallet swap -i c0470e49-7bba-425f-a7a0-656dfe9aa17d -s 10
+```
+
+* Output:
+```text
+Swap complete from StateChain ID: 03dadad7-91b9-45b5-9f17-5cd945565121.
+```
 
 ## State Entity operations
 
