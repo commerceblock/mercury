@@ -36,7 +36,8 @@ pub enum DaemonRequest {
     Deposit(u64),
     Withdraw(Uuid),
     TransferSender(Uuid, SCEAddress),
-    TransferReceiver(TransferMsg3)
+    TransferReceiver(TransferMsg3),
+    Swap(Uuid, u64, bool)
 }
 
 /// Example response object
@@ -139,13 +140,11 @@ pub fn make_wallet_daemon() -> Result<()> {
                     DaemonRequest::GenAddressBTC => {
                         debug!("Daemon: GenAddressBTC");
                         let address = wallet.keys.get_new_address();
-                        wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(address))
                     },
                     DaemonRequest::GenAddressSE(txid) => {
                         debug!("Daemon: GenAddressSE");
                         let address = wallet.get_new_state_entity_address(&txid);
-                        wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(address))
                     },
                     DaemonRequest::GetWalletBalance => {
@@ -176,30 +175,37 @@ pub fn make_wallet_daemon() -> Result<()> {
                     DaemonRequest::Deposit(amount) => {
                         debug!("Daemon: Deposit");
                         let deposit_res = state_entity::deposit::deposit(&mut wallet, &amount);
-                        wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(deposit_res))
                     },
                     DaemonRequest::Withdraw(state_chain_id) => {
                         debug!("Daemon: Withdraw");
                         let deposit_res = state_entity::withdraw::withdraw(&mut wallet, &state_chain_id);
-                        wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(deposit_res))
                     },
                     DaemonRequest::TransferSender(state_chain_id, receiver_addr) => {
                         debug!("Daemon: TransferSender");
                         let transfer_sender_resp = state_entity::transfer::transfer_sender(&mut wallet, &state_chain_id, receiver_addr);
-                        wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(transfer_sender_resp))
                     },
                     DaemonRequest::TransferReceiver(mut transfer_msg) => {
                         debug!("Daemon: TransferReceiver");
                         let transfer_receiver_resp = state_entity::transfer::transfer_receiver(&mut wallet, &mut transfer_msg, &None);
-                        wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(transfer_receiver_resp))
+                    },
+                    DaemonRequest::Swap(state_chain_id, swap_size, force_no_tor) => {
+                        debug!("Daemon: Swapping {} with swap size {}", state_chain_id, swap_size);
+                        state_entity::conductor::do_swap(
+                            &mut wallet,
+                            &state_chain_id,
+                            &swap_size,
+                            force_no_tor
+                        ).unwrap();
+                        r.send(DaemonResponse::None)
                     }
                 }.wait()
                 .unwrap();
 
+                wallet.save();
                 Ok(())
             }).map_err(|_e| ());
         spawn(server_handle);

@@ -81,8 +81,17 @@ pub fn transfer_sender(
 
     // Update prepare_sign_msg with new owners address, proof key
     prepare_sign_msg.protocol = Protocol::Transfer;
-    prepare_sign_msg.tx.output.get_mut(0).unwrap().script_pubkey =
-        receiver_addr.tx_backup_addr.script_pubkey();
+    match prepare_sign_msg.tx.output.get_mut(0){
+      Some(v)  => {
+            match receiver_addr.tx_backup_addr.clone() {
+                Some(v2) => {
+                    v.script_pubkey = v2.script_pubkey()
+                },
+                None => (),
+            }
+      },
+      None => (),
+    };
     prepare_sign_msg.proof_key = Some(receiver_addr.proof_key.clone().to_string());
 
     // Sign new back up tx
@@ -118,7 +127,31 @@ pub fn transfer_sender(
         shared_key.unspent = false;
     }
 
+    //store transfer_msg_3 in db
+
+
+    // Update server database with transfer message 3 so that 
+    // the receiver can get the message
+    requests::postb(
+        &wallet.client_shim,
+        &format!("transfer/update_msg"),
+        &transfer_msg3,
+    )?;
+
     Ok(transfer_msg3)
+}
+
+// Get the transfer message 3 
+// created by the sender and stored in the SE database
+pub fn transfer_get_msg(
+    wallet: &mut Wallet,
+    state_chain_id: &Uuid,
+) -> Result<TransferMsg3> {
+    requests::postb(
+        &wallet.client_shim,
+        &format!("transfer/get_msg"),
+        &state_chain_id,
+    )
 }
 
 /// Receiver side of Transfer protocol.
@@ -128,8 +161,11 @@ pub fn transfer_receiver(
     batch_data: &Option<BatchData>,
 ) -> Result<TransferFinalizeData> {
     //Decrypt the message on receipt
-    wallet.decrypt(transfer_msg3)?;
-    //Mae immutable
+    match wallet.decrypt(transfer_msg3){
+        Ok(_) => (),
+        Err(e) => return Err(CError::Generic(format!("error decrypting message: {}", e.to_string())))
+    };
+    //Make immutable
     let transfer_msg3 = &*transfer_msg3;
     // Get statechain data (will Err if statechain not yet finalized)
     let state_chain_data: StateChainDataAPI =
@@ -368,12 +404,13 @@ pub fn transfer_batch_sign(
     let proof_key_derivation = wallet
         .se_proof_keys
         .get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap());
-    Ok(StateChainSig::new(
-        &proof_key_derivation.unwrap().private_key.key,
-        &format!("TRANSFER_BATCH:{}", batch_id.to_owned()),
-        &state_chain_id.to_string(),
-    )?)
+    
+    match StateChainSig::new_transfer_batch_sig(&proof_key_derivation.unwrap().private_key.key, &batch_id, &state_chain_id){
+        Ok(r) => Ok(r),
+        Err(e) => Err(e.into())
+    }
 }
+
 
 /// Request StateEntity start transfer_batch protocol
 pub fn transfer_batch_init(

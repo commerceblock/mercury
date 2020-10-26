@@ -5,6 +5,11 @@ extern crate kms;
 extern crate multi_party_ecdsa;
 extern crate reqwest;
 extern crate zk_paillier;
+extern crate monotree;
+extern crate floating_duration;
+
+#[cfg(test)]
+extern crate mockito;
 
 #[macro_use]
 extern crate serde_derive;
@@ -28,7 +33,7 @@ extern crate itertools;
 extern crate pyo3;
 extern crate shared_lib;
 extern crate uuid;
-
+extern crate rand;
 pub mod ecdsa;
 pub mod error;
 pub mod state_entity;
@@ -261,6 +266,10 @@ impl ClientShim {
         let b = self.client.get(tor::IPIFYURL);
         let value = b.send()?.text()?;
         Ok(value)
+    }
+
+    pub fn has_tor(&self) -> bool {
+        self.tor.is_some()
     }
 }
 

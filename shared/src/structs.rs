@@ -2,10 +2,8 @@
 //!
 //! Struct definitions used in State entity protocols
 
-use crate::blinded_token::BlindedSpendToken;
 use crate::state_chain::{State, StateChainSig};
 use crate::Root;
-use crate::Signature;
 use bitcoin::{OutPoint, Transaction, TxIn, TxOut};
 use curv::{cryptographic_primitives::proofs::sigma_dlog::DLogProof, BigInt, FE, GE, PK};
 use kms::ecdsa::two_party::party2;
@@ -194,7 +192,7 @@ pub struct DepositMsg2 {
 /// Address generated for State Entity transfer protocol
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash)]
 pub struct SCEAddress {
-    pub tx_backup_addr: Address,
+    pub tx_backup_addr: Option<Address>,
     pub proof_key: PublicKey,
 }
 impl Eq for SCEAddress {}
@@ -278,40 +276,6 @@ pub struct WithdrawMsg1 {
 pub struct WithdrawMsg2 {
     pub shared_key_id: Uuid,
     pub address: String,
-}
-
-// Swaps
-
-/// Owner -> Conductor
-#[derive(Serialize, Deserialize, Debug)]
-pub struct RegisterUtxo {
-    pub state_chain_id: Uuid,
-    pub signature: StateChainSig,
-    pub swap_size: u64,
-}
-
-/// Owner -> Conductor
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SwapMsg1 {
-    pub swap_id: Uuid,
-    pub state_chain_id: Uuid,
-    pub swap_token_sig: Signature,
-    pub address: SCEAddress,
-    pub bst_e_prime: FE,
-}
-
-// Message to request a blinded spend token
-#[derive(Serialize, Deserialize, Debug)]
-pub struct BSTMsg {
-    pub swap_id: Uuid,
-    pub state_chain_id: Uuid,
-}
-
-/// Owner -> Conductor
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SwapMsg2 {
-    pub swap_id: Uuid,
-    pub blinded_spend_token: BlindedSpendToken,
 }
 
 impl Default for TransferMsg5 {
@@ -474,7 +438,7 @@ mod tests {
             state_chain_id: Uuid::new_v4(),
             tx_backup_psm: PrepareSignTxMsg::default(),
             rec_addr: SCEAddress {
-                tx_backup_addr: Address::from_str("1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h").unwrap(),
+                tx_backup_addr: Some(Address::from_str("1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h").unwrap()),
                 proof_key: PublicKey::from_secret_key(&secp, &SecretKey::new(&mut rng)),
             },
         };

@@ -1,3 +1,10 @@
+extern crate shared_lib;
+extern crate client_lib;
+extern crate bitcoin;
+extern crate uuid;
+extern crate clap;
+extern crate electrumx_client;
+
 use shared_lib::structs::{SCEAddress, TransferMsg3, PrepareSignTxMsg, StateChainDataAPI, StateEntityFeeInfoAPI};
 use client_lib::{state_entity::transfer::TransferFinalizeData, daemon::{query_wallet_daemon, DaemonRequest, DaemonResponse}};
 
@@ -138,6 +145,17 @@ fn main() {
                         DaemonResponse::None => panic!("None value returned.")
                 };
                 println!("\nTransfer complete for StateChain ID: {}.", finalized_data.state_chain_id);
+            }
+        } else if matches.is_present("swap") {
+            if let Some(matches) = matches.subcommand_matches("swap") {
+                let state_chain_id = Uuid::from_str(matches.value_of("state-chain-id").unwrap()).unwrap();
+                let swap_size = u64::from_str(matches.value_of("swap-size").unwrap()).unwrap();
+                let force_no_tor: bool = matches.is_present("force-no-tor");
+                match query_wallet_daemon(DaemonRequest::Swap(state_chain_id, swap_size, force_no_tor)).unwrap() {
+                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    _ => {}
+                };
+                println!("\nSwap complete from StateChain ID: {}.", state_chain_id);
             }
         }
     //
