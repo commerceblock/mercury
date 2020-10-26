@@ -116,7 +116,8 @@ pub fn withdraw(wallet: &mut Wallet, state_chain_id: &Uuid) -> Result<(String, U
 
     // Broadcast transcation
     let withdraw_txid = wallet
-        .electrumx_client.instance
+        .electrumx_client
+        .instance
         .broadcast_transaction(hex::encode(consensus::serialize(&tx_withdraw_signed)))?;
     debug!("Deposit: Funding tx broadcast. txid: {}", withdraw_txid);
 

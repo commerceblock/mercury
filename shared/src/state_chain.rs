@@ -148,9 +148,13 @@ impl StateChainSig {
     }
 
     /// Generate signature to request participation in a batch transfer
-    pub fn new_transfer_batch_sig(proof_key_priv: &SecretKey, batch_id: &Uuid, state_chain_id: &Uuid) -> Result<Self> {
+    pub fn new_transfer_batch_sig(
+        proof_key_priv: &SecretKey,
+        batch_id: &Uuid,
+        state_chain_id: &Uuid,
+    ) -> Result<Self> {
         let purpose = &Self::purpose_transfer_batch(batch_id);
-        let data = & state_chain_id.to_string();
+        let data = &state_chain_id.to_string();
         Self::new(proof_key_priv, purpose, data)
     }
 

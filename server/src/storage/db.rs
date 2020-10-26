@@ -16,10 +16,6 @@ use crate::{
     structs::*,
     Database, DatabaseR, DatabaseW, PGDatabase, PGDatabaseSmt,
 };
-use shared_lib::structs::TransferMsg3;
-use shared_lib::mainstay::CommitmentInfo;
-use shared_lib::state_chain::*;
-use shared_lib::Root;
 use bitcoin::hashes::sha256d;
 use chrono::NaiveDateTime;
 use curv::{BigInt, FE, GE};
@@ -29,6 +25,10 @@ use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, par
 use rocket_contrib::databases::postgres::{rows::Row, types::ToSql};
 use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
+use shared_lib::mainstay::CommitmentInfo;
+use shared_lib::state_chain::*;
+use shared_lib::structs::TransferMsg3;
+use shared_lib::Root;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -589,7 +589,10 @@ impl PGDatabase {
         T: rocket_contrib::databases::postgres::types::FromSql,
     {
         let (res, _, _, _) = self.get::<T, T, T, T>(id, table, column)?;
-        res.ok_or(SEError::DBError(crate::error::DBErrorType::NoDataForID,"item not found".to_string()))
+        res.ok_or(SEError::DBError(
+            crate::error::DBErrorType::NoDataForID,
+            "item not found".to_string(),
+        ))
         //Ok(res.unwrap()) //  err returned from db_get if desired item is None
     }
     /// Get 2 items from row in table. Err if ID not found. Return None if data item empty.
@@ -1115,11 +1118,7 @@ impl Database for PGDatabase {
         )
     }
 
-    fn update_transfer_msg(
-        &self,
-        state_chain_id: &Uuid,
-        msg: &TransferMsg3
-    ) -> Result<()> {
+    fn update_transfer_msg(&self, state_chain_id: &Uuid, msg: &TransferMsg3) -> Result<()> {
         self.update(
             state_chain_id,
             Table::Transfer,
@@ -1128,11 +1127,12 @@ impl Database for PGDatabase {
         )
     }
 
-    fn get_transfer_msg(
-        &self,
-        state_chain_id: &Uuid
-    ) -> Result<TransferMsg3> {
-        let msg = self.get_1(state_chain_id.to_owned(), Table::Transfer, vec![Column::TransferMsg])?;
+    fn get_transfer_msg(&self, state_chain_id: &Uuid) -> Result<TransferMsg3> {
+        let msg = self.get_1(
+            state_chain_id.to_owned(),
+            Table::Transfer,
+            vec![Column::TransferMsg],
+        )?;
         Self::deser(msg)
     }
 

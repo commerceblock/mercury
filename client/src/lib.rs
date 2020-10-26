@@ -1,12 +1,12 @@
 extern crate centipede;
 extern crate config;
 extern crate curv;
+extern crate floating_duration;
 extern crate kms;
+extern crate monotree;
 extern crate multi_party_ecdsa;
 extern crate reqwest;
 extern crate zk_paillier;
-extern crate monotree;
-extern crate floating_duration;
 
 #[cfg(test)]
 extern crate mockito;
@@ -16,8 +16,8 @@ extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 
-extern crate tokio;
 extern crate daemon_engine;
+extern crate tokio;
 
 #[macro_use]
 extern crate log;
@@ -31,14 +31,14 @@ extern crate electrumx_client;
 extern crate hex;
 extern crate itertools;
 extern crate pyo3;
+extern crate rand;
 extern crate shared_lib;
 extern crate uuid;
-extern crate rand;
+pub mod daemon;
 pub mod ecdsa;
 pub mod error;
 pub mod state_entity;
 pub mod wallet;
-pub mod daemon;
 
 mod utilities;
 

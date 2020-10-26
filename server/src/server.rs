@@ -3,10 +3,7 @@ use super::protocol::*;
 use crate::config::Config;
 use crate::structs::StateChainOwner;
 use crate::Database;
-use shared_lib::{mainstay,
-    state_chain::StateChainSig,
-    swap_data::*
-};
+use shared_lib::{mainstay, state_chain::StateChainSig, swap_data::*};
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;

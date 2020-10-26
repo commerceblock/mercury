@@ -313,11 +313,9 @@ pub trait Attestable {
                             }
                         },
                         None => {
-                            return Err(MainstayError::Generic(format!(
-                                "{} - response",
-                                err_base
-                            ))
-                            .into())
+                            return Err(
+                                MainstayError::Generic(format!("{} - response", err_base)).into()
+                            )
                         }
                     }
                 }

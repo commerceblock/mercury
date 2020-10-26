@@ -473,14 +473,14 @@ impl Database for MemoryDB {
     fn update_transfer_msg(
         &self,
         _state_chain_id: &uuid::Uuid,
-        _msg: &shared_lib::structs::TransferMsg3
+        _msg: &shared_lib::structs::TransferMsg3,
     ) -> crate::Result<()> {
         unimplemented!()
     }
     fn get_transfer_msg(
         &self,
-        _state_chain_id: &uuid::Uuid
-    ) -> crate::Result<shared_lib::structs::TransferMsg3>{
+        _state_chain_id: &uuid::Uuid,
+    ) -> crate::Result<shared_lib::structs::TransferMsg3> {
         unimplemented!()
     }
     fn create_transfer_batch_data(

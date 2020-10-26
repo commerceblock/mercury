@@ -9,9 +9,9 @@ use crate::structs::PrepareSignTxMsg;
 use crate::Verifiable;
 
 use bitcoin::{
-    Txid,
     blockdata::script::Builder,
     hashes::sha256d::Hash,
+    Txid,
     {blockdata::opcodes::OP_TRUE, util::bip143::SigHashCache, OutPoint},
     {Address, Network, Transaction, TxIn, TxOut},
 };
@@ -54,7 +54,8 @@ pub fn get_sighash(
     network: &String,
 ) -> Hash {
     let mut comp = SigHashCache::new(tx);
-    let pk_btc = bitcoin::secp256k1::PublicKey::from_slice(&address_pk.serialize()).expect("failed to convert public key");
+    let pk_btc = bitcoin::secp256k1::PublicKey::from_slice(&address_pk.serialize())
+        .expect("failed to convert public key");
     comp.signature_hash(
         tx_index.to_owned(),
         &bitcoin::Address::p2pkh(
@@ -66,8 +67,9 @@ pub fn get_sighash(
         )
         .script_pubkey(),
         *amount,
-        bitcoin::blockdata::transaction::SigHashType::All
-    ).as_hash()
+        bitcoin::blockdata::transaction::SigHashType::All,
+    )
+    .as_hash()
 }
 
 /// Check backup tx is valid
@@ -302,12 +304,12 @@ pub mod tests {
 
         let (priv_key, pub_key) = generate_keypair();
 
-        let addr = match Address::p2wpkh(&pub_key, NETWORK){
+        let addr = match Address::p2wpkh(&pub_key, NETWORK) {
             Ok(r) => r,
             Err(e) => {
                 assert!(false, "{}", e);
                 return;
-            },
+            }
         };
 
         let inputs = vec![TxIn {

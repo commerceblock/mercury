@@ -42,20 +42,23 @@ where
                 Some(l) => {
                     if l > 1000000 {
                         info!("POST value ignored because of size: {}", l);
-                        return Err(CError::Generic(format!("POST value ignored because of size: {}",l)));
+                        return Err(CError::Generic(format!(
+                            "POST value ignored because of size: {}",
+                            l
+                        )));
                     }
                 }
-                None => ()
+                None => (),
             };
-            
+
             let text = v.text()?;
-                     
+
             if text.contains(&String::from("Error: ")) {
                 return Err(CError::StateEntityError(text));
             }
-                
+
             text
-        },
+        }
 
         Err(e) => return Err(CError::from(e)),
     };

@@ -4,13 +4,13 @@ pub mod test;
 
 extern crate bitcoin;
 extern crate floating_duration;
-extern crate rocket;
-extern crate uuid;
-extern crate stoppable_thread;
 extern crate rand;
+extern crate rocket;
+extern crate stoppable_thread;
+extern crate uuid;
 
-extern crate monotree;
 extern crate curv;
+extern crate monotree;
 
 extern crate client_lib;
 extern crate server_lib;
@@ -24,6 +24,7 @@ use client_lib::wallet::wallet::Wallet;
 use client_lib::*;
 
 use bitcoin::{PublicKey, Transaction};
+use curv::FE;
 use floating_duration::TimeFormat;
 use monotree::database::{Database as monotreeDatabase, MemoryDB};
 use rocket::error::LaunchError;
@@ -41,9 +42,6 @@ use std::sync::mpsc::RecvTimeoutError;
 use std::thread;
 use std::time::Instant;
 use uuid::Uuid;
-use curv::FE;
-
-
 
 #[cfg(test)]
 #[macro_use]
@@ -167,7 +165,7 @@ fn gen_wallet_with_seed(seed: &[u8]) -> Wallet {
     let mut wallet = Wallet::new(
         &seed,
         &"regtest".to_string(),
-        ClientShim::new("http://localhost:8000".to_string(), None, None)
+        ClientShim::new("http://localhost:8000".to_string(), None, None),
     );
     let _ = wallet.keys.get_new_address();
     let _ = wallet.keys.get_new_address();
@@ -179,7 +177,7 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
-        ClientShim::new("http://localhost:8000".to_string(), None, None)
+        ClientShim::new("http://localhost:8000".to_string(), None, None),
     );
 
     let _ = wallet.keys.get_new_address();

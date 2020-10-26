@@ -39,7 +39,7 @@ pub enum SEError {
     /// Try again error
     TryAgain(String),
     /// Batch transfer timeout
-    TransferBatchEnded(String)
+    TransferBatchEnded(String),
 }
 
 impl From<String> for SEError {

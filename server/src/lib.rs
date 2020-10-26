@@ -13,22 +13,22 @@ extern crate failure;
 extern crate error_chain;
 #[macro_use]
 extern crate log;
-extern crate log4rs;
-extern crate cfg_if;
-extern crate crypto;
-extern crate jsonwebtoken as jwt;
-extern crate rusoto_dynamodb;
-extern crate serde_dynamodb;
-extern crate hex;
 extern crate bisetmap;
 extern crate bitcoin;
+extern crate cfg_if;
+extern crate crypto;
+extern crate hex;
+extern crate jsonwebtoken as jwt;
+extern crate log4rs;
+extern crate rusoto_dynamodb;
+extern crate serde_dynamodb;
 
-extern crate monotree;
 extern crate curv;
+extern crate electrumx_client;
 extern crate kms;
+extern crate monotree;
 extern crate multi_party_ecdsa;
 extern crate zk_paillier;
-extern crate electrumx_client;
 
 #[macro_use]
 extern crate serde_derive;
@@ -70,7 +70,7 @@ use mockall::*;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
 use rocket_contrib::databases::postgres;
-use shared_lib::{state_chain::*, Root, structs::TransferMsg3};
+use shared_lib::{state_chain::*, structs::TransferMsg3, Root};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -168,15 +168,8 @@ pub trait Database {
         state_chain_sig: &StateChainSig,
         x1: &FE,
     ) -> Result<()>;
-    fn update_transfer_msg(
-        &self,
-        state_chain_id: &Uuid,
-        msg: &TransferMsg3
-    ) -> Result<()>;
-    fn get_transfer_msg(
-        &self,
-        state_chain_id: &Uuid
-    ) -> Result<TransferMsg3>;
+    fn update_transfer_msg(&self, state_chain_id: &Uuid, msg: &TransferMsg3) -> Result<()>;
+    fn get_transfer_msg(&self, state_chain_id: &Uuid) -> Result<TransferMsg3>;
     fn create_transfer_batch_data(
         &self,
         batch_id: &Uuid,

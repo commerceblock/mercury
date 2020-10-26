@@ -1,18 +1,18 @@
 use super::Result;
+use crate::error::SharedLibError;
 use crate::{
     blinded_token::{BSTSenderData, BlindedSpendToken},
+    state_chain::StateChainSig,
     structs::*,
     util::keygen::Message,
     Verifiable,
-    state_chain::StateChainSig
 };
-use uuid::Uuid;
-use curv::FE;
 use bitcoin::{
     hashes::{sha256d, Hash},
-    secp256k1::{PublicKey, Secp256k1, SecretKey, Signature}
+    secp256k1::{PublicKey, Secp256k1, SecretKey, Signature},
 };
-use crate::error::SharedLibError;
+use curv::FE;
+use uuid::Uuid;
 
 // Swaps
 #[allow(dead_code)]
@@ -35,7 +35,7 @@ pub struct SwapToken {
 }
 impl SwapToken {
     /// Create message to be signed
-   pub fn to_message(&self) -> Result<Message> {
+    pub fn to_message(&self) -> Result<Message> {
         let mut str = self.amount.to_string();
         str.push_str(&self.time_out.to_string());
         str.push_str(&format!("{:?}", self.state_chain_ids));
@@ -47,10 +47,9 @@ impl SwapToken {
     pub fn sign(&self, proof_key_priv: &SecretKey) -> Result<Signature> {
         let secp = Secp256k1::new();
 
-       let message = self.to_message()?;
+        let message = self.to_message()?;
         Ok(secp.sign(&message, &proof_key_priv))
-
-   }
+    }
 
     /// Verify self's signature for transfer or withdraw
     pub fn verify_sig(&self, pk: &PublicKey, sig: Signature) -> Result<()> {
@@ -71,7 +70,6 @@ pub struct SwapInfo {
     pub swap_token: SwapToken,
     pub bst_sender_data: BSTSenderData,
 }
-
 
 /// Owner -> Conductor
 #[derive(Serialize, Deserialize, Debug)]

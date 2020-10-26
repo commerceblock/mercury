@@ -5,6 +5,7 @@
 //!     Storage by Bitcoin address, Public key and State Entity Address
 
 use super::super::Result;
+use crate::curv::elliptic::curves::traits::ECScalar;
 use crate::error::CError;
 use crate::wallet::wallet::to_bitcoin_public_key;
 use bitcoin::{
@@ -13,7 +14,6 @@ use bitcoin::{
     {PrivateKey, PublicKey},
 };
 use curv::FE;
-use crate::curv::elliptic::curves::traits::ECScalar;
 
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -189,7 +189,11 @@ impl KeyPath {
     }
 
     /// generate new key using BIP-175-style encoding of the funding TxID, and generate o2 if the optional variable is supplied
-    pub fn get_new_key_encoded_id(&mut self, child_id: u32, maybe_o2: Option<&mut FE>) -> Result<PublicKey> {
+    pub fn get_new_key_encoded_id(
+        &mut self,
+        child_id: u32,
+        maybe_o2: Option<&mut FE>,
+    ) -> Result<PublicKey> {
         let secp = Secp256k1::new();
 
         let new_ext_priv_key =
@@ -236,7 +240,7 @@ impl KeyPath {
 
 pub fn funding_txid_to_int(funding_txid: &String) -> Result<u32> {
     if funding_txid.len() < 6 {
-        return Err(CError::Generic("Funding Txid too short.".to_string()))
+        return Err(CError::Generic("Funding Txid too short.".to_string()));
     }
     u32::from_str_radix(&funding_txid[0..6], 16).map_err(|e| CError::from(e))
 }

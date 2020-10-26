@@ -168,7 +168,7 @@ impl Transfer for SCE {
         let mut s2_theta;
         let mut s1_theta;
         let s2 = t2 * (td.x1.invert()) * s1;
-        let q_third = FE::q().div_floor(&BigInt::from(3));     
+        let q_third = FE::q().div_floor(&BigInt::from(3));
 
         loop {
             theta = FE::new_random();
@@ -178,13 +178,13 @@ impl Transfer for SCE {
             s1_theta = s1 * theta;
             // Check s1_theta and s2_theta are valid for Lindell protocol (s1<q/3)
             if s1_theta.to_big_int() < q_third {
-                s2_theta = s2 * theta;    
+                s2_theta = s2 * theta;
                 if s2_theta.to_big_int() < q_third {
                     break;
                 }
             }
         }
-    
+
         let g: GE = ECPoint::generator();
         let s2_pub: GE = g * s2;
 
@@ -329,12 +329,13 @@ impl Transfer for SCE {
     }
 
     /// API: Update the state entity database with transfer message 3
-    fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> Result<()>{
-        self.database.update_transfer_msg(&transfer_msg3.state_chain_id, &transfer_msg3)
+    fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> Result<()> {
+        self.database
+            .update_transfer_msg(&transfer_msg3.state_chain_id, &transfer_msg3)
     }
 
     /// API: Get the transfer message 3 set by update_transfer_msg
-    fn transfer_get_msg(&self, state_chain_id: Uuid) -> Result<TransferMsg3>{
+    fn transfer_get_msg(&self, state_chain_id: Uuid) -> Result<TransferMsg3> {
         self.database.get_transfer_msg(&state_chain_id)
     }
 }
@@ -365,23 +366,23 @@ pub fn transfer_receiver(
 pub fn transfer_update_msg(
     sc_entity: State<SCE>,
     transfer_msg3: Json<TransferMsg3>,
-) -> Result<Json<()>>{
-    match sc_entity.transfer_update_msg(transfer_msg3.into_inner()){
+) -> Result<Json<()>> {
+    match sc_entity.transfer_update_msg(transfer_msg3.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
-} 
+}
 
 #[post("/transfer/get_msg", format = "json", data = "<state_chain_id>")]
 pub fn transfer_get_msg(
     sc_entity: State<SCE>,
     state_chain_id: Json<Uuid>,
-) -> Result<Json<TransferMsg3>>{
-    match sc_entity.transfer_get_msg(state_chain_id.into_inner()){
+) -> Result<Json<TransferMsg3>> {
+    match sc_entity.transfer_get_msg(state_chain_id.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
-} 
+}
 
 #[cfg(test)]
 mod tests {
@@ -500,9 +501,9 @@ mod tests {
     #[test]
     fn test_transfer_receiver() {
         assert!(do_transfer_receiver().is_ok())
-    }   
+    }
 
-    fn do_transfer_receiver() -> Result<TransferMsg5>{
+    fn do_transfer_receiver() -> Result<TransferMsg5> {
         let transfer_msg_4 =
             serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap();
         let shared_key_id = transfer_msg_4.shared_key_id;

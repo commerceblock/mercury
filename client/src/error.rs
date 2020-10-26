@@ -5,8 +5,8 @@
 use shared_lib::error::SharedLibError;
 
 use bitcoin::util::{address::Error as AddressError, bip32::Error as Bip32Error};
-use reqwest::Error as ReqwestError;
 use daemon_engine::DaemonError;
+use reqwest::Error as ReqwestError;
 use std::error;
 use std::fmt;
 use std::num::ParseIntError;
@@ -27,7 +27,7 @@ pub enum CError {
     /// Tor error
     TorError(String),
     /// Swap error
-    SwapError(String)
+    SwapError(String),
 }
 
 impl From<String> for CError {
@@ -92,7 +92,7 @@ impl From<bitcoin::secp256k1::Error> for CError {
 
 impl From<DaemonError> for CError {
     fn from(e: DaemonError) -> CError {
-        CError::Generic(format!("{:?}",e))
+        CError::Generic(format!("{:?}", e))
     }
 }
 
