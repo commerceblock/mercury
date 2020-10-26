@@ -15,7 +15,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_gen_shared_key() {
-        let handle = start_server();
+        let _ = start_server();
         let mut wallet = gen_wallet();
         let proof_key = wallet.se_proof_keys.get_new_key().unwrap();
         let init_res =
