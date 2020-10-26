@@ -1078,8 +1078,6 @@ mod tests {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
 
-        // let seq = Sequence::new();
-
         let mut scheduler = get_scheduler(vec![(3, 10), (3, 10), (3, 10)]);
         scheduler.update_swap_info().unwrap();
         //let swap_id_valid = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
