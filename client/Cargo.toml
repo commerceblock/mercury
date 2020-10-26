@@ -1,11 +1,6 @@
  [package]
 name = "client"
 version = "0.2.0"
-authors = [
-    "gbenattar <g.benattar@gmail.com>",
-    "Oded Leiba <odedleiba5@gmail.com"
-]
-edition = "2018"
 
 [lib]
 name = "client_lib"

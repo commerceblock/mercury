@@ -1,5 +1,5 @@
 use shared_lib::structs::{SCEAddress, TransferMsg3, PrepareSignTxMsg, StateChainDataAPI, StateEntityFeeInfoAPI};
-use client_lib::{state_entity::transfer::TransferFinalizeData, daemon::{make_unix_conn_call, DaemonRequest, DaemonResponse}};
+use client_lib::{state_entity::transfer::TransferFinalizeData, daemon::{query_wallet_daemon, DaemonRequest, DaemonResponse}};
 
 use bitcoin::{Transaction, consensus};
 use bitcoin::util::key::PublicKey;
@@ -15,7 +15,7 @@ fn main() {
 
     if let Some(matches) = matches.subcommand_matches("wallet") {
         if matches.is_present("new-address") {
-            let address: String = match make_unix_conn_call(DaemonRequest::GenAddressBTC).unwrap() {
+            let address: String = match query_wallet_daemon(DaemonRequest::GenAddressBTC).unwrap() {
                 DaemonResponse::Value(val) => val,
                 DaemonResponse::Error(e) => panic!(e.to_string()),
                 DaemonResponse::None => panic!("None value returned.")
@@ -28,7 +28,7 @@ fn main() {
         } else if matches.is_present("se-addr") {
             if let Some(matches) = matches.subcommand_matches("se-addr") {
                 let funding_txid = matches.value_of("txid").unwrap().to_string();
-                let address: String = match make_unix_conn_call(DaemonRequest::GenAddressSE(funding_txid)).unwrap() {
+                let address: String = match query_wallet_daemon(DaemonRequest::GenAddressSE(funding_txid)).unwrap() {
                     DaemonResponse::Value(val) => val,
                     DaemonResponse::Error(e) => panic!(e.to_string()),
                     DaemonResponse::None => panic!("None value returned.")
@@ -41,7 +41,7 @@ fn main() {
             }
         } else if matches.is_present("get-balance") {
             let (addrs, balances): (Vec<bitcoin::Address>, Vec<GetBalanceResponse>)
-                = match make_unix_conn_call(DaemonRequest::GetWalletBalance).unwrap() {
+                = match query_wallet_daemon(DaemonRequest::GetWalletBalance).unwrap() {
                     DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
                     DaemonResponse::Error(e) => panic!(e.to_string()),
                     DaemonResponse::None => panic!("None value returned.")
@@ -57,7 +57,7 @@ fn main() {
                 println!();
             }
             let (_, state_chain_ids, bals): (Vec<Uuid>, Vec<Uuid>, Vec<GetBalanceResponse>)
-                = match make_unix_conn_call(DaemonRequest::GetStateChainsInfo).unwrap() {
+                = match query_wallet_daemon(DaemonRequest::GetStateChainsInfo).unwrap() {
                     DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
                     DaemonResponse::Error(e) => panic!(e.to_string()),
                     DaemonResponse::None => panic!("None value returned.")
@@ -74,7 +74,7 @@ fn main() {
             }
         } else if matches.is_present("list-unspent") {
             let (_, unspent_list): (Vec<bitcoin::Address>, Vec<Vec<GetListUnspentResponse>>)
-                = match make_unix_conn_call(DaemonRequest::GetListUnspent).unwrap() {
+                = match query_wallet_daemon(DaemonRequest::GetListUnspent).unwrap() {
                     DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
                     DaemonResponse::Error(e) => panic!(e.to_string()),
                     DaemonResponse::None => panic!("None value returned.")
@@ -93,7 +93,7 @@ fn main() {
             if let Some(matches) = matches.subcommand_matches("deposit") {
                 let amount = u64::from_str(matches.value_of("amount").unwrap()).unwrap();
                 let (_, state_chain_id, funding_txid, tx_b, _, _): (Uuid, Uuid, String, Transaction, PrepareSignTxMsg, PublicKey)
-                    = match make_unix_conn_call(DaemonRequest::Deposit(amount)).unwrap() {
+                    = match query_wallet_daemon(DaemonRequest::Deposit(amount)).unwrap() {
                         DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
                         DaemonResponse::Error(e) => panic!(e.to_string()),
                         DaemonResponse::None => panic!("None value returned.")
@@ -106,7 +106,7 @@ fn main() {
             if let Some(matches) = matches.subcommand_matches("withdraw") {
                 let state_chain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
                 let (txid, state_chain_id, amount): (String, Uuid, u64)
-                    = match make_unix_conn_call(DaemonRequest::Withdraw(state_chain_id)).unwrap() {
+                    = match query_wallet_daemon(DaemonRequest::Withdraw(state_chain_id)).unwrap() {
                         DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
                         DaemonResponse::Error(e) => panic!(e.to_string()),
                         DaemonResponse::None => panic!("None value returned.")
@@ -120,7 +120,7 @@ fn main() {
                 let receiver_addr: SCEAddress =
                     serde_json::from_str(matches.value_of("addr").unwrap()).unwrap();
                 let transfer_msg3: TransferMsg3
-                    = match make_unix_conn_call(DaemonRequest::TransferSender(state_chain_id, receiver_addr)).unwrap() {
+                    = match query_wallet_daemon(DaemonRequest::TransferSender(state_chain_id, receiver_addr)).unwrap() {
                         DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
                         DaemonResponse::Error(e) => panic!(e.to_string()),
                         DaemonResponse::None => panic!("None value returned.")
@@ -132,7 +132,7 @@ fn main() {
             if let Some(matches) = matches.subcommand_matches("transfer-receiver") {
                 let transfer_msg3: TransferMsg3 = serde_json::from_str(matches.value_of("message").unwrap()).unwrap();
                 let finalized_data: TransferFinalizeData
-                    = match make_unix_conn_call(DaemonRequest::TransferReceiver(transfer_msg3)).unwrap() {
+                    = match query_wallet_daemon(DaemonRequest::TransferReceiver(transfer_msg3)).unwrap() {
                         DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
                         DaemonResponse::Error(e) => panic!(e.to_string()),
                         DaemonResponse::None => panic!("None value returned.")
@@ -174,7 +174,7 @@ fn main() {
             if let Some(matches) = matches.subcommand_matches("get-statechain") {
                 let state_chain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
                 let state_chain_info: StateChainDataAPI
-                    = match make_unix_conn_call(DaemonRequest::GetStateChain(state_chain_id)).unwrap() {
+                    = match query_wallet_daemon(DaemonRequest::GetStateChain(state_chain_id)).unwrap() {
                         DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
                         DaemonResponse::Error(e) => panic!(e.to_string()),
                         DaemonResponse::None => panic!("None value returned.")
@@ -192,7 +192,7 @@ fn main() {
             }
         } else if matches.is_present("fee-info") {
             let fee_info: StateEntityFeeInfoAPI
-                = match make_unix_conn_call(DaemonRequest::GetFeeInfo).unwrap() {
+                = match query_wallet_daemon(DaemonRequest::GetFeeInfo).unwrap() {
                     DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
                     DaemonResponse::Error(e) => panic!(e.to_string()),
                     DaemonResponse::None => panic!("None value returned.")

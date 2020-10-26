@@ -89,7 +89,6 @@ export MERC_TOR_CONTROL_PASSWORD="<Tor control password>"
 ```
 
 ## Using the CLI
-The wallet is currently exposed to a Mock Electrum server. The first 2 addresses generated have funds.
 
 Export mercury endpoint:
 ```bash
@@ -119,14 +118,8 @@ FLAGS:
 
 SUBCOMMANDS:
     help             Prints this message or the help of the given subcommand(s)
-    create-wallet    Create a new wallet
     wallet           Operation on wallet
     state-entity     State Entity API calls
-```
-
-## Wallet creation (required)
-```bash
-../target/release/cli create-wallet
 ```
 
 

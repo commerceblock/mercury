@@ -1,5 +1,5 @@
-use client_lib::daemon::make_server;
+use client_lib::daemon::make_wallet_daemon;
 
 fn main() {
-    let _ = make_server();
+    let _ = make_wallet_daemon();
 }

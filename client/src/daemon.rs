@@ -65,9 +65,9 @@ impl DaemonResponse {
 }
 
 /// Start Wallet's UnixServer process
-pub fn make_server() -> Result<()> {
+pub fn make_wallet_daemon() -> Result<()> {
     // Check if server already running
-    if let Ok(_) = make_unix_conn_call(DaemonRequest::LifeCheck) {
+    if let Ok(_) = query_wallet_daemon(DaemonRequest::LifeCheck) {
         panic!("Wallet daemon already running.")
     }
 
@@ -214,7 +214,7 @@ pub fn make_server() -> Result<()> {
 
 
 /// Create UnixConnection and make example request to UnixServer
-pub fn make_unix_conn_call(cmd: DaemonRequest) -> Result<DaemonResponse> {
+pub fn query_wallet_daemon(cmd: DaemonRequest) -> Result<DaemonResponse> {
     let conf_rs = get_config().unwrap();
     let daemon_address: String = conf_rs.get("daemon_address")?;
 
@@ -239,15 +239,15 @@ mod tests {
 
     #[test]
     fn test_make_server() {
-        let request = make_unix_conn_call(DaemonRequest::GenAddressBTC);
+        let request = query_wallet_daemon(DaemonRequest::GenAddressBTC);
         assert!(request.is_err());
 
         thread::spawn(|| {
-            let _ = make_server();
+            let _ = make_wallet_daemon();
         });
         thread::sleep(Duration::from_millis(200));
 
-        let request = make_unix_conn_call(DaemonRequest::GenAddressBTC);
+        let request = query_wallet_daemon(DaemonRequest::GenAddressBTC);
         assert!(request.is_ok());
     }
 }
