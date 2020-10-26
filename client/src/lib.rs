@@ -5,11 +5,19 @@ extern crate kms;
 extern crate multi_party_ecdsa;
 extern crate reqwest;
 extern crate zk_paillier;
+extern crate monotree;
+extern crate floating_duration;
+
+#[cfg(test)]
+extern crate mockito;
 
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
+
+extern crate tokio;
+extern crate daemon_engine;
 
 #[macro_use]
 extern crate log;
@@ -25,11 +33,12 @@ extern crate itertools;
 extern crate pyo3;
 extern crate shared_lib;
 extern crate uuid;
-
+extern crate rand;
 pub mod ecdsa;
 pub mod error;
 pub mod state_entity;
 pub mod wallet;
+pub mod daemon;
 
 mod utilities;
 
@@ -172,10 +181,10 @@ impl Tor {
             from stem.control import Controller
             with Controller.from_port(port = tordata.as_tuple()[2]) as controller:
                 controller.authenticate(tordata.as_tuple()[3])  # provide the password here if you set one
-        
+
                 bytes_read = controller.get_info("traffic/read")
                 bytes_written = controller.get_info("traffic/written")
-        
+
                 print("My Tor relay has read %s bytes and written %s bytes." % (bytes_read, bytes_written))
         "#
         );

@@ -15,7 +15,6 @@ use server_lib::{server, Database, MockDatabase, PGDatabase};
 use shared_lib::{
     commitment::make_commitment,
     mainstay,
-    mocks::mock_electrum::MockElectrum,
     state_chain::StateChainSig,
     structs::{BatchData, PrepareSignTxMsg},
 };
@@ -153,8 +152,7 @@ fn gen_wallet_with_seed(seed: &[u8]) -> Wallet {
     let mut wallet = Wallet::new(
         &seed,
         &"regtest".to_string(),
-        ClientShim::new("http://localhost:8000".to_string(), None, None),
-        Box::new(MockElectrum::new()),
+        ClientShim::new("http://localhost:8000".to_string(), None, None)
     );
     let _ = wallet.keys.get_new_address();
     let _ = wallet.keys.get_new_address();
@@ -166,8 +164,7 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
-        ClientShim::new("http://localhost:8000".to_string(), None, None),
-        Box::new(MockElectrum::new()),
+        ClientShim::new("http://localhost:8000".to_string(), None, None)
     );
 
     let _ = wallet.keys.get_new_address();
@@ -395,7 +392,7 @@ pub fn batch_transfer_verify_amounts(
 ) {
     // Check amounts have correctly rotated
     for i in 0..swap_map.len() {
-        let (_, wallet_sc_ids, bals) = wallets[swap_map[i].1].get_state_chains_info();
+        let (_, wallet_sc_ids, bals) = wallets[swap_map[i].1].get_state_chains_info().unwrap();
         // check state chain id is in wallets shared keys
         let index = wallet_sc_ids
             .iter()

@@ -136,7 +136,7 @@ mod tests {
 
         // Check deposits exist
         for i in 0..num_state_chains {
-            let (_, _, bals) = wallets[i].get_state_chains_info();
+            let (_, _, bals) = wallets[i].get_state_chains_info().unwrap();
             assert_eq!(bals.len(), 1);
             assert_eq!(
                 bals.last().expect("expected state chain info").confirmed,
@@ -197,7 +197,7 @@ mod tests {
 
         // Check each wallet has only one state chain available
         for i in 0..swap_map.len() {
-            let (_, _, bals) = wallets[i].get_state_chains_info();
+            let (_, _, bals) = wallets[i].get_state_chains_info().unwrap();
             assert_eq!(bals.len(), 1); // Only one active StateChain owned
         }
 
@@ -242,7 +242,7 @@ mod tests {
         }
         // Check deposits exist
         for i in 0..num_state_chains {
-            let (_, _, bals) = wallets[i].get_state_chains_info();
+            let (_, _, bals) = wallets[i].get_state_chains_info().unwrap();
             assert_eq!(bals.len(), 1);
             assert_eq!(bals.last().unwrap().confirmed, amounts[i]);
         }
@@ -411,26 +411,26 @@ mod tests {
     fn test_swap() {
         let _handle = start_server();
 
-        let num_state_chains: u64 = 3; 
+        let num_state_chains: u64 = 3;
         let amount: u64 = 10000;// = u64::from_str(&format!("10000")).unwrap();
-        
-        // Gen some wallets and deposit coins into SCE 
+
+        // Gen some wallets and deposit coins into SCE
         let mut wallets = vec![];
         let mut deposits = vec![];
         let mut thread_handles = vec![];
 
         for i in 0..num_state_chains as usize {
-          
+
             wallets.push(gen_wallet());
             for _ in 0..i {
                 // Gen keys so different wallets have different proof keys (since wallets have the same seed)
                 let _ = wallets[i].se_proof_keys.get_new_key();
             }
-           
+
             deposits.push(run_deposit(&mut wallets[i], &amount));
             let deposit = deposits.last().unwrap().clone();
 
-            let (_shared_key_ids, wallet_sc_ids, bals) = wallets.last().unwrap().get_state_chains_info();
+            let (_shared_key_ids, wallet_sc_ids, bals) = wallets.last().unwrap().get_state_chains_info().unwrap();
             println!("deposit wallet state chain ids: {:?}", wallet_sc_ids);
             println!("deposit wallet balances: {:?}", bals);
 
@@ -440,8 +440,7 @@ mod tests {
                 spawn(move || {
                         let mut wallet=wallet::wallet::Wallet::from_json(
                             wallet_ser,
-                            ClientShim::new("http://localhost:8000".to_string(), None, None),
-                            Box::new(MockElectrum::new())
+                            ClientShim::new("http://localhost:8000".to_string(), None, None)
                         )?;
                         state_entity::conductor::do_swap(&mut wallet, &deposit.1, &num_state_chains, false)
                     }

@@ -334,7 +334,7 @@ impl Scheduler {
                         self.bst_sig_map.insert(swap_id, scid_bst_map);
                         swap_info.status = SwapStatus::Phase2;
                         info!("SCHEDULER: Swap ID: {} moved on to Phase2", swap_id);
-                    } 
+                    }
                 }
                 SwapStatus::Phase2 => {
                     //Phase 2 - Return BST and SCEAddresses for corresponding valid signtures
@@ -480,7 +480,7 @@ impl Conductor for SCE {
                         Ok(res) => {
                             if res.finalized {
                                 let _ = guard.transfer_ended(swap_id)?;
-                            } 
+                            }
                         },
                         Err(e) => {
                             match e {
@@ -490,7 +490,7 @@ impl Conductor for SCE {
                                 _ => (),
                             }
                         }
-                    }    
+                    }
                 },
                 SwapStatus::End => {
                     ()
@@ -537,7 +537,7 @@ impl Conductor for SCE {
         let proof_key_str = &state_chain.last().unwrap().data.clone();
         let proof_key = bitcoin::secp256k1::PublicKey::from_str(&proof_key_str)?;
 
-    
+
         //let proof_key = &swap_msg1.address.proof_key;
         //Find the correct swap token and verify
         let mut guard = self.scheduler.lock()?;
@@ -558,7 +558,7 @@ impl Conductor for SCE {
                 }
 
                 let _ = self.verify_statechain_sig(
-                                &swap_msg1.state_chain_id, 
+                                &swap_msg1.state_chain_id,
                                 &swap_msg1.transfer_batch_sig, None)?;
                 //Add the transfer batch signature to the list. If it doesn't exist, make a new one.
                 match guard.tb_sig_map.get_mut(swap_id) {
@@ -571,7 +571,7 @@ impl Conductor for SCE {
                         guard.tb_sig_map.insert(swap_id.to_owned(), tbs_set);
                     }
                 }
-                
+
                 //Add the SCEAddress to the list.
                 match guard.out_addr_map.get_mut(swap_id) {
                     Some(sce_address_list) => {
@@ -1078,8 +1078,6 @@ mod tests {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
 
-        let mut seq = Sequence::new();
-
         let mut scheduler = get_scheduler(vec![(3, 10), (3, 10), (3, 10)]);
         scheduler.update_swap_info().unwrap();
         //let swap_id_valid = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
@@ -1109,7 +1107,7 @@ mod tests {
                 chain: chain.clone(),
             };
             let statechain2 = statechain.clone();
-       
+
             db.expect_get_statechain_owner()
                 .times(1)
                 .returning(move |_| {
@@ -1130,7 +1128,7 @@ mod tests {
 
         let mut sc_entity = test_sc_entity(db);
         sc_entity.scheduler = Arc::new(Mutex::new(scheduler));
-        
+
         let mut swap_token_no_sc = swap_token.clone();
         swap_token_no_sc.state_chain_ids = Vec::new();
 

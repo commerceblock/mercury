@@ -1,8 +1,8 @@
-endpoint = "http://fakeapi.mercurywallet.io"
-electrum_server = "127.0.0.1:60401"
-testing_mode = "true"
+endpoint = "http://localhost:8000"
+electrum_server = "" # Empty string for Mock Electrum server
+testing_mode = "false"
+network = "testnet"
+daemon_address = "/tmp/rustd.sock"
 [tor]
 enable = false
 proxy = "socks5h://127.0.0.1:9050"
-
- 

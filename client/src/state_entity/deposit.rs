@@ -111,7 +111,7 @@ pub fn deposit(
 
     // Broadcast funding transcation
     let funding_txid = wallet
-        .electrumx_client
+        .electrumx_client.instance
         .broadcast_transaction(hex::encode(consensus::serialize(&tx_funding_signed)))?;
     debug!("Deposit: Funding tx broadcast. txid: {}", funding_txid);
 

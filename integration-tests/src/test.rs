@@ -7,7 +7,7 @@ mod tests {
     extern crate server_lib;
     extern crate shared_lib;
 
-    use shared_lib::{mocks::mock_electrum::MockElectrum, structs::Protocol};
+    use shared_lib::structs::Protocol;
 
     use curv::elliptic::curves::traits::ECScalar;
     use curv::FE;
@@ -15,7 +15,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_gen_shared_key() {
-        let _handle = start_server();
+        let _ = start_server();
         let mut wallet = gen_wallet();
         let proof_key = wallet.se_proof_keys.get_new_key().unwrap();
         let init_res =
@@ -48,7 +48,7 @@ mod tests {
         let _handle = start_server();
         let wallet = gen_wallet_with_deposit(10000);
         //handle.join().expect("The thread being joined has panicked");
-        let state_chains_info = wallet.get_state_chains_info();
+        let state_chains_info = wallet.get_state_chains_info().unwrap();
         let (_, funding_txid, proof_key, _, _) = wallet
             .get_shared_key_info(state_chains_info.0.last().unwrap())
             .unwrap();
@@ -110,7 +110,7 @@ mod tests {
         wallets.push(gen_wallet()); // receiver
 
         // Get state chain owned by wallet
-        let state_chains_info = wallets[0].get_state_chains_info();
+        let state_chains_info = wallets[0].get_state_chains_info().unwrap();
         let shared_key_id = state_chains_info.0.last().unwrap();
         let (state_chain_id, funding_txid, _, _, _) =
             wallets[0].get_shared_key_info(shared_key_id).unwrap();
@@ -181,7 +181,7 @@ mod tests {
         wallets.push(gen_wallet()); // receiver2
 
         // Get state chain owned by wallets[0] info
-        let state_chains_info = wallets[0].get_state_chains_info();
+        let state_chains_info = wallets[0].get_state_chains_info().unwrap();
         assert_eq!(state_chains_info.0.len(), 1);
         let state_chain_id = state_chains_info.1.last().unwrap();
         let funding_txid: String;
@@ -202,10 +202,10 @@ mod tests {
         let (new_shared_key_id1,theta1) = run_transfer(&mut wallets, 0, 1, state_chain_id);
 
         // Get state chain owned by wallets[1]
-        let state_chains_info = wallets[0].get_state_chains_info();
+        let state_chains_info = wallets[0].get_state_chains_info().unwrap();
         assert_eq!(state_chains_info.0.len(), 0);
 
-        let state_chains_info = wallets[1].get_state_chains_info();
+        let state_chains_info = wallets[1].get_state_chains_info().unwrap();
         assert_eq!(state_chains_info.0.len(), 1);
 
         let shared_key_id1 = state_chains_info.0.last().unwrap();
@@ -369,8 +369,7 @@ mod tests {
         let wallet_json = wallet.to_json();
         let wallet_rebuilt = wallet::wallet::Wallet::from_json(
             wallet_json,
-            ClientShim::new("http://localhost:8000".to_string(), None, None),
-            Box::new(MockElectrum::new()),
+            ClientShim::new("http://localhost:8000".to_string(), None, None)
         )
         .unwrap();
 
