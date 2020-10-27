@@ -226,7 +226,8 @@ mod tests {
     use uuid::Uuid;
     use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
     use shared_lib::{state_chain::State as SCState};
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
+    use crate::error::DBErrorType;
 
     // Useful data structs for transfer batch protocol.
     /// Batch id and Signatures for statechains to take part in batch-transfer
@@ -387,7 +388,7 @@ mod tests {
         let state_chain_id = transfer_finalize_data.state_chain_id;
 
         let mut transfer_batch_data = TransferBatchData {
-            state_chains: HashMap::new(),
+            state_chains: HashSet::new(),
             punished_state_chains: vec![],
             start_time: Utc::now().naive_utc(),
             finalized: false,
@@ -398,14 +399,14 @@ mod tests {
         // state chain id not involved in batch
         db.expect_get_transfer_batch_data().times(1).returning(|_| {
             Ok(TransferBatchData {
-                state_chains: HashMap::new(),
+                state_chains: HashSet::new(),
                 punished_state_chains: vec![],
                 start_time: Utc::now().naive_utc(),
                 finalized: false,
             })
         });
-        let mut state_chains = HashMap::new();
-        state_chains.insert(state_chain_id, false);
+        let mut state_chains = HashSet::new();
+        state_chains.insert(state_chain_id);
         transfer_batch_data.state_chains = state_chains;
         // Batch completed successfully - no need to reveal nonce.
         transfer_batch_data.finalized = true;
@@ -414,8 +415,8 @@ mod tests {
             .returning(move |_| {
                 Ok(TransferBatchData {
                     state_chains: {
-                        let mut state_chains = HashMap::new();
-                        state_chains.insert(state_chain_id, false);
+                        let mut state_chains = HashSet::new();
+                        state_chains.insert(state_chain_id);
                         state_chains
                     },
                     punished_state_chains: vec![],
@@ -429,8 +430,8 @@ mod tests {
             .returning(move |_| {
                 Ok(TransferBatchData {
                     state_chains: {
-                        let mut state_chains = HashMap::new();
-                        state_chains.insert(state_chain_id, false);
+                        let mut state_chains = HashSet::new();
+                        state_chains.insert(state_chain_id);
                         state_chains
                     },
                     punished_state_chains: vec![],
@@ -441,8 +442,8 @@ mod tests {
         db.expect_get_transfer_batch_data().returning(move |_| {
             Ok(TransferBatchData {
                 state_chains: {
-                    let mut state_chains = HashMap::new();
-                    state_chains.insert(state_chain_id, false);
+                    let mut state_chains = HashSet::new();
+                    state_chains.insert(state_chain_id);
                     state_chains
                 },
                 punished_state_chains: vec![],
@@ -453,6 +454,9 @@ mod tests {
 
         db.expect_update_locked_until().returning(|_, _| Ok(()));
         db.expect_update_punished().returning(|_, _| Ok(()));
+        db.expect_get_sc_finalize_batch_data().returning(|_| 
+            Err(SEError::DBError(
+                DBErrorType::NoDataForID, "no data".to_string())));
 
         let sc_entity = test_sc_entity(db);
 

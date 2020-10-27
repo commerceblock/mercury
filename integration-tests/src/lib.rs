@@ -363,7 +363,7 @@ pub fn run_batch_transfer(
             assert_eq!(v.finalized, true);
             assert_eq!(v.state_chains.len(), transfer_finalized_datas.len());
         },
-        Err(e) => assert!(false, e),
+        Err(e) => assert!(false, format!("Error: {}",e)),
     }
 
     (
