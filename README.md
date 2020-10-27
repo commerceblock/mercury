@@ -1,6 +1,14 @@
 Mercury
 =====================================
-Mercury is a client/server implementation of a state chain ([whitepaper](doc/statechains.md)).
+Mercury is an implementation of a StateChain.
+
+Ownership of deposited Bitcoin (or Elements based) UTXOs can be transferred between parties without performing on-chain transactions. This allows for near instant payments, increased privacy and novation of DLCs/Lightning Channels.
+
+Swaps are a method of performing many off-chain transfers atomically. The number of participants in a swap is unlimited. If `n` participants take part in a swap with one UTXO each they receive back ownership of any of one `n-1` different UTXOs of the same value.
+
+This repository contains the Server and Client implementation for the protocol. For more information on the components of Mercury see their respective crates.
+
+You can read the whitepaper [here](doc/statechains.md).
 
 Running / Building
 -------
