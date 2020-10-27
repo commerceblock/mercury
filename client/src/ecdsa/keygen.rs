@@ -34,7 +34,7 @@ pub fn get_master_key(
         shared_key_id: *shared_key_id,
         dlog_proof: kg_party_two_first_message.d_log_proof,
     };
-    
+
     let kg_party_one_second_message: party1::KeyGenParty1Message2 = requests::postb(
         client_shim,
         &format!("{}/second", KG_PATH_PRE),

@@ -11,8 +11,8 @@ mod tests {
 
     use bitcoin::PublicKey;
     use client_lib::state_entity;
-    use std::{str::FromStr, thread, time::Duration};
     use std::thread::spawn;
+    use std::{str::FromStr, thread, time::Duration};
 
     /// Test batch transfer signature generation
     #[test]
@@ -137,7 +137,7 @@ mod tests {
 
         // Check deposits exist
         for i in 0..num_state_chains {
-            let (_, _, bals) = wallets[i].get_state_chains_info();
+            let (_, _, bals) = wallets[i].get_state_chains_info().unwrap();
             assert_eq!(bals.len(), 1);
             assert_eq!(
                 bals.last().expect("expected state chain info").confirmed,
@@ -196,7 +196,7 @@ mod tests {
 
         // Check each wallet has only one state chain available
         for i in 0..swap_map.len() {
-            let (_, _, bals) = wallets[i].get_state_chains_info();
+            let (_, _, bals) = wallets[i].get_state_chains_info().unwrap();
             assert_eq!(bals.len(), 1); // Only one active StateChain owned
         }
 
@@ -241,7 +241,7 @@ mod tests {
         }
         // Check deposits exist
         for i in 0..num_state_chains {
-            let (_, _, bals) = wallets[i].get_state_chains_info();
+            let (_, _, bals) = wallets[i].get_state_chains_info().unwrap();
             assert_eq!(bals.len(), 1);
             assert_eq!(bals.last().unwrap().confirmed, amounts[i]);
         }
@@ -400,16 +400,15 @@ mod tests {
         };
     }
 
-
     #[test]
     #[serial]
     fn test_swap() {
         let _handle = start_server();
 
-        let num_state_chains: u64 = 3; 
-        let amount: u64 = 10000;// = u64::from_str(&format!("10000")).unwrap();
-        
-        // Gen some wallets and deposit coins into SCE 
+        let num_state_chains: u64 = 3;
+        let amount: u64 = 10000; // = u64::from_str(&format!("10000")).unwrap();
+
+        // Gen some wallets and deposit coins into SCE
         let mut wallets = vec![];
         let mut deposits = vec![];
         let mut thread_handles = vec![];
@@ -417,17 +416,18 @@ mod tests {
 
 
         for i in 0..num_state_chains as usize {
-          
             wallets.push(gen_wallet());
             for _ in 0..i {
                 // Gen keys so different wallets have different proof keys (since wallets have the same seed)
                 let _ = wallets[i].se_proof_keys.get_new_key();
             }
-           
+
             deposits.push(run_deposit(&mut wallets[i], &amount));
             let deposit = deposits.last().unwrap().clone();
 
-            let (_shared_key_ids, _wallet_sc_ids, _bals) = wallets.last().unwrap().get_state_chains_info();
+            let (_shared_key_ids, _wallet_sc_ids, _bals) = wallets.last().unwrap().
+                get_state_chains_info().unwrap();
+    
             
             wallet_sers.push((wallets.last().unwrap().to_json(),deposit.1));
         }
@@ -436,24 +436,21 @@ mod tests {
         let start = Instant::now();
         for (wallet_ser, deposit) in wallet_sers{
             thread_handles.push(spawn(move || {
-                        let mut wallet=wallet::wallet::Wallet::from_json(
-                            wallet_ser,
-                            ClientShim::new("http://localhost:8000".to_string(), None, None),
-                            Box::new(MockElectrum::new())
-                        )?;
+                let mut wallet = wallet::wallet::Wallet::from_json(
+                    wallet_ser,
+                    ClientShim::new("http://localhost:8000".to_string(), None, None),
+                )?;
                         
                         state_entity::conductor::do_swap(&mut wallet, &deposit, &num_state_chains, false)
-                    }
-                )
-            );
+                })
+            )
         }
 
         let mut i = 0;
         for handle in thread_handles {
             handle.join().unwrap().unwrap();
-            i = i+1;
+            i = i + 1;
         }
         println!("(Swaps Took: {})", TimeFormat(start.elapsed()));
-
     }
 }

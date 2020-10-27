@@ -7,13 +7,6 @@ args:
       multiple: true
       help: Sets the level of verbosity
 subcommands:
-  - create-wallet:
-      about: Create an MPC wallet
-      version: "1.0"
-      args:
-      - verbose:
-          short: v
-          help: Sets the level of verbosity
   - wallet:
       about: Operation on wallet
       version: "1.0"

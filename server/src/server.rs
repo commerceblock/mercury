@@ -3,10 +3,7 @@ use super::protocol::*;
 use crate::config::Config;
 use crate::structs::StateChainOwner;
 use crate::Database;
-use shared_lib::{mainstay,
-    state_chain::StateChainSig,
-    swap_data::*
-};
+use shared_lib::{mainstay, state_chain::StateChainSig, swap_data::*};
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
@@ -153,7 +150,7 @@ pub fn get_server<
                 transfer_batch::transfer_batch_init,
                 transfer_batch::transfer_reveal_nonce,
                 withdraw::withdraw_init,
-                withdraw::withdraw_confirm, 
+                withdraw::withdraw_confirm,
                 conductor::poll_utxo,
                 conductor::poll_swap,
                 conductor::get_swap_info,

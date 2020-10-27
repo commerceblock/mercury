@@ -5,13 +5,14 @@
 use shared_lib::error::SharedLibError;
 
 use bitcoin::util::{address::Error as AddressError, bip32::Error as Bip32Error};
+use daemon_engine::DaemonError;
 use reqwest::Error as ReqwestError;
 use std::error;
 use std::fmt;
 use std::num::ParseIntError;
 
 /// Client specific errors
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum CError {
     /// Generic error from string error message
     Generic(String),
@@ -26,7 +27,7 @@ pub enum CError {
     /// Tor error
     TorError(String),
     /// Swap error
-    SwapError(String)
+    SwapError(String),
 }
 
 impl From<String> for CError {
@@ -89,6 +90,12 @@ impl From<bitcoin::secp256k1::Error> for CError {
     }
 }
 
+impl From<DaemonError> for CError {
+    fn from(e: DaemonError) -> CError {
+        CError::Generic(format!("{:?}", e))
+    }
+}
+
 impl From<()> for CError {
     fn from(_e: ()) -> CError {
         CError::Generic(String::default())
@@ -108,7 +115,7 @@ impl std::convert::From<config::ConfigError> for CError {
 }
 
 /// Wallet error types
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum WalletErrorType {
     NotEnoughFunds,
     KeyNotFound,

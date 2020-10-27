@@ -81,16 +81,12 @@ pub fn transfer_sender(
 
     // Update prepare_sign_msg with new owners address, proof key
     prepare_sign_msg.protocol = Protocol::Transfer;
-    match prepare_sign_msg.tx.output.get_mut(0){
-      Some(v)  => {
-            match receiver_addr.tx_backup_addr.clone() {
-                Some(v2) => {
-                    v.script_pubkey = v2.script_pubkey()
-                },
-                None => (),
-            }
-      },
-      None => (),
+    match prepare_sign_msg.tx.output.get_mut(0) {
+        Some(v) => match receiver_addr.tx_backup_addr.clone() {
+            Some(v2) => v.script_pubkey = v2.script_pubkey(),
+            None => (),
+        },
+        None => (),
     };
     prepare_sign_msg.proof_key = Some(receiver_addr.proof_key.clone().to_string());
 
@@ -129,8 +125,7 @@ pub fn transfer_sender(
 
     //store transfer_msg_3 in db
 
-
-    // Update server database with transfer message 3 so that 
+    // Update server database with transfer message 3 so that
     // the receiver can get the message
     requests::postb(
         &wallet.client_shim,
@@ -141,12 +136,9 @@ pub fn transfer_sender(
     Ok(transfer_msg3)
 }
 
-// Get the transfer message 3 
+// Get the transfer message 3
 // created by the sender and stored in the SE database
-pub fn transfer_get_msg(
-    wallet: &mut Wallet,
-    state_chain_id: &Uuid,
-) -> Result<TransferMsg3> {
+pub fn transfer_get_msg(wallet: &mut Wallet, state_chain_id: &Uuid) -> Result<TransferMsg3> {
     requests::postb(
         &wallet.client_shim,
         &format!("transfer/get_msg"),
@@ -161,9 +153,14 @@ pub fn transfer_receiver(
     batch_data: &Option<BatchData>,
 ) -> Result<TransferFinalizeData> {
     //Decrypt the message on receipt
-    match wallet.decrypt(transfer_msg3){
+    match wallet.decrypt(transfer_msg3) {
         Ok(_) => (),
-        Err(e) => return Err(CError::Generic(format!("error decrypting message: {}", e.to_string())))
+        Err(e) => {
+            return Err(CError::Generic(format!(
+                "error decrypting message: {}",
+                e.to_string()
+            )))
+        }
     };
     //Make immutable
     let transfer_msg3 = &*transfer_msg3;
@@ -208,15 +205,18 @@ pub fn transfer_receiver(
     let mut transfer_msg5 = TransferMsg5::default();
     let mut o2 = FE::zero();
     let mut num_tries = 0;
-    // t1 in transfer_msg3 is ECIES encrypted. 
+    // t1 in transfer_msg3 is ECIES encrypted.
     // t1 is decrypted here before passing to try_o2 because try_o2 could
     // be executed multiple times and t1 is a constant
-    let t1 = match transfer_msg3.t1.get_fe(){
+    let t1 = match transfer_msg3.t1.get_fe() {
         Ok(r) => r,
-        Err(e) => 
-            return Err(CError::Generic(format!("Failed to get FE from transfer_msg_3 {:?} error: {}", 
+        Err(e) => {
+            return Err(CError::Generic(format!(
+                "Failed to get FE from transfer_msg_3 {:?} error: {}",
                 transfer_msg3,
-                e.to_string()))),
+                e.to_string()
+            )))
+        }
     };
     while !done {
         match try_o2(
@@ -233,10 +233,7 @@ pub fn transfer_receiver(
                 done = true;
             }
             Err(e) => {
-                if !e
-                    .to_string()
-                    .contains(&String::from("try again"))
-                {
+                if !e.to_string().contains(&String::from("try again")) {
                     return Err(e);
                 }
                 num_tries = num_tries + 1;
@@ -281,40 +278,46 @@ pub fn try_o2(
     num_tries: &u32,
     batch_data: &Option<BatchData>,
 ) -> Result<(FE, TransferMsg5)> {
-
     // generate o2 private key and corresponding 02 public key
     let mut encoded_txid = num_tries.to_string();
     encoded_txid.push_str(&state_chain_data.utxo.txid.to_string());
-    let funding_txid_int = match funding_txid_to_int(&encoded_txid){
+    let funding_txid_int = match funding_txid_to_int(&encoded_txid) {
         Ok(r) => r,
-        Err(e) => 
-          return Err(CError::Generic(format!("Failed to get funding txid int from state_chain_data: {:?} error: {}", 
-              state_chain_data,
-              e.to_string()))),
+        Err(e) => {
+            return Err(CError::Generic(format!(
+                "Failed to get funding txid int from state_chain_data: {:?} error: {}",
+                state_chain_data,
+                e.to_string()
+            )))
+        }
     };
     let mut o2: FE = ECScalar::zero();
-    let _key_share_pub =  match wallet
-          .se_key_shares
-          .get_new_key_encoded_id(funding_txid_int, Some(&mut o2)){
-          Ok(r) => r,
-          Err(e) =>
-              return Err(CError::Generic(format!("Failed to get new key encoded id from funding_txid_int: {} error: {}", 
-                  funding_txid_int,
-                  e.to_string()))),
+    let _key_share_pub = match wallet
+        .se_key_shares
+        .get_new_key_encoded_id(funding_txid_int, Some(&mut o2))
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return Err(CError::Generic(format!(
+                "Failed to get new key encoded id from funding_txid_int: {} error: {}",
+                funding_txid_int,
+                e.to_string()
+            )))
+        }
     };
- 
+
     let g: GE = ECPoint::generator();
     let o2_pub: GE = g * o2;
 
     // t2 = t1*o2_inv = o1*x1*o2_inv
-   
+
     let t2 = *t1 * (o2.invert());
     // encrypt t2 with SE key and sign with Receiver proof key (se_addr.proof_key)
 
     let msg4 = &mut TransferMsg4 {
         shared_key_id: transfer_msg3.shared_key_id,
         state_chain_id: transfer_msg3.state_chain_id,
-        t2: t2,
+        t2,
         state_chain_sig: transfer_msg3.state_chain_sig.clone(),
         o2_pub,
         tx_backup: transfer_msg3.tx_backup_psm.tx.clone(),
@@ -326,7 +329,7 @@ pub fn try_o2(
     Ok((o2, transfer_msg5))
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TransferFinalizeData {
     pub new_shared_key_id: Uuid,
     pub o2: FE,
@@ -345,7 +348,6 @@ pub fn transfer_receiver_finalize(
     wallet: &mut Wallet,
     finalize_data: TransferFinalizeData,
 ) -> Result<()> {
-    
     // Make shared key with new private share
     wallet.gen_shared_key_fixed_secret_key(
         &finalize_data.new_shared_key_id,
@@ -360,7 +362,7 @@ pub fn transfer_receiver_finalize(
             .share
             .public
             .q
-            .get_element() 
+            .get_element()
     {
         return Err(CError::StateEntityError(String::from(
             "Transfer failed. Incorrect master public key generated.",
@@ -404,13 +406,16 @@ pub fn transfer_batch_sign(
     let proof_key_derivation = wallet
         .se_proof_keys
         .get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap());
-    
-    match StateChainSig::new_transfer_batch_sig(&proof_key_derivation.unwrap().private_key.key, &batch_id, &state_chain_id){
+
+    match StateChainSig::new_transfer_batch_sig(
+        &proof_key_derivation.unwrap().private_key.key,
+        &batch_id,
+        &state_chain_id,
+    ) {
         Ok(r) => Ok(r),
-        Err(e) => Err(e.into())
+        Err(e) => Err(e.into()),
     }
 }
-
 
 /// Request StateEntity start transfer_batch protocol
 pub fn transfer_batch_init(

@@ -1,36 +1,41 @@
-//
+extern crate arrayvec;
+extern crate base64;
 extern crate bitcoin;
 extern crate bitcoin_hashes;
 extern crate chrono;
 extern crate hex;
-extern crate kms;
-extern crate multi_party_ecdsa;
+extern crate itertools;
+extern crate merkletree;
+extern crate rand;
+extern crate reqwest;
 extern crate rocket;
 extern crate rocket_contrib;
 extern crate uuid;
+
+extern crate curv;
+extern crate electrumx_client;
+extern crate kms;
+extern crate monotree;
+extern crate multi_party_ecdsa;
 
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 
+#[cfg(test)]
+extern crate mockito;
+
 pub mod mocks;
 
-extern crate itertools;
-
-extern crate arrayvec;
-extern crate base64;
-extern crate merkletree;
-extern crate reqwest;
-
 pub mod blinded_token;
-pub mod swap_data;
 pub mod commitment;
 pub mod ecies;
 pub mod error;
 pub mod mainstay;
 pub mod state_chain;
 pub mod structs;
+pub mod swap_data;
 pub mod util;
 
 use bitcoin::secp256k1::{Message, PublicKey, Secp256k1, Signature};

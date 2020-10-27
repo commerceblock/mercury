@@ -24,7 +24,7 @@ pub enum StorageError {
 
 impl PartialEq for StorageError {
     fn eq(&self, other: &Self) -> bool {
-        use StorageError::*;
+        use self::StorageError::*;
         match (self, other) {
             (Generic(ref a), Generic(ref b)) => a == b,
             (FormatError(ref a), FormatError(ref b)) => a == b,

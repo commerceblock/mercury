@@ -224,7 +224,6 @@ mod tests {
     use shared_lib::commitment::make_commitment;
     use std::str::FromStr;
     use uuid::Uuid;
-    use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
     use shared_lib::{state_chain::State as SCState};
     use std::collections::{HashMap, HashSet};
     use crate::error::DBErrorType;
