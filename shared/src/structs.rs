@@ -10,7 +10,7 @@ use kms::ecdsa::two_party::party2;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_two;
 
 use bitcoin::{secp256k1::PublicKey, Address};
-use std::{collections::HashMap, fmt};
+use std::{collections::HashSet, fmt};
 use uuid::Uuid;
 
 use crate::ecies;
@@ -82,7 +82,7 @@ pub struct StateChainDataAPI {
 /// /info/transfer-batch return struct
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransferBatchDataAPI {
-    pub state_chains: HashMap<Uuid, bool>,
+    pub state_chains: HashSet<Uuid>,
     pub finalized: bool,
 }
 

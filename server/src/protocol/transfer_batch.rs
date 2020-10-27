@@ -15,7 +15,7 @@ use cfg_if::cfg_if;
 use chrono::{NaiveDateTime, Utc};
 use rocket::State;
 use rocket_contrib::json::Json;
-use std::{collections::HashMap, str::FromStr};
+use std::str::FromStr;
 use uuid::Uuid;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
@@ -66,7 +66,7 @@ impl BatchTransfer for SCE {
             }
         }
 
-        let mut state_chains = HashMap::<Uuid, bool>::new();
+        let mut state_chains = vec![];
         for sig in transfer_batch_init_msg.signatures.clone() {
             // Ensure sig is for same batch as others
             if &sig.clone().purpose[15..] != batch_id.to_string() {
@@ -86,7 +86,7 @@ impl BatchTransfer for SCE {
             is_locked(sco.locked_until)?;
 
             // Add to TransferBatchData object
-            state_chains.insert(state_chain_id, false);
+            state_chains.push(state_chain_id);
         }
 
         // Create new TransferBatchData and add to DB
@@ -106,12 +106,7 @@ impl BatchTransfer for SCE {
         info!("TRANSFER_FINALIZE_BATCH: ID: {}", batch_id);
 
         let fbd = self.database.get_finalize_batch_data(batch_id)?;
-
-        if fbd.state_chains.len() != fbd.finalized_data_vec.len() {
-            return Err(SEError::Generic(String::from(
-                "TransferBatch has unequal finalized data to state chains.",
-            )));
-        }
+       
 
         for finalized_data in fbd.finalized_data_vec.clone() {
             self.transfer_finalize(&finalized_data)?;
@@ -156,19 +151,23 @@ impl BatchTransfer for SCE {
         )?;
 
         // If state chain completed + commitment revealed then punishment can be removed from state chain
-        if *tbd.state_chains.get(&state_chain_id).unwrap() {
-            self.database
-                .update_locked_until(&state_chain_id, &get_time_now())?;
-            info!(
-                "TRANSFER_REVEAL_NONCE: State Chain unlocked. ID: {}",
-                state_chain_id
-            );
+        match self.database.get_sc_finalize_batch_data(&state_chain_id){
+            Ok(_) => {
+                self.database
+                    .update_locked_until(&state_chain_id, &get_time_now())?;
+                info!(
+                    "TRANSFER_REVEAL_NONCE: State Chain unlocked. ID: {}",
+                    state_chain_id
+                );
 
-            // remove from transfer batch punished list
-            let mut new_punished = tbd.punished_state_chains.clone();
-            new_punished.retain(|x| x != &state_chain_id);
-            self.database.update_punished(&batch_id, new_punished)?;
+                // remove from transfer batch punished list
+                let mut new_punished = tbd.punished_state_chains.clone();
+                new_punished.retain(|x| x != &state_chain_id);
+                self.database.update_punished(&batch_id, new_punished)?;
+            },
+            Err(_) => (),
         }
+       
         Ok(())
     }
 }
@@ -225,6 +224,9 @@ mod tests {
     use shared_lib::commitment::make_commitment;
     use std::str::FromStr;
     use uuid::Uuid;
+    use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
+    use shared_lib::{state_chain::State as SCState};
+    use std::collections::HashMap;
 
     // Useful data structs for transfer batch protocol.
     /// Batch id and Signatures for statechains to take part in batch-transfer
@@ -329,14 +331,43 @@ mod tests {
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
+
+        let tfd : TransferFinalizeData = serde_json::from_str(TRANSFER_FINALIZE_DATA).unwrap();
+
+        let finalized_data_vec  = vec![tfd];
+        let mut state_chain_ids = vec![];
+        for item in finalized_data_vec.clone() {
+            state_chain_ids.push(item.state_chain_id.clone());
+        }
+
         // simply test for state_chains.len() != finalized_data.len()
-        db.expect_get_finalize_batch_data().times(1).returning(|_| {
+        db.expect_get_finalize_batch_data().times(1).returning(move |_| {
             Ok(TransferFinalizeBatchData {
-                state_chains: HashMap::new(),
-                finalized_data_vec: vec![serde_json::from_str(TRANSFER_FINALIZE_DATA).unwrap()],
+                finalized_data_vec: finalized_data_vec.clone(),
                 start_time: Utc::now().naive_utc(),
             })
         });
+        
+        for (id, proof_key) in serde_json::from_str::<HashMap<&str, &str>>(SIG_PROOF_KEYS)
+        .unwrap()
+        .into_iter(){
+            let mut chain = Vec::<SCState>::new();
+            println!("id, proof key: {}, {}", id.to_string(), proof_key.to_string());
+            chain.push(SCState {
+                data: proof_key.to_string(),
+                next_state: None,
+            });
+
+            let statechain = StateChain {
+                chain: chain.clone(),
+            };
+
+            db.expect_get_statechain()
+                .returning(move |_| (Ok(statechain.clone())));
+        }
+
+        db.expect_update_statechain_owner()
+        .returning(|_, _, _| Ok(()));
 
         let sc_entity = test_sc_entity(db);
 
@@ -344,7 +375,7 @@ mod tests {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e
                 .to_string()
-                .contains("TransferBatch has unequal finalized data to state chains.")),
+                .contains("Error: secp: signature failed verification"), e.to_string()),
         }
     }
 

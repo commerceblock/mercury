@@ -1002,11 +1002,6 @@ mod tests {
 
         let mut chain = Vec::<SCState>::new();
 
-        pub struct State {
-            pub data: String,                      // proof key or address
-            pub next_state: Option<StateChainSig>, // signature representing passing of ownership
-        }
-
         chain.push(SCState {
             data: proof_key.to_string(),
             next_state: None,
@@ -1077,8 +1072,6 @@ mod tests {
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-
-        let mut seq = Sequence::new();
 
         let mut scheduler = get_scheduler(vec![(3, 10), (3, 10), (3, 10)]);
         scheduler.update_swap_info().unwrap();

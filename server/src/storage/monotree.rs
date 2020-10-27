@@ -486,7 +486,7 @@ impl Database for MemoryDB {
     fn create_transfer_batch_data(
         &self,
         _batch_id: &uuid::Uuid,
-        _state_chains: HashMap<uuid::Uuid, bool>,
+        _state_chains: Vec<uuid::Uuid>,
     ) -> crate::Result<()> {
         unimplemented!()
     }
@@ -569,17 +569,38 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
+    fn get_transfer_batch_start_time(
+        &self, 
+        _batch_id: &uuid::Uuid
+    ) -> crate::Result<chrono::NaiveDateTime> {
+        unimplemented!()
+    }
+    fn get_batch_transfer_statechain_ids(
+        &self, 
+        _batch_id: &uuid::Uuid
+    ) -> crate::Result<std::collections::HashSet::<uuid::Uuid>>{
+        unimplemented!()
+    }
+
     fn get_finalize_batch_data(
         &self,
         _batch_id: uuid::Uuid,
     ) -> crate::Result<crate::structs::TransferFinalizeBatchData> {
         unimplemented!()
     }
+
+    fn get_sc_finalize_batch_data(
+        &self,
+        _state_chain_id: &uuid::Uuid
+        
+    ) -> crate::Result<crate::protocol::transfer::TransferFinalizeData>{
+        unimplemented!()
+    }
+
     fn update_finalize_batch_data(
         &self,
         _batch_id: &uuid::Uuid,
-        _state_chains: HashMap<uuid::Uuid, bool>,
-        _finalized_data_vec: Vec<crate::protocol::transfer::TransferFinalizeData>,
+        _finalized_data: &crate::protocol::transfer::TransferFinalizeData,
     ) -> crate::Result<()> {
         unimplemented!()
     }

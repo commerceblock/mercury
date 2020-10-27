@@ -67,7 +67,7 @@ use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Part
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
 use rocket_contrib::databases::postgres;
 use shared_lib::{state_chain::*, Root, structs::TransferMsg3};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 #[database("postgres_w")]
@@ -176,7 +176,7 @@ pub trait Database {
     fn create_transfer_batch_data(
         &self,
         batch_id: &Uuid,
-        state_chains: HashMap<Uuid, bool>,
+        state_chains: Vec<Uuid>,
     ) -> Result<()>;
     fn get_transfer_data(&self, state_chain_id: Uuid) -> Result<TransferData>;
     fn remove_transfer_data(&self, state_chain_id: &Uuid) -> Result<()>;
@@ -213,12 +213,17 @@ pub trait Database {
     fn get_ecdsa_party_1_private(&self, user_id: Uuid) -> Result<party_one::Party1Private>;
     fn get_ecdsa_keypair(&self, user_id: Uuid) -> Result<ECDSAKeypair>;
     fn update_punished(&self, batch_id: &Uuid, punished_state_chains: Vec<Uuid>) -> Result<()>;
+    fn get_transfer_batch_start_time(&self, batch_id: &Uuid) -> Result<NaiveDateTime> ;
+    fn get_batch_transfer_statechain_ids(&self, batch_id: &Uuid) -> Result<HashSet<Uuid>>;
     fn get_finalize_batch_data(&self, batch_id: Uuid) -> Result<TransferFinalizeBatchData>;
+    fn get_sc_finalize_batch_data(
+        &self,
+        state_chain_id: &Uuid
+    ) -> Result<TransferFinalizeData>;
     fn update_finalize_batch_data(
         &self,
-        batch_id: &Uuid,
-        state_chains: HashMap<Uuid, bool>,
-        finalized_data_vec: Vec<TransferFinalizeData>,
+        state_chain_id: &Uuid,
+        finalized_data: &TransferFinalizeData,
     ) -> Result<()>;
     fn update_transfer_batch_finalized(&self, batch_id: &Uuid, b_finalized: &bool) -> Result<()>;
     fn get_statechain_owner(&self, state_chain_id: Uuid) -> Result<StateChainOwner>;
@@ -261,14 +266,13 @@ pub mod structs {
     }
 
     pub struct TransferBatchData {
-        pub state_chains: HashMap<Uuid, bool>,
+        pub state_chains: HashSet<Uuid>,
         pub punished_state_chains: Vec<Uuid>,
         pub start_time: NaiveDateTime,
         pub finalized: bool,
     }
 
     pub struct TransferFinalizeBatchData {
-        pub state_chains: HashMap<Uuid, bool>,
         pub finalized_data_vec: Vec<TransferFinalizeData>,
         pub start_time: NaiveDateTime,
     }

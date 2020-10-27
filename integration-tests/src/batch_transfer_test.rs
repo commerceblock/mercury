@@ -19,6 +19,7 @@ mod tests {
     #[serial]
     fn test_batch_sigs() {
         let _handle = start_server();
+
         let mut wallet = gen_wallet();
         let num_state_chains = 3;
         // make deposits
@@ -182,13 +183,11 @@ mod tests {
             _ => assert!(false),
         }
 
-        // Check all transfers marked true (= complete)
+        // Check transfers complete
         let status_api =
             state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id);
-        let mut state_chains_copy = status_api.expect("expected status").state_chains;
-        state_chains_copy.retain(|_, &mut v| v == false);
-        assert_eq!(state_chains_copy.len(), 0);
-
+        assert!(status_api.expect("expected status 1").finalized);
+        
         // Finalize transfers in wallets now that StateEntity has completed the transfers.
         finalize_batch_transfer(&mut wallets, &swap_map, transfer_finalized_datas);
 
@@ -271,13 +270,11 @@ mod tests {
         )
         .is_ok());
 
-        // Check all transfers marked false (= incomplete)
+        // Check incomplete
         let status_api =
-            state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id);
-        assert!(status_api.is_ok());
-        let mut state_chains_copy = status_api.unwrap().state_chains;
-        state_chains_copy.retain(|_, &mut v| v == false);
-        assert_eq!(state_chains_copy.len(), num_state_chains);
+            state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id)
+            .expect("expected status 2");
+        assert_eq!(status_api.finalized, false);
 
         // We will complete 2 transfer_sender's and a 2 transfer_receiver's - yielding a single
         // fully completed state chain owned by wallet[1]
@@ -301,13 +298,11 @@ mod tests {
             &batch_id,
         );
 
-        // Check 2 transfers are complete
+        // Check complete
         let status_api =
-            state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id);
-        assert!(status_api.is_ok());
-        let mut state_chains_copy = status_api.unwrap().state_chains;
-        state_chains_copy.retain(|_, &mut v| v == true);
-        assert_eq!(state_chains_copy.len(), 2);
+            state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id)
+            .expect("expected status 3");
+        assert!(status_api.finalized);
 
         // attempt to reveal nonce early
         assert!(state_entity::transfer::transfer_reveal_nonce(
@@ -418,6 +413,8 @@ mod tests {
         let mut wallets = vec![];
         let mut deposits = vec![];
         let mut thread_handles = vec![];
+        let mut wallet_sers = vec![];
+
 
         for i in 0..num_state_chains as usize {
           
@@ -430,20 +427,22 @@ mod tests {
             deposits.push(run_deposit(&mut wallets[i], &amount));
             let deposit = deposits.last().unwrap().clone();
 
-            let (_shared_key_ids, wallet_sc_ids, bals) = wallets.last().unwrap().get_state_chains_info();
-            println!("deposit wallet state chain ids: {:?}", wallet_sc_ids);
-            println!("deposit wallet balances: {:?}", bals);
-
-            let wallet_ser = wallets.last().unwrap().to_json();
-
-            thread_handles.push(
-                spawn(move || {
+            let (_shared_key_ids, _wallet_sc_ids, _bals) = wallets.last().unwrap().get_state_chains_info();
+            
+            wallet_sers.push((wallets.last().unwrap().to_json(),deposit.1));
+        }
+         
+        println!("Starting swaps...");
+        let start = Instant::now();
+        for (wallet_ser, deposit) in wallet_sers{
+            thread_handles.push(spawn(move || {
                         let mut wallet=wallet::wallet::Wallet::from_json(
                             wallet_ser,
                             ClientShim::new("http://localhost:8000".to_string(), None, None),
                             Box::new(MockElectrum::new())
                         )?;
-                        state_entity::conductor::do_swap(&mut wallet, &deposit.1, &num_state_chains, false)
+                        
+                        state_entity::conductor::do_swap(&mut wallet, &deposit, &num_state_chains, false)
                     }
                 )
             );
@@ -454,6 +453,7 @@ mod tests {
             handle.join().unwrap().unwrap();
             i = i+1;
         }
+        println!("(Swaps Took: {})", TimeFormat(start.elapsed()));
 
     }
 }
