@@ -364,7 +364,7 @@ pub fn run_batch_transfer(
         commitments.push(commitment);
     }
 
-    // Check incomplete
+    // Check complete
     let status_api =
         state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id);
 
