@@ -152,18 +152,26 @@ impl BatchTransfer for SCE {
 
         // If state chain completed + commitment revealed then punishment can be removed from state chain
         match self.database.get_sc_finalize_batch_data(&state_chain_id){
-            Ok(_) => {
-                self.database
-                    .update_locked_until(&state_chain_id, &get_time_now())?;
-                info!(
-                    "TRANSFER_REVEAL_NONCE: State Chain unlocked. ID: {}",
-                    state_chain_id
-                );
+            Ok(v) => {
+                //Check the data relatesd to this batch transfer
+                match v.batch_data {
+                    Some(bd) => {
+                        if bd.id == batch_id{
+                            self.database
+                                .update_locked_until(&state_chain_id, &get_time_now())?;
+                            info!(
+                                "TRANSFER_REVEAL_NONCE: State Chain unlocked. ID: {}",
+                                state_chain_id
+                            );
 
-                // remove from transfer batch punished list
-                let mut new_punished = tbd.punished_state_chains.clone();
-                new_punished.retain(|x| x != &state_chain_id);
-                self.database.update_punished(&batch_id, new_punished)?;
+                            // remove from transfer batch punished list
+                            let mut new_punished = tbd.punished_state_chains.clone();
+                            new_punished.retain(|x| x != &state_chain_id);
+                            self.database.update_punished(&batch_id, new_punished)?;
+                        }
+                    },
+                    None => (),
+                }
             },
             Err(_) => (),
         }

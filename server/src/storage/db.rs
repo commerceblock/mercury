@@ -107,6 +107,7 @@ pub enum Column {
     LockedUntil,
     OwnerId,
     TransferFinalizeData,
+    TransferReady,
 
     // BackupTxs
     //Id,
@@ -286,6 +287,7 @@ impl PGDatabase {
                 ownerid uuid,
                 lockeduntil timestamp,
                 transferfinalizedata varchar,
+                transferready bool,
                 PRIMARY KEY (id)
             );",
                 Table::StateChain.to_string(),
@@ -1419,7 +1421,19 @@ impl Database for PGDatabase {
         for id in self.get_batch_transfer_statechain_ids(&batch_id)? {
             match self.get_sc_finalize_batch_data(&id){
                 Ok(v) => {
-                    finalized_data_vec.push(v);
+                    //Check the batch id
+                    match v.batch_data {
+                        Some(ref bd) => {
+                            if bd.id == batch_id{
+                                finalized_data_vec.push(v);
+                            } else {
+                                return Err(SEError::DBError(NoDataForID, 
+                                    format!("batch_id required:{}, found:{}", batch_id, bd.id)))
+                            }
+                        },
+                        None => return Err(SEError::DBError(NoDataForID, 
+                                    format!("no batch data"))),
+                    }
                 },
                 Err(e) => return Err(e),
             };

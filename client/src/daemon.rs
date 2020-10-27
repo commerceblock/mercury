@@ -270,6 +270,7 @@ mod tests {
     use std::{thread, time::Duration};
 
     #[test]
+    #[ignore]
     fn test_make_server() {
         let request = query_wallet_daemon(DaemonRequest::GenAddressBTC);
         assert!(request.is_err());
