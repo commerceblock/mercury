@@ -144,6 +144,7 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
         )
         .unwrap();
 
+        
         let server_handle = s
             .incoming()
             .unwrap()
@@ -154,11 +155,13 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                     DaemonRequest::GenAddressBTC => {
                         debug!("Daemon: GenAddressBTC");
                         let address = wallet.keys.get_new_address();
+                        wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(address))
                     }
                     DaemonRequest::GenAddressSE(txid) => {
                         debug!("Daemon: GenAddressSE");
                         let address = wallet.get_new_state_entity_address(&txid);
+                        wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(address))
                     }
                     DaemonRequest::GetWalletBalance => {
@@ -189,12 +192,14 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                     DaemonRequest::Deposit(amount) => {
                         debug!("Daemon: Deposit");
                         let deposit_res = state_entity::deposit::deposit(&mut wallet, &amount);
+                        wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(deposit_res))
                     }
                     DaemonRequest::Withdraw(state_chain_id) => {
                         debug!("Daemon: Withdraw");
                         let deposit_res =
                             state_entity::withdraw::withdraw(&mut wallet, &state_chain_id);
+                        wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(deposit_res))
                     }
                     DaemonRequest::TransferSender(state_chain_id, receiver_addr) => {
@@ -204,6 +209,7 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                             &state_chain_id,
                             receiver_addr,
                         );
+                        wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(
                             transfer_sender_resp,
                         ))
@@ -215,6 +221,7 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                             &mut transfer_msg,
                             &None,
                         );
+                        wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(
                             transfer_receiver_resp,
                         ))
@@ -231,13 +238,13 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                             force_no_tor,
                         )
                         .unwrap();
+                        wallet.save();
                         r.send(DaemonResponse::None)
                     }
                 }
                 .wait()
                 .unwrap();
 
-                wallet.save();
                 Ok(())
             })
             .map_err(|_e| ());
@@ -245,7 +252,7 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
         Ok(())
     });
 
-    println!("Running wallet UnixServer...");
+    debug!("Running wallet UnixServer...");
     run(server);
 
     Ok(())
