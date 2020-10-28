@@ -33,7 +33,8 @@ use std::fs;
 use std::str::FromStr;
 use uuid::Uuid;
 
-const WALLET_FILENAME: &str = "wallet/wallet.data";
+const DEFAULT_WALLET_LOC: &str = "wallet/wallet.data";
+const DEFAULT_TEST_WALLET_LOC: &str = "wallet/test-wallet.data";
 
 // Struct wrapper for Electrumx client instance
 pub struct ElectrumxBox {
@@ -58,9 +59,10 @@ unsafe impl Sync for ElectrumxBox {}
 pub struct Wallet {
     pub id: String,
     pub network: String,
-    secp: Secp256k1<All>,
     pub electrumx_client: ElectrumxBox, // Default MockElectrum
     pub client_shim: ClientShim,
+    secp: Secp256k1<All>,
+    testing_mode: bool,
 
     pub master_priv_key: ExtendedPrivKey,
     pub keys: KeyPathWithAddresses,           // Keys for general usage
@@ -72,7 +74,7 @@ pub struct Wallet {
     pub require_mainstay: bool,
 }
 impl Wallet {
-    pub fn new(seed: &[u8], network: &String, client_shim: ClientShim) -> Wallet {
+    pub fn new(seed: &[u8], network: &String, testing_mode: bool, client_shim: ClientShim) -> Wallet {
         let secp = Secp256k1::new();
         let master_priv_key =
             ExtendedPrivKey::new_master(network.parse::<Network>().unwrap(), seed).unwrap();
@@ -100,9 +102,10 @@ impl Wallet {
         Wallet {
             id: Uuid::new_v4().to_string(),
             network: network.to_string(),
-            secp,
             electrumx_client: ElectrumxBox::new_mock(),
             client_shim,
+            secp,
+            testing_mode,
             master_priv_key,
             keys,
             se_backup_keys,
@@ -153,6 +156,7 @@ impl Wallet {
         json!({
             "id": self.id,
             "network": self.network,
+            "testing_mode": self.testing_mode,
             "master_priv_key": self.master_priv_key.to_string(),
             "keys_last_derived_pos": self.keys.last_derived_pos,
             "se_backup_keys_last_derived_pos": self.se_backup_keys.last_derived_pos,
@@ -207,9 +211,10 @@ impl Wallet {
         let mut wallet = Wallet {
             id: json["id"].as_str().unwrap().to_string(),
             network,
-            secp,
             electrumx_client: ElectrumxBox::new_mock(),
             client_shim,
+            secp,
+            testing_mode: json.get("testing_mode").unwrap().as_bool().unwrap(),
             master_priv_key,
             keys,
             se_backup_keys,
@@ -273,25 +278,19 @@ impl Wallet {
     }
 
     /// save to disk
-    pub fn save_to(&self, filepath: &str) {
-        let wallet_json = self.to_json().to_string();
-        fs::write(filepath, wallet_json).expect("Unable to save wallet!");
-        debug!("(wallet id: {}) Saved wallet to disk", self.id);
-    }
     pub fn save(&self) {
-        self.save_to(WALLET_FILENAME)
+        let wallet_json = self.to_json().to_string();
+        fs::write(get_wallet_loc_str(self.testing_mode), wallet_json).expect("Unable to save wallet!");
+        debug!("(wallet id: {}) Saved wallet to disk", self.id);
     }
 
     /// load wallet from disk
-    pub fn load_from(filepath: &str, client_shim: ClientShim) -> Result<Wallet> {
-        let data = fs::read_to_string(filepath)?;
+    pub fn load(testing_mode: bool, client_shim: ClientShim) -> Result<Wallet> {
+        let data = fs::read_to_string(get_wallet_loc_str(testing_mode))?;
         let serde_json_data = serde_json::from_str(&data).unwrap();
         let wallet: Wallet = Wallet::from_json(serde_json_data, client_shim)?;
         debug!("(wallet id: {}) Loaded wallet to memory", wallet.id);
         Ok(wallet)
-    }
-    pub fn load(client_shim: ClientShim) -> Result<Wallet> {
-        Ok(Wallet::load_from(WALLET_FILENAME, client_shim)?)
     }
 
     /// Select unspent coins greedily. Return TxIns along with corresponding spending addresses and amounts
@@ -638,6 +637,14 @@ pub fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
     }
 }
 
+pub fn get_wallet_loc_str(testing_mode: bool) -> String {
+    if testing_mode {
+        return DEFAULT_TEST_WALLET_LOC.to_string()
+    } else {
+        return DEFAULT_WALLET_LOC.to_string()
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -652,6 +659,7 @@ mod tests {
         let mut wallet = Wallet::new(
             &seed,
             &"regtest".to_string(),
+            true,
             ClientShim::new("http://localhost:8000".to_string(), None, None),
         );
         let _ = wallet.keys.get_new_address();
@@ -685,6 +693,7 @@ mod tests {
 
         assert_eq!(wallet.id, wallet_rebuilt.id);
         assert_eq!(wallet.network, wallet_rebuilt.network);
+        assert_eq!(wallet.testing_mode, wallet_rebuilt.testing_mode);
         assert_eq!(
             wallet.master_priv_key.chain_code,
             wallet_rebuilt.master_priv_key.chain_code

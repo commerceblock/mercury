@@ -68,7 +68,7 @@ impl DaemonResponse {
 }
 
 /// Start Wallet's UnixServer process
-pub fn make_wallet_daemon() -> Result<()> {
+pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
     // Check if server already running
     if let Ok(_) = query_wallet_daemon(DaemonRequest::LifeCheck) {
         panic!("Wallet daemon already running.")
@@ -81,7 +81,10 @@ pub fn make_wallet_daemon() -> Result<()> {
         let conf_rs = get_config().unwrap();
         let endpoint: String = conf_rs.get("endpoint").unwrap();
         let electrum_server: String = conf_rs.get("electrum_server").unwrap();
-        let testing_mode: bool = conf_rs.get("testing_mode").unwrap();
+        let mut testing_mode: bool = conf_rs.get("testing_mode").unwrap();
+        if force_testing_mode {
+            testing_mode = true;
+        }
         let network: String = conf_rs.get("network").unwrap();
         let daemon_address: String = conf_rs.get("daemon_address").unwrap();
 
@@ -100,7 +103,7 @@ pub fn make_wallet_daemon() -> Result<()> {
         let client_shim = ClientShim::new(endpoint, None, tor);
 
         // Try load wallet. If no wallet make new.
-        let mut wallet = match wallet::wallet::Wallet::load(client_shim.clone()) {
+        let mut wallet = match wallet::wallet::Wallet::load(testing_mode, client_shim.clone()) {
             Ok(wallet) => wallet,
             Err(_) => {
                 println!("No wallet file found. Creating new...");
@@ -112,7 +115,7 @@ pub fn make_wallet_daemon() -> Result<()> {
                     seed = rand::thread_rng().gen(); // Generate fresh seed
                 };
 
-                let wallet = wallet::wallet::Wallet::new(&seed, &network, client_shim);
+                let wallet = wallet::wallet::Wallet::new(&seed, &network, testing_mode, client_shim);
                 wallet.save();
                 wallet
             }
@@ -275,7 +278,7 @@ mod tests {
         assert!(request.is_err());
 
         thread::spawn(|| {
-            let _ = make_wallet_daemon();
+            let _ = run_wallet_daemon(true);
         });
         thread::sleep(Duration::from_millis(500));
 
