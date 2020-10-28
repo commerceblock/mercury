@@ -112,8 +112,9 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
         // Try load wallet. If no wallet make new.
         let mut wallet = match wallet::wallet::Wallet::load(wallet_data_loc, client_shim.clone()) {
             Ok(wallet) => wallet,
-            Err(_) => {
-                println!("No wallet file found. Creating new...");
+            Err(e) => {
+                println!("Wallet load error: {:?}", e.to_string());
+                println!("Creating new wallet...");
 
                 let seed = if testing_mode {
                     [0xcd; 32]              // Defaults to generic seed
