@@ -19,7 +19,7 @@ use rand::Rng;
 use shared_lib::structs::{SCEAddress, TransferMsg3};
 use state_entity::api::get_statechain;
 use uuid::Uuid;
-use wallet::wallet::ElectrumxBox;
+use wallet::wallet::{DEFAULT_TEST_WALLET_LOC, ElectrumxBox, DEFAULT_WALLET_LOC};
 
 /// Example request object
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -102,20 +102,26 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
 
         let client_shim = ClientShim::new(endpoint, None, tor);
 
+        let wallet_data_loc = if testing_mode {
+            println!("Testing mode enabled.");
+            DEFAULT_TEST_WALLET_LOC
+        } else {
+            DEFAULT_WALLET_LOC
+        };
+
         // Try load wallet. If no wallet make new.
-        let mut wallet = match wallet::wallet::Wallet::load(testing_mode, client_shim.clone()) {
+        let mut wallet = match wallet::wallet::Wallet::load(wallet_data_loc, client_shim.clone()) {
             Ok(wallet) => wallet,
             Err(_) => {
                 println!("No wallet file found. Creating new...");
 
-                // Defaults to generic seed
-                let mut seed: [u8; 32] = [0xcd; 32];
-
-                if testing_mode == false {
-                    seed = rand::thread_rng().gen(); // Generate fresh seed
+                let seed = if testing_mode {
+                    [0xcd; 32]              // Defaults to generic seed
+                } else {
+                    rand::thread_rng().gen() // Generate fresh seed
                 };
 
-                let wallet = wallet::wallet::Wallet::new(&seed, &network, testing_mode, client_shim);
+                let wallet = wallet::wallet::Wallet::new(&seed, &network, wallet_data_loc, client_shim);
                 wallet.save();
                 wallet
             }
@@ -280,7 +286,7 @@ mod tests {
         thread::spawn(|| {
             let _ = run_wallet_daemon(true);
         });
-        thread::sleep(Duration::from_millis(500));
+        thread::sleep(Duration::from_millis(1000));
 
         let request = query_wallet_daemon(DaemonRequest::GenAddressBTC);
         assert!(request.is_ok());
