@@ -7,7 +7,7 @@ use super::Result;
 use crate::wallet;
 use crate::{
     state_entity,
-    {error::CError, get_config, state_entity::api::get_statechain_fee_info, ClientShim, Tor},
+    {error::CError, get_config, state_entity::api::get_statechain_fee_info, ClientShim, Tor}, error::WalletErrorType,
 };
 
 use daemon_engine::{JsonCodec, UnixConnection, UnixServer};
@@ -112,19 +112,24 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
         // Try load wallet. If no wallet make new.
         let mut wallet = match wallet::wallet::Wallet::load(wallet_data_loc, client_shim.clone()) {
             Ok(wallet) => wallet,
-            Err(e) => {
-                println!("Wallet load error: {:?}", e.to_string());
-                println!("Creating new wallet...");
+            Err(e) => match e {
+                CError::WalletError(ref error_type) => match error_type {
+                    WalletErrorType::WalletFileNotFound => {
+                        println!("No wallet file found. Creating new wallet...");
 
-                let seed = if testing_mode {
-                    [0xcd; 32]              // Defaults to generic seed
-                } else {
-                    rand::thread_rng().gen() // Generate fresh seed
-                };
+                        let seed = if testing_mode {
+                            [0xcd; 32]              // Defaults to generic seed
+                        } else {
+                            rand::thread_rng().gen() // Generate fresh seed
+                        };
 
-                let wallet = wallet::wallet::Wallet::new(&seed, &network, wallet_data_loc, client_shim);
-                wallet.save();
-                wallet
+                        let wallet = wallet::wallet::Wallet::new(&seed, &network, wallet_data_loc, client_shim);
+                        wallet.save();
+                        wallet
+                    },
+                    _ => panic!(e.to_string())
+                },
+                _ => panic!(e.to_string())
             }
         };
 
@@ -246,7 +251,7 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
         Ok(())
     });
 
-    println!("Running wallet UnixServer...");
+    println!("Running wallet StateManager...");
     run(server);
 
     Ok(())

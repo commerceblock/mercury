@@ -286,12 +286,18 @@ impl Wallet {
 
     /// load wallet from disk
     pub fn load(wallet_data_loc: &str, client_shim: ClientShim) -> Result<Wallet> {
-        let data = fs::read_to_string(wallet_data_loc)?;
+        let data = match fs::read_to_string(wallet_data_loc) {
+            Ok(data) => data,
+            Err(_) => return Err(CError::WalletError(WalletErrorType::WalletFileNotFound))
+        };
         let serde_json_data = match serde_json::from_str(&data) {
             Ok(data) => data,
-            Err(_) => return Err(CError::Generic("Invalid wallet.data file.".to_string()))
+            Err(_) => return Err(CError::WalletError(WalletErrorType::WalletFileInvalid))
         };
-        let wallet: Wallet = Wallet::from_json(serde_json_data, client_shim)?;
+        let wallet: Wallet = match Wallet::from_json(serde_json_data, client_shim) {
+            Ok(wallet) => wallet,
+            Err(_) => return Err(CError::WalletError(WalletErrorType::WalletFileInvalid))
+        };
         debug!("(wallet id: {}) Loaded wallet to memory", wallet.id);
         Ok(wallet)
     }

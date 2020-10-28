@@ -122,6 +122,8 @@ pub enum WalletErrorType {
     SharedKeyNotFound,
     KeyMissingData,
     StateChainNotFound,
+    WalletFileNotFound,
+    WalletFileInvalid,
 }
 
 impl WalletErrorType {
@@ -132,6 +134,8 @@ impl WalletErrorType {
             WalletErrorType::SharedKeyNotFound => "Shared key not found in wallet derivation path",
             WalletErrorType::KeyMissingData => "Key is missing data",
             WalletErrorType::StateChainNotFound => "StateChain not found in wallet derivation path",
+            WalletErrorType::WalletFileNotFound => "Wallet data file not found",
+            WalletErrorType::WalletFileInvalid => "Wallet data file invalid format",
         }
     }
 }
