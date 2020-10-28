@@ -42,6 +42,7 @@ use std::sync::mpsc::RecvTimeoutError;
 use std::thread;
 use std::time::Instant;
 use uuid::Uuid;
+use wallet::wallet::DEFAULT_TEST_WALLET_LOC;
 
 #[cfg(test)]
 #[macro_use]
@@ -152,7 +153,7 @@ impl SpawnServer for MockDatabase {
     }
 }
 
-/// Create a wallet and generate some addresses
+/// Create a wallet with generic seed and generate some addresses
 #[cfg(test)]
 fn gen_wallet() -> Wallet {
     gen_wallet_with_seed(&[0xcd; 32])
@@ -165,6 +166,7 @@ fn gen_wallet_with_seed(seed: &[u8]) -> Wallet {
     let mut wallet = Wallet::new(
         &seed,
         &"regtest".to_string(),
+        DEFAULT_TEST_WALLET_LOC,
         ClientShim::new("http://localhost:8000".to_string(), None, None),
     );
     let _ = wallet.keys.get_new_address();
@@ -177,6 +179,7 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
+        DEFAULT_TEST_WALLET_LOC,
         ClientShim::new("http://localhost:8000".to_string(), None, None),
     );
 

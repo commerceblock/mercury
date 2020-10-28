@@ -1,6 +1,6 @@
 extern crate client_lib;
-use client_lib::daemon::make_wallet_daemon;
+use client_lib::daemon::run_wallet_daemon;
 
 fn main() {
-    let _ = make_wallet_daemon();
+    let _ = run_wallet_daemon(false);
 }

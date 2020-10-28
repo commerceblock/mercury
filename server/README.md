@@ -1,7 +1,7 @@
 # Mercury Server
 
 ## Introduction
-Mercury Server is a RESTful web service exposing APIs for state chain functionality and two party ECDSA key generation and signing.
+Mercury Server is a RESTful web service exposing an API for StateChain functionality which is based on 2P-ECDSA key generation, signing and key transfer.
 
 ## Installation
 
@@ -16,8 +16,8 @@ Database connection information should be provided via the environment variables
 | Parameter | Type | Description |
 | ----------- | ----- | ----------- |
 | ELECTRUM_SERVER | String | Network address of Electrum Server |
-| NETWORK | String | Bitcoin network: "mainnet", "regtest", "testnet" | 
-| BLOCK_TIME | int | Block time of network. This is useful for testing  | 
+| NETWORK | String | Bitcoin network: "mainnet", "regtest", "testnet" |
+| BLOCK_TIME | int | Block time of network. This is useful for testing  |
 | TESTING_MODE | bool | If set to true then mock electrum server is used and DBs are reset upon restart |
 | FEE_ADDRESS | String | Bitcoin address for StateChain Entity fees |
 | FEE_DEPOSIT | int | Deposit fee in Satoshis |
@@ -45,9 +45,4 @@ cargo run --release
 #### Without timing output
 ```bash
 cargo test
-```
-
-#### With timing output
-```bash
-cargo test -- --nocapture
 ```
