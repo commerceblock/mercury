@@ -367,12 +367,17 @@ pub fn run_batch_transfer(
         commitments.push(commitment);
     }
 
-    // Check all marked true (= complete)
+    // Check complete
     let status_api =
         state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id);
-    let mut state_chains_copy = status_api.unwrap().state_chains;
-    state_chains_copy.retain(|_, &mut v| v == false);
-    assert_eq!(state_chains_copy.len(), 0);
+
+    match status_api {
+        Ok(v) => {
+            assert_eq!(v.finalized, true);
+            assert_eq!(v.state_chains.len(), transfer_finalized_datas.len());
+        },
+        Err(e) => assert!(false, format!("Error: {}",e)),
+    }
 
     (
         batch_id,

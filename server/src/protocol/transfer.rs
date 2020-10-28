@@ -220,23 +220,18 @@ impl Transfer for SCE {
                 "TRANSFER: Transfer as part of batch {}. State Chain ID: {}",
                 batch_id, state_chain_id
             );
-            // Get TransferBatch data
-            let mut tbd = self.database.get_finalize_batch_data(batch_id)?;
-
+            
             // Ensure batch transfer is still active
-            if transfer_batch_is_ended(tbd.start_time, self.config.batch_lifetime as i64) {
+            if transfer_batch_is_ended(self.database.get_transfer_batch_start_time(&batch_id)?, 
+                                       self.config.batch_lifetime as i64) {
                 return Err(SEError::TransferBatchEnded(String::from(
                     "Too late to complete transfer.",
                 )));
             }
 
-            tbd.state_chains.insert(state_chain_id.clone(), true);
-            tbd.finalized_data_vec.push(finalized_data.clone());
-
             self.database.update_finalize_batch_data(
-                &batch_id,
-                tbd.state_chains,
-                tbd.finalized_data_vec,
+                &state_chain_id,
+                &finalized_data,
             )?;
 
         // If not batch then finalize transfer now
@@ -398,7 +393,6 @@ mod tests {
     };
     use chrono::{Duration, Utc};
     use mockall::predicate;
-    use std::collections::HashMap;
     use std::str::FromStr;
 
     // Data from a run of transfer protocol.
@@ -554,36 +548,8 @@ mod tests {
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
         db.expect_get_root().returning(|_| Ok(None));
         db.expect_root_update().returning(|_| Ok(1));
-        db.expect_get_finalize_batch_data() // batch time up
-            .times(1)
-            .returning(move |_| {
-                Ok(TransferFinalizeBatchData {
-                    state_chains: HashMap::new(),
-                    finalized_data_vec: vec![TransferFinalizeData {
-                        new_shared_key_id: shared_key_id,
-                        state_chain_id,
-                        state_chain_sig: serde_json::from_str::<TransferMsg4>(
-                            &TRANSFER_MSG_4.to_string(),
-                        )
-                        .unwrap()
-                        .state_chain_sig,
-                        s2: s2,
-                        theta,
-                        new_tx_backup: serde_json::from_str::<Transaction>(
-                            &BACKUP_TX_NOT_SIGNED.to_string(),
-                        )
-                        .unwrap(),
-                        batch_data: Some(BatchData {
-                            id: shared_key_id,
-                            commitment: String::default(),
-                        }),
-                    }],
-                    start_time: Utc::now().naive_utc() - Duration::seconds(999999),
-                })
-            });
         db.expect_get_finalize_batch_data().returning(move |_| {
             Ok(TransferFinalizeBatchData {
-                state_chains: HashMap::new(),
                 finalized_data_vec: vec![TransferFinalizeData {
                     new_shared_key_id: shared_key_id,
                     state_chain_id,
@@ -606,8 +572,15 @@ mod tests {
                 start_time: Utc::now().naive_utc(),
             })
         });
+        db.expect_get_transfer_batch_start_time()
+        .times(1)
+        .returning(move |_| Ok(Utc::now().naive_utc() - Duration::seconds(999999)));
+        db.expect_get_transfer_batch_start_time()
+        .times(1)
+        .returning(move |_| Ok(Utc::now().naive_utc() - Duration::seconds(1)));
+                
         db.expect_update_finalize_batch_data()
-            .returning(|_, _, _| Ok(()));
+            .returning(|_, _| Ok(()));
 
         let sc_entity = test_sc_entity(db);
         let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
