@@ -40,9 +40,9 @@ pub fn watch_node(rpc_path: String) -> Result<()> {
     };
 
     cfg_if! {
-        if #[cfg(any(test,feature="mockdb"))]{
-            use shared_lib::mocks::mock_client::MockClient;
-            let mut rpc = MockClient::new();
+        if #[cfg(any(test,feature="mockbitcoinrpc"))]{
+            use shared_lib::mocks::mock_client::MockBitcoinClient;
+            let mut rpc = MockBitcoinClient::new();
         } else {
             use bitcoincore_rpc::{Auth, Client, RpcApi};
             let rpc = Client::new(rpc_path_parts[1].to_string(),

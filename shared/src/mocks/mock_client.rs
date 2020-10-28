@@ -2,9 +2,9 @@
 use bitcoincore_rpc::Error;
 extern crate hex;
 
-pub struct MockClient {}
+pub struct MockBitcoinClient {}
 
-impl MockClient {
+impl MockBitcoinClient {
     pub fn new() -> MockClient {
         MockClient {}
     }
