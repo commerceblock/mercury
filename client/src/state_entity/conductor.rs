@@ -178,7 +178,7 @@ fn do_transfer_receiver(
                 }
                 Err(_) => (),
             };
-            thread::sleep(time::Duration::from_millis(1000));
+            thread::sleep(time::Duration::from_secs(3));
         }
     }
     Err(CError::SwapError(
@@ -208,7 +208,7 @@ pub fn do_swap(
             }
             None => (),
         }
-        thread::sleep(time::Duration::from_millis(1000));
+        thread::sleep(time::Duration::from_secs(3));
     }
     //Wait for swap info to become available
     let info: SwapInfo;
@@ -221,7 +221,7 @@ pub fn do_swap(
             }
             None => (),
         }
-        thread::sleep(time::Duration::from_millis(1000));
+        thread::sleep(time::Duration::from_secs(3));
     }
 
     let proof_key = wallet.se_proof_keys.get_new_key()?;
@@ -255,7 +255,7 @@ pub fn do_swap(
             },
             None => (),
         };
-        thread::sleep(time::Duration::from_millis(1000));
+        thread::sleep(time::Duration::from_secs(3));
     }
 
     let bss = swap_get_blinded_spend_signature(&wallet.client_shim, &swap_id, &state_chain_id)?;
@@ -277,18 +277,15 @@ pub fn do_swap(
             },
             None => (),
         };
-        thread::sleep(time::Duration::from_millis(1000));
+        thread::sleep(time::Duration::from_secs(3));
     }
 
     let _ = transfer::transfer_sender(&mut wallet, state_chain_id, receiver_addr)?;
 
-    thread::sleep(time::Duration::from_millis(1000));
 
     let (commit, _nonce) = commitment::make_commitment(&state_chain_id.to_string());
 
     let batch_id = &swap_id;
-
-    thread::sleep(time::Duration::from_millis(1000));
 
     let transfer_finalized_data = do_transfer_receiver(
         wallet,
@@ -309,7 +306,7 @@ pub fn do_swap(
             },
             None => break,
         };
-        thread::sleep(time::Duration::from_millis(10000));
+        thread::sleep(time::Duration::from_secs(3));
     }
 
     //Confirm batch transfer status and finalize the transfer in the wallet

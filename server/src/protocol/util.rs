@@ -510,17 +510,18 @@ impl SCE {
 
     pub fn get_transfer_batch_status(&self, batch_id: Uuid) -> Result<TransferBatchDataAPI> {
         let tbd = self.database.get_transfer_batch_data(batch_id)?;
-
-        // Check if all transfers are complete. If so then all transfers in batch can be finalized.
-        if !tbd.finalized {
-            let mut state_chains_copy = tbd.state_chains.clone();
-            state_chains_copy.retain(|_, &mut v| v == false);
-            if state_chains_copy.len() == 0 {
-                self.finalize_batch(batch_id)?;
-                info!(
-                    "TRANSFER_BATCH: All transfers complete in batch. Finalized. ID: {}.",
-                    batch_id
-                );
+        let mut finalized = tbd.finalized;
+        if !finalized {
+            // Attempt to finalize transfers - will fail with Err if not all ready to be finalized
+            match self.finalize_batch(batch_id){
+                Ok(_) => {
+                        info!(
+                        "TRANSFER_BATCH: All transfers complete in batch. Finalized. ID: {}.",
+                        batch_id
+                        );
+                        finalized = true;
+                    },
+                Err(_) => (),
             }
             // Check batch is still within lifetime
             if transfer_batch_is_ended(tbd.start_time, self.config.batch_lifetime as i64) {
@@ -531,7 +532,7 @@ impl SCE {
                     // Punishments not yet set
                     info!("TRANSFER_BATCH: Lifetime reached. ID: {}.", batch_id);
                     // Set punishments for all statechains involved in batch
-                    for (state_chain_id, _) in tbd.state_chains {
+                    for state_chain_id in tbd.state_chains {
                         self.state_chain_punish(state_chain_id.clone())?;
                         punished_state_chains.push(state_chain_id.clone());
 
@@ -559,7 +560,7 @@ impl SCE {
         // return status of transfers
         Ok(TransferBatchDataAPI {
             state_chains: tbd.state_chains,
-            finalized: tbd.finalized,
+            finalized,
         })
     }
 }
