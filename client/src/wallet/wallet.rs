@@ -660,8 +660,19 @@ mod tests {
         wallet
     }
 
+
     #[test]
-    fn test_save_wallet_overwrite() {
+    fn test_wallet_save_load() {
+        let wallet = gen_wallet();
+        wallet.save();
+
+        let wallet_loaded = Wallet::load(DEFAULT_TEST_WALLET_LOC, ClientShim::new("http://localhost:8000".to_string(), None, None)).unwrap();
+
+        assert_eq!(wallet.to_json(), wallet_loaded.to_json());
+    }
+
+    #[test]
+    fn test_wallet_save_overwrite() {
         // Generate two identical wallets
         let mut wallet1 = gen_wallet();
         let wallet2 = gen_wallet();
