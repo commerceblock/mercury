@@ -284,7 +284,6 @@ impl Wallet {
 
     /// load wallet from disk
     pub fn load_from(filepath: &str, client_shim: ClientShim) -> Result<Wallet> {
-        println!("loading wallet from {}", filepath);
         let data = fs::read_to_string(filepath)?;
         let serde_json_data = serde_json::from_str(&data).unwrap();
         let wallet: Wallet = Wallet::from_json(serde_json_data, client_shim)?;
