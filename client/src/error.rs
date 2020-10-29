@@ -12,7 +12,7 @@ use std::fmt;
 use std::num::ParseIntError;
 
 /// Client specific errors
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum CError {
     /// Generic error from string error message
     Generic(String),
@@ -115,13 +115,15 @@ impl std::convert::From<config::ConfigError> for CError {
 }
 
 /// Wallet error types
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum WalletErrorType {
     NotEnoughFunds,
     KeyNotFound,
     SharedKeyNotFound,
     KeyMissingData,
     StateChainNotFound,
+    WalletFileNotFound,
+    WalletFileInvalid,
 }
 
 impl WalletErrorType {
@@ -132,6 +134,8 @@ impl WalletErrorType {
             WalletErrorType::SharedKeyNotFound => "Shared key not found in wallet derivation path",
             WalletErrorType::KeyMissingData => "Key is missing data",
             WalletErrorType::StateChainNotFound => "StateChain not found in wallet derivation path",
+            WalletErrorType::WalletFileNotFound => "Wallet data file not found",
+            WalletErrorType::WalletFileInvalid => "Wallet data file invalid format",
         }
     }
 }
