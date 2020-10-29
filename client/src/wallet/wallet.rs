@@ -34,7 +34,7 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 pub const DEFAULT_WALLET_LOC: &str = "wallet/wallet.data";
-pub const DEFAULT_TEST_WALLET_LOC: &str = "wallet/test-wallet.data";
+pub const DEFAULT_TEST_WALLET_LOC: &str = "wallet/test_wallet.data";
 
 // Struct wrapper for Electrumx client instance
 pub struct ElectrumxBox {
@@ -671,6 +671,7 @@ mod tests {
 
 
     #[test]
+    #[serial]
     fn test_wallet_save_load() {
         let wallet = gen_wallet();
         wallet.save();
@@ -681,6 +682,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_wallet_save_overwrite() {
         // Generate two identical wallets
         let mut wallet1 = gen_wallet();
