@@ -5,6 +5,7 @@ authors = [
 	"Lawrence Deacon <lawrence.deacon@gmail.com>",
   "Tomos <tomos@commerceblock.com"
 ]
+edition = "2018"
 
 [lib]
 name = "server_lib"

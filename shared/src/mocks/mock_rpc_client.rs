@@ -5,8 +5,8 @@ extern crate hex;
 pub struct MockBitcoinClient {}
 
 impl MockBitcoinClient {
-    pub fn new() -> MockClient {
-        MockClient {}
+    pub fn new() -> MockBitcoinClient {
+        MockBitcoinClient {}
     }
     pub fn get_block_count(&mut self) -> std::result::Result<u64,()> {
         return Ok(147 as u64)
