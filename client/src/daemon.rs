@@ -7,7 +7,7 @@ use super::Result;
 use crate::wallet;
 use crate::{
     state_entity,
-    {error::CError, get_config, state_entity::api::get_statechain_fee_info, ClientShim, Tor},
+    {error::CError, get_config, state_entity::api::get_statechain_fee_info, ClientShim, Tor}, error::WalletErrorType,
 };
 
 use daemon_engine::{JsonCodec, UnixConnection, UnixServer};
@@ -75,7 +75,7 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
     }
 
     println!("Configuring and building WalletStateManager...");
-    let server = future::lazy(move || {
+
         let _ = env_logger::try_init();
 
         let conf_rs = get_config().unwrap();
@@ -112,18 +112,24 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
         // Try load wallet. If no wallet make new.
         let mut wallet = match wallet::wallet::Wallet::load(wallet_data_loc, client_shim.clone()) {
             Ok(wallet) => wallet,
-            Err(_) => {
-                println!("No wallet file found. Creating new...");
+            Err(e) => match e {
+                CError::WalletError(ref error_type) => match error_type {
+                    WalletErrorType::WalletFileNotFound => {
+                        println!("No wallet file found. Creating new wallet...");
 
-                let seed = if testing_mode {
-                    [0xcd; 32]              // Defaults to generic seed
-                } else {
-                    rand::thread_rng().gen() // Generate fresh seed
-                };
+                        let seed = if testing_mode {
+                            [0xcd; 32]              // Defaults to generic seed
+                        } else {
+                            rand::thread_rng().gen() // Generate fresh seed
+                        };
 
-                let wallet = wallet::wallet::Wallet::new(&seed, &network, wallet_data_loc, client_shim);
-                wallet.save();
-                wallet
+                        let wallet = wallet::wallet::Wallet::new(&seed, &network, wallet_data_loc, client_shim);
+                        wallet.save();
+                        wallet
+                    },
+                    _ => return Err(e)
+                },
+                _ => return Err(e)
             }
         };
 
@@ -138,13 +144,14 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
             }
         }
 
+    let server = future::lazy(move || {
         let mut s = UnixServer::<JsonCodec<DaemonResponse, DaemonRequest>>::new(
             &daemon_address,
             JsonCodec::new(),
         )
         .unwrap();
 
-        
+
         let server_handle = s
             .incoming()
             .unwrap()
@@ -252,7 +259,7 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
         Ok(())
     });
 
-    debug!("Running wallet UnixServer...");
+    println!("Running wallet StateManager...");
     run(server);
 
     Ok(())
@@ -284,18 +291,35 @@ pub fn query_wallet_daemon(cmd: DaemonRequest) -> Result<DaemonResponse> {
 mod tests {
     use super::*;
     use std::{thread, time::Duration};
+    use std::fs;
 
     #[test]
-    fn test_make_server() {
-        let request = query_wallet_daemon(DaemonRequest::GenAddressBTC);
-        assert!(request.is_err());
+    #[serial]
+    fn test_loading_wallet_from_file() {
+        // Clear or create empty test_invalid_wallet_format_wallet.data file
+        let _ = fs::write(DEFAULT_TEST_WALLET_LOC, "");
+        match run_wallet_daemon(true) {
+            Ok(_) => assert!(false, "Expected WalletFileInvalid error"),
+            Err(e) => assert_eq!(e, CError::WalletError(WalletErrorType::WalletFileInvalid))
+        }
+        // Valid JSON with fields missing
+        let _ = fs::write(DEFAULT_TEST_WALLET_LOC, "{'id':'f6847b5e-ac79-4d57-8eae-8fcdadcb2017'}");
+        match run_wallet_daemon(true) {
+            Ok(_) => assert!(false, "Expected WalletFileInvalid error"),
+            Err(e) => assert_eq!(e, CError::WalletError(WalletErrorType::WalletFileInvalid))
+        }
 
+        // Remove test-wallet.data file
+        let _ = fs::remove_file(DEFAULT_TEST_WALLET_LOC);
+        // Test fresh wallet created
         thread::spawn(|| {
             let _ = run_wallet_daemon(true);
         });
         thread::sleep(Duration::from_millis(1000));
 
-        let request = query_wallet_daemon(DaemonRequest::GenAddressBTC);
-        assert!(request.is_ok());
+        let gen_addr_request = query_wallet_daemon(DaemonRequest::GenAddressBTC);
+        assert!(gen_addr_request.is_ok());
+        // Should generate 1st address of test wallet.
+        assert_eq!(gen_addr_request.unwrap(), DaemonResponse::Value(serde_json::to_string("tb1qghtup486tj8vgz2l5pkh8hqw8wzdudralnw74e").unwrap()));
     }
 }
