@@ -42,6 +42,7 @@ use std::sync::mpsc::RecvTimeoutError;
 use std::thread;
 use std::time::Instant;
 use uuid::Uuid;
+use wallet::wallet::DEFAULT_TEST_WALLET_LOC;
 
 #[cfg(test)]
 #[macro_use]
@@ -152,7 +153,7 @@ impl SpawnServer for MockDatabase {
     }
 }
 
-/// Create a wallet and generate some addresses
+/// Create a wallet with generic seed and generate some addresses
 #[cfg(test)]
 fn gen_wallet() -> Wallet {
     gen_wallet_with_seed(&[0xcd; 32])
@@ -165,6 +166,7 @@ fn gen_wallet_with_seed(seed: &[u8]) -> Wallet {
     let mut wallet = Wallet::new(
         &seed,
         &"regtest".to_string(),
+        DEFAULT_TEST_WALLET_LOC,
         ClientShim::new("http://localhost:8000".to_string(), None, None),
     );
     let _ = wallet.keys.get_new_address();
@@ -177,6 +179,7 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
     let mut wallet = Wallet::new(
         &[0xcd; 32],
         &"regtest".to_string(),
+        DEFAULT_TEST_WALLET_LOC,
         ClientShim::new("http://localhost:8000".to_string(), None, None),
     );
 
@@ -364,12 +367,17 @@ pub fn run_batch_transfer(
         commitments.push(commitment);
     }
 
-    // Check all marked true (= complete)
+    // Check complete
     let status_api =
         state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id);
-    let mut state_chains_copy = status_api.unwrap().state_chains;
-    state_chains_copy.retain(|_, &mut v| v == false);
-    assert_eq!(state_chains_copy.len(), 0);
+
+    match status_api {
+        Ok(v) => {
+            assert_eq!(v.finalized, true);
+            assert_eq!(v.state_chains.len(), transfer_finalized_datas.len());
+        },
+        Err(e) => assert!(false, format!("Error: {}",e)),
+    }
 
     (
         batch_id,
