@@ -28,6 +28,7 @@ use chrono::{Duration, NaiveDateTime, Utc};
 use std::panic;
 use std::sync::{Arc, Mutex};
 use std::{convert::TryInto, panic::AssertUnwindSafe, str::FromStr};
+use uuid::Uuid;
 
 /// A list of States in which each State signs for the next State.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -114,7 +115,7 @@ pub struct State {
     pub next_state: Option<StateChainSig>, // signature representing passing of ownership
 }
 /// Data necessary to create ownership transfer signatures
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default, Hash, Eq)]
 pub struct StateChainSig {
     pub purpose: String, // "TRANSFER", "TRANSFER-BATCH" or "WITHDRAW"
     pub data: String,    // proof key, state chain id or address
@@ -142,12 +143,34 @@ impl StateChainSig {
         })
     }
 
+    fn purpose_transfer_batch(batch_id: &Uuid) -> String {
+        format!("TRANSFER_BATCH:{}", batch_id)
+    }
+
+    /// Generate signature to request participation in a batch transfer
+    pub fn new_transfer_batch_sig(
+        proof_key_priv: &SecretKey,
+        batch_id: &Uuid,
+        state_chain_id: &Uuid,
+    ) -> Result<Self> {
+        let purpose = &Self::purpose_transfer_batch(batch_id);
+        let data = &state_chain_id.to_string();
+        Self::new(proof_key_priv, purpose, data)
+    }
+
     /// Verify self's signature for transfer or withdraw
     pub fn verify(&self, pk: &String) -> Result<()> {
         let message = StateChainSig::to_message(&self.purpose, &self.data)?;
         Signature::from_str(&self.sig)
             .unwrap()
             .verify(&PublicKey::from_str(&pk).unwrap(), &message)
+    }
+
+    pub fn is_transfer_batch(&self, batch_id: Option<&Uuid>) -> bool {
+        match batch_id {
+            None => self.purpose.starts_with("TRANSFER_BATCH"),
+            Some(id) => self.purpose == Self::purpose_transfer_batch(id),
+        }
     }
 }
 

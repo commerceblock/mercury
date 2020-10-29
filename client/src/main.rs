@@ -1,75 +1,58 @@
-#[macro_use]
+extern crate bitcoin;
 extern crate clap;
-use clap::App;
+extern crate client_lib;
+extern crate electrumx_client;
+extern crate shared_lib;
+extern crate uuid;
 
-use client_lib::state_entity;
-use client_lib::wallet::wallet;
-use client_lib::{ClientShim, Tor};
-use shared_lib::{
-    mocks::mock_electrum::MockElectrum,
-    structs::{SCEAddress, TransferMsg3},
+use client_lib::{
+    daemon::{query_wallet_daemon, DaemonRequest, DaemonResponse},
+    state_entity::transfer::TransferFinalizeData,
+};
+use shared_lib::structs::{
+    PrepareSignTxMsg, SCEAddress, StateChainDataAPI, StateEntityFeeInfoAPI, TransferMsg3,
 };
 
-use bitcoin::consensus;
-use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
+use bitcoin::util::key::PublicKey;
+use bitcoin::{consensus, Transaction};
+use clap::{load_yaml, App};
+use electrumx_client::response::{GetBalanceResponse, GetListUnspentResponse};
 use std::str::FromStr;
 use uuid::Uuid;
 
 fn main() {
     let yaml = load_yaml!("../cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
-
-    let conf_rs = client_lib::get_config().unwrap();
-
-    let endpoint: String = conf_rs.get("endpoint").unwrap();
-    let electrum_server: String = conf_rs.get("electrum_server").unwrap();
-    let testing_mode: bool = conf_rs.get("testing_mode").unwrap();
-    let mut tor = Tor::from_config(&conf_rs);
-    let tor = match tor.enable {
-        true => {
-            tor.control_password = conf_rs
-                .get("tor_control_password")
-                .expect("tor enabled - tor_control_password required");
-            Some(tor)
-        }
-        false => None,
-    };
-
-    println!("config tor: {:?}", tor);
-
     let _ = env_logger::try_init();
 
-    // TODO: random generating of seed and allow input of mnemonic phrase
-    let seed = [0xcd; 32];
-    let client_shim = ClientShim::new(endpoint, None, tor);
-
-    let electrum: Box<dyn Electrumx> = if testing_mode {
-        Box::new(MockElectrum::new())
-    } else {
-        Box::new(ElectrumxClient::new(electrum_server).unwrap())
-    };
-
-    let network = "testnet".to_string();
-
-    if let Some(_matches) = matches.subcommand_matches("create-wallet") {
-        println!("Network: [{}], Creating wallet", network);
-        let wallet = wallet::Wallet::new(&seed, &network, client_shim, electrum);
-        wallet.save();
-        println!("Network: [{}], Wallet saved to disk", &network);
-    } else if let Some(matches) = matches.subcommand_matches("wallet") {
-        let mut wallet = wallet::Wallet::load(client_shim, electrum).unwrap();
-
+    if let Some(matches) = matches.subcommand_matches("wallet") {
         if matches.is_present("new-address") {
-            let address = wallet.keys.get_new_address().unwrap();
-            println!(
-                "\nNetwork: [{}], \n\nAddress: [{}]\n",
-                network,
-                address.to_string()
-            );
-            wallet.save();
+            let address: String = match query_wallet_daemon(DaemonRequest::GenAddressBTC).unwrap() {
+                DaemonResponse::Value(val) => val,
+                DaemonResponse::Error(e) => panic!(e.to_string()),
+                DaemonResponse::None => panic!("None value returned."),
+            };
+
+            println!("\nAddress: [{}]\n", address);
+        } else if matches.is_present("se-addr") {
+            if let Some(matches) = matches.subcommand_matches("se-addr") {
+                let funding_txid = matches.value_of("txid").unwrap().to_string();
+                let address: String =
+                    match query_wallet_daemon(DaemonRequest::GenAddressSE(funding_txid)).unwrap() {
+                        DaemonResponse::Value(val) => val,
+                        DaemonResponse::Error(e) => panic!(e.to_string()),
+                        DaemonResponse::None => panic!("None value returned."),
+                    };
+
+                println!("\nAddress: {:?}\n", address);
+            }
         } else if matches.is_present("get-balance") {
-            println!("\nNetwork: [{}],", network);
-            let (addrs, balances) = wallet.get_all_addresses_balance();
+            let (addrs, balances): (Vec<bitcoin::Address>, Vec<GetBalanceResponse>) =
+                match query_wallet_daemon(DaemonRequest::GetWalletBalance).unwrap() {
+                    DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::None => panic!("None value returned."),
+                };
             if addrs.len() > 0 {
                 println!("\n\nWallet balance: \n\nAddress:\t\t\t\t\tConfirmed:\tUnconfirmed:");
                 for (i, _) in addrs.iter().enumerate() {
@@ -80,7 +63,12 @@ fn main() {
                 }
                 println!();
             }
-            let (_, state_chain_ids, bals) = wallet.get_state_chains_info();
+            let (_, state_chain_ids, bals): (Vec<Uuid>, Vec<Uuid>, Vec<GetBalanceResponse>) =
+                match query_wallet_daemon(DaemonRequest::GetStateChainsInfo).unwrap() {
+                    DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::None => panic!("None value returned."),
+                };
             if state_chain_ids.len() > 0 {
                 println!("\n\nState Entity balance: \n\nStateChain ID:\t\t\t\t\tConfirmed:\tUnconfirmed:");
                 for (i, bal) in bals.into_iter().enumerate() {
@@ -92,43 +80,37 @@ fn main() {
                 println!();
             }
         } else if matches.is_present("list-unspent") {
-            let (_, unspent_list) = wallet.list_unspent();
+            let (_, unspent_list): (Vec<bitcoin::Address>, Vec<Vec<GetListUnspentResponse>>) =
+                match query_wallet_daemon(DaemonRequest::GetListUnspent).unwrap() {
+                    DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::None => panic!("None value returned."),
+                };
             let mut hashes: Vec<String> = vec![];
             for unspent_for_addr in unspent_list {
                 for unspent in unspent_for_addr {
                     hashes.push(unspent.tx_hash);
                 }
             }
-            println!(
-                "\nNetwork: [{}], \n\nUnspent tx hashes: \n{}\n",
-                network,
-                hashes.join("\n")
-            );
-        } else if matches.is_present("se-addr") {
-            if let Some(matches) = matches.subcommand_matches("se-addr") {
-                let funding_txid: &str = matches.value_of("txid").unwrap();
-                let se_address = wallet
-                    .get_new_state_entity_address(&funding_txid.to_string())
-                    .unwrap();
-                wallet.save();
-                println!(
-                    "\nNetwork: [{}], \n\nNew State Entity address: \n{:?}",
-                    network,
-                    serde_json::to_string(&se_address).unwrap()
-                );
-            }
+            println!("\nUnspent tx hashes: \n{}\n", hashes.join("\n"));
         } else if matches.is_present("deposit") {
             if let Some(matches) = matches.subcommand_matches("deposit") {
-                let amount: &str = matches.value_of("amount").unwrap();
-                let (_, state_chain_id, funding_txid, tx_b, _, _) = state_entity::deposit::deposit(
-                    &mut wallet,
-                    &amount.to_string().parse::<u64>().unwrap(),
-                )
-                .unwrap();
-                wallet.save();
+                let amount = u64::from_str(matches.value_of("amount").unwrap()).unwrap();
+                let (_, state_chain_id, funding_txid, tx_b, _, _): (
+                    Uuid,
+                    Uuid,
+                    String,
+                    Transaction,
+                    PrepareSignTxMsg,
+                    PublicKey,
+                ) = match query_wallet_daemon(DaemonRequest::Deposit(amount)).unwrap() {
+                    DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::None => panic!("None value returned."),
+                };
                 println!(
-                    "\nNetwork: [{}], \n\nDeposited {} satoshi's. \nState Chain ID: {}",
-                    network, amount, state_chain_id
+                    "\nDeposited {} satoshi's. \nState Chain ID: {}",
+                    amount, state_chain_id
                 );
                 println!("\nFunding Txid: {}", funding_txid);
                 println!(
@@ -138,120 +120,121 @@ fn main() {
             }
         } else if matches.is_present("withdraw") {
             if let Some(matches) = matches.subcommand_matches("withdraw") {
-                let shared_key_id: &str = matches.value_of("id").unwrap();
-                let (txid, state_chain_id, amount) = state_entity::withdraw::withdraw(
-                    &mut wallet,
-                    &Uuid::from_str(&shared_key_id).unwrap(),
-                )
-                .unwrap();
-                wallet.save();
+                let state_chain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
+                let (txid, state_chain_id, amount): (String, Uuid, u64) =
+                    match query_wallet_daemon(DaemonRequest::Withdraw(state_chain_id)).unwrap() {
+                        DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                        DaemonResponse::Error(e) => panic!(e.to_string()),
+                        DaemonResponse::None => panic!("None value returned."),
+                    };
                 println!(
-                    "\nNetwork: [{}], \nWithdrawn {} satoshi's. \nFrom StateChain ID: {}",
-                    network, amount, state_chain_id
+                    "\nWithdrawn {} satoshi's. \nFrom StateChain ID: {}",
+                    amount, state_chain_id
                 );
-
                 println!("\nWithdraw Txid: {}", txid);
             }
         } else if matches.is_present("transfer-sender") {
             if let Some(matches) = matches.subcommand_matches("transfer-sender") {
-                let shared_key_id: &str = matches.value_of("id").unwrap();
+                let state_chain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
                 let receiver_addr: SCEAddress =
                     serde_json::from_str(matches.value_of("addr").unwrap()).unwrap();
-                let transfer_msg = state_entity::transfer::transfer_sender(
-                    &mut wallet,
-                    &Uuid::from_str(&shared_key_id).unwrap(),
-                    receiver_addr,
+                let transfer_msg3: TransferMsg3 = match query_wallet_daemon(
+                    DaemonRequest::TransferSender(state_chain_id, receiver_addr),
                 )
-                .unwrap();
-                wallet.save();
+                .unwrap()
+                {
+                    DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::None => panic!("None value returned."),
+                };
                 println!(
-                    "\nNetwork: [{}], \n\nTransfer initiated for StateChain ID: {}.",
-                    network, shared_key_id
+                    "\nTransfer initiated for StateChain ID: {}.",
+                    state_chain_id
                 );
                 println!(
                     "\nTransfer message: {:?}",
-                    serde_json::to_string(&transfer_msg).unwrap()
+                    serde_json::to_string(&transfer_msg3).unwrap()
                 );
             }
         } else if matches.is_present("transfer-receiver") {
             if let Some(matches) = matches.subcommand_matches("transfer-receiver") {
-                let mut transfer_msg: TransferMsg3 =
+                let transfer_msg3: TransferMsg3 =
                     serde_json::from_str(matches.value_of("message").unwrap()).unwrap();
-                let finalized_data = state_entity::transfer::transfer_receiver(
-                    &mut wallet,
-                    &mut transfer_msg,
-                    &None,
-                )
-                .unwrap();
-                wallet.save();
+                let finalized_data: TransferFinalizeData =
+                    match query_wallet_daemon(DaemonRequest::TransferReceiver(transfer_msg3))
+                        .unwrap()
+                    {
+                        DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                        DaemonResponse::Error(e) => panic!(e.to_string()),
+                        DaemonResponse::None => panic!("None value returned."),
+                    };
                 println!(
-                    "\nNetwork: [{}], \n\nTransfer complete for StateChain ID: {}.",
-                    network, finalized_data.state_chain_id
+                    "\nTransfer complete for StateChain ID: {}.",
+                    finalized_data.state_chain_id
                 );
             }
-
-        // backup
-        } else if matches.is_present("backup") {
-            println!("Backup not currently implemented.")
-        // let escrow = escrow::Escrow::load();
-        //
-        // println!("Backup private share pending (it can take some time)...");
-        //
-        // let start = Instant::now();
-        // wallet.backup(escrow);
-        //
-        // println!("Backup key saved in escrow (Took: {})", TimeFormat(start.elapsed()));
-        } else if matches.is_present("verify") {
-            println!("Backup verification not currently implemented.")
-
-        // let escrow = escrow::Escrow::load();
-        //
-        // println!("verify encrypted backup (it can take some time)...");
-        //
-        // let start = Instant::now();
-        // wallet.verify_backup(escrow);
-        //
-        // println!(" (Took: {})", TimeFormat(start.elapsed()));
-        } else if matches.is_present("restore") {
-            println!("Restoring not currently implemented.")
-
-        // let escrow = escrow::Escrow::load();
-        //
-        // println!("backup recovery in process 📲 (it can take some time)...");
-        //
-        // let start = Instant::now();
-        // wallet::Wallet::recover_and_save_share(escrow, &network, &client_shim);
-        //
-        // println!(" Backup recovered 💾(Took: {})", TimeFormat(start.elapsed()));
-        } else if matches.is_present("send") {
-            println!("Send not currently implemented.")
-
-            // if let Some(matches) = matches.subcommand_matches("send") {
-            //     let to: &str = matches.value_of("to").unwrap();
-            //     let amount_btc: &str = matches.value_of("amount").unwrap();
-            //     let txid = wallet.send(
-            //         to.to_string(),
-            //         amount_btc.to_string().parse::<f32>().unwrap(),
-            //         &client_shim,
-            //     );
-            //     wallet.save();
-            //     println!(
-            //         "Network: [{}], Sent {} BTC to address {}. Transaction ID: {}",
-            //         network, amount_btc, to, txid
-            //     );
-            // }
+        } else if matches.is_present("swap") {
+            if let Some(matches) = matches.subcommand_matches("swap") {
+                let state_chain_id =
+                    Uuid::from_str(matches.value_of("state-chain-id").unwrap()).unwrap();
+                let swap_size = u64::from_str(matches.value_of("swap-size").unwrap()).unwrap();
+                let force_no_tor: bool = matches.is_present("force-no-tor");
+                match query_wallet_daemon(DaemonRequest::Swap(
+                    state_chain_id,
+                    swap_size,
+                    force_no_tor,
+                ))
+                .unwrap()
+                {
+                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    _ => {}
+                };
+                println!("\nSwap complete from StateChain ID: {}.", state_chain_id);
+            }
         }
+    //
+    //     // backup
+    //     } else if matches.is_present("backup") {
+    //         println!("Backup not currently implemented.")
+    //     } else if matches.is_present("verify") {
+    //         println!("Backup verification not currently implemented.")
+    //     } else if matches.is_present("restore") {
+    //         println!("Restoring not currently implemented.")
 
-    // Api
+    //     } else if matches.is_present("send") {
+    //         println!("Send not currently implemented.")
+    //
+    //         // if let Some(matches) = matches.subcommand_matches("send") {
+    //         //     let to: &str = matches.value_of("to").unwrap();
+    //         //     let amount_btc: &str = matches.value_of("amount").unwrap();
+    //         //     let txid = wallet.send(
+    //         //         to.to_string(),
+    //         //         amount_btc.to_string().parse::<f32>().unwrap(),
+    //         //         &client_shim,
+    //         //     );
+    //         //     wallet.save();
+    //         //     println!(
+    //         //         "Network: [{}], Sent {} BTC to address {}. Transaction ID: {}",
+    //         //         network, amount_btc, to, txid
+    //         //     );
+    //         // }
+    //     }
+    //
+    // // Api
     } else if let Some(matches) = matches.subcommand_matches("state-entity") {
         if matches.is_present("get-statechain") {
             if let Some(matches) = matches.subcommand_matches("get-statechain") {
-                let id: &str = matches.value_of("id").unwrap();
-                let state_chain_info =
-                    state_entity::api::get_statechain(&client_shim, &Uuid::from_str(&id).unwrap())
-                        .unwrap();
-                println!("\nStateChain with Id {} info: \n", id);
-
+                let state_chain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
+                let state_chain_info: StateChainDataAPI = match query_wallet_daemon(
+                    DaemonRequest::GetStateChain(state_chain_id),
+                )
+                .unwrap()
+                {
+                    DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::None => panic!("None value returned."),
+                };
+                println!("\nStateChain with Id {} info: \n", state_chain_id);
                 println!(
                     "amount: {}\nutxo:\n\ttxid: {},\n\tvout: {},\nlocktime: {}",
                     state_chain_info.amount, state_chain_info.utxo.txid, state_chain_info.utxo.vout, state_chain_info.locktime,
@@ -263,7 +246,12 @@ fn main() {
                 println!();
             }
         } else if matches.is_present("fee-info") {
-            let fee_info = state_entity::api::get_statechain_fee_info(&client_shim).unwrap();
+            let fee_info: StateEntityFeeInfoAPI =
+                match query_wallet_daemon(DaemonRequest::GetFeeInfo).unwrap() {
+                    DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::None => panic!("None value returned."),
+                };
             println!("State Entity fee info: \n\n{}", fee_info);
         }
     }

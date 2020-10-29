@@ -20,14 +20,15 @@ use bitcoin::hashes::sha256d;
 use chrono::NaiveDateTime;
 use curv::{BigInt, FE, GE};
 use kms::ecdsa::two_party::*;
-use mainstay::CommitmentInfo;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
 use rocket_contrib::databases::postgres::{rows::Row, types::ToSql};
 use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
+use shared_lib::mainstay::CommitmentInfo;
 use shared_lib::state_chain::*;
-use shared_lib::{mainstay, Root};
+use shared_lib::structs::TransferMsg3;
+use shared_lib::Root;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -115,6 +116,7 @@ pub enum Column {
     // Id,
     StateChainSig,
     X1,
+    TransferMsg,
 
     // TransferBatch
     // Id,
@@ -298,6 +300,7 @@ impl PGDatabase {
                 id uuid NOT NULL,
                 statechainsig varchar,
                 x1 varchar,
+                transfermsg varchar,
                 PRIMARY KEY (id)
             );",
                 Table::Transfer.to_string(),
@@ -589,7 +592,11 @@ impl PGDatabase {
         T: rocket_contrib::databases::postgres::types::FromSql,
     {
         let (res, _, _, _) = self.get::<T, T, T, T>(id, table, column)?;
-        Ok(res.unwrap()) //  err returned from db_get if desired item is None
+        res.ok_or(SEError::DBError(
+            crate::error::DBErrorType::NoDataForID,
+            "item not found".to_string(),
+        ))
+        //Ok(res.unwrap()) //  err returned from db_get if desired item is None
     }
     /// Get 2 items from row in table. Err if ID not found. Return None if data item empty.
     pub fn get_2<T, U>(&self, id: Uuid, table: Table, column: Vec<Column>) -> Result<(T, U)>
@@ -1138,6 +1145,24 @@ impl Database for PGDatabase {
                 &Self::ser(x1.to_owned())?,
             ],
         )
+    }
+
+    fn update_transfer_msg(&self, state_chain_id: &Uuid, msg: &TransferMsg3) -> Result<()> {
+        self.update(
+            state_chain_id,
+            Table::Transfer,
+            vec![Column::TransferMsg],
+            vec![&Self::ser(msg.to_owned())?],
+        )
+    }
+
+    fn get_transfer_msg(&self, state_chain_id: &Uuid) -> Result<TransferMsg3> {
+        let msg = self.get_1(
+            state_chain_id.to_owned(),
+            Table::Transfer,
+            vec![Column::TransferMsg],
+        )?;
+        Self::deser(msg)
     }
 
     fn create_transfer_batch_data(

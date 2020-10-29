@@ -545,7 +545,7 @@ impl SCE {
         Ok(())
     }
 
-    fn get_transfer_batch_status(&self, batch_id: Uuid) -> Result<TransferBatchDataAPI> {
+    pub fn get_transfer_batch_status(&self, batch_id: Uuid) -> Result<TransferBatchDataAPI> {
         let tbd = self.database.get_transfer_batch_data(batch_id)?;
 
         // Check if all transfers are complete. If so then all transfers in batch can be finalized.
@@ -589,7 +589,7 @@ impl SCE {
                         batch_id
                     );
                 }
-                return Err(SEError::Generic(String::from("Transfer Batch ended.")));
+                return Err(SEError::TransferBatchEnded(String::from("Timeout")));
             }
         }
 

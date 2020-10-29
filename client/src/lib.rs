@@ -1,15 +1,23 @@
 extern crate centipede;
 extern crate config;
 extern crate curv;
+extern crate floating_duration;
 extern crate kms;
+extern crate monotree;
 extern crate multi_party_ecdsa;
 extern crate reqwest;
 extern crate zk_paillier;
+
+#[cfg(test)]
+extern crate mockito;
 
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
+
+extern crate daemon_engine;
+extern crate tokio;
 
 #[macro_use]
 extern crate log;
@@ -23,9 +31,10 @@ extern crate electrumx_client;
 extern crate hex;
 extern crate itertools;
 extern crate pyo3;
+extern crate rand;
 extern crate shared_lib;
 extern crate uuid;
-
+pub mod daemon;
 pub mod ecdsa;
 pub mod error;
 pub mod state_entity;
@@ -172,10 +181,10 @@ impl Tor {
             from stem.control import Controller
             with Controller.from_port(port = tordata.as_tuple()[2]) as controller:
                 controller.authenticate(tordata.as_tuple()[3])  # provide the password here if you set one
-        
+
                 bytes_read = controller.get_info("traffic/read")
                 bytes_written = controller.get_info("traffic/written")
-        
+
                 print("My Tor relay has read %s bytes and written %s bytes." % (bytes_read, bytes_written))
         "#
         );
@@ -257,6 +266,10 @@ impl ClientShim {
         let b = self.client.get(tor::IPIFYURL);
         let value = b.send()?.text()?;
         Ok(value)
+    }
+
+    pub fn has_tor(&self) -> bool {
+        self.tor.is_some()
     }
 }
 
