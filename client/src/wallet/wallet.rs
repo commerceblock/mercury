@@ -33,7 +33,8 @@ use std::fs;
 use std::str::FromStr;
 use uuid::Uuid;
 
-const WALLET_FILENAME: &str = "wallet/wallet.data";
+pub const DEFAULT_WALLET_LOC: &str = "wallet/wallet.data";
+pub const DEFAULT_TEST_WALLET_LOC: &str = "wallet/test_wallet.data";
 
 // Struct wrapper for Electrumx client instance
 pub struct ElectrumxBox {
@@ -58,9 +59,10 @@ unsafe impl Sync for ElectrumxBox {}
 pub struct Wallet {
     pub id: String,
     pub network: String,
-    secp: Secp256k1<All>,
     pub electrumx_client: ElectrumxBox, // Default MockElectrum
     pub client_shim: ClientShim,
+    secp: Secp256k1<All>,
+    wallet_data_loc: String,
 
     pub master_priv_key: ExtendedPrivKey,
     pub keys: KeyPathWithAddresses,           // Keys for general usage
@@ -72,7 +74,7 @@ pub struct Wallet {
     pub require_mainstay: bool,
 }
 impl Wallet {
-    pub fn new(seed: &[u8], network: &String, client_shim: ClientShim) -> Wallet {
+    pub fn new(seed: &[u8], network: &String, wallet_data_loc: &str, client_shim: ClientShim) -> Wallet {
         let secp = Secp256k1::new();
         let master_priv_key =
             ExtendedPrivKey::new_master(network.parse::<Network>().unwrap(), seed).unwrap();
@@ -100,9 +102,10 @@ impl Wallet {
         Wallet {
             id: Uuid::new_v4().to_string(),
             network: network.to_string(),
-            secp,
             electrumx_client: ElectrumxBox::new_mock(),
             client_shim,
+            secp,
+            wallet_data_loc: wallet_data_loc.to_string(),
             master_priv_key,
             keys,
             se_backup_keys,
@@ -153,6 +156,7 @@ impl Wallet {
         json!({
             "id": self.id,
             "network": self.network,
+            "wallet_data_loc": self.wallet_data_loc,
             "master_priv_key": self.master_priv_key.to_string(),
             "keys_last_derived_pos": self.keys.last_derived_pos,
             "se_backup_keys_last_derived_pos": self.se_backup_keys.last_derived_pos,
@@ -207,9 +211,10 @@ impl Wallet {
         let mut wallet = Wallet {
             id: json["id"].as_str().unwrap().to_string(),
             network,
-            secp,
             electrumx_client: ElectrumxBox::new_mock(),
             client_shim,
+            secp,
+            wallet_data_loc: json["wallet_data_loc"].as_str().unwrap().to_string(),
             master_priv_key,
             keys,
             se_backup_keys,
@@ -273,25 +278,28 @@ impl Wallet {
     }
 
     /// save to disk
-    pub fn save_to(&self, filepath: &str) {
-        let wallet_json = self.to_json().to_string();
-        fs::write(filepath, wallet_json).expect("Unable to save wallet!");
-        debug!("(wallet id: {}) Saved wallet to disk", self.id);
-    }
     pub fn save(&self) {
-        self.save_to(WALLET_FILENAME)
+        let wallet_json = self.to_json().to_string();
+        fs::write(&self.wallet_data_loc, wallet_json).expect("Unable to save wallet!");
+        debug!("(wallet id: {}) Saved wallet to disk", self.id);
     }
 
     /// load wallet from disk
-    pub fn load_from(filepath: &str, client_shim: ClientShim) -> Result<Wallet> {
-        let data = fs::read_to_string(filepath)?;
-        let serde_json_data = serde_json::from_str(&data).unwrap();
-        let wallet: Wallet = Wallet::from_json(serde_json_data, client_shim)?;
+    pub fn load(wallet_data_loc: &str, client_shim: ClientShim) -> Result<Wallet> {
+        let data = match fs::read_to_string(wallet_data_loc) {
+            Ok(data) => data,
+            Err(_) => return Err(CError::WalletError(WalletErrorType::WalletFileNotFound))
+        };
+        let serde_json_data = match serde_json::from_str(&data) {
+            Ok(data) => data,
+            Err(_) => return Err(CError::WalletError(WalletErrorType::WalletFileInvalid))
+        };
+        let wallet: Wallet = match Wallet::from_json(serde_json_data, client_shim) {
+            Ok(wallet) => wallet,
+            Err(_) => return Err(CError::WalletError(WalletErrorType::WalletFileInvalid))
+        };
         debug!("(wallet id: {}) Loaded wallet to memory", wallet.id);
         Ok(wallet)
-    }
-    pub fn load(client_shim: ClientShim) -> Result<Wallet> {
-        Ok(Wallet::load_from(WALLET_FILENAME, client_shim)?)
     }
 
     /// Select unspent coins greedily. Return TxIns along with corresponding spending addresses and amounts
@@ -638,6 +646,7 @@ pub fn to_bitcoin_public_key(pk: curv::PK) -> bitcoin::util::key::PublicKey {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -652,11 +661,51 @@ mod tests {
         let mut wallet = Wallet::new(
             &seed,
             &"regtest".to_string(),
+            DEFAULT_TEST_WALLET_LOC,
             ClientShim::new("http://localhost:8000".to_string(), None, None),
         );
         let _ = wallet.keys.get_new_address();
         let _ = wallet.keys.get_new_address();
         wallet
+    }
+
+
+    #[test]
+    #[serial]
+    fn test_wallet_save_load() {
+        let wallet = gen_wallet();
+        wallet.save();
+
+        let wallet_loaded = Wallet::load(DEFAULT_TEST_WALLET_LOC, ClientShim::new("http://localhost:8000".to_string(), None, None)).unwrap();
+
+        assert_eq!(wallet.to_json(), wallet_loaded.to_json());
+    }
+
+    #[test]
+    #[serial]
+    fn test_wallet_save_overwrite() {
+        // Generate two identical wallets
+        let mut wallet1 = gen_wallet();
+        let wallet2 = gen_wallet();
+        assert_eq!(wallet1.keys.last_derived_pos, wallet2.keys.last_derived_pos);
+
+        // Make distinct
+        let _ = wallet1.keys.get_new_address();
+        let _ = wallet1.keys.get_new_address();
+        assert!(wallet1.keys.last_derived_pos != wallet2.keys.last_derived_pos);
+
+        wallet1.save();
+        // Test loaded wallet is same as wallet 1
+        let loaded_wall = Wallet::load(DEFAULT_TEST_WALLET_LOC, ClientShim::new("http://localhost:8000".to_string(), None, None)).unwrap();
+        assert_eq!(wallet1.keys.last_derived_pos, loaded_wall.keys.last_derived_pos);
+        assert!(wallet2.keys.last_derived_pos != loaded_wall.keys.last_derived_pos);
+
+        // Overwrite saved wallet with wallet2
+        wallet2.save();
+        // Test loaded wallet is same as wallet 2
+        let loaded_wall2 = Wallet::load(DEFAULT_TEST_WALLET_LOC, ClientShim::new("http://localhost:8000".to_string(), None, None)).unwrap();
+        assert_eq!(wallet2.keys.last_derived_pos, loaded_wall2.keys.last_derived_pos);
+        assert!(wallet1.keys.last_derived_pos != loaded_wall2.keys.last_derived_pos);
     }
 
     #[test]
@@ -685,6 +734,7 @@ mod tests {
 
         assert_eq!(wallet.id, wallet_rebuilt.id);
         assert_eq!(wallet.network, wallet_rebuilt.network);
+        assert_eq!(wallet.wallet_data_loc, wallet_rebuilt.wallet_data_loc);
         assert_eq!(
             wallet.master_priv_key.chain_code,
             wallet_rebuilt.master_priv_key.chain_code

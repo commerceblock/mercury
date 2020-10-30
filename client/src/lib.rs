@@ -25,6 +25,10 @@ extern crate log;
 #[macro_use]
 extern crate failure;
 
+#[cfg(test)]
+#[macro_use]
+extern crate serial_test;
+
 extern crate base64;
 extern crate bitcoin;
 extern crate electrumx_client;
@@ -50,7 +54,7 @@ use pyo3::{py_run, PyCell, PyObjectProtocol};
 use config::Config as ConfigRs;
 use error::CError;
 
-type Result<T> = std::result::Result<T, CError>;
+pub type Result<T> = std::result::Result<T, CError>;
 
 pub mod tor {
     pub static SOCKS5URL: &str = "socks5h://127.0.0.1:9050";

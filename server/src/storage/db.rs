@@ -29,7 +29,7 @@ use shared_lib::mainstay::CommitmentInfo;
 use shared_lib::state_chain::*;
 use shared_lib::structs::TransferMsg3;
 use shared_lib::Root;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use monotree::database::MemCache;
@@ -107,6 +107,8 @@ pub enum Column {
     Amount,
     LockedUntil,
     OwnerId,
+    TransferFinalizeData,
+    TransferReady,
 
     // BackupTxs
     //Id,
@@ -122,7 +124,6 @@ pub enum Column {
     // Id,
     StartTime,
     StateChains,
-    FinalizedData,
     PunishedStateChains,
     Finalized,
 
@@ -286,6 +287,8 @@ impl PGDatabase {
                 amount int8,
                 ownerid uuid,
                 lockeduntil timestamp,
+                transferfinalizedata varchar,
+                transferready bool,
                 PRIMARY KEY (id)
             );",
                 Table::StateChain.to_string(),
@@ -315,7 +318,6 @@ impl PGDatabase {
                 id uuid NOT NULL,
                 starttime timestamp,
                 statechains varchar,
-                finalizeddata varchar,
                 punishedstatechains varchar,
                 finalized bool,
                 PRIMARY KEY (id)
@@ -1102,7 +1104,7 @@ impl Database for PGDatabase {
                 Column::PunishedStateChains,
             ],
         )?;
-        let state_chains: HashMap<Uuid, bool> = Self::deser(state_chains_str)?;
+        let state_chains: HashSet<Uuid> = Self::deser(state_chains_str)?;
         let punished_state_chains: Vec<Uuid> = Self::deser(punished_state_chains_str)?;
         Ok(TransferBatchData {
             state_chains,
@@ -1168,7 +1170,7 @@ impl Database for PGDatabase {
     fn create_transfer_batch_data(
         &self,
         batch_id: &Uuid,
-        state_chains: HashMap<Uuid, bool>,
+        state_chains: Vec<Uuid>,
     ) -> Result<()> {
         self.insert(&batch_id, Table::TransferBatch)?;
         self.update(
@@ -1177,14 +1179,12 @@ impl Database for PGDatabase {
             vec![
                 Column::StartTime,
                 Column::StateChains,
-                Column::FinalizedData,
                 Column::PunishedStateChains,
                 Column::Finalized,
             ],
             vec![
                 &get_time_now(),
                 &Self::ser(state_chains)?,
-                &Self::ser(Vec::<TransferFinalizeData>::new())?,
                 &Self::ser(Vec::<String>::new())?,
                 &false,
             ],
@@ -1427,22 +1427,50 @@ impl Database for PGDatabase {
         )
     }
 
-    fn get_finalize_batch_data(&self, batch_id: Uuid) -> Result<TransferFinalizeBatchData> {
-        let (state_chains_str, finalized_data_vec_str, start_time) = self
-            .get_3::<String, String, NaiveDateTime>(
-                batch_id,
-                Table::TransferBatch,
-                vec![
-                    Column::StateChains,
-                    Column::FinalizedData,
-                    Column::StartTime,
-                ],
-            )?;
+    fn get_transfer_batch_start_time(&self, batch_id: &Uuid) -> Result<NaiveDateTime> {
+        self.get_1::<NaiveDateTime>(
+            batch_id.to_owned(),
+            Table::TransferBatch,
+            vec![Column::StartTime],
+        )
+    }
 
-        let state_chains: HashMap<Uuid, bool> = Self::deser(state_chains_str)?;
-        let finalized_data_vec: Vec<TransferFinalizeData> = Self::deser(finalized_data_vec_str)?;
+    fn get_batch_transfer_statechain_ids(&self, batch_id: &Uuid) -> Result<HashSet<Uuid>>{
+        let statechain_ids = self.get_1(
+            batch_id.to_owned(),
+            Table::TransferBatch,
+            vec![Column::StateChains],
+        )?;
+        Self::deser(statechain_ids)
+    }
+ 
+    fn get_finalize_batch_data(&self, batch_id: Uuid) -> Result<TransferFinalizeBatchData> {
+        let mut finalized_data_vec = vec![];
+        
+        for id in self.get_batch_transfer_statechain_ids(&batch_id)? {
+            match self.get_sc_finalize_batch_data(&id){
+                Ok(v) => {
+                    //Check the batch id
+                    match v.batch_data {
+                        Some(ref bd) => {
+                            if bd.id == batch_id{
+                                finalized_data_vec.push(v);
+                            } else {
+                                return Err(SEError::DBError(NoDataForID, 
+                                    format!("batch_id required:{}, found:{}", batch_id, bd.id)))
+                            }
+                        },
+                        None => return Err(SEError::DBError(NoDataForID, 
+                                    format!("no batch data"))),
+                    }
+                },
+                Err(e) => return Err(e),
+            };
+        }
+
+        let start_time = self.get_transfer_batch_start_time(&batch_id)?;
+            
         Ok(TransferFinalizeBatchData {
-            state_chains,
             finalized_data_vec,
             start_time,
         })
@@ -1450,16 +1478,24 @@ impl Database for PGDatabase {
 
     fn update_finalize_batch_data(
         &self,
-        batch_id: &Uuid,
-        state_chains: HashMap<Uuid, bool>,
-        finalized_data_vec: Vec<TransferFinalizeData>,
+        state_chain_id: &Uuid,
+        finalized_data: &TransferFinalizeData,
     ) -> Result<()> {
         self.update(
-            batch_id,
-            Table::TransferBatch,
-            vec![Column::StateChains, Column::FinalizedData],
-            vec![&Self::ser(state_chains)?, &Self::ser(finalized_data_vec)?],
+            state_chain_id,
+            Table::StateChain,
+            vec![Column::TransferFinalizeData],
+            vec![&Self::ser(finalized_data)?],
         )
+    }
+
+    fn get_sc_finalize_batch_data(
+        &self,
+        state_chain_id: &Uuid
+    ) -> Result<TransferFinalizeData> {
+        let tfd = self.get_1(state_chain_id.to_owned(), 
+            Table::StateChain, vec![Column::TransferFinalizeData])?;
+        Self::deser(tfd)
     }
 
     fn update_transfer_batch_finalized(&self, batch_id: &Uuid, b_finalized: &bool) -> Result<()> {

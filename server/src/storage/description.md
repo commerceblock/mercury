@@ -21,13 +21,14 @@ User represents a user in a particular state chain session. The same client co-o
 ### StateChain
 A list of States in which each State signs for the next State.
 
-| Name           | Type          | Required | Description |
-|----------------|---------------|----------|-------------|
-| state_chain_id | String (UUID) | true     | Primary Key |
-| chain          | Vec(State)    | true     |             |
-| amount         | u64           | true     |             |
-| locked_until   | SystemTime    | true     | Time in the future before which this state chain cannot be acted upon |
-| owner_id       | String (UUID) | true     | user_id of current owner  |
+| Name           | Type                      | Required | Description                                                           |
+|----------------|---------------------------|----------|-----------------------------------------------------------------------|
+| state_chain_id | String (UUID)             | true     | Primary Key                                                           |
+| chain          | Vec(State)                | true     |                                                                       |
+| amount         | u64                       | true     |                                                                       |
+| locked_until   | SystemTime                | true     | Time in the future before which this state chain cannot be acted upon |
+| owner_id       | String (UUID)             | true     | user_id of current owner                                              |
+| finalized_data | Vec(TransferFinalizeData) | false    | Data for finalizing transfers                                         |
 
 
 
@@ -39,6 +40,7 @@ TransferData stores transfer data between transfer_sender and transfer_receiver.
 | state_chain_id  | String (UUID) | true     | Primary Key |
 | state_chain_sig | StateChainSig | true     |             |
 | x1              | EC Scalar     | true     |             |
+| transfermsg     | TransferMsg3  | true .   | .           |
 
 
 
@@ -50,8 +52,7 @@ When all transfers in the batch are complete these transfers are finalized atomi
 |-----------------------|---------------------------|----------|-------------------------------------------------------------|
 | id                    | String (UUID)             | true     | Primary Key                                                 |
 | start_time            | SystemTime                | true     | Time batch transfer began                                   |
-| state_chains          | HashMap(String, bool)     | true     | Mapping of state_chain_ids to completion status             |
-| finalized_data        | Vec(TransferFinalizeData) | true     | Data for finalizing transfers                               |
+| state_chains          | HashSet(String)           | true     | Set of state_chain_ids                                      |
 | punished_state_chains | Vec(String)               | true     | If transfer batch fails these state_chain_ids were punished |
 | finalized             | bool                      | true     |                                                             |
 

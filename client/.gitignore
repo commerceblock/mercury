@@ -11,7 +11,7 @@ Cargo.lock
 .idea
 db/
 *.priv
-wallet/wallet.data
+wallet/*
 escrow/client.backup
 escrow/escrow-sk.json
 escrow/sk-recovered.json

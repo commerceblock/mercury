@@ -1,24 +1,25 @@
 # Mercury Client
 
 ## Introduction
-Mercury client is a client-side StateChain implementation.
+Mercury Client is a client-side StateChain implementation.
 
-A new wallet will be automatically created upon startup.
+The wallet manages key generation and storage for keys involved in standard Bitcoin address generation and 2P-ECDSA.
 
+A new wallet will be automatically created upon startup and can be found in /wallet/wallet.data.
+
+The wallet is currently a simple CLI wallet - see instructions for usage below. GUI wallet is in development!
 
 ## Config (Settings.toml)
-enpoint:                Mercury Server network address
-
-electrum_server:        Network address of Electrum Server. Leave blank for Mock Electrum Server.
-
-testing_mode:           Use Mock Electrum Server and generate generic Seed ([0xcd; 32]).
-
-network:                Bitcoin networks: "testnet", "mainnet", "regtest"
-
-daemon_address:         File system address of Client's state manager daemon
+| Parameter        | Type   | Description |
+| -----------------| ------ | ----------- |
+| enpoint:         | String | Mercury Server network address |
+| electrum_server: | String | Network address of Electrum Server. Leave blank for Mock Electrum Server. |
+| testing_mode:    | bool   | Use Mock Electrum Server and generate generic Seed ([0xcd; 32]). |
+| network:         | String | Bitcoin networks: "testnet", "mainnet", "regtest" |
+| daemon_address:  | String | File system address of Client's state manager daemon |
 
 ## Requirements
-Mercury server is required to interact with the client, for instruction on how to run it see [here](../server/README.md).
+Mercury server is required to interact with the client. Connect to our public test server at "https://fakeapi.mercurywallet.io", or for instruction on how to run your own see [here](../server/README.md).
 
 ### Requirements for Tor
 In order to enable Tor, openssl and python3 should be installed. The python package "stem" is also required.
