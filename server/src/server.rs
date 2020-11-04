@@ -16,8 +16,31 @@ use rocket::{
     config::{Config as RocketConfig, Environment},
     Request, Rocket,
 };
+use rocket_prometheus::{
+    prometheus::{opts, IntCounter, IntCounterVec},
+    PrometheusMetrics,
+};
+use once_cell::sync::Lazy;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
+
+//prometheus statics
+pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
+    IntCounter::new("deposit_counter", "Total completed deposits")
+        .expect("Could not create lazy IntCounter")
+});
+pub static WITHDRAWALS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
+    IntCounter::new("withdraw_counter", "Total completed withdrawals")
+        .expect("Could not create lazy IntCounter")
+});
+pub static TRANSFERS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
+    IntCounter::new("transfer_counter", "Total completed transfers")
+        .expect("Could not create lazy IntCounter")
+});
+pub static REG_SWAP_UTXOS: Lazy<IntCounterVec> = Lazy::new(|| {
+    IntCounterVec::new(opts!("reg_swap_utxos", "Registered utxos by group size and amount"), &["size","amount"])
+        .expect("Could not create lazy IntGaugeVec")
+});
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -117,10 +140,18 @@ pub fn get_server<
         panic!("expected mainstay config");
     }
 
+    let prometheus = PrometheusMetrics::new();
+
+    prometheus.registry().register(Box::new(DEPOSITS_COUNT.clone())).unwrap();
+    prometheus.registry().register(Box::new(WITHDRAWALS_COUNT.clone())).unwrap();
+    prometheus.registry().register(Box::new(TRANSFERS_COUNT.clone())).unwrap();
+    prometheus.registry().register(Box::new(REG_SWAP_UTXOS.clone())).unwrap();
+
     let rocket_config = get_rocket_config(&sc_entity.config);
 
     let rock = rocket::custom(rocket_config)
         .register(catchers![internal_error, not_found, bad_request])
+        .attach(prometheus.clone())
         .mount(
             "/",
             routes![
@@ -160,6 +191,7 @@ pub fn get_server<
                 conductor::swap_second_message,
             ],
         )
+        .mount("/metrics", prometheus)
         .manage(sc_entity);
 
     Ok(rock)
