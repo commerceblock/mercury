@@ -554,7 +554,7 @@ impl Conductor for SCE {
         let _ = guard.register_amount_swap_size(key_id, amount, *swap_size);
 
         //increment swap histogram
-        REG_SWAP_UTXOS.with_label_values(&[&swap_size.to_string(),&amount.to_string()]).inc();
+        REG_SWAP_UTXOS.with_label_values(&[&swap_size.clone().to_string(),&amount.clone().to_string()]).inc();
 
         Ok(())
     }
