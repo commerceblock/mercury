@@ -4,7 +4,6 @@
 
 pub use super::super::Result;
 extern crate shared_lib;
-use crate::server::TRANSFERS_COUNT;
 use super::transfer_batch::transfer_batch_is_ended;
 use shared_lib::{ecies, ecies::WalletDecryptable, state_chain::*, structs::*};
 
@@ -320,9 +319,6 @@ impl Transfer for SCE {
 
         // Remove TransferData for this transfer
         self.database.remove_transfer_data(&state_chain_id)?;
-
-        //increment transfer counter
-        TRANSFERS_COUNT.inc();
 
         Ok(())
     }

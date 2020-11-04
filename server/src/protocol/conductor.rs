@@ -4,7 +4,6 @@
 
 pub use super::super::Result;
 use crate::error::SEError;
-use crate::server::REG_SWAP_UTXOS;
 use shared_lib::{
     blinded_token::{
         BSTSenderData, BlindedSpendSignature, BlindedSpendToken, BlindedSpentTokenMessage,
@@ -552,10 +551,6 @@ impl Conductor for SCE {
         let amount: u64 = sc_amount.amount as u64;
         let mut guard = self.scheduler.lock()?;
         let _ = guard.register_amount_swap_size(key_id, amount, *swap_size);
-
-        //increment swap histogram
-        REG_SWAP_UTXOS.with_label_values(&[&swap_size.clone().to_string(),&amount.clone().to_string()]).inc();
-
         Ok(())
     }
 

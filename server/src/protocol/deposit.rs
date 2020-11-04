@@ -3,10 +3,9 @@
 //! StateEntity Deposit trait and implementation for StateChainEntity.
 
 pub use super::super::Result;
-use crate::server::DEPOSITS_COUNT;
 extern crate shared_lib;
 use crate::error::SEError;
-use crate::server::{StateChainEntity};
+use crate::server::StateChainEntity;
 use crate::storage::Storage;
 use crate::Database;
 use shared_lib::{state_chain::*, structs::*, util::FEE};
@@ -118,13 +117,6 @@ impl Deposit for SCE {
             state_chain_id, user_id
         );
 
-        // Update UserSession with StateChain's ID
-        self.database
-            .update_statechain_id(&user_id, &state_chain_id)?;
-
-        //increment fee metric
-        DEPOSITS_COUNT.inc();
-
         // Update sparse merkle tree with new StateChain entry
         let (current_root, new_root) = self.update_smt(
             &tx_backup
@@ -145,6 +137,10 @@ impl Deposit for SCE {
             "DEPOSIT: State Chain ID: {}. New root: {:?}. Previous root: {:?}.",
             state_chain_id, new_root, current_root
         );
+
+        // Update UserSession with StateChain's ID
+        self.database
+            .update_statechain_id(&user_id, &state_chain_id)?;
 
         Ok(state_chain_id)
     }
