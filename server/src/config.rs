@@ -86,6 +86,10 @@ pub struct Config {
     pub block_time: u64,
     /// Testing mode
     pub testing_mode: bool,
+    /// Initial deposit backup nlocktime
+    pub lockheight_init: u32,
+    /// Transfer nlocktime decrement
+    pub lh_decrement: u32,
     /// Receive address for fee payments
     pub fee_address: String,
     /// Despoit fee (satoshis)
@@ -96,6 +100,10 @@ pub struct Config {
     pub batch_lifetime: u64,
     /// Length of punishment for unresponsivve/misbehaving batch-transfer utxo
     pub punishment_duration: u64,
+    /// Watch-only
+    pub watch_only: bool,
+    /// bitcoind node connecton
+    pub bitcoind: String,
     /// Storage config
     pub storage: StorageConfig,
     /// Mainstay config
@@ -112,11 +120,15 @@ impl Default for Config {
             network: String::from("regtest"),
             block_time: 2,
             testing_mode: true,
+            lockheight_init: 10000,
+            lh_decrement: 100,
             fee_address: String::from("bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x"),
             fee_deposit: 300,
             fee_withdraw: 300,
             batch_lifetime: 3600,     // 1 hour
             punishment_duration: 360, // 1 minute
+            watch_only: false,
+            bitcoind: String::from("user:password@http://127.0.0.1:8332"),
             storage: StorageConfig::default(),
             mainstay: Some(MainstayConfig::default()),
             rocket: RocketConfig::default(),

@@ -3,6 +3,8 @@ network = "testnet"
 block_time = 2
 testing_mode = true
 # log_file = "log/output.log" # Comment out for stdout
+lockheight_init = 1000
+lh_decrement = 10
 
 # Fees
 fee_address = "bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x"
@@ -15,3 +17,7 @@ batch_lifetime = "3600" # 1 hour
 
 #Mainstay config
 mainstay_config = ""
+
+#Watch config
+watch_only = false
+bitcoind = "exch:goodpass@http://localhost:8332"

@@ -72,22 +72,6 @@ pub fn get_sighash(
     .as_hash()
 }
 
-/// Check backup tx is valid
-pub fn tx_backup_verify(tx_psm: &PrepareSignTxMsg) -> Result<()> {
-    if tx_psm.input_addrs.len() != tx_psm.input_amounts.len() {
-        return Err(SharedLibError::FormatError(String::from(
-            "Back up tx number of signing addresses != number of input amounts.",
-        )));
-    }
-
-    // May want to check more here
-    // - locktime
-    // - amounts
-    // - Fee rate?
-
-    Ok(())
-}
-
 /// Check withdraw tx is valid
 pub fn tx_withdraw_verify(
     tx_psm: &PrepareSignTxMsg,
@@ -187,6 +171,7 @@ pub fn tx_backup_build(
     funding_txid: &Txid,
     b_address: &Address,
     amount: &u64,
+    locktime: &u32,
 ) -> Result<Transaction> {
     if FEE >= *amount {
         return Err(SharedLibError::FormatError(String::from(
@@ -210,7 +195,7 @@ pub fn tx_backup_build(
             script_pubkey: b_address.script_pubkey(),
             value: amount - FEE,
         }],
-        lock_time: 0,
+        lock_time: *locktime,
         version: 2,
     };
     Ok(tx_b)

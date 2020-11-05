@@ -236,8 +236,8 @@ fn main() {
                 };
                 println!("\nStateChain with Id {} info: \n", state_chain_id);
                 println!(
-                    "amount: {}\nutxo:\n\ttxid: {},\n\tvout: {}",
-                    state_chain_info.amount, state_chain_info.utxo.txid, state_chain_info.utxo.vout
+                    "amount: {}\nutxo:\n\ttxid: {},\n\tvout: {},\nlocktime: {}",
+                    state_chain_info.amount, state_chain_info.utxo.txid, state_chain_info.utxo.vout, state_chain_info.locktime,
                 );
                 println!("StateChain: ");
                 for state in state_chain_info.chain.clone() {
