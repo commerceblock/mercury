@@ -5,6 +5,7 @@
 pub use super::super::Result;
 extern crate shared_lib;
 use crate::structs::StateChainOwner;
+use crate::server::WITHDRAWALS_COUNT;
 use shared_lib::{state_chain::*, structs::*};
 
 use rocket::State;
@@ -133,6 +134,9 @@ impl Withdraw for SCE {
 
         // Remove state_chain_id from user session to signal end of session
         self.database.remove_statechain_id(&user_id)?;
+
+        //increment withdrawals metric
+        WITHDRAWALS_COUNT.inc();
 
         // Update sparse merkle tree
         let (prev_root, new_root) = self.update_smt(
