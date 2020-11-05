@@ -94,6 +94,7 @@ pub enum Column {
     ProofKey,
     StateChainId,
     TxBackup,
+    LockTime,
     TxWithdraw,
     SigHash,
     S2,
@@ -346,6 +347,7 @@ impl PGDatabase {
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
                 txbackup varchar,
+                locktime int8,
                 PRIMARY KEY (id)
             );",
                 Table::BackupTxs.to_string(),
@@ -553,6 +555,7 @@ impl PGDatabase {
 
         Ok((None, None, None, None))
     }
+
     /// Returns str list of column names for SQL SELECT query statement.
     pub fn get_columns_str(&self, cols: &Vec<Column>) -> String {
         let cols_len = cols.len();
@@ -754,12 +757,13 @@ impl Database for PGDatabase {
         Self::deser(self.get_1(user_id, Table::UserSession, vec![Column::TxBackup])?)
     }
 
-    fn update_backup_tx(&self, state_chain_id: &Uuid, tx: Transaction) -> Result<()> {
+    fn update_backup_tx(&self,state_chain_id: &Uuid, tx: Transaction) -> Result<()> {
+        let locktime = tx.lock_time;
         self.update(
             state_chain_id,
             Table::BackupTxs,
-            vec![Column::TxBackup],
-            vec![&Self::ser(tx)?],
+            vec![Column::TxBackup,Column::LockTime],
+            vec![&Self::ser(tx)?,&(locktime as i64)],
         )
     }
 
@@ -851,6 +855,30 @@ impl Database for PGDatabase {
                 Err(_) => return Ok(0),
             },
         }
+    }
+
+    /// Get vector of backup transactions that have nlocktimes less than or equal to the supplied locktime (lockheight)
+    fn get_current_backup_txs(&self, locktime: i64) -> Result<Vec<BackupTxID>> {
+        let dbr = self.database_r()?;
+        let statement =
+            dbr.prepare(&format!("SELECT * FROM {} WHERE locktime <= $1", Table::BackupTxs.to_string(),))?;
+        let rows = statement.query(&[&locktime])?;
+        let mut txs: Vec<BackupTxID> = Vec::new();
+        if rows.is_empty() {
+            return Ok(txs);
+        };
+        for row in &rows {
+            let tx_backup: Transaction = Self::deser(row.get("txbackup"))?;
+            let id: Uuid = row.get("id");
+            let backup_obj = BackupTxID { tx: tx_backup, id: id };
+            txs.push(backup_obj);
+        }
+        Ok(txs)
+    }
+
+    // remove confirmed backup transaction from db
+    fn remove_backup_tx(&self, state_chain_id: &Uuid) -> Result<()> {
+        self.remove(state_chain_id, Table::BackupTxs)
     }
 
     /// Get root with given ID
@@ -1018,12 +1046,13 @@ impl Database for PGDatabase {
         state_chain_id: &Uuid,
         tx_backup: &Transaction,
     ) -> Result<()> {
+        let locktime = tx_backup.lock_time;
         self.insert(state_chain_id, Table::BackupTxs)?;
         self.update(
             state_chain_id,
             Table::BackupTxs,
-            vec![Column::TxBackup],
-            vec![&Self::ser(tx_backup.clone())?],
+            vec![Column::TxBackup,Column::LockTime],
+            vec![&Self::ser(tx_backup.clone())?,&(locktime as i64)],
         )
     }
 

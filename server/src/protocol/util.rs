@@ -11,9 +11,11 @@ use shared_lib::{
     mocks::mock_electrum::MockElectrum,
     state_chain::*,
     structs::*,
-    util::{get_sighash, tx_backup_verify, tx_withdraw_verify},
+    util::{get_sighash, tx_withdraw_verify},
     Root,
 };
+
+use shared_lib::structs::Protocol;
 
 use crate::error::{DBErrorType, SEError};
 use crate::storage::Storage;
@@ -29,6 +31,8 @@ use rocket_contrib::json::Json;
 use std::str::FromStr;
 use std::{thread, time::Duration};
 use uuid::Uuid;
+
+const MAX_LOCKTIME: u32 = 500000000; // bitcoin tx nlocktime cutoff
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -81,6 +85,8 @@ impl Utilities for SCE {
             address: self.config.fee_address.clone(),
             deposit: self.config.fee_deposit,
             withdraw: self.config.fee_withdraw,
+            interval: self.config.lh_decrement,
+            initlock: self.config.lockheight_init,
         })
     }
 
@@ -265,8 +271,39 @@ impl Utilities for SCE {
             }
             _ => {
                 // Verify unsigned backup tx to ensure co-sign will be signing the correct data
-                tx_backup_verify(&prepare_sign_msg)?;
+                if prepare_sign_msg.input_addrs.len() != prepare_sign_msg.input_amounts.len() {
+                    return Err(SEError::Generic(String::from(
+                        "Back up tx number of signing addresses != number of input amounts.",
+                    )));
+                }
 
+                //check that the locktime is height and not epoch
+                if (prepare_sign_msg.tx.lock_time as u32) >= MAX_LOCKTIME {
+                    return Err(SEError::Generic(String::from(
+                        "Backup tx locktime specified as Unix epoch time not block height.",
+                    )));
+                }
+
+                //for transfer (not deposit)
+                if prepare_sign_msg.protocol == Protocol::Transfer {
+                    //verify transfer locktime is correct
+                    let state_chain_id = self.database.get_statechain_id(user_id)?;
+                    let current_tx_backup = self.database.get_backup_transaction(state_chain_id)?;
+
+                    if (current_tx_backup.lock_time as u32) != (prepare_sign_msg.tx.lock_time as u32) + (self.config.lh_decrement as u32) {
+                        return Err(SEError::Generic(String::from(
+                            "Backup tx locktime not correctly decremented.",
+                        )));
+                    }
+                } else if prepare_sign_msg.protocol == Protocol::Deposit {
+                    //verify deposit locktime is correct
+                    if (prepare_sign_msg.tx.lock_time as u32) != (self.config.lockheight_init as u32) {
+                        return Err(SEError::Generic(String::from(
+                            "Deposit backup tx locktime not set to init value",
+                        )));
+                    }
+                }
+                
                 let sig_hash = get_sighash(
                     &prepare_sign_msg.tx,
                     &0,
@@ -779,6 +816,7 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
                 amount: state_chain.amount as u64,
                 utxo: tx_backup.input.get(0).unwrap().previous_output,
                 chain: state_chain.chain.chain,
+                locktime: tx_backup.lock_time,
             }
         })
     }
@@ -893,6 +931,7 @@ pub mod tests {
 
     pub fn test_sc_entity(db: MockDatabase) -> SCE {
         let mut sc_entity = SCE::load(db, MemoryDB::new("")).unwrap();
+        sc_entity.config.testing_mode = true;
         sc_entity.config.mainstay = Some(mainstay::MainstayConfig::mock_from_url(&test_url()));
         sc_entity
     }
