@@ -20,7 +20,10 @@ impl Electrumx for MockElectrum {
     fn get_tip_header(
         &mut self,
     ) -> std::result::Result<GetTipResponse, Box<dyn std::error::Error>> {
-        todo!()
+        return Ok(GetTipResponse {
+            height: 12345,
+            hex: "AA".to_string(),
+        });
     }
     fn get_block_header(&mut self, _height: usize) -> Result<String, Box<dyn std::error::Error>> {
         todo!()
