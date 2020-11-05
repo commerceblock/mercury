@@ -1,6 +1,6 @@
 endpoint = "https://fakeapi.mercurywallet.io"
 electrum_server = "electrum.blockstream.info:60001" # Empty string for Mock Electrum server
-testing_mode = "false" # Use testing wallet
+testing_mode = "true" # Use testing wallet
 network = "testnet"
 daemon_address = "/tmp/rustd.sock"
 [tor]

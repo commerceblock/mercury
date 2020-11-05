@@ -90,6 +90,7 @@ pub fn deposit(
     //get initial locktime
     let chaintip = wallet
         .electrumx_client
+        .instance
         .get_tip_header()?;
     debug!("Deposit: Got current best block height: {}", chaintip.height.to_string());
     let init_locktime: u32 = (chaintip.height as u32) + (se_fee_info.initlock as u32);
