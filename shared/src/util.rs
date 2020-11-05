@@ -185,6 +185,7 @@ pub fn tx_backup_build(
     funding_txid: &Txid,
     b_address: &Address,
     amount: &u64,
+    locktime: &u32,
 ) -> Result<Transaction> {
     if FEE >= *amount {
         return Err(SharedLibError::FormatError(String::from(
@@ -208,7 +209,7 @@ pub fn tx_backup_build(
             script_pubkey: b_address.script_pubkey(),
             value: amount - FEE,
         }],
-        lock_time: 0,
+        lock_time: *locktime,
         version: 2,
     };
     Ok(tx_b)

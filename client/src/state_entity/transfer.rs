@@ -20,7 +20,7 @@ use super::super::Result;
 
 use crate::error::{CError, WalletErrorType};
 use crate::state_entity::{
-    api::{get_smt_proof, get_smt_root, get_statechain},
+    api::{get_smt_proof, get_smt_root, get_statechain, get_statechain_fee_info},
     util::{cosign_tx_input, verify_statechain_smt},
 };
 use crate::wallet::{key_paths::funding_txid_to_int, wallet::Wallet};
@@ -50,6 +50,9 @@ pub fn transfer_sender(
             .clone()
             .ok_or(CError::WalletError(WalletErrorType::KeyMissingData))?;
     }
+
+    // Get state entity fee and locktime info
+    let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
 
     // First sign state chain
     let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id)?;
@@ -89,6 +92,8 @@ pub fn transfer_sender(
         None => (),
     };
     prepare_sign_msg.proof_key = Some(receiver_addr.proof_key.clone().to_string());
+    //set updated decremented locktime
+    prepare_sign_msg.tx.lock_time = state_chain_data.locktime - se_fee_info.interval;
 
     // Sign new back up tx
     let new_backup_witness = cosign_tx_input(wallet, &prepare_sign_msg)?;

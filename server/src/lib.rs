@@ -51,6 +51,7 @@ pub mod error;
 pub mod protocol;
 pub mod server;
 pub mod storage;
+pub mod watch;
 
 pub type Result<T> = std::result::Result<T, error::SEError>;
 pub type Hash = bitcoin::hashes::sha256d::Hash;
@@ -153,6 +154,8 @@ pub trait Database {
         state_chain_id: &Uuid,
         tx_backup: &Transaction,
     ) -> Result<()>;
+    fn get_current_backup_txs(&self, locktime: i64) -> Result<Vec<BackupTxID>>;
+    fn remove_backup_tx(&self, state_chain_id: &Uuid) -> Result<()>;
     fn get_backup_transaction(&self, state_chain_id: Uuid) -> Result<Transaction>;
     fn get_backup_transaction_and_proof_key(&self, user_id: Uuid) -> Result<(Transaction, String)>;
     fn get_proof_key(&self, user_id: Uuid) -> Result<String>;
@@ -272,6 +275,12 @@ pub mod structs {
     pub struct TransferFinalizeBatchData {
         pub finalized_data_vec: Vec<TransferFinalizeData>,
         pub start_time: NaiveDateTime,
+    }
+
+    #[derive(Clone)]
+    pub struct BackupTxID {
+        pub tx: Transaction,
+        pub id: Uuid,
     }
 
     #[derive(Debug)]

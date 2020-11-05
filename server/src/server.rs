@@ -9,6 +9,10 @@ use log::LevelFilter;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config as LogConfig, Root as LogRoot};
 use log4rs::encode::pattern::PatternEncoder;
+
+use std::thread;
+use crate::watch::watch_node;
+
 use mockall::*;
 use monotree::database::Database as MonotreeDatabase;
 use rocket;
@@ -134,6 +138,7 @@ pub fn get_server<
         Some(c) => sc_entity.config.mainstay = Some(c),
         None => (),
     }
+
     //At this point the mainstay config should be set,
     //either in testing mode or specified in the settings file
     if sc_entity.config.mainstay.is_none() {
@@ -149,52 +154,72 @@ pub fn get_server<
 
     let rocket_config = get_rocket_config(&sc_entity.config);
 
-    let rock = rocket::custom(rocket_config)
-        .register(catchers![internal_error, not_found, bad_request])
-        .attach(prometheus.clone())
-        .mount(
-            "/",
-            routes![
-                ping::ping,
-                ecdsa::first_message,
-                ecdsa::second_message,
-                ecdsa::third_message,
-                ecdsa::fourth_message,
-                ecdsa::sign_first,
-                ecdsa::sign_second,
-                util::get_statechain,
-                util::get_smt_root,
-                //util::get_confirmed_smt_root,
-                util::get_smt_proof,
-                util::get_fees,
-                util::prepare_sign_tx,
-                util::get_transfer_batch_status,
-                util::reset_test_dbs, // !!
-                util::get_smt_proof_test,
-                util::put_smt_value_test,
-                deposit::deposit_init,
-                deposit::deposit_confirm,
-                transfer::transfer_sender,
-                transfer::transfer_receiver,
-                transfer::transfer_update_msg,
-                transfer::transfer_get_msg,
-                transfer_batch::transfer_batch_init,
-                transfer_batch::transfer_reveal_nonce,
-                withdraw::withdraw_init,
-                withdraw::withdraw_confirm,
-                conductor::poll_utxo,
-                conductor::poll_swap,
-                conductor::get_swap_info,
-                conductor::get_blinded_spend_signature,
-                conductor::register_utxo,
-                conductor::swap_first_message,
-                conductor::swap_second_message,
-            ],
-        )
-        .mount("/metrics", prometheus)
-        .manage(sc_entity);
+    let bitcoind = sc_entity.config.bitcoind.clone();
 
-    Ok(rock)
+    if sc_entity.config.watch_only {
+        info!("Server running in watch-only mode.");
+        thread::spawn(|| watch_node(bitcoind));
+        let rock = rocket::custom(rocket_config)
+            .register(catchers![internal_error, not_found, bad_request])
+            .mount(
+                "/",
+                routes![
+                    ping::ping
+                ],
+            );
+        Ok(rock)
+    } else {
+        // if bitcoind path supplied, run watching
+        if sc_entity.config.bitcoind.is_empty() == false {
+            thread::spawn(|| watch_node(bitcoind));
+        }
+        let rock = rocket::custom(rocket_config)
+            .register(catchers![internal_error, not_found, bad_request])
+            .attach(prometheus.clone())
+            .mount(
+                "/",
+                routes![
+                    ping::ping,
+                    ecdsa::first_message,
+                    ecdsa::second_message,
+                    ecdsa::third_message,
+                    ecdsa::fourth_message,
+                    ecdsa::sign_first,
+                    ecdsa::sign_second,
+                    util::get_statechain,
+                    util::get_smt_root,
+                    //util::get_confirmed_smt_root,
+                    util::get_smt_proof,
+                    util::get_fees,
+                    util::prepare_sign_tx,
+                    util::get_transfer_batch_status,
+                    util::reset_test_dbs, // !!
+                    util::get_smt_proof_test,
+                    util::put_smt_value_test,
+                    deposit::deposit_init,
+                    deposit::deposit_confirm,
+                    transfer::transfer_sender,
+                    transfer::transfer_receiver,
+                    transfer::transfer_update_msg,
+                    transfer::transfer_get_msg,
+                    transfer_batch::transfer_batch_init,
+                    transfer_batch::transfer_reveal_nonce,
+                    withdraw::withdraw_init,
+                    withdraw::withdraw_confirm,
+                    conductor::poll_utxo,
+                    conductor::poll_swap,
+                    conductor::get_swap_info,
+                    conductor::get_blinded_spend_signature,
+                    conductor::register_utxo,
+                    conductor::swap_first_message,
+                    conductor::swap_second_message,
+                ],
+            )
+            .mount("/metrics", prometheus)
+            .manage(sc_entity);
+
+        Ok(rock)
+    }
 }
 
 fn set_logging_config(log_file: &String) {

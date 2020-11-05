@@ -419,10 +419,14 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_backup_transaction(
-        &self,
-        _state_chain_id: uuid::Uuid,
-    ) -> crate::Result<bitcoin::Transaction> {
+
+    fn get_current_backup_txs(&self, _locktime: i64) -> crate::Result<Vec<crate::structs::BackupTxID>> {
+        unimplemented!()        
+    }
+    fn remove_backup_tx(&self, _state_chain_id: &uuid::Uuid) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_backup_transaction(&self, _state_chain_id: uuid::Uuid) -> crate::Result<bitcoin::Transaction> {
         unimplemented!()
     }
     fn get_backup_transaction_and_proof_key(
