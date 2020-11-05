@@ -72,22 +72,6 @@ pub fn get_sighash(
     .as_hash()
 }
 
-/// Check backup tx is valid
-pub fn tx_backup_verify(tx_psm: &PrepareSignTxMsg) -> Result<()> {
-    if tx_psm.input_addrs.len() != tx_psm.input_amounts.len() {
-        return Err(SharedLibError::FormatError(String::from(
-            "Back up tx number of signing addresses != number of input amounts.",
-        )));
-    }
-
-    // May want to check more here
-    // - locktime
-    // - amounts
-    // - Fee rate?
-
-    Ok(())
-}
-
 /// Check withdraw tx is valid
 pub fn tx_withdraw_verify(
     tx_psm: &PrepareSignTxMsg,
@@ -128,11 +112,8 @@ pub fn tx_funding_build(
             "Not enough value to cover fee.",
         )));
     }
-    let tx_0 = Transaction {
-        version: 2,
-        lock_time: 0,
-        input: inputs.to_vec(),
-        output: vec![
+    if fee != 0 {
+        let outputs = vec![
             TxOut {
                 script_pubkey: Address::from_str(p_address)?.script_pubkey(),
                 value: *amount,
@@ -145,7 +126,24 @@ pub fn tx_funding_build(
                 script_pubkey: Address::from_str(change_addr)?.script_pubkey(),
                 value: *change_amount - FEE,
             },
-        ],
+        ];
+    } else {
+        let outputs = vec![
+            TxOut {
+                script_pubkey: Address::from_str(p_address)?.script_pubkey(),
+                value: *amount,
+            },
+            TxOut {
+                script_pubkey: Address::from_str(change_addr)?.script_pubkey(),
+                value: *change_amount - FEE,
+            },
+        ];        
+    }
+    let tx_0 = Transaction {
+        version: 2,
+        lock_time: 0,
+        input: inputs.to_vec(),
+        output: outputs
     };
     Ok(tx_0)
 }
@@ -182,7 +180,7 @@ pub fn tx_kickoff_build(
     Ok(tx_k)
 }
 
-/// Build backup tx spending P output of txK to given backup address
+/// Build backup tx spending P output of funding tx to given backup address
 pub fn tx_backup_build(
     funding_txid: &Txid,
     b_address: &Address,
