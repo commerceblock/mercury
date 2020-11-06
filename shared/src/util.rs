@@ -112,33 +112,26 @@ pub fn tx_funding_build(
             "Not enough value to cover fee.",
         )));
     }
-    if fee != 0 {
-        let outputs = vec![
-            TxOut {
-                script_pubkey: Address::from_str(p_address)?.script_pubkey(),
-                value: *amount,
-            },
+
+    let mut outputs = vec![
+        TxOut {
+            script_pubkey: Address::from_str(p_address)?.script_pubkey(),
+            value: *amount,
+        },
+        TxOut {
+            script_pubkey: Address::from_str(change_addr)?.script_pubkey(),
+            value: *change_amount - FEE,
+        },
+    ];    
+
+    if *fee != 0 {
+        outputs.push(
             TxOut {
                 script_pubkey: Address::from_str(fee_addr)?.script_pubkey(),
                 value: *fee,
-            },
-            TxOut {
-                script_pubkey: Address::from_str(change_addr)?.script_pubkey(),
-                value: *change_amount - FEE,
-            },
-        ];
-    } else {
-        let outputs = vec![
-            TxOut {
-                script_pubkey: Address::from_str(p_address)?.script_pubkey(),
-                value: *amount,
-            },
-            TxOut {
-                script_pubkey: Address::from_str(change_addr)?.script_pubkey(),
-                value: *change_amount - FEE,
-            },
-        ];        
+            });
     }
+
     let tx_0 = Transaction {
         version: 2,
         lock_time: 0,
@@ -186,6 +179,8 @@ pub fn tx_backup_build(
     b_address: &Address,
     amount: &u64,
     locktime: &u32,
+    _fee: &u64,
+    _fee_addr: &String,
 ) -> Result<Transaction> {
     if FEE >= *amount {
         return Err(SharedLibError::FormatError(String::from(

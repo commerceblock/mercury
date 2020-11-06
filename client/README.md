@@ -317,8 +317,10 @@ SUBCOMMANDS:
 State Entity fee info:
 
 Fee address: bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x,
-Deposit fee: 100
-Withdrawal fee: 100
+Deposit fee rate: 100
+Withdrawal fee rate: 100
+Lock interval: 100
+Initial lock: 1000
 ```
 
 

@@ -76,12 +76,15 @@ pub fn withdraw(wallet: &mut Wallet, state_chain_id: &Uuid) -> Result<(String, U
     // Get state entity withdraw fee info
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
 
+    //calculate SE fee amount from rate
+    let withdraw_fee = (sc_info.amount * se_fee_info.withdraw) / 10000 as u64;
+
     // Construct withdraw tx
     let tx_withdraw_unsigned = tx_withdraw_build(
         &sc_info.utxo.txid,
         &rec_address,
         &(sc_info.amount + se_fee_info.deposit),
-        &se_fee_info.withdraw,
+        &withdraw_fee,
         &se_fee_info.address,
     )?;
 
@@ -119,7 +122,7 @@ pub fn withdraw(wallet: &mut Wallet, state_chain_id: &Uuid) -> Result<(String, U
         .electrumx_client
         .instance
         .broadcast_transaction(hex::encode(consensus::serialize(&tx_withdraw_signed)))?;
-    debug!("Deposit: Funding tx broadcast. txid: {}", withdraw_txid);
+    debug!("Withdraw: Withdrawal tx broadcast. txid: {}", withdraw_txid);
 
     Ok((
         withdraw_txid,

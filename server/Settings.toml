@@ -20,4 +20,4 @@ mainstay_config = ""
 
 #Watch config
 watch_only = false
-bitcoind = "exch:goodpass@http://localhost:8332"
+bitcoind = ""

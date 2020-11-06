@@ -224,10 +224,13 @@ impl Utilities for SCE {
                 }
 
                 // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data
+                // calculate SE fee amount from rate
+                let withdraw_fee = (prepare_sign_msg.input_amounts[0] * self.config.fee_withdraw) / 10000 as u64;
+                
                 tx_withdraw_verify(
                     &prepare_sign_msg,
                     &self.config.fee_address,
-                    &self.config.fee_withdraw,
+                    &withdraw_fee,
                 )?;
 
                 let state_chain_id = self.database.get_statechain_id(user_id)?;
