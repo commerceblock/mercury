@@ -32,6 +32,7 @@ pub enum DaemonRequest {
     GetStateChainsInfo,
     GetListUnspent,
     // State Entity fns
+    GetBackup(Uuid),
     GetFeeInfo,
     GetStateChain(Uuid),
     Deposit(u64),
@@ -176,6 +177,11 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                         let balance = wallet.get_all_addresses_balance();
                         r.send(DaemonResponse::value_to_deamon_response(balance))
                     }
+                    DaemonRequest::GetBackup(state_chain_id) => {
+                        debug!("Daemon: GetBackup");
+                        let backup_tx = wallet.get_backup_tx(&state_chain_id);
+                        r.send(DaemonResponse::value_to_deamon_response(backup_tx))
+                    }                    
                     DaemonRequest::GetStateChainsInfo => {
                         debug!("Daemon: GetStateChainsInfo");
                         let balance = wallet.get_state_chains_info();

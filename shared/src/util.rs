@@ -179,10 +179,10 @@ pub fn tx_backup_build(
     b_address: &Address,
     amount: &u64,
     locktime: &u32,
-    _fee: &u64,
-    _fee_addr: &String,
+    fee: &u64,
+    fee_addr: &String,
 ) -> Result<Transaction> {
-    if FEE >= *amount {
+    if *fee + FEE >= *amount {
         return Err(SharedLibError::FormatError(String::from(
             "Not enough value to cover fee.",
         )));
@@ -200,10 +200,16 @@ pub fn tx_backup_build(
 
     let tx_b = Transaction {
         input: vec![txin.clone()],
-        output: vec![TxOut {
-            script_pubkey: b_address.script_pubkey(),
-            value: amount - FEE,
-        }],
+        output: vec![
+            TxOut {
+                script_pubkey: b_address.script_pubkey(),
+                value: amount - *fee - FEE,
+            },
+            TxOut {
+                script_pubkey: Address::from_str(fee_addr)?.script_pubkey(),
+                value: *fee,
+            },
+        ],
         lock_time: *locktime,
         version: 2,
     };

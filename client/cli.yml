@@ -102,6 +102,15 @@ subcommands:
                   required: true
                   value_name: amount
                   help: Amount in BTC
+        - get-backup:
+            about: Get Backup Transaction Hex
+            version: "1.0"
+            args:
+              - id:
+                  short: id
+                  required: true
+                  value_name: StateChain ID
+                  help: ID of StateChain with funds on State Entity
   - state-entity:
       about: API calls to State Entity
       version: "1.0"
