@@ -4,6 +4,7 @@
 
 pub use super::super::Result;
 extern crate shared_lib;
+extern crate reqwest;
 use crate::server::TRANSFERS_COUNT;
 use super::transfer_batch::transfer_batch_is_ended;
 use shared_lib::{ecies, ecies::WalletDecryptable, state_chain::*, structs::*};
@@ -104,6 +105,18 @@ impl Transfer for SCE {
         let x1: FE = ECScalar::new_random();
         let x1_ser = FESer::from_fe(&x1);
 
+        // call lockbox
+        if self.config.lockbox.is_empty() == false {
+            let path: &str = "/transfer/sender";
+            let url = format!("{}{}", self.config.lockbox, path);
+            let result = reqwest::blocking::get(&url);
+
+            let _response = match result {
+                Ok(res) => info!("transfer/sender lockbox call status: {}", res.status() ),
+                Err(err) => eprintln!("transfer/sender lockbox call status: {}", err),
+            };
+        }
+
         self.database
             .create_transfer(&state_chain_id, &transfer_msg1.state_chain_sig, &x1)?;
 
@@ -155,6 +168,18 @@ impl Transfer for SCE {
                 "State chain siganture provided does not match state chain at id {}",
                 state_chain_id
             )));
+        }
+
+        // call lockbox
+        if self.config.lockbox.is_empty() == false {
+            let path: &str = "/transfer/receiver";
+            let url = format!("{}{}", self.config.lockbox, path);
+            let result = reqwest::blocking::get(&url);
+
+            let _response = match result {
+                Ok(res) => info!("transfer/receiver lockbox call status: {}", res.status() ),
+                Err(err) => eprintln!("transfer/receiver lockbox call status: {}", err),
+            };
         }
 
         let kp = self.database.get_ecdsa_keypair(user_id)?;

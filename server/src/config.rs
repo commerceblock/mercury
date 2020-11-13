@@ -80,6 +80,8 @@ pub struct Config {
     pub log_file: String,
     /// Electrum Server Address
     pub electrum_server: String,
+    /// Lockbox server address
+    pub lockbox: String,
     /// Bitcoin network name (testnet, regtest, mainnet)
     pub network: String,
     /// Block time of network
@@ -117,6 +119,7 @@ impl Default for Config {
         Config {
             log_file: String::from(""),
             electrum_server: String::from("127.0.0.1:60401"),
+            lockbox: String::from(""),
             network: String::from("regtest"),
             block_time: 2,
             testing_mode: true,
@@ -128,7 +131,7 @@ impl Default for Config {
             batch_lifetime: 3600,     // 1 hour
             punishment_duration: 360, // 1 minute
             watch_only: false,
-            bitcoind: String::from("user:password@http://127.0.0.1:8332"),
+            bitcoind: String::from(""),
             storage: StorageConfig::default(),
             mainstay: Some(MainstayConfig::default()),
             rocket: RocketConfig::default(),

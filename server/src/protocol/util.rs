@@ -295,13 +295,6 @@ impl Utilities for SCE {
                             "Backup tx locktime not correctly decremented.",
                         )));
                     }
-                } else if prepare_sign_msg.protocol == Protocol::Deposit {
-                    //verify deposit locktime is correct
-                    if (prepare_sign_msg.tx.lock_time as u32) != (self.config.lockheight_init as u32) {
-                        return Err(SEError::Generic(String::from(
-                            "Deposit backup tx locktime not set to init value",
-                        )));
-                    }
                 }
                 
                 let sig_hash = get_sighash(

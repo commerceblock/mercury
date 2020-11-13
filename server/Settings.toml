@@ -1,4 +1,5 @@
 electrum_server = "127.0.0.1:60401"
+lockbox = "https://127.0.0.1:95000"
 network = "testnet"
 block_time = 2
 testing_mode = true
@@ -20,4 +21,4 @@ mainstay_config = ""
 
 #Watch config
 watch_only = false
-bitcoind = "exch:goodpass@http://localhost:8332"
+bitcoind = ""
