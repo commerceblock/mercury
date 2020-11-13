@@ -35,6 +35,7 @@ hex = "0.4.2"
 floating-duration = "0.1.2"
 bitcoin = { version = "0.25", features = [ "use-serde" ] }
 electrumx_client = { git = "https://github.com/commerceblock/rust-electrumx-client", tag="v0.1.3" }
+reqwest = { version = "0.10", features = ["socks", "blocking", "json"] }
 env_logger = "0.7.1"
 log4rs = "0.13.0"
 postgres = { version = "0.15.2", features = ["with-uuid","with-chrono"] }
