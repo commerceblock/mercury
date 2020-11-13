@@ -1,7 +1,7 @@
 endpoint = "http://127.0.0.1:8000"
 electrum_server = "127.0.0.1:60401" # Empty string for Mock Electrum server
-testing_mode = "false" # Use testing wallet
-network = "regtest"
+testing_mode = "true" # Use testing wallet
+network = "testnet"
 daemon_address = "/tmp/rustd.sock"
 [tor]
 enable = false
