@@ -600,11 +600,11 @@ impl Wallet {
     pub fn get_backup_tx(&self, state_chain_id: &Uuid) -> Result<String> {
         let mut backup_tx_hex: String = "".to_string();
         for shared_key in &self.shared_keys {
-            if shared_key.id == *state_chain_id {
+            if shared_key.state_chain_id.clone().unwrap() == *state_chain_id {
                 backup_tx_hex = hex::encode(consensus::serialize(&shared_key.tx_backup_psm.as_ref().unwrap().tx));
             }
         }
-        Ok(backup_tx_hex)        
+        Ok(backup_tx_hex)
     }
 
     /// List unspent outputs for addresses derived by this wallet.

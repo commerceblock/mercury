@@ -89,7 +89,7 @@ fn main() {
                         DaemonResponse::None => panic!("None value returned."),
                     };
 
-                println!("\nBackup Tx: {:?}\n", txhex);
+                println!("\nBackup Tx: {}\n", txhex);
             }
         } else if matches.is_present("list-unspent") {
             let (_, unspent_list): (Vec<bitcoin::Address>, Vec<Vec<GetListUnspentResponse>>) =
