@@ -175,8 +175,8 @@ Address: [bcrt1qq0znj64a5zukv7yew52zjzmdndch3r0vxu8668]
 Address:					Confirmed:	Unconfirmed:
 bcrt1qsuqsurhgfduhqw6ejquw54482sqpkfc22gytyh	100000		0
 
-State Chain ID:					Confirmed:	Unconfirmed:
-1b4cc310-458d-40e8-8a1b-b91c2cc67397		100		0
+State Chain ID:					        Confirmed:	Unconfirmed:   Locktime:
+1b4cc310-458d-40e8-8a1b-b91c2cc67397		100		0                7682
 ```
 
 ### Get list unspent
@@ -317,8 +317,8 @@ SUBCOMMANDS:
 State Entity fee info:
 
 Fee address: bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x,
-Deposit fee rate: 100
-Withdrawal fee rate: 100
+Deposit fee rate: 0
+Withdrawal fee rate: 50
 Lock interval: 100
 Initial lock: 1000
 ```

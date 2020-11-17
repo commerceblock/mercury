@@ -413,7 +413,7 @@ pub fn batch_transfer_verify_amounts(
 ) {
     // Check amounts have correctly rotated
     for i in 0..swap_map.len() {
-        let (_, wallet_sc_ids, bals) = wallets[swap_map[i].1].get_state_chains_info().unwrap();
+        let (_, wallet_sc_ids, bals,_) = wallets[swap_map[i].1].get_state_chains_info().unwrap();
         // check state chain id is in wallets shared keys
         let index = wallet_sc_ids
             .iter()
