@@ -3,6 +3,7 @@ pub use super::super::Result;
 use crate::error::{DBErrorType, SEError};
 use crate::Database;
 use crate::{server::StateChainEntity, structs::*};
+extern crate reqwest;
 use shared_lib::{
     structs::{KeyGenMsg1, KeyGenMsg2, KeyGenMsg3, KeyGenMsg4, Protocol, SignMsg1, SignMsg2},
     util::reverse_hex_str,
@@ -106,6 +107,18 @@ impl Ecdsa for SCE {
 
         db.update_keygen_first_msg(&user_id, &key_gen_first_msg, comm_witness, ec_key_pair)?;
 
+        // call lockbox
+        if self.config.lockbox.is_empty() == false {
+            let path: &str = "/ecdsa/keygen/first";
+            let url = format!("{}{}", self.config.lockbox, path);
+            let result = reqwest::blocking::get(&url);
+
+            let _response = match result {
+                Ok(res) => info!("ecdsa/keygen/first lockbox call status: {}", res.status() ),
+                Err(err) => eprintln!("ecdsa/keygen/first lockbox call status: {}", err),
+            };
+        }
+
         Ok((user_id, key_gen_first_msg))
     }
 
@@ -135,6 +148,18 @@ impl Ecdsa for SCE {
             party_one_private,
         )?;
 
+        // call lockbox
+        if self.config.lockbox.is_empty() == false {
+            let path: &str = "/ecdsa/keygen/second";
+            let url = format!("{}{}", self.config.lockbox, path);
+            let result = reqwest::blocking::get(&url);
+
+            let _response = match result {
+                Ok(res) => info!("ecdsa/keygen/second lockbox call status: {}", res.status() ),
+                Err(err) => eprintln!("ecdsa/keygen/second lockbox call status: {}", err),
+            };
+        }
+
         Ok(kg_party_one_second_message)
     }
 
@@ -155,6 +180,18 @@ impl Ecdsa for SCE {
             key_gen_msg3.party_two_pdl_first_message,
             alpha,
         )?;
+
+        // call lockbox
+        if self.config.lockbox.is_empty() == false {
+            let path: &str = "/ecdsa/keygen/third";
+            let url = format!("{}{}", self.config.lockbox, path);
+            let result = reqwest::blocking::get(&url);
+
+            let _response = match result {
+                Ok(res) => info!("ecdsa/keygen/third lockbox call status: {}", res.status() ),
+                Err(err) => eprintln!("ecdsa/keygen/third lockbox call status: {}", err),
+            };
+        }
 
         Ok(party_one_third_message)
     }
@@ -177,6 +214,18 @@ impl Ecdsa for SCE {
 
         self.master_key(user_id)?;
 
+        // call lockbox
+        if self.config.lockbox.is_empty() == false {
+            let path: &str = "/ecdsa/keygen/fourth";
+            let url = format!("{}{}", self.config.lockbox, path);
+            let result = reqwest::blocking::get(&url);
+
+            let _response = match result {
+                Ok(res) => info!("ecdsa/keygen/fourth lockbox call status: {}", res.status() ),
+                Err(err) => eprintln!("ecdsa/keygen/fourth lockbox call status: {}", err),
+            };
+        }
+
         Ok(pdl_second_msg.unwrap())
     }
 
@@ -197,6 +246,18 @@ impl Ecdsa for SCE {
             sign_msg1.eph_key_gen_first_message_party_two,
             eph_ec_key_pair_party1,
         )?;
+
+        // call lockbox
+        if self.config.lockbox.is_empty() == false {
+            let path: &str = "/ecdsa/sign/first";
+            let url = format!("{}{}", self.config.lockbox, path);
+            let result = reqwest::blocking::get(&url);
+
+            let _response = match result {
+                Ok(res) => info!("ecdsa/sign/first lockbox call status: {}", res.status() ),
+                Err(err) => eprintln!("ecdsa/sign/first lockbox call status: {}", err),
+            };
+        }
 
         Ok(sign_party_one_first_message)
     }
@@ -296,6 +357,18 @@ impl Ecdsa for SCE {
                 );
             }
         };
+
+        // call lockbox
+        if self.config.lockbox.is_empty() == false {
+            let path: &str = "/ecdsa/sign/first";
+            let url = format!("{}{}", self.config.lockbox, path);
+            let result = reqwest::blocking::get(&url);
+
+            let _response = match result {
+                Ok(res) => info!("ecdsa/sign/first lockbox call status: {}", res.status() ),
+                Err(err) => eprintln!("ecdsa/sign/first lockbox call status: {}", err),
+            };
+        }
 
         Ok(witness)
     }

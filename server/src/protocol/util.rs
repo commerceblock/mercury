@@ -305,7 +305,8 @@ impl Utilities for SCE {
                             "Backup tx locktime not correctly decremented.",
                         )));
                     }
-                } 
+
+                }
                 
                 let sig_hash = get_sighash(
                     &prepare_sign_msg.tx,

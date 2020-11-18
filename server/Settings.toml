@@ -1,4 +1,5 @@
 electrum_server = "127.0.0.1:60401"
+lockbox = "https://127.0.0.1:95000"
 network = "testnet"
 block_time = 2
 testing_mode = true
