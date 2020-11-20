@@ -296,7 +296,7 @@ impl Utilities for SCE {
                         )));
                     }
                 }
-                
+
                 let sig_hash = get_sighash(
                     &prepare_sign_msg.tx,
                     &0,
@@ -397,64 +397,7 @@ pub fn reset_test_dbs(sc_entity: State<SCE>) -> Result<Json<()>> {
     )));
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct SMTTest {
-    key: String,
-    entry: String,
-}
-#[post("/test/put-smt-value", format = "json", data = "<input>")]
-pub fn put_smt_value_test(sc_entity: State<SCE>, input: Json<SMTTest>) -> Result<Json<()>> {
-    if sc_entity.config.testing_mode {
-        let key = input.key.clone();
-        let entry = input.entry.clone();
-        let db = &sc_entity.database;
 
-        let current_root_id = db.root_get_current_id()?;
-        println!("current_root_id: {:?}", current_root_id);
-        let current_root = db.get_root(current_root_id)?;
-        println!("current_root: {:?}", current_root);
-
-        let new_root_hash = update_statechain_smt(
-            sc_entity.smt.clone(),
-            &current_root.clone().map(|r| r.hash()),
-            &key,
-            &entry,
-        )?;
-
-        let new_root = Root::from_hash(&new_root_hash.unwrap());
-        sc_entity.update_root(&new_root)?; // Update current root
-
-        println!("put_smt_value new_root: {:?}", new_root_hash);
-        println!("put_smt_value put entry {:?} into key {:?}", entry, key);
-    } else {
-        return Err(SEError::Generic(String::from("Testing mode only.")));
-    }
-
-    Ok(Json(()))
-}
-
-#[post("/test/get-smt-proof", format = "json", data = "<input>")]
-pub fn get_smt_proof_test(sc_entity: State<SCE>, input: Json<SMTTest>) -> Result<Json<()>> {
-    if sc_entity.config.testing_mode {
-        let key = input.key.clone();
-        let db = &sc_entity.database;
-
-        let current_root_id = db.root_get_current_id()?;
-        println!("current_root_id: {:?}", current_root_id);
-        let current_root = db.get_root(current_root_id)?;
-        println!("current_root: {:?}", current_root);
-
-        let proof = gen_proof_smt(
-            sc_entity.smt.clone(),
-            &current_root.clone().map(|r| r.hash()),
-            &key,
-        );
-        println!("proof from get_smt_value: {:?}", proof);
-    } else {
-        return Err(SEError::Generic(String::from("Testing mode only.")));
-    }
-    Ok(Json(()))
-}
 
 // Utily functions for StateChainEntity to be used throughout codebase.
 impl SCE {

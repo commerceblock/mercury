@@ -193,9 +193,6 @@ pub fn get_server<
                     util::get_fees,
                     util::prepare_sign_tx,
                     util::get_transfer_batch_status,
-                    util::reset_test_dbs, // !!
-                    util::get_smt_proof_test,
-                    util::put_smt_value_test,
                     deposit::deposit_init,
                     deposit::deposit_confirm,
                     transfer::transfer_sender,
