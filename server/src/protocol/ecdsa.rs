@@ -22,6 +22,8 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use std::string::ToString;
 use uuid::Uuid;
+use std::time::Instant;
+use floating_duration::TimeFormat;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -109,14 +111,21 @@ impl Ecdsa for SCE {
 
         // call lockbox
         if self.config.lockbox.is_empty() == false {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let start = Instant::now();
             let path: &str = "/ecdsa/keygen/first";
             let url = format!("{}{}", self.config.lockbox, path);
-            let result = reqwest::blocking::get(&url);
+
+            let client = reqwest::blocking::Client::new();
+            let result = client.post(&url)
+                .json(&key_gen_msg1)
+                .send();
 
             let _response = match result {
-                Ok(res) => info!("ecdsa/keygen/first lockbox call status: {}", res.status() ),
-                Err(err) => eprintln!("ecdsa/keygen/first lockbox call status: {}", err),
+                Ok(res) => info!("{} lockbox call status: {}", url.to_string(), res.status() ),
+                Err(err) => info!("ERROR: {} lockbox error: {}", url.to_string(), err),
             };
+            info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
         }
 
         Ok((user_id, key_gen_first_msg))
@@ -150,20 +159,47 @@ impl Ecdsa for SCE {
 
         // call lockbox
         if self.config.lockbox.is_empty() == false {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let start = Instant::now();
             let path: &str = "/ecdsa/keygen/second";
             let url = format!("{}{}", self.config.lockbox, path);
-            let result = reqwest::blocking::get(&url);
+
+            let client = reqwest::blocking::Client::new();
+            let result = client.post(&url)
+                .json(&key_gen_msg2)
+                .send();
 
             let _response = match result {
-                Ok(res) => info!("ecdsa/keygen/second lockbox call status: {}", res.status() ),
-                Err(err) => eprintln!("ecdsa/keygen/second lockbox call status: {}", err),
+                Ok(res) => info!("{} lockbox call status: {}", url.to_string(), res.status() ),
+                Err(err) => info!("ERROR: {} lockbox error: {}", url.to_string(), err),
             };
+            info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
         }
 
         Ok(kg_party_one_second_message)
     }
 
     fn third_message(&self, key_gen_msg3: KeyGenMsg3) -> Result<party_one::PDLFirstMessage> {
+
+        // call lockbox
+        if self.config.lockbox.is_empty() == false {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let start = Instant::now();
+            let path: &str = "/ecdsa/keygen/third";
+            let url = format!("{}{}", self.config.lockbox, path);
+
+            let client = reqwest::blocking::Client::new();
+            let result = client.post(&url)
+                .json(&key_gen_msg3)
+                .send();
+
+            let _response = match result {
+                Ok(res) => info!("{} lockbox call status: {}", url.to_string(), res.status() ),
+                Err(err) => info!("ERROR: {} lockbox error: {}", url.to_string(), err),
+            };
+            info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
+        }
+
         let user_id = key_gen_msg3.shared_key_id;
         let db = &self.database;
         let party_one_private: party_one::Party1Private = db.get_ecdsa_party_1_private(user_id)?;
@@ -180,18 +216,6 @@ impl Ecdsa for SCE {
             key_gen_msg3.party_two_pdl_first_message,
             alpha,
         )?;
-
-        // call lockbox
-        if self.config.lockbox.is_empty() == false {
-            let path: &str = "/ecdsa/keygen/third";
-            let url = format!("{}{}", self.config.lockbox, path);
-            let result = reqwest::blocking::get(&url);
-
-            let _response = match result {
-                Ok(res) => info!("ecdsa/keygen/third lockbox call status: {}", res.status() ),
-                Err(err) => eprintln!("ecdsa/keygen/third lockbox call status: {}", err),
-            };
-        }
 
         Ok(party_one_third_message)
     }
@@ -216,20 +240,47 @@ impl Ecdsa for SCE {
 
         // call lockbox
         if self.config.lockbox.is_empty() == false {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let start = Instant::now();
             let path: &str = "/ecdsa/keygen/fourth";
             let url = format!("{}{}", self.config.lockbox, path);
-            let result = reqwest::blocking::get(&url);
+
+            let client = reqwest::blocking::Client::new();
+            let result = client.post(&url)
+                .json(&key_gen_msg4)
+                .send();
 
             let _response = match result {
-                Ok(res) => info!("ecdsa/keygen/fourth lockbox call status: {}", res.status() ),
-                Err(err) => eprintln!("ecdsa/keygen/fourth lockbox call status: {}", err),
+                Ok(res) => info!("{} lockbox call status: {}", url.to_string(), res.status() ),
+                Err(err) => info!("ERROR: {} lockbox error: {}", url.to_string(), err),
             };
+            info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
         }
 
         Ok(pdl_second_msg.unwrap())
     }
 
     fn sign_first(&self, sign_msg1: SignMsg1) -> Result<party_one::EphKeyGenFirstMsg> {
+        
+        // call lockbox
+        if self.config.lockbox.is_empty() == false {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let start = Instant::now();
+            let path: &str = "/ecdsa/sign/first";
+            let url = format!("{}{}", self.config.lockbox, path);
+
+            let client = reqwest::blocking::Client::new();
+            let result = client.post(&url)
+                .json(&sign_msg1)
+                .send();
+
+            let _response = match result {
+                Ok(res) => info!("{} lockbox call status: {}", url.to_string(), res.status() ),
+                Err(err) => info!("ERROR: {} lockbox error: {}", url.to_string(), err),
+            };
+            info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
+        }
+
         let user_id = sign_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
 
@@ -247,22 +298,30 @@ impl Ecdsa for SCE {
             eph_ec_key_pair_party1,
         )?;
 
-        // call lockbox
-        if self.config.lockbox.is_empty() == false {
-            let path: &str = "/ecdsa/sign/first";
-            let url = format!("{}{}", self.config.lockbox, path);
-            let result = reqwest::blocking::get(&url);
-
-            let _response = match result {
-                Ok(res) => info!("ecdsa/sign/first lockbox call status: {}", res.status() ),
-                Err(err) => eprintln!("ecdsa/sign/first lockbox call status: {}", err),
-            };
-        }
-
         Ok(sign_party_one_first_message)
     }
 
     fn sign_second(&self, sign_msg2: SignMsg2) -> Result<Vec<Vec<u8>>> {
+
+        // call lockbox
+        if self.config.lockbox.is_empty() == false {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let start = Instant::now();
+            let path: &str = "/ecdsa/sign/second";
+            let url = format!("{}{}", self.config.lockbox, path);
+
+            let client = reqwest::blocking::Client::new();
+            let result = client.post(&url)
+                .json(&sign_msg2)
+                .send();
+
+            let _response = match result {
+                Ok(res) => info!("{} lockbox call status: {}", url.to_string(), res.status() ),
+                Err(err) => info!("ERROR: {} lockbox error: {}", url.to_string(), err),
+            };
+            info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
+        }
+
         let user_id = sign_msg2.shared_key_id;
         self.check_user_auth(&user_id)?;
         let db = &self.database;
@@ -357,18 +416,6 @@ impl Ecdsa for SCE {
                 );
             }
         };
-
-        // call lockbox
-        if self.config.lockbox.is_empty() == false {
-            let path: &str = "/ecdsa/sign/first";
-            let url = format!("{}{}", self.config.lockbox, path);
-            let result = reqwest::blocking::get(&url);
-
-            let _response = match result {
-                Ok(res) => info!("ecdsa/sign/first lockbox call status: {}", res.status() ),
-                Err(err) => eprintln!("ecdsa/sign/first lockbox call status: {}", err),
-            };
-        }
 
         Ok(witness)
     }
