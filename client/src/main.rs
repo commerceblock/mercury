@@ -33,19 +33,15 @@ fn main() {
                 DaemonResponse::None => panic!("None value returned."),
             };
 
-            println!("\nAddress: [{}]\n", address);
+            println!("\nBTC Address: [{}]\n", address);
         } else if matches.is_present("se-addr") {
-            if let Some(matches) = matches.subcommand_matches("se-addr") {
-                let funding_txid = matches.value_of("txid").unwrap().to_string();
-                let address: String =
-                    match query_wallet_daemon(DaemonRequest::GenAddressSE(funding_txid)).unwrap() {
-                        DaemonResponse::Value(val) => val,
-                        DaemonResponse::Error(e) => panic!(e.to_string()),
-                        DaemonResponse::None => panic!("None value returned."),
-                    };
-
-                println!("\nAddress: {:?}\n", address);
-            }
+            let address: String =
+                match query_wallet_daemon(DaemonRequest::GenAddressSE).unwrap() {
+                    DaemonResponse::Value(val) => val,
+                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::None => panic!("None value returned."),
+                };
+            println!("\nMercury Address: {:?}\n", address);
         } else if matches.is_present("get-balance") {
             let (addrs, balances): (Vec<bitcoin::Address>, Vec<GetBalanceResponse>) =
                 match query_wallet_daemon(DaemonRequest::GetWalletBalance).unwrap() {
@@ -136,8 +132,7 @@ fn main() {
         } else if matches.is_present("transfer-sender") {
             if let Some(matches) = matches.subcommand_matches("transfer-sender") {
                 let state_chain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
-                let receiver_addr: SCEAddress =
-                    serde_json::from_str(matches.value_of("addr").unwrap()).unwrap();
+                let receiver_addr: String = matches.value_of("addr").unwrap().to_string();
                 let transfer_msg3: TransferMsg3 = match query_wallet_daemon(
                     DaemonRequest::TransferSender(state_chain_id, receiver_addr),
                 )
