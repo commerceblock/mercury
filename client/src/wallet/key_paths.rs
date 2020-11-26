@@ -89,7 +89,7 @@ impl KeyPathWithAddresses {
     pub fn add_address(&mut self, new_pubkey: PublicKey, new_privkey: PrivateKey) -> Result<bitcoin::Address> {
 
         let address = bitcoin::Address::p2wpkh(
-            &to_bitcoin_public_key(new_pubkey.key),
+            &new_pubkey,
             self.ext_priv_key.network,
         )?;
 

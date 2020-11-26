@@ -336,10 +336,10 @@ impl Wallet {
         // add proof key to address map
         let tx_backup_addr = Some(self.se_backup_keys.add_address(proof_key,priv_key)?);
 
-        let proof_key =
-            bitcoin::secp256k1::PublicKey::from_slice(&proof_key.to_bytes().as_slice())?;
+        println!("{:?}", "proof keys");
+        println!("{:?}", self.se_proof_keys.key_derivation_map);
 
-        Ok(SCEAddress {tx_backup_addr, proof_key})
+        Ok(SCEAddress {tx_backup_addr: tx_backup_addr, proof_key: proof_key.key})
     }
 
     /// Sign inputs with given addresses derived by this wallet. input_indices, addresses and amoumts lists
