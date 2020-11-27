@@ -332,6 +332,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_finalize_batch() {
         let batch_id = serde_json::from_str::<TransferBatchInitMsg>(TRANSFER_BATCH_INIT)
             .unwrap()
