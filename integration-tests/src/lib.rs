@@ -241,7 +241,7 @@ pub fn run_transfer(
     }
 
     let receiver_addr = wallets[receiver_index]
-        .get_new_state_entity_address(&funding_txid)
+        .get_new_state_entity_address()
         .unwrap();
 
     let start = Instant::now();
@@ -280,7 +280,7 @@ pub fn run_transfer_with_commitment(
     let start = Instant::now();
 
     let receiver_addr = wallets[receiver_index]
-        .get_new_state_entity_address(&funding_txid)
+        .get_new_state_entity_address()
         .unwrap();
 
     let mut tranfer_sender_resp = state_entity::transfer::transfer_sender(
