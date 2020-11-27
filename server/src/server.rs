@@ -4,6 +4,7 @@ use crate::config::Config;
 use crate::structs::StateChainOwner;
 use crate::Database;
 use shared_lib::{mainstay, state_chain::StateChainSig, swap_data::*};
+use crate::error::SEError;
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
@@ -24,6 +25,10 @@ use rocket_prometheus::{
     prometheus::{opts, IntCounter, IntCounterVec},
     PrometheusMetrics,
 };
+use reqwest;
+use floating_duration::TimeFormat;
+use serde;
+use std::time::Instant;
 use once_cell::sync::Lazy;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
@@ -48,6 +53,63 @@ pub static REG_SWAP_UTXOS: Lazy<IntCounterVec> = Lazy::new(|| {
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+#[derive(Debug, Clone)]
+pub struct Lockbox {
+    pub client: reqwest::blocking::Client,
+    pub endpoint: String,
+}
+
+impl Lockbox {
+    pub fn connection(&self, endpoint: String) -> () {
+        self.client = reqwest::blocking::Client::new();
+        self.endpoint = endpoint.clone();
+    }
+
+    fn error_handler(e: reqwest::Error) {
+       if e.is_http() {
+           match e.url() {
+               None => info!("No Url given"),
+               Some(url) => info!("Problem making request to: {}", url),
+           }
+       }
+       // Inspect the internal error and output it
+       if e.is_serialization() {
+          let serde_error = match e.get_ref() {
+               None => return,
+               Some(err) => err,
+           };
+           info!("problem parsing information {}", serde_error);
+       }
+       if e.is_redirect() {
+           info!("server redirecting too many times or making loop");
+       }
+    }
+
+    pub fn post<T, V>(&self, path: &str, body: T) -> Result<V>
+    where
+        T: serde::ser::Serialize,
+        V: serde::de::DeserializeOwned,
+    {
+        let start = Instant::now();
+        let url = format!("{}{}", self.endpoint, path);
+
+        let value = match self.client.post(&url)
+                .json(&body)
+                .send()? {
+            Ok(v) => {
+                let result = v.text()?;
+
+                info!("Lockbox request {} status: {}", path, v.status() );               
+            }
+
+            Err(e) => self.error_handler(e),
+        };
+
+        info!("(Lockbox request {}, took: {})", path, TimeFormat(start.elapsed()));
+        Ok(serde_json::from_str(value.as_str()).unwrap())
+    }
+}
+
 pub struct StateChainEntity<
     T: Database + Send + Sync + 'static,
     D: MonotreeDatabase + Send + Sync + 'static,
@@ -56,6 +118,7 @@ pub struct StateChainEntity<
     pub database: T,
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
     pub scheduler: Arc<Mutex<Scheduler>>,
+    pub lockbox: Lockbox,
 }
 
 impl<
@@ -79,6 +142,7 @@ impl<
             database: db,
             smt: Arc::new(Mutex::new(smt)),
             scheduler: Arc::new(Mutex::new(Scheduler::new())),
+            lockbox: Lockbox,
         };
 
         Self::start_conductor_thread(sce.scheduler.clone());
@@ -145,8 +209,14 @@ pub fn get_server<
         panic!("expected mainstay config");
     }
 
-    let prometheus = PrometheusMetrics::new();
+    let lockbox_url = sc_entity.config.lockbox.clone();
 
+    //client connection to lockbox server
+    if sc_entity.config.lockbox.is_empty() == false {
+            sc_entity.lockbox.connection(lockbox_url);
+    }
+
+    let prometheus = PrometheusMetrics::new();
     prometheus.registry().register(Box::new(DEPOSITS_COUNT.clone())).unwrap();
     prometheus.registry().register(Box::new(WITHDRAWALS_COUNT.clone())).unwrap();
     prometheus.registry().register(Box::new(TRANSFERS_COUNT.clone())).unwrap();

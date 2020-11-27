@@ -22,8 +22,6 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use std::string::ToString;
 use uuid::Uuid;
-use std::time::Instant;
-use floating_duration::TimeFormat;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -111,21 +109,8 @@ impl Ecdsa for SCE {
 
         // call lockbox
         if self.config.lockbox.is_empty() == false {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            let start = Instant::now();
             let path: &str = "/ecdsa/keygen/first";
-            let url = format!("{}{}", self.config.lockbox, path);
-
-            let client = reqwest::blocking::Client::new();
-            let result = client.post(&url)
-                .json(&key_gen_msg1)
-                .send();
-
-            let _response = match result {
-                Ok(res) => info!("{} lockbox call status: {}", url.to_string(), res.status() ),
-                Err(err) => info!("ERROR: {} lockbox error: {}", url.to_string(), err),
-            };
-            info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
+            let (_id, _kg_party_one_first_message): (Uuid, party_one::KeyGenFirstMsg) = self.lockbox.post(path,&key_gen_msg1)?;
         }
 
         Ok((user_id, key_gen_first_msg))
@@ -157,48 +142,10 @@ impl Ecdsa for SCE {
             party_one_private,
         )?;
 
-        // call lockbox
-        if self.config.lockbox.is_empty() == false {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            let start = Instant::now();
-            let path: &str = "/ecdsa/keygen/second";
-            let url = format!("{}{}", self.config.lockbox, path);
-
-            let client = reqwest::blocking::Client::new();
-            let result = client.post(&url)
-                .json(&key_gen_msg2)
-                .send();
-
-            let _response = match result {
-                Ok(res) => info!("{} lockbox call status: {}", url.to_string(), res.status() ),
-                Err(err) => info!("ERROR: {} lockbox error: {}", url.to_string(), err),
-            };
-            info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
-        }
-
         Ok(kg_party_one_second_message)
     }
 
     fn third_message(&self, key_gen_msg3: KeyGenMsg3) -> Result<party_one::PDLFirstMessage> {
-
-        // call lockbox
-        if self.config.lockbox.is_empty() == false {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            let start = Instant::now();
-            let path: &str = "/ecdsa/keygen/third";
-            let url = format!("{}{}", self.config.lockbox, path);
-
-            let client = reqwest::blocking::Client::new();
-            let result = client.post(&url)
-                .json(&key_gen_msg3)
-                .send();
-
-            let _response = match result {
-                Ok(res) => info!("{} lockbox call status: {}", url.to_string(), res.status() ),
-                Err(err) => info!("ERROR: {} lockbox error: {}", url.to_string(), err),
-            };
-            info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
-        }
 
         let user_id = key_gen_msg3.shared_key_id;
         let db = &self.database;
@@ -238,48 +185,10 @@ impl Ecdsa for SCE {
 
         self.master_key(user_id)?;
 
-        // call lockbox
-        if self.config.lockbox.is_empty() == false {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            let start = Instant::now();
-            let path: &str = "/ecdsa/keygen/fourth";
-            let url = format!("{}{}", self.config.lockbox, path);
-
-            let client = reqwest::blocking::Client::new();
-            let result = client.post(&url)
-                .json(&key_gen_msg4)
-                .send();
-
-            let _response = match result {
-                Ok(res) => info!("{} lockbox call status: {}", url.to_string(), res.status() ),
-                Err(err) => info!("ERROR: {} lockbox error: {}", url.to_string(), err),
-            };
-            info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
-        }
-
         Ok(pdl_second_msg.unwrap())
     }
 
     fn sign_first(&self, sign_msg1: SignMsg1) -> Result<party_one::EphKeyGenFirstMsg> {
-        
-        // call lockbox
-        if self.config.lockbox.is_empty() == false {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            let start = Instant::now();
-            let path: &str = "/ecdsa/sign/first";
-            let url = format!("{}{}", self.config.lockbox, path);
-
-            let client = reqwest::blocking::Client::new();
-            let result = client.post(&url)
-                .json(&sign_msg1)
-                .send();
-
-            let _response = match result {
-                Ok(res) => info!("{} lockbox call status: {}", url.to_string(), res.status() ),
-                Err(err) => info!("ERROR: {} lockbox error: {}", url.to_string(), err),
-            };
-            info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
-        }
 
         let user_id = sign_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
@@ -302,25 +211,6 @@ impl Ecdsa for SCE {
     }
 
     fn sign_second(&self, sign_msg2: SignMsg2) -> Result<Vec<Vec<u8>>> {
-
-        // call lockbox
-        if self.config.lockbox.is_empty() == false {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            let start = Instant::now();
-            let path: &str = "/ecdsa/sign/second";
-            let url = format!("{}{}", self.config.lockbox, path);
-
-            let client = reqwest::blocking::Client::new();
-            let result = client.post(&url)
-                .json(&sign_msg2)
-                .send();
-
-            let _response = match result {
-                Ok(res) => info!("{} lockbox call status: {}", url.to_string(), res.status() ),
-                Err(err) => info!("ERROR: {} lockbox error: {}", url.to_string(), err),
-            };
-            info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
-        }
 
         let user_id = sign_msg2.shared_key_id;
         self.check_user_auth(&user_id)?;
