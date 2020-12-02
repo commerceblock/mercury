@@ -48,13 +48,12 @@ features =  ["ec_secp256k1"]
 
 [dependencies.kms]
 git = "https://github.com/commerceblock/kms-secp256k1"
-tag = "v0.1.2"
+rev = "924ecf2ed7cce35e0e6a919e2f1a510c86341899"
 default-features = false
-
 
 [dependencies.multi-party-ecdsa]
 git = "https://github.com/commerceblock/multi-party-ecdsa"
-tag = "v0.2.7"
+rev = "48d182359fd67d4d019002f58653b6a55cfd59f6"
 
 [dependencies.monotree]
 git = "https://github.com/commerceblock/monotree"
