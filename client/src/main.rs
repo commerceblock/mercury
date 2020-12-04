@@ -5,6 +5,9 @@ extern crate electrumx_client;
 extern crate shared_lib;
 extern crate uuid;
 
+use std::time::Instant;
+use floating_duration::TimeFormat;
+
 use client_lib::{
     daemon::{query_wallet_daemon, DaemonRequest, DaemonResponse},
     state_entity::transfer::TransferFinalizeData,
@@ -153,6 +156,7 @@ fn main() {
             }
         } else if matches.is_present("transfer-receiver") {
             if let Some(matches) = matches.subcommand_matches("transfer-receiver") {
+                let start = Instant::now();
                 let transfer_msg: String = matches.value_of("message").unwrap().to_string();
                 let finalized_data: TransferFinalizeData =
                     match query_wallet_daemon(DaemonRequest::TransferReceiver(transfer_msg))
@@ -166,6 +170,7 @@ fn main() {
                     "\nTransfer complete for StateChain ID: {}.",
                     finalized_data.state_chain_id
                 );
+                println!("\n {}", TimeFormat(start.elapsed()));
             }
         } else if matches.is_present("swap") {
             if let Some(matches) = matches.subcommand_matches("swap") {

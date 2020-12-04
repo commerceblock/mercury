@@ -153,6 +153,8 @@ impl Ecdsa for SCE {
             party_one_private,
         )?;
 
+        self.master_key(user_id)?;
+
         // call lockbox
         if self.config.lockbox.is_empty() == false {
             std::thread::sleep(std::time::Duration::from_millis(100));

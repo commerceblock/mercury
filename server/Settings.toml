@@ -1,8 +1,8 @@
 electrum_server = "127.0.0.1:60401"
 lockbox = ""
-network = "testnet"
+network = "regtest"
 block_time = 2
-testing_mode = true
+testing_mode = false
 # log_file = "log/output.log" # Comment out for stdout
 lockheight_init = 1000
 lh_decrement = 10
