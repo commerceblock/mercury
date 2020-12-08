@@ -170,7 +170,7 @@ mod tests {
 
         // Attempt to transfer same UTXO a second time
         let receiver_addr = wallets[1]
-            .get_new_state_entity_address(&funding_txids[0])
+            .get_new_state_entity_address()
             .expect("expected state chain entity address");
         match state_entity::transfer::transfer_sender(
             &mut wallets[0],
@@ -326,7 +326,7 @@ mod tests {
         // Check state chains are all locked by attempting to transfer + withdraw
         for i in 0..num_state_chains {
             let receiver_addr = wallets[i + 1 % num_state_chains - 1]
-                .get_new_state_entity_address(&deposits[i].2)
+                .get_new_state_entity_address()
                 .unwrap();
             match state_entity::transfer::transfer_sender(
                 &mut wallets[i],

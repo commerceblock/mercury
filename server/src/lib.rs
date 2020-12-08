@@ -64,7 +64,7 @@ use crate::storage::db::Alpha;
 use bitcoin::hashes::sha256d;
 use bitcoin::Transaction;
 use chrono::NaiveDateTime;
-use curv::{BigInt, FE, GE};
+use curv::{FE, GE};
 use kms::ecdsa::two_party::*;
 use mockall::predicate::*;
 use mockall::*;
