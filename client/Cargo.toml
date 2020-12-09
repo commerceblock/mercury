@@ -49,12 +49,12 @@ tag = "v0.2.8"
 
 [dependencies.kms]
 git = "https://github.com/commerceblock/kms-secp256k1"
-rev = "924ecf2ed7cce35e0e6a919e2f1a510c86341899"
+tag = "v0.1.2"
 default-features = false
 
 [dependencies.multi-party-ecdsa]
 git = "https://github.com/commerceblock/multi-party-ecdsa"
-rev = "48d182359fd67d4d019002f58653b6a55cfd59f6"
+tag = "v0.3.7"
 
 [dependencies.multi-party-eddsa]
 git = "https://github.com/KZen-networks/multi-party-eddsa"
