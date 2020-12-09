@@ -6,7 +6,7 @@ use super::super::utilities::requests;
 use super::super::ClientShim;
 use super::super::Result;
 use crate::wallet::shared_key::SharedKey;
-use shared_lib::structs::{KeyGenMsg1, KeyGenMsg2, KeyGenMsg3, KeyGenMsg4, Protocol};
+use shared_lib::structs::{KeyGenMsg1, KeyGenMsg2, Protocol};
 use uuid::Uuid;
 
 const KG_PATH_PRE: &str = "ecdsa/keygen";
@@ -47,39 +47,7 @@ pub fn get_master_key(
         &kg_party_one_second_message,
     );
 
-    let (party_two_second_message, party_two_paillier, party_two_pdl_chal) =
-        key_gen_second_message.unwrap();
-
-    let key_gen_msg3 = KeyGenMsg3 {
-        shared_key_id: *shared_key_id,
-        party_two_pdl_first_message: party_two_second_message.pdl_first_message,
-    };
-
-    let party_one_third_message: party_one::PDLFirstMessage =
-        requests::postb(client_shim, &format!("{}/third", KG_PATH_PRE), key_gen_msg3).unwrap();
-
-    let pdl_decom_party2 = MasterKey2::key_gen_third_message(&party_two_pdl_chal);
-
-    let party_2_pdl_second_message = pdl_decom_party2;
-
-    let key_gen_msg4 = KeyGenMsg4 {
-        shared_key_id: *shared_key_id,
-        party_two_pdl_second_message: party_2_pdl_second_message,
-    };
-
-    let party_one_pdl_second_message: party_one::PDLSecondMessage = requests::postb(
-        client_shim,
-        &format!("{}/fourth", KG_PATH_PRE),
-        key_gen_msg4,
-    )
-    .unwrap();
-
-    MasterKey2::key_gen_fourth_message(
-        &party_two_pdl_chal,
-        &party_one_third_message,
-        &party_one_pdl_second_message,
-    )
-    .expect("pdl error party1");
+    let (_, party_two_paillier) = key_gen_second_message.unwrap();
 
     let master_key = MasterKey2::set_master_key(
         &BigInt::from(0),

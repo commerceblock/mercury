@@ -542,15 +542,6 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
-    fn update_keygen_third_msg(
-        &self,
-        _user_id: &uuid::Uuid,
-        _party_one_pdl_decommit: crate::protocol::ecdsa::party_one::PDLdecommit,
-        _party_two_pdl_first_message: crate::protocol::ecdsa::party_two::PDLFirstMessage,
-        _alpha: curv::BigInt,
-    ) -> crate::Result<()> {
-        unimplemented!()
-    }
     fn init_ecdsa(&self, _user_id: &uuid::Uuid) -> crate::Result<u64> {
         unimplemented!()
     }
@@ -635,12 +626,6 @@ impl Database for MemoryDB {
         _state_chain_id: &uuid::Uuid,
         _finalized_data: crate::protocol::transfer::TransferFinalizeData,
     ) -> crate::Result<()> {
-        unimplemented!()
-    }
-    fn get_ecdsa_fourth_message_input(
-        &self,
-        _user_id: uuid::Uuid,
-    ) -> crate::Result<crate::structs::ECDSAFourthMessageInput> {
         unimplemented!()
     }
     fn update_ecdsa_sign_first(

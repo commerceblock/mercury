@@ -31,6 +31,7 @@ use rocket_contrib::json::Json;
 use std::str::FromStr;
 use std::{thread, time::Duration};
 use uuid::Uuid;
+use bitcoin::OutPoint;
 
 const MAX_LOCKTIME: u32 = 500000000; // bitcoin tx nlocktime cutoff
 
@@ -745,16 +746,28 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
         //let state_chain_id = Uuid::from_str(&state_chain_id).unwrap();
 
         let state_chain = self.database.get_statechain_amount(state_chain_id)?;
+
+        let state = state_chain.chain.chain.get(0).unwrap().next_state.clone();
+
+        if state.is_some() {
+                if state.unwrap().purpose == String::from("WITHDRAW") {
+                    return Ok({StateChainDataAPI {
+                        amount: state_chain.amount as u64,
+                        utxo: OutPoint::null(),
+                        chain: state_chain.chain.chain,
+                        locktime: 0 as u32,
+                    }});
+                } 
+            }
+
         let tx_backup = self.database.get_backup_transaction(state_chain_id)?;
 
-        Ok({
-            StateChainDataAPI {
-                amount: state_chain.amount as u64,
-                utxo: tx_backup.input.get(0).unwrap().previous_output,
-                chain: state_chain.chain.chain,
-                locktime: tx_backup.lock_time,
-            }
-        })
+        return Ok({StateChainDataAPI {
+            amount: state_chain.amount as u64,
+            utxo: tx_backup.input.get(0).unwrap().previous_output,
+            chain: state_chain.chain.chain,
+            locktime: tx_backup.lock_time,
+        }});
     }
 
     //fn authorise_withdrawal(&self, user_id: &Uuid, signature: StateChainSig) -> Result<()>;

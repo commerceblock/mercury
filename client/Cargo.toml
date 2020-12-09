@@ -45,16 +45,16 @@ mockito = "0.27.0"
 
 [dependencies.zk-paillier]
 git = "https://github.com/KZen-networks/zk-paillier"
-tag = "v0.2.4"
+tag = "v0.2.8"
 
 [dependencies.kms]
 git = "https://github.com/commerceblock/kms-secp256k1"
-tag = "v0.1.2"
+tag = "v0.1.3"
 default-features = false
 
 [dependencies.multi-party-ecdsa]
 git = "https://github.com/commerceblock/multi-party-ecdsa"
-tag = "v0.2.7"
+tag = "v0.3.7"
 
 [dependencies.multi-party-eddsa]
 git = "https://github.com/KZen-networks/multi-party-eddsa"

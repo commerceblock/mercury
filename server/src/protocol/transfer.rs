@@ -17,7 +17,7 @@ use bitcoin::Transaction;
 use cfg_if::cfg_if;
 use curv::{
     elliptic::curves::traits::{ECPoint, ECScalar},
-    {BigInt, FE, GE},
+    {FE, GE},
 };
 use rocket::State;
 use rocket_contrib::json::Json;
@@ -190,26 +190,14 @@ impl Transfer for SCE {
         let s1 = kp.party_1_private.get_private_key();
 
         //let mut rng = OsRng::new().expect("OsRng");
-        let mut theta;
-        let mut s2_theta;
-        let mut s1_theta;
         let s2 = t2 * (td.x1.invert()) * s1;
-        let q_third = FE::q().div_floor(&BigInt::from(3));
 
-        loop {
-            theta = FE::new_random();
-            // Note:
-            //  s2 = o1*o2_inv*s1
-            //  t2 = o1*x1*o2_inv
-            s1_theta = s1 * theta;
-            // Check s1_theta and s2_theta are valid for Lindell protocol (s1<q/3)
-            if s1_theta.to_big_int() < q_third {
-                s2_theta = s2 * theta;
-                if s2_theta.to_big_int() < q_third {
-                    break;
-                }
-            }
-        }
+        let theta = FE::new_random();
+        // Note:
+        //  s2 = o1*o2_inv*s1
+        //  t2 = o1*x1*o2_inv
+        let s1_theta = s1 * theta;
+        let s2_theta = s2 * theta;
 
         let g: GE = ECPoint::generator();
         let s2_pub: GE = g * s2;
