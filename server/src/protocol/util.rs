@@ -31,6 +31,7 @@ use rocket_contrib::json::Json;
 use std::str::FromStr;
 use std::{thread, time::Duration};
 use uuid::Uuid;
+use bitcoin::OutPoint;
 
 const MAX_LOCKTIME: u32 = 500000000; // bitcoin tx nlocktime cutoff
 
@@ -307,7 +308,7 @@ impl Utilities for SCE {
                     }
 
                 }
-                
+
                 let sig_hash = get_sighash(
                     &prepare_sign_msg.tx,
                     &0,
@@ -408,64 +409,7 @@ pub fn reset_test_dbs(sc_entity: State<SCE>) -> Result<Json<()>> {
     )));
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct SMTTest {
-    key: String,
-    entry: String,
-}
-#[post("/test/put-smt-value", format = "json", data = "<input>")]
-pub fn put_smt_value_test(sc_entity: State<SCE>, input: Json<SMTTest>) -> Result<Json<()>> {
-    if sc_entity.config.testing_mode {
-        let key = input.key.clone();
-        let entry = input.entry.clone();
-        let db = &sc_entity.database;
 
-        let current_root_id = db.root_get_current_id()?;
-        println!("current_root_id: {:?}", current_root_id);
-        let current_root = db.get_root(current_root_id)?;
-        println!("current_root: {:?}", current_root);
-
-        let new_root_hash = update_statechain_smt(
-            sc_entity.smt.clone(),
-            &current_root.clone().map(|r| r.hash()),
-            &key,
-            &entry,
-        )?;
-
-        let new_root = Root::from_hash(&new_root_hash.unwrap());
-        sc_entity.update_root(&new_root)?; // Update current root
-
-        println!("put_smt_value new_root: {:?}", new_root_hash);
-        println!("put_smt_value put entry {:?} into key {:?}", entry, key);
-    } else {
-        return Err(SEError::Generic(String::from("Testing mode only.")));
-    }
-
-    Ok(Json(()))
-}
-
-#[post("/test/get-smt-proof", format = "json", data = "<input>")]
-pub fn get_smt_proof_test(sc_entity: State<SCE>, input: Json<SMTTest>) -> Result<Json<()>> {
-    if sc_entity.config.testing_mode {
-        let key = input.key.clone();
-        let db = &sc_entity.database;
-
-        let current_root_id = db.root_get_current_id()?;
-        println!("current_root_id: {:?}", current_root_id);
-        let current_root = db.get_root(current_root_id)?;
-        println!("current_root: {:?}", current_root);
-
-        let proof = gen_proof_smt(
-            sc_entity.smt.clone(),
-            &current_root.clone().map(|r| r.hash()),
-            &key,
-        );
-        println!("proof from get_smt_value: {:?}", proof);
-    } else {
-        return Err(SEError::Generic(String::from("Testing mode only.")));
-    }
-    Ok(Json(()))
-}
 
 // Utily functions for StateChainEntity to be used throughout codebase.
 impl SCE {
@@ -813,16 +757,28 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
         //let state_chain_id = Uuid::from_str(&state_chain_id).unwrap();
 
         let state_chain = self.database.get_statechain_amount(state_chain_id)?;
+
+        let state = state_chain.chain.chain.get(0).unwrap().next_state.clone();
+
+        if state.is_some() {
+                if state.unwrap().purpose == String::from("WITHDRAW") {
+                    return Ok({StateChainDataAPI {
+                        amount: state_chain.amount as u64,
+                        utxo: OutPoint::null(),
+                        chain: state_chain.chain.chain,
+                        locktime: 0 as u32,
+                    }});
+                } 
+            }
+
         let tx_backup = self.database.get_backup_transaction(state_chain_id)?;
 
-        Ok({
-            StateChainDataAPI {
-                amount: state_chain.amount as u64,
-                utxo: tx_backup.input.get(0).unwrap().previous_output,
-                chain: state_chain.chain.chain,
-                locktime: tx_backup.lock_time,
-            }
-        })
+        return Ok({StateChainDataAPI {
+            amount: state_chain.amount as u64,
+            utxo: tx_backup.input.get(0).unwrap().previous_output,
+            chain: state_chain.chain.chain,
+            locktime: tx_backup.lock_time,
+        }});
     }
 
     //fn authorise_withdrawal(&self, user_id: &Uuid, signature: StateChainSig) -> Result<()>;

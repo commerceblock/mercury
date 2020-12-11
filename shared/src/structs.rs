@@ -146,18 +146,6 @@ pub struct KeyGenMsg2 {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct KeyGenMsg3 {
-    pub shared_key_id: Uuid,
-    pub party_two_pdl_first_message: party_two::PDLFirstMessage,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct KeyGenMsg4 {
-    pub shared_key_id: Uuid,
-    pub party_two_pdl_second_message: party_two::PDLSecondMessage,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
 pub struct SignMsg1 {
     pub shared_key_id: Uuid,
     pub eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg,

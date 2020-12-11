@@ -119,7 +119,7 @@ pub struct State {
 pub struct StateChainSig {
     pub purpose: String, // "TRANSFER", "TRANSFER-BATCH" or "WITHDRAW"
     pub data: String,    // proof key, state chain id or address
-    sig: String,
+    pub sig: String,
 }
 
 impl StateChainSig {

@@ -11,7 +11,7 @@ use shared_lib::{
     util::get_sighash,
 };
 
-use super::key_paths::{funding_txid_to_int, KeyPath, KeyPathWithAddresses};
+use super::key_paths::{KeyPath, KeyPathWithAddresses};
 use crate::error::{CError, WalletErrorType};
 use crate::wallet::shared_key::SharedKey;
 use crate::ClientShim;
@@ -329,20 +329,15 @@ impl Wallet {
         return Err(CError::WalletError(WalletErrorType::NotEnoughFunds));
     }
 
-    pub fn get_new_state_entity_address(&mut self, funding_txid: &String) -> Result<SCEAddress> {
-        let tx_backup_addr = Some(
-            self.se_backup_keys
-                .get_new_address_encoded_id(funding_txid_to_int(funding_txid)?)?,
-        );
-        let proof_key = self
+    pub fn get_new_state_entity_address(&mut self) -> Result<SCEAddress> {
+
+        let (proof_key, priv_key) = self
             .se_proof_keys
-            .get_new_key_encoded_id(funding_txid_to_int(funding_txid)?, None)?;
-        let proof_key =
-            bitcoin::secp256k1::PublicKey::from_slice(&proof_key.to_bytes().as_slice())?;
-        Ok(SCEAddress {
-            tx_backup_addr,
-            proof_key,
-        })
+            .get_new_key_priv()?;
+        // add proof key to address map
+        let tx_backup_addr = Some(self.se_backup_keys.add_address(proof_key,priv_key)?);
+
+        Ok(SCEAddress {tx_backup_addr: tx_backup_addr, proof_key: proof_key.key})
     }
 
     /// Sign inputs with given addresses derived by this wallet. input_indices, addresses and amoumts lists

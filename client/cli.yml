@@ -24,12 +24,6 @@ subcommands:
         - se-addr:
             about: Generate a new state entity address
             version: "1.0"
-            args:
-              - txid:
-                  short: t
-                  required: true
-                  value_name: txid
-                  help: Transaction ID of state chain funding transaction
         - deposit:
             about: Deposit to State Entity
             version: "1.0"

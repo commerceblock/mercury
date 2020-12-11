@@ -33,8 +33,9 @@ use shared_lib::{
     commitment::make_commitment,
     mainstay,
     state_chain::StateChainSig,
-    structs::{BatchData, PrepareSignTxMsg},
+    structs::{BatchData, PrepareSignTxMsg, SCEAddress},
 };
+
 use std::env;
 use std::error;
 use std::fmt;
@@ -229,20 +230,9 @@ pub fn run_transfer(
     wallets: &mut Vec<Wallet>,
     sender_index: usize,
     receiver_index: usize,
+    receiver_addr: &SCEAddress,
     state_chain_id: &Uuid,
 ) -> (Uuid, FE) {
-    let funding_txid: String;
-    {
-        funding_txid = wallets[sender_index]
-            .get_shared_key_by_state_chain_id(state_chain_id)
-            .unwrap()
-            .funding_txid
-            .to_owned();
-    }
-
-    let receiver_addr = wallets[receiver_index]
-        .get_new_state_entity_address(&funding_txid)
-        .unwrap();
 
     let start = Instant::now();
     let mut tranfer_sender_resp = state_entity::transfer::transfer_sender(
@@ -274,13 +264,13 @@ pub fn run_transfer_with_commitment(
     sender_state_chain_id: &Uuid,
     receiver_index: usize,
     receiver_state_chain_id: &Uuid,
-    funding_txid: &String,
+    _funding_txid: &String,
     batch_id: &Uuid,
 ) -> (TransferFinalizeData, String, [u8; 32]) {
     let start = Instant::now();
 
     let receiver_addr = wallets[receiver_index]
-        .get_new_state_entity_address(&funding_txid)
+        .get_new_state_entity_address()
         .unwrap();
 
     let mut tranfer_sender_resp = state_entity::transfer::transfer_sender(

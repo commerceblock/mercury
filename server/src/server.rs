@@ -182,8 +182,6 @@ pub fn get_server<
                     ping::ping,
                     ecdsa::first_message,
                     ecdsa::second_message,
-                    ecdsa::third_message,
-                    ecdsa::fourth_message,
                     ecdsa::sign_first,
                     ecdsa::sign_second,
                     util::get_statechain,
@@ -193,9 +191,6 @@ pub fn get_server<
                     util::get_fees,
                     util::prepare_sign_tx,
                     util::get_transfer_batch_status,
-                    util::reset_test_dbs, // !!
-                    util::get_smt_proof_test,
-                    util::put_smt_value_test,
                     deposit::deposit_init,
                     deposit::deposit_confirm,
                     transfer::transfer_sender,
@@ -302,16 +297,6 @@ mock! {
             &self,
             key_gen_msg2: KeyGenMsg2,
         ) -> ecdsa::Result<ecdsa::party1::KeyGenParty1Message2>;
-
-        fn third_message(
-            &self,
-            key_gen_msg3: KeyGenMsg3,
-        ) -> ecdsa::Result<ecdsa::party_one::PDLFirstMessage>;
-
-        fn fourth_message(
-            &self,
-            key_gen_msg4: KeyGenMsg4,
-        ) -> ecdsa::Result<ecdsa::party_one::PDLSecondMessage>;
 
         fn sign_first(
             &self,

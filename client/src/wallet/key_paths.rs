@@ -85,6 +85,28 @@ impl KeyPathWithAddresses {
         Ok(address)
     }
 
+    // add pubkey to address derivation map
+    pub fn add_address(&mut self, new_pubkey: PublicKey, new_privkey: PrivateKey) -> Result<bitcoin::Address> {
+
+        let address = bitcoin::Address::p2wpkh(
+            &new_pubkey,
+            self.ext_priv_key.network,
+        )?;
+
+        self.last_derived_pos += 1;
+
+        self.addresses_derivation_map.insert(
+            address.clone().to_string(),
+            KeyDerivation::new(
+                self.last_derived_pos,
+                new_privkey,
+                Some(new_pubkey),
+            ),
+        );
+
+        Ok(address)
+    }
+
     fn derive_new_key_encoded_id(
         &mut self,
         secp: &Secp256k1<All>,
@@ -163,7 +185,7 @@ impl KeyPath {
             .map_err(|e| CError::from(e))
     }
 
-    /// generate new bitcoin address
+    /// generate new proof key
     pub fn get_new_key(&mut self) -> Result<PublicKey> {
         let secp = Secp256k1::new();
         let new_ext_priv_key = self.derive_new_key(&secp)?;
@@ -176,6 +198,21 @@ impl KeyPath {
         );
 
         Ok(new_ext_pub_key.public_key)
+    }
+
+    /// generate new proof key
+    pub fn get_new_key_priv(&mut self) -> Result<(PublicKey, PrivateKey)> {
+        let secp = Secp256k1::new();
+        let new_ext_priv_key = self.derive_new_key(&secp)?;
+        let new_ext_pub_key = ExtendedPubKey::from_private(&secp, &new_ext_priv_key);
+
+        self.last_derived_pos += 1;
+        self.key_derivation_map.insert(
+            new_ext_pub_key.public_key,
+            KeyDerivation::new(self.last_derived_pos, new_ext_priv_key.private_key, None),
+        );
+
+        Ok((new_ext_pub_key.public_key, new_ext_priv_key.private_key))
     }
 
     fn derive_new_key_encoded_id(

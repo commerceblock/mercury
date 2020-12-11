@@ -16,10 +16,10 @@ use tokio::prelude::*;
 use tokio::{run, spawn};
 
 use rand::Rng;
-use shared_lib::structs::{SCEAddress, TransferMsg3};
 use state_entity::api::get_statechain;
 use uuid::Uuid;
 use wallet::wallet::{DEFAULT_TEST_WALLET_LOC, ElectrumxBox, DEFAULT_WALLET_LOC};
+use crate::utilities::encoding;
 
 /// Example request object
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -27,7 +27,7 @@ pub enum DaemonRequest {
     LifeCheck,
     // Wallet fns
     GenAddressBTC,
-    GenAddressSE(String),
+    GenAddressSE,
     GetWalletBalance,
     GetStateChainsInfo,
     GetListUnspent,
@@ -37,8 +37,8 @@ pub enum DaemonRequest {
     GetStateChain(Uuid),
     Deposit(u64),
     Withdraw(Uuid),
-    TransferSender(Uuid, SCEAddress),
-    TransferReceiver(TransferMsg3),
+    TransferSender(Uuid, String),
+    TransferReceiver(String),
     Swap(Uuid, u64, bool),
 }
 
@@ -166,11 +166,12 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                         wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(address))
                     }
-                    DaemonRequest::GenAddressSE(txid) => {
+                    DaemonRequest::GenAddressSE => {
                         debug!("Daemon: GenAddressSE");
-                        let address = wallet.get_new_state_entity_address(&txid);
+                        let address = wallet.get_new_state_entity_address();
+                        let bech32 = encoding::encode_address(address.unwrap());
                         wallet.save();
-                        r.send(DaemonResponse::value_to_deamon_response(address))
+                        r.send(DaemonResponse::value_to_deamon_response(bech32))
                     }
                     DaemonRequest::GetWalletBalance => {
                         debug!("Daemon: GetWalletBalance");
@@ -217,18 +218,21 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                     }
                     DaemonRequest::TransferSender(state_chain_id, receiver_addr) => {
                         debug!("Daemon: TransferSender");
+                        let sce_address = encoding::decode_address(receiver_addr,&network).unwrap();
                         let transfer_sender_resp = state_entity::transfer::transfer_sender(
                             &mut wallet,
                             &state_chain_id,
-                            receiver_addr,
+                            sce_address,
                         );
+                        let encoded_message = encoding::encode_message(transfer_sender_resp.unwrap());
                         wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(
-                            transfer_sender_resp,
+                            encoded_message,
                         ))
                     }
-                    DaemonRequest::TransferReceiver(mut transfer_msg) => {
+                    DaemonRequest::TransferReceiver(transfer_msg_bech32) => {
                         debug!("Daemon: TransferReceiver");
+                        let mut transfer_msg = encoding::decode_message(transfer_msg_bech32,&network).unwrap();
                         let transfer_receiver_resp = state_entity::transfer::transfer_receiver(
                             &mut wallet,
                             &mut transfer_msg,
