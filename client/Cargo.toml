@@ -56,14 +56,6 @@ default-features = false
 git = "https://github.com/commerceblock/multi-party-ecdsa"
 tag = "v0.3.7"
 
-[dependencies.multi-party-eddsa]
-git = "https://github.com/KZen-networks/multi-party-eddsa"
-tag = "v0.2.1"
-
-[dependencies.multi-party-schnorr]
-git = "https://github.com/commerceblock/multi-party-schnorr"
-tag = "v0.3.4"
-
 [dependencies.curv]
 git = "https://github.com/commerceblock/curv"
 features =  ["ec_secp256k1"]
