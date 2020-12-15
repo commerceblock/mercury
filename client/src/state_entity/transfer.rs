@@ -195,10 +195,10 @@ pub fn transfer_receiver(
         .instance
         .get_tip_header()?;
     debug!("Transfer receiver: Got current best block height: {}", chaintip.height.to_string());
-    if tx_backup.lock_time >= (chaintip.height as u32) {
+    if tx_backup.lock_time <= (chaintip.height as u32) {
             return Err(CError::Generic(format!(
-                "Error: backup tx locktime ({:?}) expired",tx_backup.lock_time
-            )));     
+                "Error: backup tx locktime ({:?}) expired, blockheight {:?}",tx_backup.lock_time,chaintip.height
+            )));
     }
 
     // Check validity of the backup transaction
