@@ -954,6 +954,7 @@ impl Database for PGDatabase {
             vec![Column::Amount, Column::Chain],
         )?;
         let state_chain: StateChain = Self::deser(state_chain_str)?;
+
         Ok(StateChainAmount {
             chain: state_chain,
             amount,

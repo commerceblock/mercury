@@ -57,7 +57,7 @@ pub fn deposit(
 
     // Greedy coin selection.
     let (inputs, addrs, amounts) =
-        wallet.coin_selection_greedy(&(amount + se_fee_info.deposit + FEE))?;
+        wallet.coin_selection_greedy(&(amount + deposit_fee + FEE))?;
 
     // Generate proof key
     let proof_key = wallet.se_proof_keys.get_new_key()?;

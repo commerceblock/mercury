@@ -187,7 +187,7 @@ mod tests {
         let status_api =
             state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id);
         assert!(status_api.expect("expected status 1").finalized);
-        
+
         // Finalize transfers in wallets now that StateEntity has completed the transfers.
         finalize_batch_transfer(&mut wallets, &swap_map, transfer_finalized_datas);
 

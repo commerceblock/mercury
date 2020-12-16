@@ -102,7 +102,7 @@ impl Deposit for SCE {
 
         // Create state chain DB object
         let state_chain_id = Uuid::new_v4();
-        let amount = (tx_backup.output.last().unwrap().value + FEE) as i64;
+        let amount = (tx_backup.output[0].value + tx_backup.output[1].value + FEE) as i64;
         let state_chain = StateChain::new(proof_key.clone());
 
         // Insert into StateChain table

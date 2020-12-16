@@ -9,10 +9,9 @@ use crate::structs::PrepareSignTxMsg;
 use crate::Verifiable;
 
 use bitcoin::{
-    blockdata::script::Builder,
     hashes::sha256d::Hash,
     Txid,
-    {blockdata::opcodes::OP_TRUE, util::bip143::SigHashCache, OutPoint},
+    {util::bip143::SigHashCache, OutPoint},
     {Address, Network, Transaction, TxIn, TxOut},
 };
 
@@ -139,38 +138,6 @@ pub fn tx_funding_build(
         output: outputs
     };
     Ok(tx_0)
-}
-
-/// build kick-off transaction spending funding tx to:
-///     - amount A-D to p2wpkh address P, and
-///     - amount D to script OP_TRUE
-pub fn tx_kickoff_build(
-    funding_tx_in: &TxIn,
-    p_address: &Address,
-    amount: &u64,
-) -> Result<Transaction> {
-    if DUSTLIMIT >= *amount {
-        return Err(SharedLibError::FormatError(String::from(
-            "Not enough value to cover fee.",
-        )));
-    }
-    let script = Builder::new().push_opcode(OP_TRUE).into_script();
-    let tx_k = Transaction {
-        input: vec![funding_tx_in.clone()],
-        output: vec![
-            TxOut {
-                script_pubkey: p_address.script_pubkey(),
-                value: amount - DUSTLIMIT,
-            },
-            TxOut {
-                script_pubkey: script,
-                value: DUSTLIMIT,
-            },
-        ],
-        lock_time: 0,
-        version: 2,
-    };
-    Ok(tx_k)
 }
 
 /// Build backup tx spending P output of funding tx to given backup address
