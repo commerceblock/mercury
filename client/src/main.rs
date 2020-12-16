@@ -5,9 +5,6 @@ extern crate electrumx_client;
 extern crate shared_lib;
 extern crate uuid;
 
-use std::time::Instant;
-use floating_duration::TimeFormat;
-
 use client_lib::{
     daemon::{query_wallet_daemon, DaemonRequest, DaemonResponse},
     state_entity::transfer::TransferFinalizeData,
