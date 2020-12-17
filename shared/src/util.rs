@@ -9,10 +9,9 @@ use crate::structs::PrepareSignTxMsg;
 use crate::Verifiable;
 
 use bitcoin::{
-    blockdata::script::Builder,
     hashes::sha256d::Hash,
     Txid,
-    {blockdata::opcodes::OP_TRUE, util::bip143::SigHashCache, OutPoint},
+    {util::bip143::SigHashCache, OutPoint},
     {Address, Network, Transaction, TxIn, TxOut},
 };
 
@@ -112,68 +111,45 @@ pub fn tx_funding_build(
             "Not enough value to cover fee.",
         )));
     }
+
+    let mut outputs = vec![
+        TxOut {
+            script_pubkey: Address::from_str(p_address)?.script_pubkey(),
+            value: *amount,
+        },
+        TxOut {
+            script_pubkey: Address::from_str(change_addr)?.script_pubkey(),
+            value: *change_amount - FEE,
+        },
+    ];    
+
+    if *fee != 0 {
+        outputs.push(
+            TxOut {
+                script_pubkey: Address::from_str(fee_addr)?.script_pubkey(),
+                value: *fee,
+            });
+    }
+
     let tx_0 = Transaction {
         version: 2,
         lock_time: 0,
         input: inputs.to_vec(),
-        output: vec![
-            TxOut {
-                script_pubkey: Address::from_str(p_address)?.script_pubkey(),
-                value: *amount,
-            },
-            TxOut {
-                script_pubkey: Address::from_str(fee_addr)?.script_pubkey(),
-                value: *fee,
-            },
-            TxOut {
-                script_pubkey: Address::from_str(change_addr)?.script_pubkey(),
-                value: *change_amount - FEE,
-            },
-        ],
+        output: outputs
     };
     Ok(tx_0)
 }
 
-/// build kick-off transaction spending funding tx to:
-///     - amount A-D to p2wpkh address P, and
-///     - amount D to script OP_TRUE
-pub fn tx_kickoff_build(
-    funding_tx_in: &TxIn,
-    p_address: &Address,
-    amount: &u64,
-) -> Result<Transaction> {
-    if DUSTLIMIT >= *amount {
-        return Err(SharedLibError::FormatError(String::from(
-            "Not enough value to cover fee.",
-        )));
-    }
-    let script = Builder::new().push_opcode(OP_TRUE).into_script();
-    let tx_k = Transaction {
-        input: vec![funding_tx_in.clone()],
-        output: vec![
-            TxOut {
-                script_pubkey: p_address.script_pubkey(),
-                value: amount - DUSTLIMIT,
-            },
-            TxOut {
-                script_pubkey: script,
-                value: DUSTLIMIT,
-            },
-        ],
-        lock_time: 0,
-        version: 2,
-    };
-    Ok(tx_k)
-}
-
-/// Build backup tx spending P output of txK to given backup address
+/// Build backup tx spending P output of funding tx to given backup address
 pub fn tx_backup_build(
     funding_txid: &Txid,
     b_address: &Address,
     amount: &u64,
     locktime: &u32,
+    fee: &u64,
+    fee_addr: &String,
 ) -> Result<Transaction> {
-    if FEE >= *amount {
+    if *fee + FEE >= *amount {
         return Err(SharedLibError::FormatError(String::from(
             "Not enough value to cover fee.",
         )));
@@ -191,10 +167,16 @@ pub fn tx_backup_build(
 
     let tx_b = Transaction {
         input: vec![txin.clone()],
-        output: vec![TxOut {
-            script_pubkey: b_address.script_pubkey(),
-            value: amount - FEE,
-        }],
+        output: vec![
+            TxOut {
+                script_pubkey: b_address.script_pubkey(),
+                value: amount - *fee - FEE,
+            },
+            TxOut {
+                script_pubkey: Address::from_str(fee_addr)?.script_pubkey(),
+                value: *fee,
+            },
+        ],
         lock_time: *locktime,
         version: 2,
     };

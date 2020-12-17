@@ -6,3 +6,4 @@
 // }
 
 pub mod requests;
+pub mod encoding;

@@ -137,7 +137,7 @@ mod tests {
 
         // Check deposits exist
         for i in 0..num_state_chains {
-            let (_, _, bals) = wallets[i].get_state_chains_info().unwrap();
+            let (_, _, bals,_) = wallets[i].get_state_chains_info().unwrap();
             assert_eq!(bals.len(), 1);
             assert_eq!(
                 bals.last().expect("expected state chain info").confirmed,
@@ -170,7 +170,7 @@ mod tests {
 
         // Attempt to transfer same UTXO a second time
         let receiver_addr = wallets[1]
-            .get_new_state_entity_address(&funding_txids[0])
+            .get_new_state_entity_address()
             .expect("expected state chain entity address");
         match state_entity::transfer::transfer_sender(
             &mut wallets[0],
@@ -187,7 +187,7 @@ mod tests {
         let status_api =
             state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id);
         assert!(status_api.expect("expected status 1").finalized);
-        
+
         // Finalize transfers in wallets now that StateEntity has completed the transfers.
         finalize_batch_transfer(&mut wallets, &swap_map, transfer_finalized_datas);
 
@@ -196,7 +196,7 @@ mod tests {
 
         // Check each wallet has only one state chain available
         for i in 0..swap_map.len() {
-            let (_, _, bals) = wallets[i].get_state_chains_info().unwrap();
+            let (_, _, bals,_) = wallets[i].get_state_chains_info().unwrap();
             assert_eq!(bals.len(), 1); // Only one active StateChain owned
         }
 
@@ -241,7 +241,7 @@ mod tests {
         }
         // Check deposits exist
         for i in 0..num_state_chains {
-            let (_, _, bals) = wallets[i].get_state_chains_info().unwrap();
+            let (_, _, bals,_) = wallets[i].get_state_chains_info().unwrap();
             assert_eq!(bals.len(), 1);
             assert_eq!(bals.last().unwrap().confirmed, amounts[i]);
         }
@@ -326,7 +326,7 @@ mod tests {
         // Check state chains are all locked by attempting to transfer + withdraw
         for i in 0..num_state_chains {
             let receiver_addr = wallets[i + 1 % num_state_chains - 1]
-                .get_new_state_entity_address(&deposits[i].2)
+                .get_new_state_entity_address()
                 .unwrap();
             match state_entity::transfer::transfer_sender(
                 &mut wallets[i],
@@ -425,7 +425,7 @@ mod tests {
             deposits.push(run_deposit(&mut wallets[i], &amount));
             let deposit = deposits.last().unwrap().clone();
 
-            let (_shared_key_ids, _wallet_sc_ids, _bals) = wallets.last().unwrap().
+            let (_shared_key_ids, _wallet_sc_ids, _bals, _locktimes) = wallets.last().unwrap().
                 get_state_chains_info().unwrap();
     
             

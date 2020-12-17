@@ -11,7 +11,7 @@ use shared_lib::{
     util::get_sighash,
 };
 
-use super::key_paths::{funding_txid_to_int, KeyPath, KeyPathWithAddresses};
+use super::key_paths::{KeyPath, KeyPathWithAddresses};
 use crate::error::{CError, WalletErrorType};
 use crate::wallet::shared_key::SharedKey;
 use crate::ClientShim;
@@ -20,6 +20,7 @@ use bitcoin::{
     secp256k1::{key::SecretKey, All, Message, Secp256k1},
     util::bip32::{ChildNumber, ExtendedPrivKey},
     {Address, Network, OutPoint, PublicKey, TxIn},
+    consensus,
 };
 
 use electrumx_client::{
@@ -328,20 +329,15 @@ impl Wallet {
         return Err(CError::WalletError(WalletErrorType::NotEnoughFunds));
     }
 
-    pub fn get_new_state_entity_address(&mut self, funding_txid: &String) -> Result<SCEAddress> {
-        let tx_backup_addr = Some(
-            self.se_backup_keys
-                .get_new_address_encoded_id(funding_txid_to_int(funding_txid)?)?,
-        );
-        let proof_key = self
+    pub fn get_new_state_entity_address(&mut self) -> Result<SCEAddress> {
+
+        let (proof_key, priv_key) = self
             .se_proof_keys
-            .get_new_key_encoded_id(funding_txid_to_int(funding_txid)?, None)?;
-        let proof_key =
-            bitcoin::secp256k1::PublicKey::from_slice(&proof_key.to_bytes().as_slice())?;
-        Ok(SCEAddress {
-            tx_backup_addr,
-            proof_key,
-        })
+            .get_new_key_priv()?;
+        // add proof key to address map
+        let tx_backup_addr = Some(self.se_backup_keys.add_address(proof_key,priv_key)?);
+
+        Ok(SCEAddress {tx_backup_addr: tx_backup_addr, proof_key: proof_key.key})
     }
 
     /// Sign inputs with given addresses derived by this wallet. input_indices, addresses and amoumts lists
@@ -574,23 +570,36 @@ impl Wallet {
     }
 
     /// Return balances of unspent state chains
-    pub fn get_state_chains_info(&self) -> Result<(Vec<Uuid>, Vec<Uuid>, Vec<GetBalanceResponse>)> {
+    pub fn get_state_chains_info(&self) -> Result<(Vec<Uuid>, Vec<Uuid>, Vec<GetBalanceResponse>, Vec<u32>)> {
         let mut shared_key_ids: Vec<Uuid> = vec![];
         let mut state_chain_ids: Vec<Uuid> = vec![];
         let mut state_chain_balances: Vec<GetBalanceResponse> = vec![];
+        let mut state_chain_locktimes: Vec<u32> = vec![];
         for shared_key in &self.shared_keys {
             if shared_key.unspent {
                 state_chain_balances.push(GetBalanceResponse {
                     confirmed: shared_key.value,
                     unconfirmed: 0,
                 });
+                state_chain_locktimes.push(shared_key.tx_backup_psm.as_ref().unwrap().tx.lock_time.clone());
                 shared_key_ids.push(shared_key.id.to_owned());
                 if shared_key.state_chain_id.is_some() {
                     state_chain_ids.push(shared_key.state_chain_id.clone().unwrap());
                 }
             }
         }
-        Ok((shared_key_ids, state_chain_ids, state_chain_balances))
+        Ok((shared_key_ids, state_chain_ids, state_chain_balances, state_chain_locktimes))
+    }
+
+    /// Return specified sc backup tx
+    pub fn get_backup_tx(&self, state_chain_id: &Uuid) -> Result<String> {
+        let mut backup_tx_hex: String = "".to_string();
+        for shared_key in &self.shared_keys {
+            if shared_key.state_chain_id.clone().unwrap() == *state_chain_id {
+                backup_tx_hex = hex::encode(consensus::serialize(&shared_key.tx_backup_psm.as_ref().unwrap().tx));
+            }
+        }
+        Ok(backup_tx_hex)
     }
 
     /// List unspent outputs for addresses derived by this wallet.

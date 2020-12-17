@@ -64,7 +64,7 @@ use crate::storage::db::Alpha;
 use bitcoin::hashes::sha256d;
 use bitcoin::Transaction;
 use chrono::NaiveDateTime;
-use curv::{BigInt, FE, GE};
+use curv::{FE, GE};
 use kms::ecdsa::two_party::*;
 use mockall::predicate::*;
 use mockall::*;
@@ -202,13 +202,6 @@ pub trait Database {
         paillier_key_pair: party_one::PaillierKeyPair,
         party_one_private: party_one::Party1Private,
     ) -> Result<()>;
-    fn update_keygen_third_msg(
-        &self,
-        user_id: &Uuid,
-        party_one_pdl_decommit: party_one::PDLdecommit,
-        party_two_pdl_first_message: party_two::PDLFirstMessage,
-        alpha: BigInt,
-    ) -> Result<()>;
     fn init_ecdsa(&self, user_id: &Uuid) -> Result<u64>;
     fn get_ecdsa_party_1_private(&self, user_id: Uuid) -> Result<party_one::Party1Private>;
     fn get_ecdsa_keypair(&self, user_id: Uuid) -> Result<ECDSAKeypair>;
@@ -237,7 +230,6 @@ pub trait Database {
         state_chain_id: &Uuid,
         finalized_data: TransferFinalizeData,
     ) -> Result<()>;
-    fn get_ecdsa_fourth_message_input(&self, user_id: Uuid) -> Result<ECDSAFourthMessageInput>;
     fn update_ecdsa_sign_first(
         &self,
         user_id: Uuid,
@@ -277,7 +269,7 @@ pub mod structs {
         pub start_time: NaiveDateTime,
     }
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug)]
     pub struct BackupTxID {
         pub tx: Transaction,
         pub id: Uuid,

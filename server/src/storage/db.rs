@@ -135,10 +135,6 @@ pub enum Column {
     PaillierKeyPair,
     Party1Private,
     Party2Public,
-    PDLProver,
-    PDLDecommit,
-    Alpha,
-    Party2PDLFirstMsg,
     Party1MasterKey,
     EphEcKeyPair,
     EphKeyGenFirstMsg,
@@ -263,9 +259,6 @@ impl PGDatabase {
                 party2public varchar,
                 paillierkeypair varchar,
                 party1private varchar,
-                pdldecommit varchar,
-                alpha varchar,
-                party2pdlfirstmsg varchar,
                 party1masterkey varchar,
                 pos varchar,
                 epheckeypair varchar,
@@ -961,6 +954,7 @@ impl Database for PGDatabase {
             vec![Column::Amount, Column::Chain],
         )?;
         let state_chain: StateChain = Self::deser(state_chain_str)?;
+
         Ok(StateChainAmount {
             chain: state_chain,
             amount,
@@ -1334,73 +1328,12 @@ impl Database for PGDatabase {
         Ok(())
     }
 
-    fn update_keygen_third_msg(
-        &self,
-        user_id: &Uuid,
-        party_one_pdl_decommit: party_one::PDLdecommit,
-        party_two_pdl_first_message: party_two::PDLFirstMessage,
-        alpha: BigInt,
-    ) -> Result<()> {
-        self.update(
-            user_id,
-            Table::Ecdsa,
-            vec![
-                Column::PDLDecommit,
-                Column::Alpha,
-                Column::Party2PDLFirstMsg,
-            ],
-            vec![
-                &Self::ser(party_one_pdl_decommit)?,
-                &Self::ser(Alpha {
-                    value: alpha.to_owned(),
-                })?,
-                &Self::ser(party_two_pdl_first_message)?,
-            ],
-        )?;
-
-        Ok(())
-    }
-
     fn init_ecdsa(&self, user_id: &Uuid) -> Result<u64> {
         self.insert(user_id, Table::Ecdsa)
     }
 
     fn get_ecdsa_party_1_private(&self, user_id: Uuid) -> Result<party_one::Party1Private> {
         Self::deser(self.get_1(user_id, Table::Ecdsa, vec![Column::Party1Private])?)
-    }
-
-    fn get_ecdsa_fourth_message_input(&self, user_id: Uuid) -> Result<ECDSAFourthMessageInput> {
-        let (
-            party_one_private_str,
-            party_one_pdl_decommit_str,
-            party_two_pdl_first_message_str,
-            alpha_str,
-        ) = self.get_4::<String, String, String, String>(
-            user_id,
-            Table::Ecdsa,
-            vec![
-                Column::Party1Private,
-                Column::PDLDecommit,
-                Column::Party2PDLFirstMsg,
-                Column::Alpha,
-            ],
-        )?;
-
-        let party_one_private: party_one::Party1Private = Self::deser(party_one_private_str)?;
-        let party_one_pdl_decommit: party_one::PDLdecommit =
-            Self::deser(party_one_pdl_decommit_str)?;
-        let party_two_pdl_first_message: party_two::PDLFirstMessage =
-            Self::deser(party_two_pdl_first_message_str)?;
-        let alpha: Alpha = Self::deser(alpha_str)?;
-
-        Ok({
-            ECDSAFourthMessageInput {
-                party_one_private,
-                party_one_pdl_decommit,
-                party_two_pdl_first_message,
-                alpha,
-            }
-        })
     }
 
     fn get_ecdsa_keypair(&self, user_id: Uuid) -> Result<ECDSAKeypair> {

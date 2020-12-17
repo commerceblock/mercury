@@ -58,8 +58,8 @@ impl FESer {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StateEntityFeeInfoAPI {
     pub address: String, // Receive address for fee payments
-    pub deposit: u64,    // satoshis
-    pub withdraw: u64,   // satoshis
+    pub deposit: u64,    // basis points
+    pub withdraw: u64,   // basis points
     pub interval: u32,   // locktime decrement interval in blocks
     pub initlock: u32,   // inital backup locktime
 }
@@ -68,7 +68,7 @@ impl fmt::Display for StateEntityFeeInfoAPI {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Fee address: {},\nDeposit fee: {}\nWithdrawal fee: {}\nLock interval: {}\nInitial lock: {}",
+            "Fee address: {},\nDeposit fee rate: {}\nWithdrawal fee rate: {}\nLock interval: {}\nInitial lock: {}",
             self.address, self.deposit, self.withdraw, self.interval, self.initlock
         )
     }
@@ -143,18 +143,6 @@ pub struct KeyGenMsg1 {
 pub struct KeyGenMsg2 {
     pub shared_key_id: Uuid,
     pub dlog_proof: DLogProof,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct KeyGenMsg3 {
-    pub shared_key_id: Uuid,
-    pub party_two_pdl_first_message: party_two::PDLFirstMessage,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct KeyGenMsg4 {
-    pub shared_key_id: Uuid,
-    pub party_two_pdl_second_message: party_two::PDLSecondMessage,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

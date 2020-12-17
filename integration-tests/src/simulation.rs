@@ -90,7 +90,11 @@ pub fn random_transfer(wallets: &mut Vec<Wallet>) {
         receiver_index
     );
 
-    let _ = run_transfer(wallets, sender_index, receiver_index, &state_chain_id);
+    let receiver_addr = wallets[receiver_index]
+        .get_new_state_entity_address()
+        .unwrap();
+
+    let _ = run_transfer(wallets, sender_index, receiver_index, &receiver_addr, &state_chain_id);
 
     // Check shared key is marked spent in sender and unspent in sender
     assert!(

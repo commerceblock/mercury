@@ -31,6 +31,7 @@ use rocket_contrib::json::Json;
 use std::str::FromStr;
 use std::{thread, time::Duration};
 use uuid::Uuid;
+use bitcoin::OutPoint;
 
 const MAX_LOCKTIME: u32 = 500000000; // bitcoin tx nlocktime cutoff
 
@@ -213,6 +214,10 @@ impl Utilities for SCE {
         let user_id = prepare_sign_msg.shared_key_id;
         self.check_user_auth(&user_id)?;
 
+        // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data
+        // calculate SE fee amount from rate
+        let withdraw_fee = (prepare_sign_msg.input_amounts[0] * self.config.fee_withdraw) / 10000 as u64;
+
         // Which protocol are we signing for?
         match prepare_sign_msg.protocol {
             Protocol::Withdraw => {
@@ -223,11 +228,10 @@ impl Utilities for SCE {
                     )));
                 }
 
-                // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data
                 tx_withdraw_verify(
                     &prepare_sign_msg,
                     &self.config.fee_address,
-                    &self.config.fee_withdraw,
+                    &withdraw_fee,
                 )?;
 
                 let state_chain_id = self.database.get_statechain_id(user_id)?;
@@ -284,6 +288,13 @@ impl Utilities for SCE {
                     )));
                 }
 
+                //check withdrawal fee is correctly set
+                tx_withdraw_verify(
+                    &prepare_sign_msg,
+                    &self.config.fee_address,
+                    &withdraw_fee,
+                )?;
+
                 //for transfer (not deposit)
                 if prepare_sign_msg.protocol == Protocol::Transfer {
                     //verify transfer locktime is correct
@@ -295,6 +306,7 @@ impl Utilities for SCE {
                             "Backup tx locktime not correctly decremented.",
                         )));
                     }
+
                 }
 
                 let sig_hash = get_sighash(
@@ -548,7 +560,7 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
         match &self.config.mainstay {
             Some(c) => match root.attest(&c) {
                 Ok(_) => (),
-                Err(e) => return Err(SEError::SharedLibError(e.to_string())),
+                Err(e) => info!("Mainstay attestation error: {}.",e.to_string()),
             },
             None => (),
         };
@@ -745,16 +757,28 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
         //let state_chain_id = Uuid::from_str(&state_chain_id).unwrap();
 
         let state_chain = self.database.get_statechain_amount(state_chain_id)?;
+
+        let state = state_chain.chain.chain.get(0).unwrap().next_state.clone();
+
+        if state.is_some() {
+                if state.unwrap().purpose == String::from("WITHDRAW") {
+                    return Ok({StateChainDataAPI {
+                        amount: state_chain.amount as u64,
+                        utxo: OutPoint::null(),
+                        chain: state_chain.chain.chain,
+                        locktime: 0 as u32,
+                    }});
+                } 
+            }
+
         let tx_backup = self.database.get_backup_transaction(state_chain_id)?;
 
-        Ok({
-            StateChainDataAPI {
-                amount: state_chain.amount as u64,
-                utxo: tx_backup.input.get(0).unwrap().previous_output,
-                chain: state_chain.chain.chain,
-                locktime: tx_backup.lock_time,
-            }
-        })
+        return Ok({StateChainDataAPI {
+            amount: state_chain.amount as u64,
+            utxo: tx_backup.input.get(0).unwrap().previous_output,
+            chain: state_chain.chain.chain,
+            locktime: tx_backup.lock_time,
+        }});
     }
 
     //fn authorise_withdrawal(&self, user_id: &Uuid, signature: StateChainSig) -> Result<()>;

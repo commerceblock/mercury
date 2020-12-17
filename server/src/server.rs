@@ -252,8 +252,6 @@ pub fn get_server<
                     ping::ping,
                     ecdsa::first_message,
                     ecdsa::second_message,
-                    ecdsa::third_message,
-                    ecdsa::fourth_message,
                     ecdsa::sign_first,
                     ecdsa::sign_second,
                     util::get_statechain,
@@ -369,16 +367,6 @@ mock! {
             &self,
             key_gen_msg2: KeyGenMsg2,
         ) -> ecdsa::Result<ecdsa::party1::KeyGenParty1Message2>;
-
-        fn third_message(
-            &self,
-            key_gen_msg3: KeyGenMsg3,
-        ) -> ecdsa::Result<ecdsa::party_one::PDLFirstMessage>;
-
-        fn fourth_message(
-            &self,
-            key_gen_msg4: KeyGenMsg4,
-        ) -> ecdsa::Result<ecdsa::party_one::PDLSecondMessage>;
 
         fn sign_first(
             &self,
