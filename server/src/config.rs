@@ -94,9 +94,9 @@ pub struct Config {
     pub lh_decrement: u32,
     /// Receive address for fee payments
     pub fee_address: String,
-    /// Despoit fee (satoshis)
+    /// Despoit fee (basis points)
     pub fee_deposit: u64,
-    /// Withdraw fee (satoshis)
+    /// Withdraw fee (basis points)
     pub fee_withdraw: u64,
     /// Time to allow batch transfer to take
     pub batch_lifetime: u64,
@@ -126,8 +126,8 @@ impl Default for Config {
             lockheight_init: 10000,
             lh_decrement: 100,
             fee_address: String::from("bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x"),
-            fee_deposit: 300,
-            fee_withdraw: 300,
+            fee_deposit: 40,
+            fee_withdraw: 40,
             batch_lifetime: 3600,     // 1 hour
             punishment_duration: 360, // 1 minute
             watch_only: false,

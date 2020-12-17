@@ -214,6 +214,10 @@ impl Utilities for SCE {
         let user_id = prepare_sign_msg.shared_key_id;
         self.check_user_auth(&user_id)?;
 
+        // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data
+        // calculate SE fee amount from rate
+        let withdraw_fee = (prepare_sign_msg.input_amounts[0] * self.config.fee_withdraw) / 10000 as u64;
+
         // Which protocol are we signing for?
         match prepare_sign_msg.protocol {
             Protocol::Withdraw => {
@@ -224,11 +228,10 @@ impl Utilities for SCE {
                     )));
                 }
 
-                // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data
                 tx_withdraw_verify(
                     &prepare_sign_msg,
                     &self.config.fee_address,
-                    &self.config.fee_withdraw,
+                    &withdraw_fee,
                 )?;
 
                 let state_chain_id = self.database.get_statechain_id(user_id)?;
@@ -285,6 +288,13 @@ impl Utilities for SCE {
                     )));
                 }
 
+                //check withdrawal fee is correctly set
+                tx_withdraw_verify(
+                    &prepare_sign_msg,
+                    &self.config.fee_address,
+                    &withdraw_fee,
+                )?;
+
                 //for transfer (not deposit)
                 if prepare_sign_msg.protocol == Protocol::Transfer {
                     //verify transfer locktime is correct
@@ -296,6 +306,7 @@ impl Utilities for SCE {
                             "Backup tx locktime not correctly decremented.",
                         )));
                     }
+
                 }
 
                 let sig_hash = get_sighash(
@@ -549,7 +560,7 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
         match &self.config.mainstay {
             Some(c) => match root.attest(&c) {
                 Ok(_) => (),
-                Err(e) => return Err(SEError::SharedLibError(e.to_string())),
+                Err(e) => info!("Mainstay attestation error: {}.",e.to_string()),
             },
             None => (),
         };

@@ -189,6 +189,23 @@ pub fn transfer_receiver(
             "Backup Tx receiving address not found in this wallet!",
         )))?;
 
+    // Check locktime of recieved backup transaction
+    let chaintip = wallet
+        .electrumx_client
+        .instance
+        .get_tip_header()?;
+    debug!("Transfer receiver: Got current best block height: {}", chaintip.height.to_string());
+    if tx_backup.lock_time <= (chaintip.height as u32) {
+            return Err(CError::Generic(format!(
+                "Error: backup tx locktime ({:?}) expired, blockheight {:?}",tx_backup.lock_time,chaintip.height
+            )));
+    }
+
+    // Check validity of the backup transaction
+    // check inputs 
+    // check signatures
+    // TODO
+
     // Verify state chain represents this address as new owner
     let prev_owner_proof_key = state_chain_data.chain.last().unwrap().data.clone();
     transfer_msg3
@@ -204,6 +221,8 @@ pub fn transfer_receiver(
         .ok_or(CError::Generic(String::from(
             "Transfer Error: StateChain is signed over to proof key not owned by this wallet!",
         )))?;
+
+
 
     // Check try_o2() comments and docs for justification of below code
     let mut done = false;

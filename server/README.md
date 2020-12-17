@@ -26,6 +26,9 @@ Database connection information should be provided via the environment variables
 | BATCH_LIFETIME | int | Lifetime of batch-transfers |
 | MS_SLOT | int | Mainstay slot |
 | MS_TOKEN | String | Mainstay token |
+| WATCH_ONLY | bool | If true, server watches blockheight for backup tx broadcast |
+| BITCOIND | String | RPC connection to bitcoind - username:password@host:port - empty string causes no connection or watch function |
+| LOCKBOX | String | URL of the secret key lockbox |
 | DB_HOST | String | Database host name |
 | DB_PORT | String | Database port |
 | DB_USER | String | Database user name |

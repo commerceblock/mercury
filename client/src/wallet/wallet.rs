@@ -20,6 +20,7 @@ use bitcoin::{
     secp256k1::{key::SecretKey, All, Message, Secp256k1},
     util::bip32::{ChildNumber, ExtendedPrivKey},
     {Address, Network, OutPoint, PublicKey, TxIn},
+    consensus,
 };
 
 use electrumx_client::{
@@ -569,23 +570,36 @@ impl Wallet {
     }
 
     /// Return balances of unspent state chains
-    pub fn get_state_chains_info(&self) -> Result<(Vec<Uuid>, Vec<Uuid>, Vec<GetBalanceResponse>)> {
+    pub fn get_state_chains_info(&self) -> Result<(Vec<Uuid>, Vec<Uuid>, Vec<GetBalanceResponse>, Vec<u32>)> {
         let mut shared_key_ids: Vec<Uuid> = vec![];
         let mut state_chain_ids: Vec<Uuid> = vec![];
         let mut state_chain_balances: Vec<GetBalanceResponse> = vec![];
+        let mut state_chain_locktimes: Vec<u32> = vec![];
         for shared_key in &self.shared_keys {
             if shared_key.unspent {
                 state_chain_balances.push(GetBalanceResponse {
                     confirmed: shared_key.value,
                     unconfirmed: 0,
                 });
+                state_chain_locktimes.push(shared_key.tx_backup_psm.as_ref().unwrap().tx.lock_time.clone());
                 shared_key_ids.push(shared_key.id.to_owned());
                 if shared_key.state_chain_id.is_some() {
                     state_chain_ids.push(shared_key.state_chain_id.clone().unwrap());
                 }
             }
         }
-        Ok((shared_key_ids, state_chain_ids, state_chain_balances))
+        Ok((shared_key_ids, state_chain_ids, state_chain_balances, state_chain_locktimes))
+    }
+
+    /// Return specified sc backup tx
+    pub fn get_backup_tx(&self, state_chain_id: &Uuid) -> Result<String> {
+        let mut backup_tx_hex: String = "".to_string();
+        for shared_key in &self.shared_keys {
+            if shared_key.state_chain_id.clone().unwrap() == *state_chain_id {
+                backup_tx_hex = hex::encode(consensus::serialize(&shared_key.tx_backup_psm.as_ref().unwrap().tx));
+            }
+        }
+        Ok(backup_tx_hex)
     }
 
     /// List unspent outputs for addresses derived by this wallet.

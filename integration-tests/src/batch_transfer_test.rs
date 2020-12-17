@@ -137,7 +137,7 @@ mod tests {
 
         // Check deposits exist
         for i in 0..num_state_chains {
-            let (_, _, bals) = wallets[i].get_state_chains_info().unwrap();
+            let (_, _, bals,_) = wallets[i].get_state_chains_info().unwrap();
             assert_eq!(bals.len(), 1);
             assert_eq!(
                 bals.last().expect("expected state chain info").confirmed,
@@ -187,7 +187,7 @@ mod tests {
         let status_api =
             state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id);
         assert!(status_api.expect("expected status 1").finalized);
-        
+
         // Finalize transfers in wallets now that StateEntity has completed the transfers.
         finalize_batch_transfer(&mut wallets, &swap_map, transfer_finalized_datas);
 
@@ -196,7 +196,7 @@ mod tests {
 
         // Check each wallet has only one state chain available
         for i in 0..swap_map.len() {
-            let (_, _, bals) = wallets[i].get_state_chains_info().unwrap();
+            let (_, _, bals,_) = wallets[i].get_state_chains_info().unwrap();
             assert_eq!(bals.len(), 1); // Only one active StateChain owned
         }
 
@@ -241,7 +241,7 @@ mod tests {
         }
         // Check deposits exist
         for i in 0..num_state_chains {
-            let (_, _, bals) = wallets[i].get_state_chains_info().unwrap();
+            let (_, _, bals,_) = wallets[i].get_state_chains_info().unwrap();
             assert_eq!(bals.len(), 1);
             assert_eq!(bals.last().unwrap().confirmed, amounts[i]);
         }
@@ -425,7 +425,7 @@ mod tests {
             deposits.push(run_deposit(&mut wallets[i], &amount));
             let deposit = deposits.last().unwrap().clone();
 
-            let (_shared_key_ids, _wallet_sc_ids, _bals) = wallets.last().unwrap().
+            let (_shared_key_ids, _wallet_sc_ids, _bals, _locktimes) = wallets.last().unwrap().
                 get_state_chains_info().unwrap();
     
             

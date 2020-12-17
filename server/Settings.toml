@@ -9,7 +9,7 @@ lh_decrement = 10
 
 # Fees
 fee_address = "bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x"
-fee_deposit = 300
+fee_deposit = 0
 fee_withdraw = 300
 
 # Swap parameters
