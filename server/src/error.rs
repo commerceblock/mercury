@@ -88,6 +88,16 @@ impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, crate::protocol::cond
     }
 }
 
+impl From<Box<dyn std::error::Error>>
+    for SEError
+{
+    fn from(
+        e: Box<dyn std::error::Error>,
+    ) -> SEError {
+        SEError::Generic(e.to_string())
+    }
+}
+
 /// DB error types
 #[derive(Debug, Deserialize)]
 pub enum DBErrorType {

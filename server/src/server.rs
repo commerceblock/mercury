@@ -25,7 +25,7 @@ use rocket_prometheus::{
     prometheus::{opts, IntCounter, IntCounterVec},
     PrometheusMetrics,
 };
-use reqwest;
+use reqwest::blocking::Client;
 use floating_duration::TimeFormat;
 use serde;
 use std::time::Instant;
@@ -55,34 +55,13 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 #[derive(Debug, Clone)]
 pub struct Lockbox {
-    pub client: reqwest::blocking::Client,
+    pub client: Client,
     pub endpoint: String,
 }
 
 impl Lockbox {
     pub fn connection(&self, endpoint: String) -> () {
-        self.client = reqwest::blocking::Client::new();
         self.endpoint = endpoint.clone();
-    }
-
-    fn error_handler(e: reqwest::Error) {
-       if e.is_http() {
-           match e.url() {
-               None => info!("No Url given"),
-               Some(url) => info!("Problem making request to: {}", url),
-           }
-       }
-       // Inspect the internal error and output it
-       if e.is_serialization() {
-          let serde_error = match e.get_ref() {
-               None => return,
-               Some(err) => err,
-           };
-           info!("problem parsing information {}", serde_error);
-       }
-       if e.is_redirect() {
-           info!("server redirecting too many times or making loop");
-       }
     }
 
     pub fn post<T, V>(&self, path: &str, body: T) -> Result<V>
@@ -97,12 +76,12 @@ impl Lockbox {
                 .json(&body)
                 .send()? {
             Ok(v) => {
-                let result = v.text()?;
+                let text = v.text();
 
-                info!("Lockbox request {} status: {}", path, v.status() );               
+                text
             }
 
-            Err(e) => self.error_handler(e),
+            Err(e) => return Err(SEError::from(e)),
         };
 
         info!("(Lockbox request {}, took: {})", path, TimeFormat(start.elapsed()));
@@ -142,7 +121,7 @@ impl<
             database: db,
             smt: Arc::new(Mutex::new(smt)),
             scheduler: Arc::new(Mutex::new(Scheduler::new())),
-            lockbox: Lockbox,
+            lockbox: Lockbox { client: reqwest::blocking::Client::new(), endpoint: "".to_string() },
         };
 
         Self::start_conductor_thread(sce.scheduler.clone());
