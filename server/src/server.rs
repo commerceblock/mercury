@@ -25,7 +25,7 @@ use rocket_prometheus::{
     prometheus::{opts, IntCounter, IntCounterVec},
     PrometheusMetrics,
 };
-use reqwest::blocking::Client;
+use reqwest;
 use floating_duration::TimeFormat;
 use serde;
 use std::time::Instant;
@@ -55,11 +55,14 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 #[derive(Debug, Clone)]
 pub struct Lockbox {
-    pub client: Client,
+    pub client: reqwest::blocking::Client,
     pub endpoint: String,
 }
 
 impl Lockbox {
+    
+
+    
     pub fn connection(&self, endpoint: String) -> () {
         self.endpoint = endpoint.clone();
     }
