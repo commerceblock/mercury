@@ -12,6 +12,7 @@ use postgres::Error as PostgresError;
 use rocket::http::{ContentType, Status};
 use rocket::response::Responder;
 use rocket::{Request, Response};
+use reqwest::Error as ReqwestError;
 use std::error;
 use std::fmt;
 use std::io::Cursor;
@@ -74,6 +75,12 @@ impl From<PostgresError> for SEError {
 }
 impl From<ConfigError> for SEError {
     fn from(e: ConfigError) -> SEError {
+        SEError::Generic(e.to_string())
+    }
+}
+
+impl From<ReqwestError> for SEError {
+    fn from(e: ReqwestError) -> SEError {
         SEError::Generic(e.to_string())
     }
 }

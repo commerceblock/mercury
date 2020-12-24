@@ -12,6 +12,7 @@ use shared_lib::{ecies, ecies::WalletDecryptable, state_chain::*, structs::*};
 use crate::error::SEError;
 use crate::Database;
 use crate::{server::StateChainEntity, storage::Storage};
+use super::requests::post_lb;
 
 use bitcoin::Transaction;
 use cfg_if::cfg_if;
@@ -105,18 +106,6 @@ impl Transfer for SCE {
         let x1: FE = ECScalar::new_random();
         let x1_ser = FESer::from_fe(&x1);
 
-        // call lockbox
-        if self.config.lockbox.is_empty() == false {
-            let path: &str = "/transfer/sender";
-            let url = format!("{}{}", self.config.lockbox, path);
-            let result = reqwest::blocking::get(&url);
-
-            let _response = match result {
-                Ok(res) => info!("transfer/sender lockbox call status: {}", res.status() ),
-                Err(err) => eprintln!("transfer/sender lockbox call status: {}", err),
-            };
-        }
-
         self.database
             .create_transfer(&state_chain_id, &transfer_msg1.state_chain_sig, &x1)?;
 
@@ -182,35 +171,52 @@ impl Transfer for SCE {
             };
         }
 
-        let kp = self.database.get_ecdsa_keypair(user_id)?;
+        let s2: FE;
+        let theta: FE;
+        let s2_pub: GE;
+        if self.lockbox.active {
+            let ku_send = KUSendMsg {
+                x1: td.x1,
+                t1: transfer_msg4.t2,
+                o2_pub: transfer_msg4.o2_pub,
+            };
+            let path: &str = "/ecdsa/keyupdate/first";
+            let ku_receive: KUReceiveMsg = post_lb(&self.lockbox, path, &ku_send)?;
+            s2 = FE::zero();
+            s2_pub = ku_receive.s2_pub;
+            theta = ku_receive.theta;
+        }
+        else {
+            let kp = self.database.get_ecdsa_keypair(user_id)?;
 
-        // let x1 = transfer_data.x1;
-        let t2 = transfer_msg4.t2;
+            // let x1 = transfer_data.x1;
+            let t2 = transfer_msg4.t2;
 
-        let s1 = kp.party_1_private.get_private_key();
+            let s1 = kp.party_1_private.get_private_key();
 
-        //let mut rng = OsRng::new().expect("OsRng");
-        let s2 = t2 * (td.x1.invert()) * s1;
+            //let mut rng = OsRng::new().expect("OsRng");
+            s2 = t2 * (td.x1.invert()) * s1;
 
-        let theta = FE::new_random();
-        // Note:
-        //  s2 = o1*o2_inv*s1
-        //  t2 = o1*x1*o2_inv
-        let s1_theta = s1 * theta;
-        let s2_theta = s2 * theta;
+            theta = FE::new_random();
+            // Note:
+            //  s2 = o1*o2_inv*s1
+            //  t2 = o1*x1*o2_inv
+            let s1_theta = s1 * theta;
+            let s2_theta = s2 * theta;
 
-        let g: GE = ECPoint::generator();
-        let s2_pub: GE = g * s2;
+            let g: GE = ECPoint::generator();
+            s2_pub = g * s2;
 
-        let p1_pub = kp.party_2_public * s1_theta;
-        let p2_pub = transfer_msg4.o2_pub * s2_theta;
+            let p1_pub = kp.party_2_public * s1_theta;
+            let p2_pub = transfer_msg4.o2_pub * s2_theta;
 
-        // Check P1 = o1_pub*s1 === p2 = o2_pub*s2
-        if p1_pub != p2_pub {
-            error!("TRANSFER: Protocol failed. P1 != P2.");
-            return Err(SEError::Generic(String::from(
-                "Transfer protocol error: P1 != P2",
-            )));
+            // Check P1 = o1_pub*s1 === p2 = o2_pub*s2
+            if p1_pub != p2_pub {
+                error!("TRANSFER: Protocol failed. P1 != P2.");
+                return Err(SEError::Generic(String::from(
+                    "Transfer protocol error: P1 != P2",
+                )));
+            }
         }
 
         // Create user ID for new UserSession (receiver of transfer)

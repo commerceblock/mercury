@@ -4,7 +4,6 @@ use crate::config::Config;
 use crate::structs::StateChainOwner;
 use crate::Database;
 use shared_lib::{mainstay, state_chain::StateChainSig, swap_data::*};
-use crate::error::SEError;
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
@@ -26,9 +25,6 @@ use rocket_prometheus::{
     PrometheusMetrics,
 };
 use reqwest;
-use floating_duration::TimeFormat;
-use serde;
-use std::time::Instant;
 use once_cell::sync::Lazy;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
@@ -57,38 +53,19 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 pub struct Lockbox {
     pub client: reqwest::blocking::Client,
     pub endpoint: String,
+    pub active: bool,
 }
 
 impl Lockbox {
-    
-
-    
-    pub fn connection(&self, endpoint: String) -> () {
-        self.endpoint = endpoint.clone();
-    }
-
-    pub fn post<T, V>(&self, path: &str, body: T) -> Result<V>
-    where
-        T: serde::ser::Serialize,
-        V: serde::de::DeserializeOwned,
-    {
-        let start = Instant::now();
-        let url = format!("{}{}", self.endpoint, path);
-
-        let value = match self.client.post(&url)
-                .json(&body)
-                .send()? {
-            Ok(v) => {
-                let text = v.text();
-
-                text
-            }
-
-            Err(e) => return Err(SEError::from(e)),
+    pub fn new(endpoint: String) -> Lockbox {
+        let client = reqwest::blocking::Client::new();
+        let active = endpoint.len() > 0;
+        let lb = Lockbox {
+            client,
+            endpoint,
+            active,
         };
-
-        info!("(Lockbox request {}, took: {})", path, TimeFormat(start.elapsed()));
-        Ok(serde_json::from_str(value.as_str()).unwrap())
+        lb
     }
 }
 
@@ -111,6 +88,7 @@ impl<
     pub fn load(mut db: T, mut db_smt: D) -> Result<StateChainEntity<T, D>> {
         // Get config as defaults, Settings.toml and env vars
         let config_rs = Config::load()?;
+        let lockbox_url = config_rs.lockbox.clone();
         db.set_connection_from_config(&config_rs)?;
         db_smt.set_connection_from_config(&config_rs)?;
 
@@ -124,7 +102,7 @@ impl<
             database: db,
             smt: Arc::new(Mutex::new(smt)),
             scheduler: Arc::new(Mutex::new(Scheduler::new())),
-            lockbox: Lockbox { client: reqwest::blocking::Client::new(), endpoint: "".to_string() },
+            lockbox: Lockbox::new(lockbox_url),
         };
 
         Self::start_conductor_thread(sce.scheduler.clone());
@@ -189,13 +167,6 @@ pub fn get_server<
     //either in testing mode or specified in the settings file
     if sc_entity.config.mainstay.is_none() {
         panic!("expected mainstay config");
-    }
-
-    let lockbox_url = sc_entity.config.lockbox.clone();
-
-    //client connection to lockbox server
-    if sc_entity.config.lockbox.is_empty() == false {
-            sc_entity.lockbox.connection(lockbox_url);
     }
 
     let prometheus = PrometheusMetrics::new();

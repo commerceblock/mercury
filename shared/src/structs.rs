@@ -225,6 +225,21 @@ pub struct TransferMsg4 {
     pub batch_data: Option<BatchData>,
 }
 
+/// State Entity -> Lockbox
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct KUSendMsg {
+    pub x1: FE,
+    pub t1: FE,
+    pub o2_pub: GE,
+}
+
+/// Lockbox -> State Entity
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct KUReceiveMsg {
+    pub theta: FE,
+    pub s2_pub: GE,
+}
+
 /// State Entity -> Receiver
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferMsg5 {
