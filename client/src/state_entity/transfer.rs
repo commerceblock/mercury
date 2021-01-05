@@ -25,7 +25,7 @@ use crate::state_entity::{
 };
 use crate::wallet::{key_paths::funding_txid_to_int, wallet::Wallet};
 use crate::{utilities::requests, ClientShim};
-use shared_lib::{ecies::WalletDecryptable, state_chain::StateChainSig, structs::*};
+use shared_lib::{ecies::WalletDecryptable, state_chain::StateChainSig, structs::*, util::{transaction_serialise, transaction_deserialise}};
 
 use bitcoin::{Address, PublicKey};
 use curv::elliptic::curves::traits::{ECPoint, ECScalar};
@@ -82,9 +82,11 @@ pub fn transfer_sender(
 
     wallet.decrypt(&mut transfer_msg2)?;
 
+    let mut tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
+
     // Update prepare_sign_msg with new owners address, proof key
     prepare_sign_msg.protocol = Protocol::Transfer;
-    match prepare_sign_msg.tx.output.get_mut(0) {
+    match tx.output.get_mut(0) {
         Some(v) => match receiver_addr.tx_backup_addr.clone() {
             Some(v2) => v.script_pubkey = v2.script_pubkey(),
             None => (),
@@ -93,12 +95,16 @@ pub fn transfer_sender(
     };
     prepare_sign_msg.proof_key = Some(receiver_addr.proof_key.clone().to_string());
     //set updated decremented locktime
-    prepare_sign_msg.tx.lock_time = state_chain_data.locktime - se_fee_info.interval;
+    tx.lock_time = state_chain_data.locktime - se_fee_info.interval;
+    prepare_sign_msg.tx_hex = transaction_serialise(&tx);
 
     // Sign new back up tx
     let new_backup_witness = cosign_tx_input(wallet, &prepare_sign_msg)?;
+
+    let mut tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
     // Update back up tx with new witness
-    prepare_sign_msg.tx.input[0].witness = new_backup_witness;
+    tx.input[0].witness = new_backup_witness;
+    prepare_sign_msg.tx_hex = transaction_serialise(&tx);
 
     // Get o1 priv key
     let shared_key = wallet.get_shared_key(&shared_key_id)?;
@@ -173,7 +179,7 @@ pub fn transfer_receiver(
     let state_chain_data: StateChainDataAPI =
         get_statechain(&wallet.client_shim, &transfer_msg3.state_chain_id)?;
 
-    let tx_backup = transfer_msg3.tx_backup_psm.tx.clone();
+    let tx_backup = transaction_deserialise(&transfer_msg3.tx_backup_psm.tx_hex)?;
     // Ensure backup tx funds are sent to address owned by this wallet
     let back_up_rec_addr = Address::from_script(
         &tx_backup.output[0].script_pubkey,
@@ -202,7 +208,7 @@ pub fn transfer_receiver(
     }
 
     // Check validity of the backup transaction
-    // check inputs 
+    // check inputs
     // check signatures
     // TODO
 
@@ -344,7 +350,7 @@ pub fn try_o2(
         t2,
         state_chain_sig: transfer_msg3.state_chain_sig.clone(),
         o2_pub,
-        tx_backup: transfer_msg3.tx_backup_psm.tx.clone(),
+        tx_backup_hex: transfer_msg3.tx_backup_psm.tx_hex.clone(),
         batch_data: batch_data.to_owned(),
     };
 

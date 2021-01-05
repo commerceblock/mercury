@@ -12,7 +12,7 @@ use bitcoin::{
     hashes::sha256d::Hash,
     Txid,
     {util::bip143::SigHashCache, OutPoint},
-    {Address, Network, Transaction, TxIn, TxOut},
+    {Address, Network, Transaction, TxIn, TxOut}, consensus,
 };
 
 use curv::PK;
@@ -41,6 +41,22 @@ pub fn reverse_hex_str(hex_str: String) -> Result<String> {
         }
     }
     Ok(result)
+}
+
+/// consensus serialize tx into hex string
+pub fn transaction_serialise(tx: &Transaction) -> String {
+    hex::encode(consensus::serialize(tx))
+}
+/// consensus deserialize tx into Transaction
+pub fn transaction_deserialise(ser: &String) -> Result<Transaction> {
+    let buf = match hex::decode(ser) {
+        Ok(v) => v,
+        Err(_) => return Err(SharedLibError::FormatError(String::from("Transaction hex failed to deserialise")))
+    };
+    match consensus::deserialize::<Transaction>(&buf) {
+        Ok(v) => return Ok(v),
+        Err(_) => return Err(SharedLibError::FormatError(String::from("Transaction hex failed to deserialise")))
+    }
 }
 
 /// Get sig hash for some transaction input.
@@ -83,12 +99,13 @@ pub fn tx_withdraw_verify(
         )));
     }
     // Check fee info
-    if tx_psm.tx.output[1].script_pubkey != Address::from_str(fee_address)?.script_pubkey() {
+    let tx = transaction_deserialise(&tx_psm.tx_hex)?;
+    if tx.output[1].script_pubkey != Address::from_str(fee_address)?.script_pubkey() {
         return Err(SharedLibError::FormatError(String::from(
             "Incorrect State Entity fee address.",
         )));
     }
-    if tx_psm.tx.output[1].value != fee_withdraw.to_owned() {
+    if tx.output[1].value != fee_withdraw.to_owned() {
         return Err(SharedLibError::FormatError(String::from(
             "Incorrect State Entity fee.",
         )));
@@ -121,7 +138,7 @@ pub fn tx_funding_build(
             script_pubkey: Address::from_str(change_addr)?.script_pubkey(),
             value: *change_amount - FEE,
         },
-    ];    
+    ];
 
     if *fee != 0 {
         outputs.push(

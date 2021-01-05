@@ -9,9 +9,9 @@ use client_lib::{
     daemon::{query_wallet_daemon, DaemonRequest, DaemonResponse},
     state_entity::transfer::TransferFinalizeData,
 };
-use shared_lib::structs::{
+use shared_lib::{util::transaction_deserialise, structs::{
     PrepareSignTxMsg, StateChainDataAPI, StateEntityFeeInfoAPI,
-};
+}};
 
 use bitcoin::util::key::PublicKey;
 use bitcoin::{consensus, Transaction};
@@ -174,6 +174,8 @@ fn main() {
                         DaemonResponse::Error(e) => panic!(e.to_string()),
                         DaemonResponse::None => panic!("None value returned."),
                     };
+
+                let tx = transaction_deserialise(&finalized_data.tx_backup_psm.tx_hex).unwrap();
                 println!(
                     "\nTransfer complete for StateChain ID: {}.",
                     finalized_data.state_chain_id
@@ -181,17 +183,17 @@ fn main() {
 
                 println!(
                     "\nValue: {}",
-                    finalized_data.tx_backup_psm.tx.output[0].value
+                    tx.output[0].value
                 );
 
                 println!(
                     "\nLocktime: {}",
-                    finalized_data.tx_backup_psm.tx.lock_time
+                    tx.lock_time
                 );
 
                 println!(
                     "\nBackup Transaction hex: {}",
-                    hex::encode(consensus::serialize(&finalized_data.tx_backup_psm.tx))
+                    finalized_data.tx_backup_psm.tx_hex
                 );
             }
         } else if matches.is_present("swap") {

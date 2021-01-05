@@ -14,7 +14,7 @@ use std::{collections::HashSet, fmt};
 use uuid::Uuid;
 
 use crate::ecies;
-use crate::ecies::{Encryptable, SelfEncryptable, WalletDecryptable};
+use crate::{util::transaction_serialise, ecies::{Encryptable, SelfEncryptable, WalletDecryptable}};
 
 /// State Entity protocols
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -105,7 +105,7 @@ pub struct SmtProofMsgAPI {
 pub struct PrepareSignTxMsg {
     pub shared_key_id: Uuid,
     pub protocol: Protocol,
-    pub tx: Transaction,
+    pub tx_hex: String,
     pub input_addrs: Vec<PK>, // pub keys being spent from
     pub input_amounts: Vec<u64>,
     pub proof_key: Option<String>,
@@ -123,7 +123,7 @@ impl Default for PrepareSignTxMsg {
         Self {
             shared_key_id: Uuid::default(),
             protocol: Protocol::Transfer,
-            tx: default_tx,
+            tx_hex: transaction_serialise(&default_tx),
             input_addrs: Vec::<PK>::default(),
             input_amounts: Vec::<u64>::default(),
             proof_key: None,
@@ -221,7 +221,7 @@ pub struct TransferMsg4 {
     pub t2: FE, // t2 = t1*o2_inv = o1*x1*o2_inv
     pub state_chain_sig: StateChainSig,
     pub o2_pub: GE,
-    pub tx_backup: Transaction,
+    pub tx_backup_hex: String,
     pub batch_data: Option<BatchData>,
 }
 

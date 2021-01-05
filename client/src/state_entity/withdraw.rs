@@ -13,7 +13,7 @@ extern crate shared_lib;
 use shared_lib::{
     state_chain::StateChainSig,
     structs::{PrepareSignTxMsg, Protocol, StateChainDataAPI, WithdrawMsg1, WithdrawMsg2},
-    util::tx_withdraw_build,
+    util::{transaction_serialise, tx_withdraw_build},
 };
 
 use super::api::{get_statechain, get_statechain_fee_info};
@@ -92,7 +92,7 @@ pub fn withdraw(wallet: &mut Wallet, state_chain_id: &Uuid) -> Result<(String, U
     let tx_w_prepare_sign_msg = PrepareSignTxMsg {
         shared_key_id: shared_key_id.to_owned(),
         protocol: Protocol::Withdraw,
-        tx: tx_withdraw_unsigned.clone(),
+        tx_hex: transaction_serialise(&tx_withdraw_unsigned),
         input_addrs: vec![pk],
         input_amounts: vec![sc_info.amount],
         proof_key: None,

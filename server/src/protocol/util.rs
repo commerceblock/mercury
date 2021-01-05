@@ -11,7 +11,7 @@ use shared_lib::{
     mocks::mock_electrum::MockElectrum,
     state_chain::*,
     structs::*,
-    util::{get_sighash, tx_withdraw_verify},
+    util::{get_sighash, tx_withdraw_verify, transaction_deserialise},
     Root,
 };
 
@@ -214,6 +214,8 @@ impl Utilities for SCE {
         let user_id = prepare_sign_msg.shared_key_id;
         self.check_user_auth(&user_id)?;
 
+        let tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
+
         // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data
         // calculate SE fee amount from rate
         let withdraw_fee = (prepare_sign_msg.input_amounts[0] * self.config.fee_withdraw) / 10000 as u64;
@@ -239,8 +241,7 @@ impl Utilities for SCE {
 
                 // Check funding txid UTXO info
                 let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
-                if prepare_sign_msg
-                    .tx
+                if tx
                     .input
                     .get(0)
                     .unwrap()
@@ -255,7 +256,7 @@ impl Utilities for SCE {
 
                 // Update UserSession with withdraw tx info
                 let sig_hash = get_sighash(
-                    &prepare_sign_msg.tx,
+                    &tx,
                     &0,
                     &prepare_sign_msg.input_addrs[0],
                     &prepare_sign_msg.input_amounts[0],
@@ -265,7 +266,7 @@ impl Utilities for SCE {
                 self.database.update_withdraw_tx_sighash(
                     &user_id,
                     sig_hash,
-                    prepare_sign_msg.tx,
+                    tx,
                 )?;
 
                 info!(
@@ -282,7 +283,7 @@ impl Utilities for SCE {
                 }
 
                 //check that the locktime is height and not epoch
-                if (prepare_sign_msg.tx.lock_time as u32) >= MAX_LOCKTIME {
+                if (tx.lock_time as u32) >= MAX_LOCKTIME {
                     return Err(SEError::Generic(String::from(
                         "Backup tx locktime specified as Unix epoch time not block height.",
                     )));
@@ -301,7 +302,9 @@ impl Utilities for SCE {
                     let state_chain_id = self.database.get_statechain_id(user_id)?;
                     let current_tx_backup = self.database.get_backup_transaction(state_chain_id)?;
 
-                    if (current_tx_backup.lock_time as u32) != (prepare_sign_msg.tx.lock_time as u32) + (self.config.lh_decrement as u32) {
+                    println!("current_tx_backup: {:?}", current_tx_backup);
+                    println!("tx: {:?}", tx);
+                    if (current_tx_backup.lock_time as u32) != (tx.lock_time as u32) + (self.config.lh_decrement as u32) {
                         return Err(SEError::Generic(String::from(
                             "Backup tx locktime not correctly decremented.",
                         )));
@@ -310,7 +313,7 @@ impl Utilities for SCE {
                 }
 
                 let sig_hash = get_sighash(
-                    &prepare_sign_msg.tx,
+                    &tx,
                     &0,
                     &prepare_sign_msg.input_addrs[0],
                     &prepare_sign_msg.input_amounts[0],
@@ -322,7 +325,7 @@ impl Utilities for SCE {
                 // Only in deposit case add backup tx to UserSession
                 if prepare_sign_msg.protocol == Protocol::Deposit {
                     self.database
-                        .update_user_backup_tx(&user_id, prepare_sign_msg.tx)?;
+                        .update_user_backup_tx(&user_id, tx)?;
                 }
 
                 info!(
@@ -768,7 +771,7 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
                         chain: state_chain.chain.chain,
                         locktime: 0 as u32,
                     }});
-                } 
+                }
             }
 
         let tx_backup = self.database.get_backup_transaction(state_chain_id)?;

@@ -29,6 +29,8 @@ use shared_lib::mainstay::CommitmentInfo;
 use shared_lib::state_chain::*;
 use shared_lib::structs::TransferMsg3;
 use shared_lib::Root;
+use shared_lib::util::transaction_deserialise;
+
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
@@ -863,7 +865,7 @@ impl Database for PGDatabase {
         for row in &rows {
             let tx_backup: Transaction = Self::deser(row.get("txbackup"))?;
             let id: Uuid = row.get("id");
-            let backup_obj = BackupTxID { tx: tx_backup, id: id };
+            let backup_obj = BackupTxID { tx: tx_backup, id };
             txs.push(backup_obj);
         }
         Ok(txs)
@@ -1376,10 +1378,10 @@ impl Database for PGDatabase {
         )?;
         Self::deser(statechain_ids)
     }
- 
+
     fn get_finalize_batch_data(&self, batch_id: Uuid) -> Result<TransferFinalizeBatchData> {
         let mut finalized_data_vec = vec![];
-        
+
         for id in self.get_batch_transfer_statechain_ids(&batch_id)? {
             match self.get_sc_finalize_batch_data(&id){
                 Ok(v) => {
@@ -1389,11 +1391,11 @@ impl Database for PGDatabase {
                             if bd.id == batch_id{
                                 finalized_data_vec.push(v);
                             } else {
-                                return Err(SEError::DBError(NoDataForID, 
+                                return Err(SEError::DBError(NoDataForID,
                                     format!("batch_id required:{}, found:{}", batch_id, bd.id)))
                             }
                         },
-                        None => return Err(SEError::DBError(NoDataForID, 
+                        None => return Err(SEError::DBError(NoDataForID,
                                     format!("no batch data"))),
                     }
                 },
@@ -1402,7 +1404,7 @@ impl Database for PGDatabase {
         }
 
         let start_time = self.get_transfer_batch_start_time(&batch_id)?;
-            
+
         Ok(TransferFinalizeBatchData {
             finalized_data_vec,
             start_time,
@@ -1426,7 +1428,7 @@ impl Database for PGDatabase {
         &self,
         state_chain_id: &Uuid
     ) -> Result<TransferFinalizeData> {
-        let tfd = self.get_1(state_chain_id.to_owned(), 
+        let tfd = self.get_1(state_chain_id.to_owned(),
             Table::StateChain, vec![Column::TransferFinalizeData])?;
         Self::deser(tfd)
     }
@@ -1489,7 +1491,7 @@ impl Database for PGDatabase {
             vec![
                 &String::from("auth"),
                 &finalized_data.state_chain_sig.data.to_owned(),
-                &Self::ser(finalized_data.new_tx_backup.clone())?,
+                &Self::ser(transaction_deserialise(&finalized_data.new_tx_backup_hex)?)?,
                 &state_chain_id,
                 &Self::ser(finalized_data.s2)?,
                 &Self::ser(finalized_data.theta)?,

@@ -178,7 +178,7 @@ impl Ecdsa for SCE {
     }
 
     fn sign_first(&self, sign_msg1: SignMsg1) -> Result<party_one::EphKeyGenFirstMsg> {
-        
+
         // call lockbox
         if self.config.lockbox.is_empty() == false {
             std::thread::sleep(std::time::Duration::from_millis(100));
@@ -219,7 +219,7 @@ impl Ecdsa for SCE {
     }
 
     fn sign_second(&self, sign_msg2: SignMsg2) -> Result<Vec<Vec<u8>>> {
-
+        
         // call lockbox
         if self.config.lockbox.is_empty() == false {
             std::thread::sleep(std::time::Duration::from_millis(100));
