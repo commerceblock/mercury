@@ -339,7 +339,7 @@ impl Database for MemoryDB {
     }
     fn update_backup_tx(
         &self,
-        _state_chain_id: &uuid::Uuid,
+        _statechain_id: &uuid::Uuid,
         _tx: bitcoin::Transaction,
     ) -> crate::Result<()> {
         unimplemented!()
@@ -371,19 +371,19 @@ impl Database for MemoryDB {
     fn update_statechain_id(
         &self,
         _user_id: &uuid::Uuid,
-        _state_chain_id: &uuid::Uuid,
+        _statechain_id: &uuid::Uuid,
     ) -> crate::Result<()> {
         unimplemented!()
     }
     fn get_statechain_amount(
         &self,
-        _state_chain_id: uuid::Uuid,
+        _statechain_id: uuid::Uuid,
     ) -> crate::Result<crate::structs::StateChainAmount> {
         unimplemented!()
     }
     fn update_statechain_amount(
         &self,
-        _state_chain_id: &uuid::Uuid,
+        _statechain_id: &uuid::Uuid,
         _state_chain: super::StateChain,
         _amount: u64,
     ) -> crate::Result<()> {
@@ -391,19 +391,19 @@ impl Database for MemoryDB {
     }
     fn create_statechain(
         &self,
-        _state_chain_id: &uuid::Uuid,
+        _statechain_id: &uuid::Uuid,
         _user_id: &uuid::Uuid,
         _state_chain: &super::StateChain,
         _amount: &i64,
     ) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_statechain(&self, _state_chain_id: uuid::Uuid) -> crate::Result<super::StateChain> {
+    fn get_statechain(&self, _statechain_id: uuid::Uuid) -> crate::Result<super::StateChain> {
         unimplemented!()
     }
     fn update_statechain_owner(
         &self,
-        _state_chain_id: &uuid::Uuid,
+        _statechain_id: &uuid::Uuid,
         _state_chain: super::StateChain,
         _new_user_id: &uuid::Uuid,
     ) -> crate::Result<()> {
@@ -414,7 +414,7 @@ impl Database for MemoryDB {
     }
     fn create_backup_transaction(
         &self,
-        _state_chain_id: &uuid::Uuid,
+        _statechain_id: &uuid::Uuid,
         _tx_backup: &bitcoin::Transaction,
     ) -> crate::Result<()> {
         unimplemented!()
@@ -423,10 +423,10 @@ impl Database for MemoryDB {
     fn get_current_backup_txs(&self, _locktime: i64) -> crate::Result<Vec<crate::structs::BackupTxID>> {
         unimplemented!()        
     }
-    fn remove_backup_tx(&self, _state_chain_id: &uuid::Uuid) -> crate::Result<()> {
+    fn remove_backup_tx(&self, _statechain_id: &uuid::Uuid) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_backup_transaction(&self, _state_chain_id: uuid::Uuid) -> crate::Result<bitcoin::Transaction> {
+    fn get_backup_transaction(&self, _statechain_id: uuid::Uuid) -> crate::Result<bitcoin::Transaction> {
         unimplemented!()
     }
     fn get_backup_transaction_and_proof_key(
@@ -440,13 +440,13 @@ impl Database for MemoryDB {
     }
     fn get_sc_locked_until(
         &self,
-        _state_chain_id: uuid::Uuid,
+        _statechain_id: uuid::Uuid,
     ) -> crate::Result<chrono::NaiveDateTime> {
         unimplemented!()
     }
     fn update_locked_until(
         &self,
-        _state_chain_id: &uuid::Uuid,
+        _statechain_id: &uuid::Uuid,
         _time: &chrono::NaiveDateTime,
     ) -> crate::Result<()> {
         unimplemented!()
@@ -468,22 +468,22 @@ impl Database for MemoryDB {
     }
     fn create_transfer(
         &self,
-        _state_chain_id: &uuid::Uuid,
-        _state_chain_sig: &shared_lib::state_chain::StateChainSig,
+        _statechain_id: &uuid::Uuid,
+        _statechain_sig: &shared_lib::state_chain::StateChainSig,
         _x1: &curv::FE,
     ) -> crate::Result<()> {
         unimplemented!()
     }
     fn update_transfer_msg(
         &self,
-        _state_chain_id: &uuid::Uuid,
+        _statechain_id: &uuid::Uuid,
         _msg: &shared_lib::structs::TransferMsg3,
     ) -> crate::Result<()> {
         unimplemented!()
     }
     fn get_transfer_msg(
         &self,
-        _state_chain_id: &uuid::Uuid,
+        _statechain_id: &uuid::Uuid,
     ) -> crate::Result<shared_lib::structs::TransferMsg3> {
         unimplemented!()
     }
@@ -496,14 +496,14 @@ impl Database for MemoryDB {
     }
     fn get_transfer_data(
         &self,
-        _state_chain_id: uuid::Uuid,
+        _statechain_id: uuid::Uuid,
     ) -> crate::Result<crate::structs::TransferData> {
         unimplemented!()
     }
-    fn remove_transfer_data(&self, _state_chain_id: &uuid::Uuid) -> crate::Result<()> {
+    fn remove_transfer_data(&self, _statechain_id: &uuid::Uuid) -> crate::Result<()> {
         unimplemented!()
     }
-    fn transfer_is_completed(&self, _state_chain_id: uuid::Uuid) -> bool {
+    fn transfer_is_completed(&self, _statechain_id: uuid::Uuid) -> bool {
         unimplemented!()
     }
     fn get_ecdsa_master(&self, _user_id: uuid::Uuid) -> crate::Result<Option<String>> {
@@ -586,7 +586,7 @@ impl Database for MemoryDB {
 
     fn get_sc_finalize_batch_data(
         &self,
-        _state_chain_id: &uuid::Uuid
+        _statechain_id: &uuid::Uuid
         
     ) -> crate::Result<crate::protocol::transfer::TransferFinalizeData>{
         unimplemented!()
@@ -608,7 +608,7 @@ impl Database for MemoryDB {
     }
     fn get_statechain_owner(
         &self,
-        _state_chain_id: uuid::Uuid,
+        _statechain_id: uuid::Uuid,
     ) -> crate::Result<crate::structs::StateChainOwner> {
         unimplemented!()
     }
@@ -623,7 +623,7 @@ impl Database for MemoryDB {
     fn transfer_init_user_session(
         &self,
         _new_user_id: &uuid::Uuid,
-        _state_chain_id: &uuid::Uuid,
+        _statechain_id: &uuid::Uuid,
         _finalized_data: crate::protocol::transfer::TransferFinalizeData,
     ) -> crate::Result<()> {
         unimplemented!()

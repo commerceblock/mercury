@@ -173,16 +173,16 @@ impl Utilities for SCE {
     //                 // Punishments not yet set
     //                 info!("TRANSFER_BATCH: Lifetime reached. ID: {}.", batch_id);
     //                 // Set punishments for all statechains involved in batch
-    //                 for (state_chain_id, _) in state_chains {
-    //                     self.state_chain_punish(&db_read, &db_write, state_chain_id.clone())?;
-    //                     punished_state_chains.push(state_chain_id.clone());
+    //                 for (statechain_id, _) in state_chains {
+    //                     self.state_chain_punish(&db_read, &db_write, statechain_id.clone())?;
+    //                     punished_state_chains.push(statechain_id.clone());
     //
     //                     // Remove TransferData involved. Ignore failed update err since Transfer data may not exist.
-    //                     let _ = db_remove(&db_write, &state_chain_id, Table::Transfer);
+    //                     let _ = db_remove(&db_write, &statechain_id, Table::Transfer);
     //
     //                     info!(
     //                         "TRANSFER_BATCH: Transfer data deleted. State Chain ID: {}.",
-    //                         state_chain_id
+    //                         statechain_id
     //                     );
     //                 }
     //
@@ -236,8 +236,8 @@ impl Utilities for SCE {
                     &withdraw_fee,
                 )?;
 
-                let state_chain_id = self.database.get_statechain_id(user_id)?;
-                let tx_backup = self.database.get_backup_transaction(state_chain_id)?;
+                let statechain_id = self.database.get_statechain_id(user_id)?;
+                let tx_backup = self.database.get_backup_transaction(statechain_id)?;
 
                 // Check funding txid UTXO info
                 let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
@@ -299,8 +299,8 @@ impl Utilities for SCE {
                 //for transfer (not deposit)
                 if prepare_sign_msg.protocol == Protocol::Transfer {
                     //verify transfer locktime is correct
-                    let state_chain_id = self.database.get_statechain_id(user_id)?;
-                    let current_tx_backup = self.database.get_backup_transaction(state_chain_id)?;
+                    let statechain_id = self.database.get_statechain_id(user_id)?;
+                    let current_tx_backup = self.database.get_backup_transaction(statechain_id)?;
 
                     println!("current_tx_backup: {:?}", current_tx_backup);
                     println!("tx: {:?}", tx);
@@ -347,12 +347,12 @@ pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
     }
 }
 
-#[get("/info/statechain/<state_chain_id>", format = "json")]
+#[get("/info/statechain/<statechain_id>", format = "json")]
 pub fn get_statechain(
     sc_entity: State<SCE>,
-    state_chain_id: String,
+    statechain_id: String,
 ) -> Result<Json<StateChainDataAPI>> {
-    match sc_entity.get_statechain_data_api(Uuid::from_str(&state_chain_id).unwrap()) {
+    match sc_entity.get_statechain_data_api(Uuid::from_str(&statechain_id).unwrap()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -466,8 +466,8 @@ impl SCE {
     }
 
     // Set state chain time-out
-    pub fn state_chain_punish(&self, state_chain_id: Uuid) -> Result<()> {
-        let sc_locked_until = self.database.get_sc_locked_until(state_chain_id)?;
+    pub fn state_chain_punish(&self, statechain_id: Uuid) -> Result<()> {
+        let sc_locked_until = self.database.get_sc_locked_until(statechain_id)?;
 
         if is_locked(sc_locked_until).is_err() {
             return Err(SEError::Generic(String::from(
@@ -476,13 +476,13 @@ impl SCE {
         }
 
         self.database.update_locked_until(
-            &state_chain_id,
+            &statechain_id,
             &get_locked_until(self.config.punishment_duration as i64)?,
         )?;
 
         info!(
             "PUNISHMENT: State Chain ID: {} locked for {}s.",
-            state_chain_id, self.config.punishment_duration
+            statechain_id, self.config.punishment_duration
         );
         Ok(())
     }
@@ -520,16 +520,16 @@ impl SCE {
                     // Punishments not yet set
                     info!("TRANSFER_BATCH: Lifetime reached. ID: {}.", batch_id);
                     // Set punishments for all statechains involved in batch
-                    for state_chain_id in tbd.state_chains {
-                        self.state_chain_punish(state_chain_id.clone())?;
-                        punished_state_chains.push(state_chain_id.clone());
+                    for statechain_id in tbd.state_chains {
+                        self.state_chain_punish(statechain_id.clone())?;
+                        punished_state_chains.push(statechain_id.clone());
 
                         // Remove TransferData involved. Ignore failed update err since Transfer data may not exist.
-                        let _ = self.database.remove_transfer_data(&state_chain_id);
+                        let _ = self.database.remove_transfer_data(&statechain_id);
 
                         info!(
                             "TRANSFER_BATCH: Transfer data deleted. State Chain ID: {}.",
-                            state_chain_id
+                            statechain_id
                         );
                     }
 
@@ -752,14 +752,14 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
 
     //fn update_root(&self, root: &Root) -> Result<i64>;
 
-    fn get_statechain(&self, state_chain_id: Uuid) -> Result<StateChain> {
-        self.database.get_statechain(state_chain_id)
+    fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain> {
+        self.database.get_statechain(statechain_id)
     }
 
-    fn get_statechain_data_api(&self, state_chain_id: Uuid) -> Result<StateChainDataAPI> {
-        //let state_chain_id = Uuid::from_str(&state_chain_id).unwrap();
+    fn get_statechain_data_api(&self, statechain_id: Uuid) -> Result<StateChainDataAPI> {
+        //let statechain_id = Uuid::from_str(&statechain_id).unwrap();
 
-        let state_chain = self.database.get_statechain_amount(state_chain_id)?;
+        let state_chain = self.database.get_statechain_amount(statechain_id)?;
 
         let state = state_chain.chain.chain.get(0).unwrap().next_state.clone();
 
@@ -774,7 +774,7 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
                 }
             }
 
-        let tx_backup = self.database.get_backup_transaction(state_chain_id)?;
+        let tx_backup = self.database.get_backup_transaction(statechain_id)?;
 
         return Ok({StateChainDataAPI {
             amount: state_chain.amount as u64,
@@ -807,7 +807,7 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
     //                   state_chains: &HashMap<Uuid, bool>) -> Result<()>;
 
     // Update the locked until time of a state chain (used for punishment)
-    //fn update_locked_until(&self, state_chain_id: &Uuid, time: &NaiveDateTime);
+    //fn update_locked_until(&self, statechain_id: &Uuid, time: &NaiveDateTime);
 
     //Update the list of punished state chains
     //fn update_punished(&self, punished: &Vec<Uuid>);

@@ -72,7 +72,7 @@ subcommands:
               - state-chain-id:
                   short: id
                   required: true
-                  value_name: state_chain_id
+                  value_name: statechain_id
                   help: State chain ID
               - swap-size:
                   short: s

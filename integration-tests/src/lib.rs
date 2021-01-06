@@ -193,7 +193,7 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
 }
 
 /// Run deposit on a wallet for some amount
-/// Returns shared_key_id, state_chain_id, funding txid, signed backup tx, back up transacion data and proof_key
+/// Returns shared_key_id, statechain_id, funding txid, signed backup tx, back up transacion data and proof_key
 pub fn run_deposit(
     wallet: &mut Wallet,
     amount: &u64,
@@ -216,9 +216,9 @@ pub fn run_confirm_proofs(wallet: &mut Wallet) -> Vec<Uuid> {
 }
 
 /// Run withdraw of shared key ID given
-pub fn run_withdraw(wallet: &mut Wallet, state_chain_id: &Uuid) -> (String, Uuid, u64) {
+pub fn run_withdraw(wallet: &mut Wallet, statechain_id: &Uuid) -> (String, Uuid, u64) {
     let start = Instant::now();
-    let resp = state_entity::withdraw::withdraw(wallet, &state_chain_id).unwrap();
+    let resp = state_entity::withdraw::withdraw(wallet, &statechain_id).unwrap();
     println!("(Withdraw Took: {})", TimeFormat(start.elapsed()));
 
     resp
@@ -231,13 +231,13 @@ pub fn run_transfer(
     sender_index: usize,
     receiver_index: usize,
     receiver_addr: &SCEAddress,
-    state_chain_id: &Uuid,
+    statechain_id: &Uuid,
 ) -> (Uuid, FE) {
 
     let start = Instant::now();
     let mut tranfer_sender_resp = state_entity::transfer::transfer_sender(
         &mut wallets[sender_index],
-        state_chain_id,
+        statechain_id,
         receiver_addr.clone(),
     )
     .unwrap();
@@ -261,9 +261,9 @@ pub fn run_transfer(
 pub fn run_transfer_with_commitment(
     wallets: &mut Vec<Wallet>,
     sender_index: usize,
-    sender_state_chain_id: &Uuid,
+    sender_statechain_id: &Uuid,
     receiver_index: usize,
-    receiver_state_chain_id: &Uuid,
+    receiver_statechain_id: &Uuid,
     _funding_txid: &String,
     batch_id: &Uuid,
 ) -> (TransferFinalizeData, String, [u8; 32]) {
@@ -275,12 +275,12 @@ pub fn run_transfer_with_commitment(
 
     let mut tranfer_sender_resp = state_entity::transfer::transfer_sender(
         &mut wallets[sender_index],
-        sender_state_chain_id,
+        sender_statechain_id,
         receiver_addr.clone(),
     )
     .unwrap();
 
-    let (commitment, nonce) = make_commitment(&receiver_state_chain_id.to_string());
+    let (commitment, nonce) = make_commitment(&receiver_statechain_id.to_string());
 
     let transfer_finalized_data = state_entity::transfer::transfer_receiver(
         &mut wallets[receiver_index],
@@ -297,13 +297,13 @@ pub fn run_transfer_with_commitment(
     return (transfer_finalized_data, commitment, nonce);
 }
 
-/// Run a batch transfer. Input wallets, (sender-receiver) mapping, corresponding funding_txids, shared_key_ids and state_chain_ids.
+/// Run a batch transfer. Input wallets, (sender-receiver) mapping, corresponding funding_txids, shared_key_ids and statechain_ids.
 /// Return batch id, finalize datas, commitments, nonces and state chain signatures.
 pub fn run_batch_transfer(
     wallets: &mut Vec<Wallet>,      // vec of all wallets
     swap_map: &Vec<(usize, usize)>, // mapping of sender -> receiver
     funding_txids: &Vec<String>,
-    state_chain_ids: &Vec<Uuid>,
+    statechain_ids: &Vec<Uuid>,
 ) -> (
     Uuid,
     Vec<TransferFinalizeData>,
@@ -322,7 +322,7 @@ pub fn run_batch_transfer(
         transfer_sigs.push(
             state_entity::transfer::transfer_batch_sign(
                 &mut wallets[swap_map[i].0],
-                &state_chain_ids[i], // state chain id
+                &statechain_ids[i], // state chain id
                 &batch_id,
             )
             .unwrap(),
@@ -346,9 +346,9 @@ pub fn run_batch_transfer(
         let (transfer_finalized_data, commitment, nonce) = run_transfer_with_commitment(
             wallets,
             i,
-            &state_chain_ids[i], // state chian id
+            &statechain_ids[i], // state chian id
             receiver_index,
-            &state_chain_ids[receiver_index], // state chian id
+            &statechain_ids[receiver_index], // state chian id
             &funding_txids[i],                // funding txid
             &batch_id,
         );
@@ -398,7 +398,7 @@ pub fn finalize_batch_transfer(
 pub fn batch_transfer_verify_amounts(
     wallets: &mut Vec<Wallet>,
     amounts: &Vec<u64>,
-    state_chain_ids: &Vec<Uuid>,
+    statechain_ids: &Vec<Uuid>,
     swap_map: &Vec<(usize, usize)>, // mapping of sender -> receiver
 ) {
     // Check amounts have correctly rotated
@@ -407,7 +407,7 @@ pub fn batch_transfer_verify_amounts(
         // check state chain id is in wallets shared keys
         let index = wallet_sc_ids
             .iter()
-            .position(|r| r == &state_chain_ids[swap_map[i].0]);
+            .position(|r| r == &statechain_ids[swap_map[i].0]);
         assert!(index.is_some());
         // check amount of state chain at index is correctß
         assert!(bals[index.unwrap()].confirmed == amounts[swap_map[i].0])

@@ -25,7 +25,7 @@ pub struct SharedKey {
     pub id: Uuid,
     pub share: MasterKey2,
     pub value: u64, //Satoshis
-    pub state_chain_id: Option<Uuid>,
+    pub statechain_id: Option<Uuid>,
     pub tx_backup_psm: Option<PrepareSignTxMsg>, // back up transaction data
     pub proof_key: Option<String>,
     pub smt_proof: Option<InclusionProofSMT>,

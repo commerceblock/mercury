@@ -63,7 +63,7 @@ pub fn get_master_key(
         id,
         share: master_key,
         value: value.to_owned(),
-        state_chain_id: None,
+        statechain_id: None,
         tx_backup_psm: None,
         proof_key: None,
         smt_proof: None,

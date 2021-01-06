@@ -37,7 +37,7 @@ pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<Uuid> {
     )
 }
 
-/// Deposit coins into state entity. Returns shared_key_id, state_chain_id, funding txid,
+/// Deposit coins into state entity. Returns shared_key_id, statechain_id, funding txid,
 /// signed backup tx, back up transacion data and proof_key
 pub fn deposit(
     wallet: &mut Wallet,
@@ -131,7 +131,7 @@ pub fn deposit(
         .broadcast_transaction(hex::encode(consensus::serialize(&tx_funding_signed)))?;
 
     // Wait for server confirmation of funding tx and receive new StateChain's id
-    let state_chain_id: Uuid = requests::postb(
+    let statechain_id: Uuid = requests::postb(
         &wallet.client_shim,
         &format!("deposit/confirm"),
         &DepositMsg2 {
@@ -151,14 +151,14 @@ pub fn deposit(
     // Add proof and state chain id to Shared key
     {
         let shared_key = wallet.get_shared_key_mut(&shared_key_id)?;
-        shared_key.state_chain_id = Some(state_chain_id);
+        shared_key.statechain_id = Some(statechain_id);
         shared_key.tx_backup_psm = Some(tx_backup_psm.to_owned());
         shared_key.add_proof_data(&proof_key.to_string(), &root, &proof, &funding_txid);
     }
 
     Ok((
         shared_key_id,
-        state_chain_id,
+        statechain_id,
         funding_txid,
         tx_backup_signed,
         tx_backup_psm,

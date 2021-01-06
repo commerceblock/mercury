@@ -59,27 +59,27 @@ fn main() {
                 }
                 println!();
             }
-            let (_, state_chain_ids, bals, lktimes): (Vec<Uuid>, Vec<Uuid>, Vec<GetBalanceResponse>, Vec<u32>) =
+            let (_, statechain_ids, bals, lktimes): (Vec<Uuid>, Vec<Uuid>, Vec<GetBalanceResponse>, Vec<u32>) =
                 match query_wallet_daemon(DaemonRequest::GetStateChainsInfo).unwrap() {
                     DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
                     DaemonResponse::Error(e) => panic!(e.to_string()),
                     DaemonResponse::None => panic!("None value returned."),
                 };
-            if state_chain_ids.len() > 0 {
+            if statechain_ids.len() > 0 {
                 println!("\n\nState Entity balance: \n\nStateChain ID:\t\t\t\t\tConfirmed:\tUnconfirmed:\tLocktime:");
                 for (i, bal) in bals.into_iter().enumerate() {
                     println!(
                         "{}\t\t{}\t\t{}\t\t{}",
-                        state_chain_ids[i], bal.confirmed, bal.unconfirmed,lktimes[i]
+                        statechain_ids[i], bal.confirmed, bal.unconfirmed,lktimes[i]
                     );
                 }
                 println!();
             }
         } else if matches.is_present("get-backup") {
             if let Some(matches) = matches.subcommand_matches("get-backup") {
-                let state_chain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
+                let statechain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
                 let txhex: String =
-                    match query_wallet_daemon(DaemonRequest::GetBackup(state_chain_id)).unwrap() {
+                    match query_wallet_daemon(DaemonRequest::GetBackup(statechain_id)).unwrap() {
                         DaemonResponse::Value(val) => val,
                         DaemonResponse::Error(e) => panic!(e.to_string()),
                         DaemonResponse::None => panic!("None value returned."),
@@ -104,7 +104,7 @@ fn main() {
         } else if matches.is_present("deposit") {
             if let Some(matches) = matches.subcommand_matches("deposit") {
                 let amount = u64::from_str(matches.value_of("amount").unwrap()).unwrap();
-                let (_, state_chain_id, funding_txid, tx_b, _, _): (
+                let (_, statechain_id, funding_txid, tx_b, _, _): (
                     Uuid,
                     Uuid,
                     String,
@@ -118,7 +118,7 @@ fn main() {
                 };
                 println!(
                     "\nDeposited {} satoshi's. \nState Chain ID: {}",
-                    amount, state_chain_id
+                    amount, statechain_id
                 );
                 println!("\nFunding Txid: {}", funding_txid);
                 println!(
@@ -128,25 +128,25 @@ fn main() {
             }
         } else if matches.is_present("withdraw") {
             if let Some(matches) = matches.subcommand_matches("withdraw") {
-                let state_chain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
-                let (txid, state_chain_id, amount): (String, Uuid, u64) =
-                    match query_wallet_daemon(DaemonRequest::Withdraw(state_chain_id)).unwrap() {
+                let statechain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
+                let (txid, statechain_id, amount): (String, Uuid, u64) =
+                    match query_wallet_daemon(DaemonRequest::Withdraw(statechain_id)).unwrap() {
                         DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
                         DaemonResponse::Error(e) => panic!(e.to_string()),
                         DaemonResponse::None => panic!("None value returned."),
                     };
                 println!(
                     "\nWithdrawn {} satoshi's. \nFrom StateChain ID: {}",
-                    amount, state_chain_id
+                    amount, statechain_id
                 );
                 println!("\nWithdraw Txid: {}", txid);
             }
         } else if matches.is_present("transfer-sender") {
             if let Some(matches) = matches.subcommand_matches("transfer-sender") {
-                let state_chain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
+                let statechain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
                 let receiver_addr: String = matches.value_of("addr").unwrap().to_string();
                 let transfer_msg: String = match query_wallet_daemon(
-                    DaemonRequest::TransferSender(state_chain_id, receiver_addr),
+                    DaemonRequest::TransferSender(statechain_id, receiver_addr),
                 )
                 .unwrap()
                 {
@@ -156,7 +156,7 @@ fn main() {
                 };
                 println!(
                     "\nTransfer initiated for StateChain ID: {}.",
-                    state_chain_id
+                    statechain_id
                 );
                 println!(
                     "\nTransfer message: {:?}",
@@ -178,7 +178,7 @@ fn main() {
                 let tx = transaction_deserialise(&finalized_data.tx_backup_psm.tx_hex).unwrap();
                 println!(
                     "\nTransfer complete for StateChain ID: {}.",
-                    finalized_data.state_chain_id
+                    finalized_data.statechain_id
                 );
 
                 println!(
@@ -198,12 +198,12 @@ fn main() {
             }
         } else if matches.is_present("swap") {
             if let Some(matches) = matches.subcommand_matches("swap") {
-                let state_chain_id =
+                let statechain_id =
                     Uuid::from_str(matches.value_of("state-chain-id").unwrap()).unwrap();
                 let swap_size = u64::from_str(matches.value_of("swap-size").unwrap()).unwrap();
                 let force_no_tor: bool = matches.is_present("force-no-tor");
                 match query_wallet_daemon(DaemonRequest::Swap(
-                    state_chain_id,
+                    statechain_id,
                     swap_size,
                     force_no_tor,
                 ))
@@ -212,7 +212,7 @@ fn main() {
                     DaemonResponse::Error(e) => panic!(e.to_string()),
                     _ => {}
                 };
-                println!("\nSwap complete from StateChain ID: {}.", state_chain_id);
+                println!("\nSwap complete from StateChain ID: {}.", statechain_id);
             }
         }
     //
@@ -247,9 +247,9 @@ fn main() {
     } else if let Some(matches) = matches.subcommand_matches("state-entity") {
         if matches.is_present("get-statechain") {
             if let Some(matches) = matches.subcommand_matches("get-statechain") {
-                let state_chain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
+                let statechain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
                 let state_chain_info: StateChainDataAPI = match query_wallet_daemon(
-                    DaemonRequest::GetStateChain(state_chain_id),
+                    DaemonRequest::GetStateChain(statechain_id),
                 )
                 .unwrap()
                 {
@@ -257,7 +257,7 @@ fn main() {
                     DaemonResponse::Error(e) => panic!(e.to_string()),
                     DaemonResponse::None => panic!("None value returned."),
                 };
-                println!("\nStateChain with Id {} info: \n", state_chain_id);
+                println!("\nStateChain with Id {} info: \n", statechain_id);
                 println!(
                     "amount: {}\nutxo:\n\ttxid: {},\n\tvout: {},\nlocktime: {}",
                     state_chain_info.amount, state_chain_info.utxo.txid, state_chain_info.utxo.vout, state_chain_info.locktime,

@@ -25,16 +25,16 @@ use uuid::Uuid;
 
 // Register a state chain for participation in a swap (request a swap)
 // with swap_size participants
-pub fn swap_register_utxo(wallet: &Wallet, state_chain_id: &Uuid, swap_size: &u64) -> Result<()> {
+pub fn swap_register_utxo(wallet: &Wallet, statechain_id: &Uuid, swap_size: &u64) -> Result<()> {
     // First sign state chain
-    let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id)?;
-    let state_chain = state_chain_data.chain;
+    let statechain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &statechain_id)?;
+    let state_chain = statechain_data.chain;
     // Get proof key for signing
     let proof_key_derivation = &wallet
         .se_proof_keys
         .get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap())
         .ok_or(CError::WalletError(WalletErrorType::KeyNotFound))?;
-    let state_chain_sig = StateChainSig::new(
+    let statechain_sig = StateChainSig::new(
         &proof_key_derivation.private_key.key,
         &String::from("SWAP"),
         &proof_key_derivation.public_key.unwrap().to_string(),
@@ -44,18 +44,18 @@ pub fn swap_register_utxo(wallet: &Wallet, state_chain_id: &Uuid, swap_size: &u6
         &wallet.client_shim,
         &String::from("swap/register-utxo"),
         &RegisterUtxo {
-            state_chain_id: state_chain_id.to_owned(),
-            signature: state_chain_sig,
+            statechain_id: statechain_id.to_owned(),
+            signature: statechain_sig,
             swap_size: swap_size.to_owned(),
         },
     )
 }
 
-pub fn swap_poll_utxo(client_shim: &ClientShim, state_chain_id: &Uuid) -> Result<Option<Uuid>> {
+pub fn swap_poll_utxo(client_shim: &ClientShim, statechain_id: &Uuid) -> Result<Option<Uuid>> {
     requests::postb(
         &client_shim,
         &String::from("swap/poll/utxo"),
-        &state_chain_id,
+        &statechain_id,
     )
 }
 
@@ -70,14 +70,14 @@ pub fn swap_info(client_shim: &ClientShim, swap_id: &Uuid) -> Result<Option<Swap
 pub fn swap_first_message(
     wallet: &Wallet,
     swap_info: &SwapInfo,
-    state_chain_id: &Uuid,
+    statechain_id: &Uuid,
     transfer_batch_sig: &StateChainSig,
     new_address: &SCEAddress,
 ) -> Result<BSTRequestorData> {
     let swap_token = swap_info.swap_token.clone();
 
-    let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id)?;
-    let state_chain = state_chain_data.chain;
+    let statechain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &statechain_id)?;
+    let state_chain = statechain_data.chain;
 
     let proof_pub_key = match PublicKey::from_str(&state_chain.last().unwrap().data) {
         Ok(v) => v,
@@ -103,7 +103,7 @@ pub fn swap_first_message(
         &String::from("swap/first"),
         &SwapMsg1 {
             swap_id: swap_token.id.to_owned(),
-            state_chain_id: state_chain_id.to_owned(),
+            statechain_id: statechain_id.to_owned(),
             swap_token_sig: swap_token_sig.to_owned(),
             transfer_batch_sig: transfer_batch_sig.to_owned(),
             address: new_address.to_owned(),
@@ -116,14 +116,14 @@ pub fn swap_first_message(
 pub fn swap_get_blinded_spend_signature(
     client_shim: &ClientShim,
     swap_id: &Uuid,
-    state_chain_id: &Uuid,
+    statechain_id: &Uuid,
 ) -> Result<BlindedSpendSignature> {
     requests::postb(
         &client_shim,
         &String::from("swap/blinded-spend-signature"),
         &BSTMsg {
             swap_id: swap_id.to_owned(),
-            state_chain_id: state_chain_id.to_owned(),
+            statechain_id: statechain_id.to_owned(),
         },
     )
 }
@@ -154,13 +154,13 @@ fn do_transfer_receiver(
     batch_id: &Uuid,
     commit: &String,
     statechain_ids: &Vec<Uuid>,
-    rec_addr: &SCEAddress, //my receiver address
+    rec_se_addr: &SCEAddress, //my receiver address
 ) -> Result<transfer::TransferFinalizeData> {
     for statechain_id in statechain_ids {
         loop {
             match transfer::transfer_get_msg(wallet, &statechain_id) {
                 Ok(mut msg) => {
-                    if msg.rec_addr.proof_key == rec_addr.proof_key {
+                    if msg.rec_se_addr.proof_key == rec_se_addr.proof_key {
                         match transfer::transfer_receiver(
                             &mut wallet,
                             &mut msg,
@@ -188,7 +188,7 @@ fn do_transfer_receiver(
 
 pub fn do_swap(
     mut wallet: &mut Wallet,
-    state_chain_id: &Uuid,
+    statechain_id: &Uuid,
     swap_size: &u64,
     with_tor: bool,
 ) -> Result<SCEAddress> {
@@ -196,12 +196,12 @@ pub fn do_swap(
         return Err(CError::SwapError("tor not enabled".to_string()));
     }
 
-    swap_register_utxo(wallet, state_chain_id, swap_size)?;
+    swap_register_utxo(wallet, statechain_id, swap_size)?;
     let swap_id;
     //Wait for swap to commence
 
     loop {
-        match swap_poll_utxo(&wallet.client_shim, &state_chain_id)? {
+        match swap_poll_utxo(&wallet.client_shim, &statechain_id)? {
             Some(v) => {
                 swap_id = v;
                 break;
@@ -233,12 +233,12 @@ pub fn do_swap(
         proof_key,
     };
 
-    let transfer_batch_sig = transfer::transfer_batch_sign(wallet, &state_chain_id, &swap_id)?;
+    let transfer_batch_sig = transfer::transfer_batch_sign(wallet, &statechain_id, &swap_id)?;
 
     let my_bst_data = swap_first_message(
         &wallet,
         &info,
-        &state_chain_id,
+        &statechain_id,
         &transfer_batch_sig,
         &address,
     )?;
@@ -258,7 +258,7 @@ pub fn do_swap(
         thread::sleep(time::Duration::from_secs(3));
     }
 
-    let bss = swap_get_blinded_spend_signature(&wallet.client_shim, &swap_id, &state_chain_id)?;
+    let bss = swap_get_blinded_spend_signature(&wallet.client_shim, &swap_id, &statechain_id)?;
 
     if with_tor {
         wallet.client_shim.new_tor_id()?;
@@ -280,10 +280,10 @@ pub fn do_swap(
         thread::sleep(time::Duration::from_secs(3));
     }
 
-    let _ = transfer::transfer_sender(&mut wallet, state_chain_id, receiver_addr)?;
+    let _ = transfer::transfer_sender(&mut wallet, statechain_id, receiver_addr)?;
 
 
-    let (commit, _nonce) = commitment::make_commitment(&state_chain_id.to_string());
+    let (commit, _nonce) = commitment::make_commitment(&statechain_id.to_string());
 
     let batch_id = &swap_id;
 
@@ -291,7 +291,7 @@ pub fn do_swap(
         wallet,
         batch_id,
         &commit,
-        &info.swap_token.state_chain_ids,
+        &info.swap_token.statechain_ids,
         &address,
     )?;
 

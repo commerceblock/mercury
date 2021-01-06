@@ -75,8 +75,8 @@ impl BatchTransfer for SCE {
                 )));
             }
 
-            let state_chain_id = Uuid::from_str(&sig.data).unwrap();
-            let sco = self.database.get_statechain_owner(state_chain_id)?;
+            let statechain_id = Uuid::from_str(&sig.data).unwrap();
+            let sco = self.database.get_statechain_owner(statechain_id)?;
 
             // Verify sigs
             let proof_key = sco.chain.get_tip()?.data;
@@ -86,7 +86,7 @@ impl BatchTransfer for SCE {
             is_locked(sco.locked_until)?;
 
             // Add to TransferBatchData object
-            state_chains.push(state_chain_id);
+            state_chains.push(statechain_id);
         }
 
         // Create new TransferBatchData and add to DB
@@ -120,15 +120,15 @@ impl BatchTransfer for SCE {
 
     fn transfer_reveal_nonce(&self, transfer_reveal_nonce: TransferRevealNonce) -> Result<()> {
         let batch_id = transfer_reveal_nonce.batch_id;
-        let state_chain_id = transfer_reveal_nonce.state_chain_id;
+        let statechain_id = transfer_reveal_nonce.statechain_id;
         info!(
             "TRANSFER_REVEAL_NONCE: Batch ID: {}. State Chain ID: {}",
-            batch_id, state_chain_id
+            batch_id, statechain_id
         );
 
         let tbd = self.database.get_transfer_batch_data(batch_id)?;
 
-        if tbd.state_chains.get(&state_chain_id).is_none() {
+        if tbd.state_chains.get(&statechain_id).is_none() {
             return Err(SEError::Generic(String::from(
                 "State chain ID not in this batch.",
             )));
@@ -146,27 +146,27 @@ impl BatchTransfer for SCE {
 
         verify_commitment(
             &transfer_reveal_nonce.hash,
-            &state_chain_id.to_string(),
+            &statechain_id.to_string(),
             &transfer_reveal_nonce.nonce,
         )?;
 
         // If state chain completed + commitment revealed then punishment can be removed from state chain
-        match self.database.get_sc_finalize_batch_data(&state_chain_id){
+        match self.database.get_sc_finalize_batch_data(&statechain_id){
             Ok(v) => {
                 //Check the data relatesd to this batch transfer
                 match v.batch_data {
                     Some(bd) => {
                         if bd.id == batch_id{
                             self.database
-                                .update_locked_until(&state_chain_id, &get_time_now())?;
+                                .update_locked_until(&statechain_id, &get_time_now())?;
                             info!(
                                 "TRANSFER_REVEAL_NONCE: State Chain unlocked. ID: {}",
-                                state_chain_id
+                                statechain_id
                             );
 
                             // remove from transfer batch punished list
                             let mut new_punished = tbd.punished_state_chains.clone();
-                            new_punished.retain(|x| x != &state_chain_id);
+                            new_punished.retain(|x| x != &statechain_id);
                             self.database.update_punished(&batch_id, new_punished)?;
                         }
                     },
@@ -239,14 +239,14 @@ mod tests {
     // Useful data structs for transfer batch protocol.
     /// Batch id and Signatures for statechains to take part in batch-transfer
     static TRANSFER_BATCH_INIT: &str = "{\"id\":\"dce55491-867a-485b-a036-cf96f2122ba5\",\"signatures\":[{\"purpose\":\"TRANSFER_BATCH:dce55491-867a-485b-a036-cf96f2122ba5\",\"data\":\"313bbb05-7d5e-475e-8d1e-4ef454a0e57a\",\"sig\":\"3044022062db3272cdf9b0551ee1466b58c9222ba71409f4c66714ef49e3be7e55c57a5b022075c71a3d965c27c41336047fd42ab8486e9d7bd6588e0d71e523b0c4eea651f9\"},{\"purpose\":\"TRANSFER_BATCH:dce55491-867a-485b-a036-cf96f2122ba5\",\"data\":\"f98957a9-9db4-4a0f-9a46-d21d5b8db4ec\",\"sig\":\"3045022100cdf5cfedd15f06885696fb5899a38b96ee8e55f6a8ffe029519fef47bb6e8469022013cc3e0d4740d9b790601efb685e94e93010efb4c6399954ae622ec124431cb6\"},{\"purpose\":\"TRANSFER_BATCH:dce55491-867a-485b-a036-cf96f2122ba5\",\"data\":\"ff33831e-f458-4a14-997c-abc460d1fe87\",\"sig\":\"3045022100844221eb7d324b8b6a1ca5007834e9802fd178b926850ffbe6ee084f523f5c8c02205cf12a77f104cb2b57623da0b0687a149244a87f273296a0eee3e2c5c9fd0231\"}]}";
-    /// Mapping of state_chain_ids -> proof keys for above list of sigatures
+    /// Mapping of statechain_ids -> proof keys for above list of sigatures
     static SIG_PROOF_KEYS: &str = "{\"313bbb05-7d5e-475e-8d1e-4ef454a0e57a\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"f98957a9-9db4-4a0f-9a46-d21d5b8db4ec\":\"022d7ea3d286541ed593e0158e315d73908646abcfa46aa56c12229a2910cce48c\",\"ff33831e-f458-4a14-997c-abc460d1fe87\":\"039afb8b85ba5c1b6664df7e68d4d79ea194e7022c76f0f9f3dadc3f94d8c79211\"}";
     /// Signs for incorrect batch id
     static STATE_CHAIN_SIG_ONE_WRONG_BATCH_ID: &str = "{\"purpose\":\"TRANSFER_BATCH:5d15c863-2ee3-46e2-935b-3f8702155fb6\",\"data\":\"ff33831e-f458-4a14-997c-abc460d1fe87\",\"sig\":\"30440220601a56ede4f2980e4b66d3b07a58b44dd5831b0ae300aa38de521147d74b49cc0220284923cd22b10c8edbf81535b53ab974757e875a39bc59bad84b3a01cf022e52\"}";
     /// Signs for "TRANSFER" instead of "TRANSFER-BATCH"
     static STATE_CHAIN_SIG_ONE_SIGN_REG_TRANSFER: &str = "{\"purpose\":\"TRANSFER\",\"data\":\"proof key dummy\",\"sig\":\"3045022100f31f1189d871c098bf954c1783ca1f89b4c6314c1cd59cf4ca3080a4e6f15104022040687c3d9335438ec9fec5fc125b5514fe323c98d1d70509de6e2f7c829d2948\"}";
 
-    static TRANSFER_FINALIZE_DATA: &str = "{\"new_shared_key_id\":\"45ee47fb-9361-42f3-a0a9-7d48c9b55afb\",\"state_chain_id\":\"5c960c7a-de59-40ac-a207-021afa57ca32\",\"state_chain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"03b1237dfd274027c29699bab2af88974ee266670861c4bb882f1f2a132f725be1\",\"sig\":\"3045022100c442cba10460732f473bf6d665b9f6b10a032395ecd2f75ab582137952d8e49c02206007005217bf21c321723a736fb854f09d51e1efeacb11dee663b766e1a5c305\"},\"s2\":\"1608b4f8fa8555bce037817c3608b107e4448c38e933007daf607596be9ad27\",\"theta\":\"0000000000000000000000000000000000000000000000000000000000000001\",\"new_tx_backup_hex\":\"0200000000010161cd0e9151b4ecbf1fc2b69a3aecce6ea3a677584c3114c34621573d8d529e4f0000000000ffffffff01384a00000000000016001427baa80ce9ce30ef1ef5f20a76ffc3a1a85be3d102483045022100fb7f1b15d6962a7e462541284be2cd81ea0f44c7bb9e23da1efe217b440ce17902205a569f29d1590b96ec5852784226f7ba6375b907adcf853bd052ccfab112df9d0121034f14136fdbe82daa4f7e6c27f2e2ad30a74616f141680ecde534b77010e4917500000000\",\"batch_data\":{\"id\":\"b0bcdab8-917c-46af-aaa2-d9060ff98575\",\"commitment\":\"8228048f45f148675a2f1e5d2e65b9a15c50a7b3f905e9b19f10c6ee67218861\"}}";
+    static TRANSFER_FINALIZE_DATA: &str = "{\"new_shared_key_id\":\"45ee47fb-9361-42f3-a0a9-7d48c9b55afb\",\"statechain_id\":\"5c960c7a-de59-40ac-a207-021afa57ca32\",\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"03b1237dfd274027c29699bab2af88974ee266670861c4bb882f1f2a132f725be1\",\"sig\":\"3045022100c442cba10460732f473bf6d665b9f6b10a032395ecd2f75ab582137952d8e49c02206007005217bf21c321723a736fb854f09d51e1efeacb11dee663b766e1a5c305\"},\"s2\":\"1608b4f8fa8555bce037817c3608b107e4448c38e933007daf607596be9ad27\",\"theta\":\"0000000000000000000000000000000000000000000000000000000000000001\",\"new_tx_backup_hex\":\"0200000000010161cd0e9151b4ecbf1fc2b69a3aecce6ea3a677584c3114c34621573d8d529e4f0000000000ffffffff01384a00000000000016001427baa80ce9ce30ef1ef5f20a76ffc3a1a85be3d102483045022100fb7f1b15d6962a7e462541284be2cd81ea0f44c7bb9e23da1efe217b440ce17902205a569f29d1590b96ec5852784226f7ba6375b907adcf853bd052ccfab112df9d0121034f14136fdbe82daa4f7e6c27f2e2ad30a74616f141680ecde534b77010e4917500000000\",\"batch_data\":{\"id\":\"b0bcdab8-917c-46af-aaa2-d9060ff98575\",\"commitment\":\"8228048f45f148675a2f1e5d2e65b9a15c50a7b3f905e9b19f10c6ee67218861\"}}";
 
     #[test]
     fn test_transfer_batch_init() {
@@ -344,9 +344,9 @@ mod tests {
         let tfd : TransferFinalizeData = serde_json::from_str(TRANSFER_FINALIZE_DATA).unwrap();
 
         let finalized_data_vec  = vec![tfd];
-        let mut state_chain_ids = vec![];
+        let mut statechain_ids = vec![];
         for item in finalized_data_vec.clone() {
-            state_chain_ids.push(item.state_chain_id.clone());
+            statechain_ids.push(item.statechain_id.clone());
         }
 
         // simply test for state_chains.len() != finalized_data.len()
@@ -393,7 +393,7 @@ mod tests {
         let transfer_finalize_data: TransferFinalizeData =
             serde_json::from_str(TRANSFER_FINALIZE_DATA).unwrap();
         let batch_id = transfer_finalize_data.batch_data.unwrap().id;
-        let state_chain_id = transfer_finalize_data.state_chain_id;
+        let statechain_id = transfer_finalize_data.statechain_id;
 
         let mut transfer_batch_data = TransferBatchData {
             state_chains: HashSet::new(),
@@ -414,7 +414,7 @@ mod tests {
             })
         });
         let mut state_chains = HashSet::new();
-        state_chains.insert(state_chain_id);
+        state_chains.insert(statechain_id);
         transfer_batch_data.state_chains = state_chains;
         // Batch completed successfully - no need to reveal nonce.
         transfer_batch_data.finalized = true;
@@ -424,7 +424,7 @@ mod tests {
                 Ok(TransferBatchData {
                     state_chains: {
                         let mut state_chains = HashSet::new();
-                        state_chains.insert(state_chain_id);
+                        state_chains.insert(statechain_id);
                         state_chains
                     },
                     punished_state_chains: vec![],
@@ -439,7 +439,7 @@ mod tests {
                 Ok(TransferBatchData {
                     state_chains: {
                         let mut state_chains = HashSet::new();
-                        state_chains.insert(state_chain_id);
+                        state_chains.insert(statechain_id);
                         state_chains
                     },
                     punished_state_chains: vec![],
@@ -451,7 +451,7 @@ mod tests {
             Ok(TransferBatchData {
                 state_chains: {
                     let mut state_chains = HashSet::new();
-                    state_chains.insert(state_chain_id);
+                    state_chains.insert(statechain_id);
                     state_chains
                 },
                 punished_state_chains: vec![],
@@ -468,11 +468,11 @@ mod tests {
 
         let sc_entity = test_sc_entity(db);
 
-        let (commitment, nonce) = make_commitment(&state_chain_id.to_string());
+        let (commitment, nonce) = make_commitment(&statechain_id.to_string());
         let transfer_reveal_nonce = TransferRevealNonce {
             batch_id,
             hash: commitment,
-            state_chain_id,
+            statechain_id,
             nonce,
         };
 

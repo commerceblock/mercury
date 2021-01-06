@@ -205,7 +205,7 @@ pub fn tx_backup_build(
 ///     - amount 'fee' to State Entity fee address 'fee_addr'
 pub fn tx_withdraw_build(
     funding_txid: &Txid,
-    rec_address: &Address,
+    rec_se_address: &Address,
     amount: &u64,
     fee: &u64,
     fee_addr: &String,
@@ -232,7 +232,7 @@ pub fn tx_withdraw_build(
         input: vec![txin.clone()],
         output: vec![
             TxOut {
-                script_pubkey: rec_address.script_pubkey(),
+                script_pubkey: rec_se_address.script_pubkey(),
                 value: amount - *fee - FEE,
             },
             TxOut {

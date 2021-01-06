@@ -8,7 +8,7 @@ User represents a user in a particular state chain session. The same client co-o
 | Name            | Type          | Required | Description                             |
 |-----------------|---------------|----------|-----------------------------------------|
 | id              | String (UUID) | true     | Primary Key                             |
-| state_chain_id  | String (UUID) | false    | Foreign Key for StateChain table        |
+| statechain_id  | String (UUID) | false    | Foreign Key for StateChain table        |
 | authentication  | undetermined  | true     | Can be string token for now             |
 | proofkey        | String        | false    |                                         |
 | s2              | EC Scalar     | false    | Required at transfer to create new User |
@@ -23,7 +23,7 @@ A list of States in which each State signs for the next State.
 
 | Name           | Type                      | Required | Description                                                           |
 |----------------|---------------------------|----------|-----------------------------------------------------------------------|
-| state_chain_id | String (UUID)             | true     | Primary Key                                                           |
+| statechain_id | String (UUID)             | true     | Primary Key                                                           |
 | chain          | Vec(State)                | true     |                                                                       |
 | amount         | u64                       | true     |                                                                       |
 | locked_until   | SystemTime                | true     | Time in the future before which this state chain cannot be acted upon |
@@ -37,8 +37,8 @@ TransferData stores transfer data between transfer_sender and transfer_receiver.
 
 | Name            | Type          | Required | Description |
 |-----------------|---------------|----------|-------------|
-| state_chain_id  | String (UUID) | true     | Primary Key |
-| state_chain_sig | StateChainSig | true     |             |
+| statechain_id  | String (UUID) | true     | Primary Key |
+| statechain_sig | StateChainSig | true     |             |
 | x1              | EC Scalar     | true     |             |
 | transfermsg     | TransferMsg3  | true .   | .           |
 
@@ -52,8 +52,8 @@ When all transfers in the batch are complete these transfers are finalized atomi
 |-----------------------|---------------------------|----------|-------------------------------------------------------------|
 | id                    | String (UUID)             | true     | Primary Key                                                 |
 | start_time            | SystemTime                | true     | Time batch transfer began                                   |
-| state_chains          | HashSet(String)           | true     | Set of state_chain_ids                                      |
-| punished_state_chains | Vec(String)               | true     | If transfer batch fails these state_chain_ids were punished |
+| state_chains          | HashSet(String)           | true     | Set of statechain_ids                                      |
+| punished_state_chains | Vec(String)               | true     | If transfer batch fails these statechain_ids were punished |
 | finalized             | bool                      | true     |                                                             |
 
 
@@ -97,7 +97,7 @@ Storage of active Backup Txs.
 
 | Name            | Type          | Required | Description     |
 |-----------------|---------------|----------|-----------------|
-| state_chain_id  | String (UUID) | true     | Composite Key   |
+| statechain_id  | String (UUID) | true     | Composite Key   |
 | tx_backup       | Transaction   | true     | Back up tx data |
 
 

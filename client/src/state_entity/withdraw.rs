@@ -28,37 +28,37 @@ use curv::elliptic::curves::traits::ECPoint;
 use std::str::FromStr;
 use uuid::Uuid;
 
-/// Withdraw coins from state entity. Returns signed withdraw transaction, state_chain_id and withdrawn amount.
-pub fn withdraw(wallet: &mut Wallet, state_chain_id: &Uuid) -> Result<(String, Uuid, u64)> {
+/// Withdraw coins from state entity. Returns signed withdraw transaction, statechain_id and withdrawn amount.
+pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid) -> Result<(String, Uuid, u64)> {
     // first get required shared key data
     let shared_key_id;
     let pk;
     {
-        let shared_key = wallet.get_shared_key_by_state_chain_id(state_chain_id)?;
+        let shared_key = wallet.get_shared_key_by_statechain_id(statechain_id)?;
         pk = shared_key.share.public.q.get_element();
         shared_key_id = shared_key.id.clone();
     }
 
     // Generate receiving address of withdrawn funds
-    let rec_address = wallet.keys.get_new_address()?;
+    let rec_se_address = wallet.keys.get_new_address()?;
 
     // Sign state chain
-    let state_chain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &state_chain_id)?;
-    if state_chain_data.amount == 0 {
+    let statechain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &statechain_id)?;
+    if statechain_data.amount == 0 {
         return Err(CError::StateEntityError(String::from(
             "Withdraw: StateChain is already withdrawn.",
         )));
     }
-    let state_chain = state_chain_data.chain;
+    let state_chain = statechain_data.chain;
     // get proof key for signing
     let proof_key_derivation = wallet
         .se_proof_keys
         .get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap())
         .ok_or(CError::WalletError(WalletErrorType::KeyNotFound));
-    let state_chain_sig = StateChainSig::new(
+    let statechain_sig = StateChainSig::new(
         &proof_key_derivation.unwrap().private_key.key,
         &String::from("WITHDRAW"),
-        &rec_address.to_string(),
+        &rec_se_address.to_string(),
     )?;
 
     // Alert SE of desire of withdraw and receive authorisation if state chain signature verifies
@@ -67,12 +67,12 @@ pub fn withdraw(wallet: &mut Wallet, state_chain_id: &Uuid) -> Result<(String, U
         &format!("withdraw/init"),
         &WithdrawMsg1 {
             shared_key_id: shared_key_id.clone(),
-            state_chain_sig,
+            statechain_sig,
         },
     )?;
 
     // Get state chain info
-    let sc_info = get_statechain(&wallet.client_shim, &state_chain_id)?;
+    let sc_info = get_statechain(&wallet.client_shim, &statechain_id)?;
     // Get state entity withdraw fee info
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
 
@@ -82,7 +82,7 @@ pub fn withdraw(wallet: &mut Wallet, state_chain_id: &Uuid) -> Result<(String, U
     // Construct withdraw tx
     let tx_withdraw_unsigned = tx_withdraw_build(
         &sc_info.utxo.txid,
-        &rec_address,
+        &rec_se_address,
         &(sc_info.amount + se_fee_info.deposit),
         &withdraw_fee,
         &se_fee_info.address,
@@ -104,7 +104,7 @@ pub fn withdraw(wallet: &mut Wallet, state_chain_id: &Uuid) -> Result<(String, U
         &format!("/withdraw/confirm"),
         &WithdrawMsg2 {
             shared_key_id: shared_key_id.to_owned(),
-            address: rec_address.to_string(),
+            address: rec_se_address.to_string(),
         },
     )?;
 
@@ -126,7 +126,7 @@ pub fn withdraw(wallet: &mut Wallet, state_chain_id: &Uuid) -> Result<(String, U
 
     Ok((
         withdraw_txid,
-        state_chain_id.clone(),
-        state_chain_data.amount - se_fee_info.withdraw,
+        statechain_id.clone(),
+        statechain_data.amount - se_fee_info.withdraw,
     ))
 }

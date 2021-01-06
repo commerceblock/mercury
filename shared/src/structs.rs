@@ -193,7 +193,7 @@ impl Eq for SCEAddress {}
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferMsg1 {
     pub shared_key_id: Uuid,
-    pub state_chain_sig: StateChainSig,
+    pub statechain_sig: StateChainSig,
 }
 
 /// SE -> Sender
@@ -207,19 +207,19 @@ pub struct TransferMsg2 {
 pub struct TransferMsg3 {
     pub shared_key_id: Uuid,
     pub t1: FESer, // t1 = o1x1
-    pub state_chain_sig: StateChainSig,
-    pub state_chain_id: Uuid,
+    pub statechain_sig: StateChainSig,
+    pub statechain_id: Uuid,
     pub tx_backup_psm: PrepareSignTxMsg,
-    pub rec_addr: SCEAddress, // receivers state entity address (btc address and proof key)
+    pub rec_se_addr: SCEAddress, // receivers state entity address (btc address and proof key)
 }
 
 /// Receiver -> State Entity
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferMsg4 {
     pub shared_key_id: Uuid,
-    pub state_chain_id: Uuid,
+    pub statechain_id: Uuid,
     pub t2: FE, // t2 = t1*o2_inv = o1*x1*o2_inv
-    pub state_chain_sig: StateChainSig,
+    pub statechain_sig: StateChainSig,
     pub o2_pub: GE,
     pub tx_backup_hex: String,
     pub batch_data: Option<BatchData>,
@@ -245,7 +245,7 @@ pub struct TransferBatchInitMsg {
 pub struct TransferRevealNonce {
     pub batch_id: Uuid,
     pub hash: String,
-    pub state_chain_id: Uuid,
+    pub statechain_id: Uuid,
     pub nonce: [u8; 32],
 }
 
@@ -261,7 +261,7 @@ pub struct BatchData {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WithdrawMsg1 {
     pub shared_key_id: Uuid,
-    pub state_chain_sig: StateChainSig,
+    pub statechain_sig: StateChainSig,
 }
 
 /// Owner -> State Entity
@@ -370,7 +370,7 @@ impl SelfEncryptable for TransferMsg3 {
 impl WalletDecryptable for TransferMsg3 {
     fn get_public_key(&self) -> crate::ecies::Result<Option<crate::ecies::PublicKey>> {
         Ok(Some(crate::ecies::PublicKey::from_str(
-            &self.state_chain_sig.data,
+            &self.statechain_sig.data,
         )?))
     }
 }
@@ -427,10 +427,10 @@ mod tests {
         let mut msg = TransferMsg3 {
             shared_key_id: Uuid::new_v4(),
             t1: FESer::new_random(),
-            state_chain_sig: StateChainSig::default(),
-            state_chain_id: Uuid::new_v4(),
+            statechain_sig: StateChainSig::default(),
+            statechain_id: Uuid::new_v4(),
             tx_backup_psm: PrepareSignTxMsg::default(),
-            rec_addr: SCEAddress {
+            rec_se_addr: SCEAddress {
                 tx_backup_addr: Some(
                     Address::from_str("1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h").unwrap(),
                 ),

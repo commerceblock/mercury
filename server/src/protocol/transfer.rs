@@ -38,8 +38,8 @@ cfg_if! {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransferFinalizeData {
     pub new_shared_key_id: Uuid,
-    pub state_chain_id: Uuid,
-    pub state_chain_sig: StateChainSig,
+    pub statechain_id: Uuid,
+    pub statechain_sig: StateChainSig,
     pub s2: FE,
     pub theta: FE,
     pub new_tx_backup_hex: String,
@@ -69,7 +69,7 @@ pub trait Transfer {
     fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> Result<()>;
 
     /// API: Get the transfer message 3 set by update_transfer_msg
-    fn transfer_get_msg(&self, state_chain_id: Uuid) -> Result<TransferMsg3>;
+    fn transfer_get_msg(&self, statechain_id: Uuid) -> Result<TransferMsg3>;
 }
 
 impl Transfer for SCE {
@@ -80,17 +80,17 @@ impl Transfer for SCE {
         info!("TRANSFER: Sender Side. Shared Key ID: {}", user_id);
 
         // Get state_chain id
-        let state_chain_id = self.database.get_statechain_id(user_id)?;
+        let statechain_id = self.database.get_statechain_id(user_id)?;
 
         // Check if transfer has already been completed (but not finalized)
-        if self.database.transfer_is_completed(state_chain_id) {
+        if self.database.transfer_is_completed(statechain_id) {
             return Err(SEError::Generic(String::from(
                 "Transfer already completed. Waiting for finalize.",
             )));
         }
 
         // Check if state chain is owned by user and not locked
-        let sco = self.database.get_statechain_owner(state_chain_id)?;
+        let sco = self.database.get_statechain_owner(statechain_id)?;
 
         is_locked(sco.locked_until)?;
         if sco.owner_id != user_id {
@@ -117,14 +117,14 @@ impl Transfer for SCE {
         }
 
         self.database
-            .create_transfer(&state_chain_id, &transfer_msg1.state_chain_sig, &x1)?;
+            .create_transfer(&statechain_id, &transfer_msg1.statechain_sig, &x1)?;
 
         info!(
             "TRANSFER: Sender side complete. Previous shared key ID: {}. State Chain ID: {}",
             user_id.to_string(),
-            state_chain_id
+            statechain_id
         );
-        debug!("TRANSFER: Sender side complete. State Chain ID: {}. State Chain Signature: {:?}. x1: {:?}.", state_chain_id, transfer_msg1.state_chain_sig, x1);
+        debug!("TRANSFER: Sender side complete. State Chain ID: {}. State Chain Signature: {:?}. x1: {:?}.", statechain_id, transfer_msg1.statechain_sig, x1);
 
         // encrypt x1 with Senders proof key
         let proof_key = match ecies::PublicKey::from_str(&self.database.get_proof_key(user_id)?) {
@@ -154,18 +154,18 @@ impl Transfer for SCE {
 
     fn transfer_receiver(&self, transfer_msg4: TransferMsg4) -> Result<TransferMsg5> {
         let user_id = transfer_msg4.shared_key_id;
-        let state_chain_id = transfer_msg4.state_chain_id;
+        let statechain_id = transfer_msg4.statechain_id;
 
         info!("TRANSFER: Receiver side. Shared Key ID: {}", user_id);
 
-        // Get Transfer Data for state_chain_id
-        let td = self.database.get_transfer_data(state_chain_id)?;
+        // Get Transfer Data for statechain_id
+        let td = self.database.get_transfer_data(statechain_id)?;
 
-        // Ensure state_chain_sigs are the same
-        if td.state_chain_sig != transfer_msg4.state_chain_sig.to_owned() {
+        // Ensure statechain_sigs are the same
+        if td.statechain_sig != transfer_msg4.statechain_sig.to_owned() {
             return Err(SEError::Generic(format!(
                 "State chain siganture provided does not match state chain at id {}",
-                state_chain_id
+                statechain_id
             )));
         }
 
@@ -217,8 +217,8 @@ impl Transfer for SCE {
 
         let finalized_data = TransferFinalizeData {
             new_shared_key_id: new_shared_key_id.clone(),
-            state_chain_id: state_chain_id.clone(),
-            state_chain_sig: td.state_chain_sig,
+            statechain_id: statechain_id.clone(),
+            statechain_sig: td.statechain_sig,
             s2,
             theta,
             new_tx_backup_hex: transfer_msg4.tx_backup_hex,
@@ -231,7 +231,7 @@ impl Transfer for SCE {
             let batch_id = transfer_msg4.batch_data.clone().unwrap().id;
             info!(
                 "TRANSFER: Transfer as part of batch {}. State Chain ID: {}",
-                batch_id, state_chain_id
+                batch_id, statechain_id
             );
 
             // Ensure batch transfer is still active
@@ -243,7 +243,7 @@ impl Transfer for SCE {
             }
 
             self.database.update_finalize_batch_data(
-                &state_chain_id,
+                &statechain_id,
                 &finalized_data,
             )?;
 
@@ -257,7 +257,7 @@ impl Transfer for SCE {
             "TRANSFER: Receiver side complete. State Chain ID: {}",
             new_shared_key_id
         );
-        debug!("TRANSFER: Receiver side complete. State Chain ID: {}. New Shared Key ID: {}. Finalized data: {:?}",state_chain_id,state_chain_id,finalized_data);
+        debug!("TRANSFER: Receiver side complete. State Chain ID: {}. New Shared Key ID: {}. Finalized data: {:?}",statechain_id,statechain_id,finalized_data);
 
         Ok(TransferMsg5 {
             new_shared_key_id,
@@ -270,19 +270,19 @@ impl Transfer for SCE {
     /// This function is called immediately in the regular transfer case or after confirmation of atomic
     /// transfers completion in the batch transfer case.
     fn transfer_finalize(&self, finalized_data: &TransferFinalizeData) -> Result<()> {
-        let state_chain_id = finalized_data.state_chain_id;
+        let statechain_id = finalized_data.statechain_id;
 
-        info!("TRANSFER_FINALIZE: State Chain ID: {}", state_chain_id);
+        info!("TRANSFER_FINALIZE: State Chain ID: {}", statechain_id);
 
         // Update state chain
-        let mut state_chain: StateChain = self.database.get_statechain(state_chain_id)?;
+        let mut state_chain: StateChain = self.database.get_statechain(statechain_id)?;
 
-        state_chain.add(finalized_data.state_chain_sig.to_owned())?;
+        state_chain.add(finalized_data.statechain_sig.to_owned())?;
 
         let new_user_id = finalized_data.new_shared_key_id;
 
         self.database.update_statechain_owner(
-            &state_chain_id,
+            &statechain_id,
             state_chain.clone(),
             &new_user_id,
         )?;
@@ -291,18 +291,18 @@ impl Transfer for SCE {
 
         self.database.transfer_init_user_session(
             &new_user_id,
-            &state_chain_id,
+            &statechain_id,
             finalized_data.to_owned(),
         )?;
 
         let new_tx_backup = transaction_deserialise(&finalized_data.new_tx_backup_hex)?;
 
         self.database
-            .update_backup_tx(&state_chain_id, new_tx_backup.clone())?;
+            .update_backup_tx(&statechain_id, new_tx_backup.clone())?;
 
         info!(
             "TRANSFER: Finalized. New shared key ID: {}. State Chain ID: {}",
-            finalized_data.new_shared_key_id, state_chain_id
+            finalized_data.new_shared_key_id, statechain_id
         );
 
         // Update sparse merkle tree with new StateChain entry
@@ -324,15 +324,15 @@ impl Transfer for SCE {
 
         info!(
             "TRANSFER: Included in sparse merkle tree. State Chain ID: {}",
-            state_chain_id
+            statechain_id
         );
         debug!(
             "TRANSFER: State Chain ID: {}. New root: {:?}. Previous root: {:?}.",
-            state_chain_id, &new_root, &prev_root
+            statechain_id, &new_root, &prev_root
         );
 
         // Remove TransferData for this transfer
-        self.database.remove_transfer_data(&state_chain_id)?;
+        self.database.remove_transfer_data(&statechain_id)?;
 
         //increment transfer counter
         TRANSFERS_COUNT.inc();
@@ -343,12 +343,12 @@ impl Transfer for SCE {
     /// API: Update the state entity database with transfer message 3
     fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> Result<()> {
         self.database
-            .update_transfer_msg(&transfer_msg3.state_chain_id, &transfer_msg3)
+            .update_transfer_msg(&transfer_msg3.statechain_id, &transfer_msg3)
     }
 
     /// API: Get the transfer message 3 set by update_transfer_msg
-    fn transfer_get_msg(&self, state_chain_id: Uuid) -> Result<TransferMsg3> {
-        self.database.get_transfer_msg(&state_chain_id)
+    fn transfer_get_msg(&self, statechain_id: Uuid) -> Result<TransferMsg3> {
+        self.database.get_transfer_msg(&statechain_id)
     }
 }
 
@@ -385,12 +385,12 @@ pub fn transfer_update_msg(
     }
 }
 
-#[post("/transfer/get_msg", format = "json", data = "<state_chain_id>")]
+#[post("/transfer/get_msg", format = "json", data = "<statechain_id>")]
 pub fn transfer_get_msg(
     sc_entity: State<SCE>,
-    state_chain_id: Json<Uuid>,
+    statechain_id: Json<Uuid>,
 ) -> Result<Json<TransferMsg3>> {
-    match sc_entity.transfer_get_msg(state_chain_id.into_inner()) {
+    match sc_entity.transfer_get_msg(statechain_id.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -415,12 +415,12 @@ mod tests {
     use shared_lib::util::transaction_serialise;
 
     // Data from a run of transfer protocol.
-    // static TRANSFER_MSG_1: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"state_chain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"}}";
+    // static TRANSFER_MSG_1: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"}}";
     static TRANSFER_MSG_2: &str = "{\"x1\":{\"secret_bytes\":[217,214,207,25,253,52,22,248,213,221,5,144,234,167,41,113,133,7,4,157,15,84,91,60,178,40,179,202,26,62,186,105]},\"proof_key\":\"04b42845b4e8477af2133ea5b5c15a4e8864e48d553c018a20ef6fa54526b8879c87306264ad3b4d1525ecf863734f6145a59cc940bb0a8813bedd9a8f6d816814\"}";
 
-    // static TRANSFER_MSG_3: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"t1\":\"34c9a329617b8dd3cdeb3d491fa09f023f84f28005bdf40f0682eb020969183b\",\"state_chain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"},\"state_chain_id\":\"9b0ba36b-406a-499c-8c83-696b77f003a9\",\"tx_backup_psm\":{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"protocol\":\"Transfer\",\"tx\":{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"53e1d67d837fdaddb016c5de85d8903bc033f7f2208d3ff40430fc42edeab4cb:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,69,2,33,0,177,248,103,71,170,95,47,217,222,7,130,181,12,9,254,115,96,166,180,164,162,4,14,110,145,113,106,97,155,231,190,22,2,32,63,119,90,178,253,249,43,242,42,177,250,25,29,251,156,37,12,61,70,252,201,155,252,188,56,242,36,211,50,136,203,95,1],[2,108,195,112,80,86,19,121,166,106,134,63,140,162,115,194,178,158,147,92,173,6,188,127,94,107,131,160,62,11,191,241,230]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"0014a5c378a7de7311e6836253a28830b48cc6b9e252\"}]},\"input_addrs\":[\"026cc37050561379a66a863f8ca273c2b29e935cad06bc7f5e6b83a03e0bbff1e6\"],\"input_amounts\":[10000],\"proof_key\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\"},\"rec_addr\":{\"tx_backup_addr\":\"bcrt1q5hph3f77wvg7dqmz2w3gsv953nrtncjjzyj3m9\",\"proof_key\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\"}}";
-    static TRANSFER_MSG_4: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"state_chain_id\":\"9b0ba36b-406a-499c-8c83-696b77f003a9\",\"t2\":\"a1563a0006e1dac1cdb89d592327f7c5e292193365a0f15ebf805900261f9bb2\",\"state_chain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"},\"o2_pub\":{\"x\":\"e60171f570be0c6b673acbb5df775001b634e474e7ad329ab07b0fb50fead479\",\"y\":\"1ef781c8cde5310eb748a305dcab6b3ee302160d49d83b7ae8e7fde67979eb13\"},\"tx_backup_hex\":\"02000000000101cbb4eaed42fc3004f43f8d20f2f733c03b90d885dec516b0ddda7f837dd6e1530000000000ffffffff012823000000000000160014a5c378a7de7311e6836253a28830b48cc6b9e25202483045022100b1f86747aa5f2fd9de0782b50c09fe7360a6b4a4a2040e6e91716a619be7be1602203f775ab2fdf92bf22ab1fa191dfb9c250c3d46fcc99bfcbc38f224d33288cb5f0121026cc37050561379a66a863f8ca273c2b29e935cad06bc7f5e6b83a03e0bbff1e600000000\",\"batch_data\":null}";
-    static FINALIZED_DATA: &str = "{\"new_shared_key_id\":\"22f73737-efde-49a0-977a-ffaf8ba1e0f0\",\"state_chain_id\":\"9b0ba36b-406a-499c-8c83-696b77f003a9\",\"state_chain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"},\"s2\":\"28d85004c2a896df7f205882930ead6c7a95d84b3978174c51ebd06a4bd1589a\",\"theta\":\"28d85004c2a896df7f205882930ead6c7a95d84b3978174c51ebd06a4bd1589a\",\"new_tx_backup_hex\":\"02000000000101cbb4eaed42fc3004f43f8d20f2f733c03b90d885dec516b0ddda7f837dd6e1530000000000ffffffff012823000000000000160014a5c378a7de7311e6836253a28830b48cc6b9e25202483045022100b1f86747aa5f2fd9de0782b50c09fe7360a6b4a4a2040e6e91716a619be7be1602203f775ab2fdf92bf22ab1fa191dfb9c250c3d46fcc99bfcbc38f224d33288cb5f0121026cc37050561379a66a863f8ca273c2b29e935cad06bc7f5e6b83a03e0bbff1e600000000\",\"batch_data\":null}";
+    // static TRANSFER_MSG_3: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"t1\":\"34c9a329617b8dd3cdeb3d491fa09f023f84f28005bdf40f0682eb020969183b\",\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"},\"statechain_id\":\"9b0ba36b-406a-499c-8c83-696b77f003a9\",\"tx_backup_psm\":{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"protocol\":\"Transfer\",\"tx\":{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"53e1d67d837fdaddb016c5de85d8903bc033f7f2208d3ff40430fc42edeab4cb:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,69,2,33,0,177,248,103,71,170,95,47,217,222,7,130,181,12,9,254,115,96,166,180,164,162,4,14,110,145,113,106,97,155,231,190,22,2,32,63,119,90,178,253,249,43,242,42,177,250,25,29,251,156,37,12,61,70,252,201,155,252,188,56,242,36,211,50,136,203,95,1],[2,108,195,112,80,86,19,121,166,106,134,63,140,162,115,194,178,158,147,92,173,6,188,127,94,107,131,160,62,11,191,241,230]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"0014a5c378a7de7311e6836253a28830b48cc6b9e252\"}]},\"input_addrs\":[\"026cc37050561379a66a863f8ca273c2b29e935cad06bc7f5e6b83a03e0bbff1e6\"],\"input_amounts\":[10000],\"proof_key\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\"},\"rec_se_addr\":{\"tx_backup_addr\":\"bcrt1q5hph3f77wvg7dqmz2w3gsv953nrtncjjzyj3m9\",\"proof_key\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\"}}";
+    static TRANSFER_MSG_4: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"statechain_id\":\"9b0ba36b-406a-499c-8c83-696b77f003a9\",\"t2\":\"a1563a0006e1dac1cdb89d592327f7c5e292193365a0f15ebf805900261f9bb2\",\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"},\"o2_pub\":{\"x\":\"e60171f570be0c6b673acbb5df775001b634e474e7ad329ab07b0fb50fead479\",\"y\":\"1ef781c8cde5310eb748a305dcab6b3ee302160d49d83b7ae8e7fde67979eb13\"},\"tx_backup_hex\":\"02000000000101cbb4eaed42fc3004f43f8d20f2f733c03b90d885dec516b0ddda7f837dd6e1530000000000ffffffff012823000000000000160014a5c378a7de7311e6836253a28830b48cc6b9e25202483045022100b1f86747aa5f2fd9de0782b50c09fe7360a6b4a4a2040e6e91716a619be7be1602203f775ab2fdf92bf22ab1fa191dfb9c250c3d46fcc99bfcbc38f224d33288cb5f0121026cc37050561379a66a863f8ca273c2b29e935cad06bc7f5e6b83a03e0bbff1e600000000\",\"batch_data\":null}";
+    static FINALIZED_DATA: &str = "{\"new_shared_key_id\":\"22f73737-efde-49a0-977a-ffaf8ba1e0f0\",\"statechain_id\":\"9b0ba36b-406a-499c-8c83-696b77f003a9\",\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"},\"s2\":\"28d85004c2a896df7f205882930ead6c7a95d84b3978174c51ebd06a4bd1589a\",\"theta\":\"28d85004c2a896df7f205882930ead6c7a95d84b3978174c51ebd06a4bd1589a\",\"new_tx_backup_hex\":\"02000000000101cbb4eaed42fc3004f43f8d20f2f733c03b90d885dec516b0ddda7f837dd6e1530000000000ffffffff012823000000000000160014a5c378a7de7311e6836253a28830b48cc6b9e25202483045022100b1f86747aa5f2fd9de0782b50c09fe7360a6b4a4a2040e6e91716a619be7be1602203f775ab2fdf92bf22ab1fa191dfb9c250c3d46fcc99bfcbc38f224d33288cb5f0121026cc37050561379a66a863f8ca273c2b29e935cad06bc7f5e6b83a03e0bbff1e600000000\",\"batch_data\":null}";
     pub static PARTY_1_PRIVATE: &str = "{\"x1\":\"827089d12423e80ac4d6cd463d524326e3aa89c4623178df41a6581fec42fc4\",\"paillier_priv\":{\"p\":\"175105153600741631732008635643568979650827093652618445865555498830310239779193993937919065748609864882562533521325401979357004940357735331137242744377931301179917304999674039005453503946248939473532166164488354001195043141677905998318715771948374633284282386723061505364048790027483575020641965955188382828043\",\"q\":\"176107056094363704009530683741685388080833654947191096034654854567664678756371593133182239495448766868278040275902304993107585397542355074990977649321727244853545689372964609905231205840920297987033622047920439606987774726496544858149573923439784574804611753120265479364394401830948243108767573192431824915223\"},\"c_key_randomness\":\"c3d4d31f59de5dc74bd5f89a92d498197ea5fd93069556cde819db50b0fa9fc4649ee5f89404d943c2a227453defb2c58908869f13ec12897b150778c41dd037a6c88015e53be46beeed355ce2e41d8351005b06264f397cde4adde9d881e9abf3d4278a89b1d66beb335a4f81128e1e78e069a8ddfee1756585ff3aa80f714fe4f4ced8822b73a1d8c9c04375b76f055791a60b683443eb959ffb292aa152fd23561a69bfe20c1d711cc8be4a404591bf04cab07c472ca013e06b9b370cdb53a668af4f1646854a225a7cf07ea12e6c53f7d55014d445d2a1ed061e2320656a4afad19593f9de4fef4f0c73f018373a0eb61b7cd8c1d5efd1c485bd90b845bb\"}";
     pub static PARTY_2_PUBLIC: &str = "{\"x\":\"5220bc6ebcc83d0a1e4482ab1f2194cb69648100e8be78acde47ca56b996bd9e\",\"y\":\"8dfbb36ef76f2197598738329ffab7d3b3a06d80467db8e739c6b165abc20231\"}";
 
@@ -430,14 +430,14 @@ mod tests {
             serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap();
         let shared_key_id = transfer_msg_4.shared_key_id;
         let no_sc_shared_key_id = Uuid::from_str("deadb33f-1111-46f9-aaaa-0678c891b2d3").unwrap(); // random Uuid
-        let state_chain_id = transfer_msg_4.state_chain_id;
-        let state_chain_sig: StateChainSig =
+        let statechain_id = transfer_msg_4.statechain_id;
+        let statechain_sig: StateChainSig =
             serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string())
                 .unwrap()
-                .state_chain_sig;
+                .statechain_sig;
         let transfer_msg_1 = TransferMsg1 {
             shared_key_id,
-            state_chain_sig,
+            statechain_sig,
         };
 
         let mut db = MockDatabase::new();
@@ -449,7 +449,7 @@ mod tests {
             .returning(move |_| Ok(shared_key_id));
         db.expect_get_statechain_id()
             .with(predicate::eq(shared_key_id))
-            .returning(move |_| Ok(state_chain_id));
+            .returning(move |_| Ok(statechain_id));
         // userid does not own a state
         db.expect_get_statechain_id()
             .with(predicate::eq(no_sc_shared_key_id))
@@ -460,10 +460,10 @@ mod tests {
                 ))
             });
         db.expect_transfer_is_completed()
-            .with(predicate::eq(state_chain_id))
+            .with(predicate::eq(statechain_id))
             .returning(|_| false);
         db.expect_get_statechain_owner() // sc locked
-            .with(predicate::eq(state_chain_id))
+            .with(predicate::eq(statechain_id))
             .times(1)
             .returning(move |_| {
                 Ok(StateChainOwner {
@@ -473,7 +473,7 @@ mod tests {
                 })
             });
         db.expect_get_statechain_owner()
-            .with(predicate::eq(state_chain_id))
+            .with(predicate::eq(statechain_id))
             .returning(move |_| {
                 Ok(StateChainOwner {
                     locked_until: Utc::now().naive_utc(),
@@ -520,7 +520,7 @@ mod tests {
         let transfer_msg_4 =
             serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap();
         let shared_key_id = transfer_msg_4.shared_key_id;
-        let state_chain_id = transfer_msg_4.state_chain_id;
+        let statechain_id = transfer_msg_4.statechain_id;
         let s2 = serde_json::from_str::<TransferFinalizeData>(&FINALIZED_DATA.to_string())
             .unwrap()
             .s2;
@@ -535,15 +535,15 @@ mod tests {
         db.expect_get_user_auth()
             .returning(move |_| Ok(shared_key_id));
         db.expect_get_transfer_data()
-            .with(predicate::eq(state_chain_id))
+            .with(predicate::eq(statechain_id))
             .returning(move |_| {
                 Ok(TransferData {
-                    state_chain_id,
-                    state_chain_sig: serde_json::from_str::<TransferMsg4>(
+                    statechain_id,
+                    statechain_sig: serde_json::from_str::<TransferMsg4>(
                         &TRANSFER_MSG_4.to_string(),
                     )
                     .unwrap()
-                    .state_chain_sig,
+                    .statechain_sig,
                     x1,
                 })
             });
@@ -571,12 +571,12 @@ mod tests {
             Ok(TransferFinalizeBatchData {
                 finalized_data_vec: vec![TransferFinalizeData {
                     new_shared_key_id: shared_key_id,
-                    state_chain_id,
-                    state_chain_sig: serde_json::from_str::<TransferMsg4>(
+                    statechain_id,
+                    statechain_sig: serde_json::from_str::<TransferMsg4>(
                         &TRANSFER_MSG_4.to_string(),
                     )
                     .unwrap()
-                    .state_chain_sig,
+                    .statechain_sig,
                     s2: s2,
                     theta,
                     new_tx_backup_hex: transaction_serialise(
@@ -625,7 +625,7 @@ mod tests {
 
         // StateChain incorreclty signed for
         let mut msg_4_incorrect_sc = transfer_msg_4.clone();
-        msg_4_incorrect_sc.state_chain_sig.data =
+        msg_4_incorrect_sc.statechain_sig.data =
             "deadb33f88579c6aafcfcc8ca91b0556a2044e6c61dfb7fca5f90c40ed119349ec".to_string();
         match sc_entity.transfer_receiver(msg_4_incorrect_sc) {
             Ok(_) => assert!(false, "Expected failure."),

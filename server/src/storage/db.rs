@@ -752,10 +752,10 @@ impl Database for PGDatabase {
         Self::deser(self.get_1(user_id, Table::UserSession, vec![Column::TxBackup])?)
     }
 
-    fn update_backup_tx(&self,state_chain_id: &Uuid, tx: Transaction) -> Result<()> {
+    fn update_backup_tx(&self,statechain_id: &Uuid, tx: Transaction) -> Result<()> {
         let locktime = tx.lock_time;
         self.update(
-            state_chain_id,
+            statechain_id,
             Table::BackupTxs,
             vec![Column::TxBackup,Column::LockTime],
             vec![&Self::ser(tx)?,&(locktime as i64)],
@@ -763,7 +763,7 @@ impl Database for PGDatabase {
     }
 
     fn get_withdraw_confirm_data(&self, user_id: Uuid) -> Result<WithdrawConfirmData> {
-        let (tx_withdraw_str, withdraw_sc_sig_str, state_chain_id) = self
+        let (tx_withdraw_str, withdraw_sc_sig_str, statechain_id) = self
             .get_3::<String, String, Uuid>(
                 user_id,
                 Table::UserSession,
@@ -778,7 +778,7 @@ impl Database for PGDatabase {
         Ok(WithdrawConfirmData {
             tx_withdraw,
             withdraw_sc_sig,
-            state_chain_id,
+            statechain_id,
         })
     }
 
@@ -872,8 +872,8 @@ impl Database for PGDatabase {
     }
 
     // remove confirmed backup transaction from db
-    fn remove_backup_tx(&self, state_chain_id: &Uuid) -> Result<()> {
-        self.remove(state_chain_id, Table::BackupTxs)
+    fn remove_backup_tx(&self, statechain_id: &Uuid) -> Result<()> {
+        self.remove(statechain_id, Table::BackupTxs)
     }
 
     /// Get root with given ID
@@ -940,18 +940,18 @@ impl Database for PGDatabase {
         self.get_1::<Uuid>(user_id, Table::UserSession, vec![Column::StateChainId])
     }
 
-    fn update_statechain_id(&self, user_id: &Uuid, state_chain_id: &Uuid) -> Result<()> {
+    fn update_statechain_id(&self, user_id: &Uuid, statechain_id: &Uuid) -> Result<()> {
         self.update(
             user_id,
             Table::UserSession,
             vec![Column::StateChainId],
-            vec![state_chain_id],
+            vec![statechain_id],
         )
     }
 
-    fn get_statechain_amount(&self, state_chain_id: Uuid) -> Result<StateChainAmount> {
+    fn get_statechain_amount(&self, statechain_id: Uuid) -> Result<StateChainAmount> {
         let (amount, state_chain_str) = self.get_2::<i64, String>(
-            state_chain_id,
+            statechain_id,
             Table::StateChain,
             vec![Column::Amount, Column::Chain],
         )?;
@@ -965,12 +965,12 @@ impl Database for PGDatabase {
 
     fn update_statechain_amount(
         &self,
-        state_chain_id: &Uuid,
+        statechain_id: &Uuid,
         state_chain: StateChain,
         amount: u64,
     ) -> Result<()> {
         self.update(
-            state_chain_id,
+            statechain_id,
             Table::StateChain,
             vec![Column::Chain, Column::Amount],
             vec![&Self::ser(state_chain)?, &(amount as i64)], // signals withdrawn funds
@@ -979,14 +979,14 @@ impl Database for PGDatabase {
 
     fn create_statechain(
         &self,
-        state_chain_id: &Uuid,
+        statechain_id: &Uuid,
         user_id: &Uuid,
         state_chain: &StateChain,
         amount: &i64,
     ) -> Result<()> {
-        self.insert(state_chain_id, Table::StateChain)?;
+        self.insert(statechain_id, Table::StateChain)?;
         self.update(
-            state_chain_id,
+            statechain_id,
             Table::StateChain,
             vec![
                 Column::Chain,
@@ -1003,9 +1003,9 @@ impl Database for PGDatabase {
         )
     }
 
-    fn get_statechain(&self, state_chain_id: Uuid) -> Result<StateChain> {
+    fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain> {
         let (_, state_chain_str) = self.get_2::<i64, String>(
-            state_chain_id,
+            statechain_id,
             Table::StateChain,
             vec![Column::Amount, Column::Chain],
         )?;
@@ -1015,19 +1015,19 @@ impl Database for PGDatabase {
 
     fn update_statechain_owner(
         &self,
-        state_chain_id: &Uuid,
+        statechain_id: &Uuid,
         state_chain: StateChain,
         new_user_id: &Uuid,
     ) -> Result<()> {
         self.update(
-            state_chain_id,
+            statechain_id,
             Table::StateChain,
             vec![Column::Chain, Column::OwnerId],
             vec![&Self::ser(state_chain)?, &new_user_id],
         )
     }
 
-    // Remove state_chain_id from user session to signal end of session
+    // Remove statechain_id from user session to signal end of session
     fn remove_statechain_id(&self, user_id: &Uuid) -> Result<()> {
         self.update(
             user_id,
@@ -1039,22 +1039,22 @@ impl Database for PGDatabase {
 
     fn create_backup_transaction(
         &self,
-        state_chain_id: &Uuid,
+        statechain_id: &Uuid,
         tx_backup: &Transaction,
     ) -> Result<()> {
         let locktime = tx_backup.lock_time;
-        self.insert(state_chain_id, Table::BackupTxs)?;
+        self.insert(statechain_id, Table::BackupTxs)?;
         self.update(
-            state_chain_id,
+            statechain_id,
             Table::BackupTxs,
             vec![Column::TxBackup,Column::LockTime],
             vec![&Self::ser(tx_backup.clone())?,&(locktime as i64)],
         )
     }
 
-    fn get_backup_transaction(&self, state_chain_id: Uuid) -> Result<Transaction> {
+    fn get_backup_transaction(&self, statechain_id: Uuid) -> Result<Transaction> {
         let (tx_backup_str) =
-            self.get_1::<String>(state_chain_id, Table::BackupTxs, vec![Column::TxBackup])?;
+            self.get_1::<String>(statechain_id, Table::BackupTxs, vec![Column::TxBackup])?;
         let tx_backup: Transaction = Self::deser(tx_backup_str)?;
         Ok(tx_backup)
     }
@@ -1075,13 +1075,13 @@ impl Database for PGDatabase {
         Ok((tx_backup, proof_key))
     }
 
-    fn get_sc_locked_until(&self, state_chain_id: Uuid) -> Result<NaiveDateTime> {
-        self.get_1::<NaiveDateTime>(state_chain_id, Table::StateChain, vec![Column::LockedUntil])
+    fn get_sc_locked_until(&self, statechain_id: Uuid) -> Result<NaiveDateTime> {
+        self.get_1::<NaiveDateTime>(statechain_id, Table::StateChain, vec![Column::LockedUntil])
     }
 
-    fn update_locked_until(&self, state_chain_id: &Uuid, time: &NaiveDateTime) -> Result<()> {
+    fn update_locked_until(&self, statechain_id: &Uuid, time: &NaiveDateTime) -> Result<()> {
         self.update(
-            state_chain_id,
+            statechain_id,
             Table::StateChain,
             vec![Column::LockedUntil],
             vec![time],
@@ -1128,35 +1128,35 @@ impl Database for PGDatabase {
 
     fn create_transfer(
         &self,
-        state_chain_id: &Uuid,
-        state_chain_sig: &StateChainSig,
+        statechain_id: &Uuid,
+        statechain_sig: &StateChainSig,
         x1: &FE,
     ) -> Result<()> {
         // Create Transfer table entry
-        self.insert(&state_chain_id, Table::Transfer)?;
+        self.insert(&statechain_id, Table::Transfer)?;
         self.update(
-            state_chain_id,
+            statechain_id,
             Table::Transfer,
             vec![Column::StateChainSig, Column::X1],
             vec![
-                &Self::ser(state_chain_sig.to_owned())?,
+                &Self::ser(statechain_sig.to_owned())?,
                 &Self::ser(x1.to_owned())?,
             ],
         )
     }
 
-    fn update_transfer_msg(&self, state_chain_id: &Uuid, msg: &TransferMsg3) -> Result<()> {
+    fn update_transfer_msg(&self, statechain_id: &Uuid, msg: &TransferMsg3) -> Result<()> {
         self.update(
-            state_chain_id,
+            statechain_id,
             Table::Transfer,
             vec![Column::TransferMsg],
             vec![&Self::ser(msg.to_owned())?],
         )
     }
 
-    fn get_transfer_msg(&self, state_chain_id: &Uuid) -> Result<TransferMsg3> {
+    fn get_transfer_msg(&self, statechain_id: &Uuid) -> Result<TransferMsg3> {
         let msg = self.get_1(
-            state_chain_id.to_owned(),
+            statechain_id.to_owned(),
             Table::Transfer,
             vec![Column::TransferMsg],
         )?;
@@ -1187,29 +1187,29 @@ impl Database for PGDatabase {
         )
     }
 
-    fn get_transfer_data(&self, state_chain_id: Uuid) -> Result<TransferData> {
-        let (state_chain_id, state_chain_sig_str, x1_str) = self.get_3::<Uuid, String, String>(
-            state_chain_id,
+    fn get_transfer_data(&self, statechain_id: Uuid) -> Result<TransferData> {
+        let (statechain_id, statechain_sig_str, x1_str) = self.get_3::<Uuid, String, String>(
+            statechain_id,
             Table::Transfer,
             vec![Column::Id, Column::StateChainSig, Column::X1],
         )?;
 
-        let state_chain_sig: StateChainSig = Self::deser(state_chain_sig_str)?;
+        let statechain_sig: StateChainSig = Self::deser(statechain_sig_str)?;
         let x1: FE = Self::deser(x1_str)?;
 
         return Ok(TransferData {
-            state_chain_id,
-            state_chain_sig,
+            statechain_id,
+            statechain_sig,
             x1,
         });
     }
 
-    fn remove_transfer_data(&self, state_chain_id: &Uuid) -> Result<()> {
-        self.remove(state_chain_id, Table::Transfer)
+    fn remove_transfer_data(&self, statechain_id: &Uuid) -> Result<()> {
+        self.remove(statechain_id, Table::Transfer)
     }
 
-    fn transfer_is_completed(&self, state_chain_id: Uuid) -> bool {
-        self.get_1::<Uuid>(state_chain_id, Table::Transfer, vec![Column::Id])
+    fn transfer_is_completed(&self, statechain_id: Uuid) -> bool {
+        self.get_1::<Uuid>(statechain_id, Table::Transfer, vec![Column::Id])
             .is_ok()
     }
 
@@ -1413,11 +1413,11 @@ impl Database for PGDatabase {
 
     fn update_finalize_batch_data(
         &self,
-        state_chain_id: &Uuid,
+        statechain_id: &Uuid,
         finalized_data: &TransferFinalizeData,
     ) -> Result<()> {
         self.update(
-            state_chain_id,
+            statechain_id,
             Table::StateChain,
             vec![Column::TransferFinalizeData],
             vec![&Self::ser(finalized_data)?],
@@ -1426,9 +1426,9 @@ impl Database for PGDatabase {
 
     fn get_sc_finalize_batch_data(
         &self,
-        state_chain_id: &Uuid
+        statechain_id: &Uuid
     ) -> Result<TransferFinalizeData> {
-        let tfd = self.get_1(state_chain_id.to_owned(),
+        let tfd = self.get_1(statechain_id.to_owned(),
             Table::StateChain, vec![Column::TransferFinalizeData])?;
         Self::deser(tfd)
     }
@@ -1442,9 +1442,9 @@ impl Database for PGDatabase {
         )
     }
 
-    fn get_statechain_owner(&self, state_chain_id: Uuid) -> Result<StateChainOwner> {
+    fn get_statechain_owner(&self, statechain_id: Uuid) -> Result<StateChainOwner> {
         let (locked_until, owner_id, state_chain_str) = self.get_3::<NaiveDateTime, Uuid, String>(
-            state_chain_id,
+            statechain_id,
             Table::StateChain,
             vec![Column::LockedUntil, Column::OwnerId, Column::Chain],
         )?;
@@ -1473,7 +1473,7 @@ impl Database for PGDatabase {
     fn transfer_init_user_session(
         &self,
         new_user_id: &Uuid,
-        state_chain_id: &Uuid,
+        statechain_id: &Uuid,
         finalized_data: TransferFinalizeData,
     ) -> Result<()> {
         self.insert(new_user_id, Table::UserSession)?;
@@ -1490,9 +1490,9 @@ impl Database for PGDatabase {
             ],
             vec![
                 &String::from("auth"),
-                &finalized_data.state_chain_sig.data.to_owned(),
+                &finalized_data.statechain_sig.data.to_owned(),
                 &Self::ser(transaction_deserialise(&finalized_data.new_tx_backup_hex)?)?,
-                &state_chain_id,
+                &statechain_id,
                 &Self::ser(finalized_data.s2)?,
                 &Self::ser(finalized_data.theta)?,
             ],
