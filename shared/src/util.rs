@@ -311,9 +311,6 @@ pub mod tests {
 
         println!("signature: {:?}", signature);
 
-        let tx_k = tx_kickoff_build(tx_0.input.get(0).unwrap(), &addr, &amount).unwrap();
-        println!("{}", serde_json::to_string_pretty(&tx_k).unwrap());
-
         // let tx_1 = tx_backup_build(&tx_k.input.get(0).unwrap(), &addr.to_string(), &amount).unwrap();
         // println!("{}", serde_json::to_string_pretty(&tx_1).unwrap());
     }
