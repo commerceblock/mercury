@@ -35,7 +35,7 @@ First a Conductor gathers some participants for their swap proposal. There are t
 | batch_id        | Unique identifier for the swap   |
 | amount          | BTC amount that each UTXO must be  |
 | time_out        | Lifetime of swap - if reached then swap is cancelled and no transfers are finalized |
-| state_chain_ids | List of all StateChains involved  |
+| statechain_ids | List of all StateChains involved  |
 
 2) Conductor sends each participant the `swap_token`. If a participant is happy with the swap parameters then they return an SCE-Address and produce a signature over the `swap_token` with the proof key that currently owns the state chain they are transferring in the swap.
 
@@ -51,17 +51,17 @@ Conductor creates and distributes a single-use blinded token per participant.
 1) Participants create a fresh anonymous network identity and contact Conductor asking for another participants' SCE-Address. Conductor responds with an SE-Address and considers the blinded token 'spent'.
 2) Participants carry out `transfer_sender()` with their given SCE-Address and mark the transfer as part of a swap by providing the `swap_token`. The StateChain involved is labelled `complete`
 3) Participants signal validation of transfers sent **to** them by performing `transfer_receiver()`. This is to ensure that the transfer is successful and ready to be finalized. The StateChain is then labelled `validated`.
-In step 3 participants provide a blinded commitment `Comm(state_chain_id, nonce)` to the StateChain that they transferred in step 2 which may be revealed for blame assignment in the final phase.
+In step 3 participants provide a blinded commitment `Comm(statechain_id, nonce)` to the StateChain that they transferred in step 2 which may be revealed for blame assignment in the final phase.
 
 ### Phase 4 - End or blame assignment
 
 The protocol is now complete for honest and live participants. If all transfers are completed before `swap_token.time_out` time has passed since the first `transfer_sender` is performed then the swap is considered complete and all transfers are finalized.
 
-On the other hand if `swap_token.time_out` time passes before all transfers are complete then all transfers are rewound and no state chains involved in the swap have been transferred. The Conductor can now publish the list of signatures which signal the participants' commitment to the batch transfer. This can be included in the SCE public API so that all clients can access a list of those StateChains that have caused recent failures. Participants that completed their transfers can reveal the `nonce` to the their `Comm(state_chain_id, nonce)` and thus prove which StateChain they own and should not take any responsibility for the failure.  
+On the other hand if `swap_token.time_out` time passes before all transfers are complete then all transfers are rewound and no state chains involved in the swap have been transferred. The Conductor can now publish the list of signatures which signal the participants' commitment to the batch transfer. This can be included in the SCE public API so that all clients can access a list of those StateChains that have caused recent failures. Participants that completed their transfers can reveal the `nonce` to the their `Comm(statechain_id, nonce)` and thus prove which StateChain they own and should not take any responsibility for the failure.  
 
 ## Assigning blame at failure
 
-After failure it is useful to know which StateChains failed to complete their transfer. Each StateChain in the swap is marked `incomplete`, `complete` or `validated`. There is also a list of `state_chain_ids` that were committed to during successful `transfer_receiver()` calls. Below details how we can assign blame from this information:
+After failure it is useful to know which StateChains failed to complete their transfer. Each StateChain in the swap is marked `incomplete`, `complete` or `validated`. There is also a list of `statechain_ids` that were committed to during successful `transfer_receiver()` calls. Below details how we can assign blame from this information:
 
 `incomplete` - StateChain is clearly responsible for failing to perform `transfer_sender()`.
 

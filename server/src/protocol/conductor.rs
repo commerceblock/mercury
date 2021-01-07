@@ -54,7 +54,7 @@ cfg_if! {
 pub trait Conductor {
     /// API: Poll Conductor to check for status of registered utxo. Return Ok(None) if still waiting
     /// or swap_id if swap round has begun.
-    fn poll_utxo(&self, state_chain_id: &Uuid) -> Result<Option<Uuid>>;
+    fn poll_utxo(&self, statechain_id: &Uuid) -> Result<Option<Uuid>>;
 
     /// API: Poll Conductor to check for status of swap.
     fn poll_swap(&self, swap_id: &Uuid) -> Result<Option<SwapStatus>>;
@@ -100,7 +100,7 @@ pub trait Conductor {
 
     // Phase 3: Participants carry out transfer_sender() and signal that this transfer is a part of
     // swap with id: x. Participants carry out corresponding transfer_receiver() and provide their
-    // commitment Comm(state_chain_id, nonce), to be used later as proof of completeing the protocol
+    // commitment Comm(statechain_id, nonce), to be used later as proof of completeing the protocol
     // if the swap fails.
 
     // Phase 4: The protocol is now complete for honest and live participants. If all transfers are
@@ -112,7 +112,7 @@ pub trait Conductor {
     // The coordinator can now publish the list of signatures which signal the participants' commitment
     // to the batch transfer. This can be included in the SCE public API so that all clients can access a
     // list of those StateChains that have caused recent failures. Participants that completed their
-    // transfers can reveal the nonce to the their Comm(state_chain_id, nonce) and thus prove which
+    // transfers can reveal the nonce to the their Comm(statechain_id, nonce) and thus prove which
     // StateChain they own and should not take any responsibility for the failure.
 }
 
@@ -156,42 +156,42 @@ impl Scheduler {
         }
     }
 
-    pub fn get_swap_id(&self, state_chain_id: &Uuid) -> Option<Uuid> {
-        self.swap_id_map.get(state_chain_id).cloned()
+    pub fn get_swap_id(&self, statechain_id: &Uuid) -> Option<Uuid> {
+        self.swap_id_map.get(statechain_id).cloned()
     }
 
     pub fn register_amount_swap_size(
         &mut self,
-        state_chain_id: &Uuid,
+        statechain_id: &Uuid,
         amount: u64,
         swap_size: u64,
     ) {
         //If there was an amout already registered for this state chain id then
         //remove it from the inverse table before updating
         self.statechain_amount_map
-            .insert(state_chain_id.to_owned(), amount);
+            .insert(statechain_id.to_owned(), amount);
         self.statechain_swap_size_map
-            .insert(state_chain_id.to_owned(), swap_size);
+            .insert(statechain_id.to_owned(), swap_size);
     }
 
     pub fn get_statechain_ids_by_amount(&self, amount: &u64) -> Vec<Uuid> {
         self.statechain_amount_map.rev_get(amount)
     }
 
-    fn register_swap_id(&mut self, state_chain_id: &Uuid, swap_id: &Uuid) -> Option<Uuid> {
+    fn register_swap_id(&mut self, statechain_id: &Uuid, swap_id: &Uuid) -> Option<Uuid> {
         self.swap_id_map
-            .insert(state_chain_id.to_owned(), swap_id.to_owned())
+            .insert(statechain_id.to_owned(), swap_id.to_owned())
     }
 
-    fn deregister_swap_id(&mut self, state_chain_id: &Uuid) -> Option<Uuid> {
-        self.swap_id_map.remove(state_chain_id)
+    fn deregister_swap_id(&mut self, statechain_id: &Uuid) -> Option<Uuid> {
+        self.swap_id_map.remove(statechain_id)
     }
 
     pub fn insert_swap_info(&mut self, swap_info: &SwapInfo) {
         let swap_id = &swap_info.swap_token.id;
         self.swap_info_map
             .insert(swap_id.to_owned(), swap_info.to_owned());
-        for id in &swap_info.swap_token.state_chain_ids {
+        for id in &swap_info.swap_token.statechain_ids {
             self.register_swap_id(id, swap_id);
         }
         self.status_map
@@ -203,7 +203,7 @@ impl Scheduler {
     pub fn remove_swap_info(&mut self, swap_id: &Uuid) -> Option<SwapInfo> {
         match self.get_swap_info(swap_id) {
             Some(i) => {
-                for id in i.to_owned().swap_token.state_chain_ids {
+                for id in i.to_owned().swap_token.statechain_ids {
                     self.deregister_swap_id(&id);
                 }
                 let swap_id = &i.swap_token.id;
@@ -282,7 +282,7 @@ impl Scheduler {
                         id: swap_id.clone(),
                         amount,
                         time_out: DEFAULT_TIMEOUT,
-                        state_chain_ids: ids_for_swap.clone(),
+                        statechain_ids: ids_for_swap.clone(),
                     };
 
                     let si = SwapInfo {
@@ -326,7 +326,7 @@ impl Scheduler {
                             Some(out_addr_map) => out_addr_map,
                             None => return Ok(()), // BisetMap not yet created means no participants have completed swap_msg_1 yet
                         };
-                    if (swap_info.swap_token.state_chain_ids.len() == out_addr_map.len()) {
+                    if (swap_info.swap_token.statechain_ids.len() == out_addr_map.len()) {
                         //All output addresses received.
                         //Generate a list of blinded spend tokens and proceed to phase 2.
                         let swap_id = swap_info.swap_token.id;
@@ -464,7 +464,7 @@ pub fn generate_blind_spend_signatures(
     let bst_e_prime_map: &HashMap<Uuid, FE> = bst_e_prime_map.ok_or(SEError::SwapError(
         "Cannot generate BSTs - e_prime values not found for swap.".to_string(),
     ))?;
-    if swap_info.swap_token.state_chain_ids.len() != bst_e_prime_map.len() {
+    if swap_info.swap_token.statechain_ids.len() != bst_e_prime_map.len() {
         return Err(SEError::SwapError(
             "Cannot generate BSTs - Not enough e_prime values.".to_string(),
         ));
@@ -481,9 +481,9 @@ pub fn generate_blind_spend_signatures(
 }
 
 impl Conductor for SCE {
-    fn poll_utxo(&self, state_chain_id: &Uuid) -> Result<Option<Uuid>> {
+    fn poll_utxo(&self, statechain_id: &Uuid) -> Result<Option<Uuid>> {
         let guard = self.scheduler.lock()?;
-        Ok(guard.get_swap_id(state_chain_id))
+        Ok(guard.get_swap_id(statechain_id))
     }
     fn poll_swap(&self, swap_id: &Uuid) -> Result<Option<SwapStatus>> {
         let mut guard = self.scheduler.lock()?;
@@ -544,7 +544,7 @@ impl Conductor for SCE {
 
     fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> Result<()> {
         let sig = &register_utxo_msg.signature;
-        let key_id = &register_utxo_msg.state_chain_id;
+        let key_id = &register_utxo_msg.statechain_id;
         let swap_size = &register_utxo_msg.swap_size;
         //Verify the signature
         let _ = self.verify_statechain_sig(key_id, sig, None)?;
@@ -560,7 +560,7 @@ impl Conductor for SCE {
     }
 
     fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> Result<()> {
-        let state_chain = self.get_statechain(swap_msg1.state_chain_id)?.chain;
+        let state_chain = self.get_statechain(swap_msg1.statechain_id)?.chain;
         let proof_key_str = &state_chain.last().unwrap().data.clone();
         let proof_key = bitcoin::secp256k1::PublicKey::from_str(&proof_key_str)?;
 
@@ -584,7 +584,7 @@ impl Conductor for SCE {
                     ));
                 }
 
-                if swap_msg1.state_chain_id.to_string() != swap_msg1.transfer_batch_sig.data {
+                if swap_msg1.statechain_id.to_string() != swap_msg1.transfer_batch_sig.data {
                     return Err(SEError::SwapError(
                         "swap first message: state chain id does not match signature data"
                             .to_string(),
@@ -592,7 +592,7 @@ impl Conductor for SCE {
                 }
 
                 let _ = self.verify_statechain_sig(
-                    &swap_msg1.state_chain_id,
+                    &swap_msg1.statechain_id,
                     &swap_msg1.transfer_batch_sig,
                     None,
                 )?;
@@ -625,11 +625,11 @@ impl Conductor for SCE {
                 // Add bst_e_prime value to list.
                 match guard.bst_e_prime_map.get_mut(swap_id) {
                     Some(e_prime_map) => {
-                        e_prime_map.insert(swap_msg1.state_chain_id, swap_msg1.bst_e_prime);
+                        e_prime_map.insert(swap_msg1.statechain_id, swap_msg1.bst_e_prime);
                     }
                     None => {
                         let mut swaps_e_prime_list = HashMap::<Uuid, FE>::new(); // create new e_prime_map if none exists
-                        swaps_e_prime_list.insert(swap_msg1.state_chain_id, swap_msg1.bst_e_prime);
+                        swaps_e_prime_list.insert(swap_msg1.statechain_id, swap_msg1.bst_e_prime);
                         guard
                             .bst_e_prime_map
                             .insert(swap_id.to_owned(), swaps_e_prime_list.clone());
@@ -637,7 +637,7 @@ impl Conductor for SCE {
                 };
                 info!(
                     "CONDUTOR: swap_first_message complete for StateChain ID {} of Swap ID: {}",
-                    swap_msg1.state_chain_id, swap_id
+                    swap_msg1.statechain_id, swap_id
                 );
                 Ok(())
             }
@@ -770,9 +770,9 @@ impl Conductor for SCE {
     }
 }
 
-#[post("/swap/poll/utxo", format = "json", data = "<state_chain_id>")]
-pub fn poll_utxo(sc_entity: State<SCE>, state_chain_id: Json<Uuid>) -> Result<Json<Option<Uuid>>> {
-    match sc_entity.poll_utxo(&state_chain_id.into_inner()) {
+#[post("/swap/poll/utxo", format = "json", data = "<statechain_id>")]
+pub fn poll_utxo(sc_entity: State<SCE>, statechain_id: Json<Uuid>) -> Result<Json<Option<Uuid>>> {
+    match sc_entity.poll_utxo(&statechain_id.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -801,7 +801,7 @@ pub fn get_blinded_spend_signature(
 ) -> Result<Json<BlindedSpendSignature>> {
     let bst_msg = bst_msg.into_inner();
     sc_entity
-        .get_blinded_spend_signature(&bst_msg.swap_id, &bst_msg.state_chain_id)
+        .get_blinded_spend_signature(&bst_msg.swap_id, &bst_msg.statechain_id)
         .map(|x| Json(x))
 }
 
@@ -860,7 +860,7 @@ mod tests {
             id: Uuid::from_str("637203c9-37ab-46f9-abda-0678c891b2d3").unwrap(),
             amount: 1,
             time_out: DEFAULT_TIMEOUT,
-            state_chain_ids: vec![Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap()],
+            statechain_ids: vec![Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap()],
         };
         let proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap(); // Proof key priv part
         let proof_key = PublicKey::from_secret_key(&Secp256k1::new(), &proof_key_priv); // proof key
@@ -956,7 +956,7 @@ mod tests {
             "expected default timeout"
         );
         let mut id_set = HashSet::new();
-        for id in swap_info.swap_token.state_chain_ids {
+        for id in swap_info.swap_token.statechain_ids {
             id_set.insert(id);
         }
         assert_eq!(
@@ -1019,7 +1019,7 @@ mod tests {
                 assert_eq!(swap_info.status, SwapStatus::Phase1);
                 assert_eq!(swap_info.swap_token.id, swap_id_valid);
                 assert!(swap_info.swap_token.time_out == DEFAULT_TIMEOUT);
-                assert!(swap_info.swap_token.state_chain_ids.len() == 3);
+                assert!(swap_info.swap_token.statechain_ids.len() == 3);
             }
             _ => assert!(false, "Expected Ok(Some(swap_info))."),
         }
@@ -1028,7 +1028,7 @@ mod tests {
     #[test]
     fn test_register_utxo() {
         // Check signature verified correctly
-        let state_chain_id = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let statechain_id = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d3").unwrap();
         let proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap(); // Proof key priv part
         let proof_key = PublicKey::from_secret_key(&Secp256k1::new(), &proof_key_priv); // proof key
         let invalid_proof_key_priv = SecretKey::from_slice(&[2; 32]).unwrap();
@@ -1075,7 +1075,7 @@ mod tests {
         )
         .unwrap();
         match sc_entity.register_utxo(&RegisterUtxo {
-            state_chain_id,
+            statechain_id,
             signature: invalid_signature,
             swap_size: 10,
         }) {
@@ -1091,7 +1091,7 @@ mod tests {
                 .unwrap();
         assert!(sc_entity
             .register_utxo(&RegisterUtxo {
-                state_chain_id,
+                statechain_id,
                 signature: signature,
                 swap_size: 10,
             })
@@ -1113,9 +1113,9 @@ mod tests {
         scheduler.update_swap_info().unwrap();
         //let swap_id_valid = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
         let swap_id = scheduler.swap_id_map.iter().next().unwrap().1.to_owned();
-        // Sign swap token with no state_chain_ids
+        // Sign swap token with no statechain_ids
         let swap_token = scheduler.get_swap_info(&swap_id).unwrap().swap_token;
-        let statechain_ids = swap_token.state_chain_ids.clone();
+        let statechain_ids = swap_token.statechain_ids.clone();
 
         for i in 0..3 {
             proof_key_priv_vec.push(SecretKey::from_slice(&[i + 1; 32]).unwrap());
@@ -1158,19 +1158,19 @@ mod tests {
         sc_entity.scheduler = Arc::new(Mutex::new(scheduler));
 
         let mut swap_token_no_sc = swap_token.clone();
-        swap_token_no_sc.state_chain_ids = Vec::new();
+        swap_token_no_sc.statechain_ids = Vec::new();
 
         let swap_token_sig = swap_token_no_sc.sign(&proof_key_priv_vec[0]).unwrap();
-        let state_chain_id = statechain_ids[0];
+        let statechain_id = statechain_ids[0];
         let transfer_batch_sig = StateChainSig::new_transfer_batch_sig(
             &proof_key_priv_vec[0],
             &swap_id,
-            &state_chain_id,
+            &statechain_id,
         )
         .unwrap();
 
         let mut swap_msg_1 = SwapMsg1 {
-            state_chain_id,
+            statechain_id,
             swap_id,
             swap_token_sig,
             transfer_batch_sig,
@@ -1228,7 +1228,7 @@ mod tests {
                 .verify(&proof_key_vec[i].to_string())
                 .unwrap();
             let swap_msg_1 = SwapMsg1 {
-                state_chain_id: statechain_ids[i],
+                statechain_id: statechain_ids[i],
                 swap_id,
                 swap_token_sig: swap_token.sign(&proof_key_priv_vec[i]).unwrap(),
                 transfer_batch_sig,
@@ -1259,7 +1259,7 @@ mod tests {
                 .get(&swap_id)
                 .unwrap()
                 .swap_token
-                .state_chain_ids
+                .statechain_ids
                 .len()
         );
         drop(guard);
@@ -1276,30 +1276,30 @@ mod tests {
 
         let swap_id = guard.swap_id_map.iter().next().unwrap().1.to_owned();
         let mut swap_info = guard.get_swap_info(&swap_id).unwrap();
-        // Sign swap token with no state_chain_ids
+        // Sign swap token with no statechain_ids
         swap_info.status = SwapStatus::Phase2;
         guard.swap_info_map.insert(swap_id, swap_info.clone());
         let swap_token = swap_info.swap_token;
-        let state_chain_id = swap_token.state_chain_ids[0];
+        let statechain_id = swap_token.statechain_ids[0];
 
-        // Dummy signature for each state_chain_id
+        // Dummy signature for each statechain_id
         let mut id_bst_map = HashMap::<Uuid, BlindedSpendSignature>::new();
-        for id in swap_token.state_chain_ids {
+        for id in swap_token.statechain_ids {
             id_bst_map.insert(id, BlindedSpendSignature::default());
         }
         guard.bst_sig_map.insert(swap_id.clone(), id_bst_map);
         drop(guard);
 
         sc_entity
-            .get_blinded_spend_signature(&swap_id, &state_chain_id)
+            .get_blinded_spend_signature(&swap_id, &statechain_id)
             .unwrap();
 
         assert!(sc_entity
-            .get_blinded_spend_signature(&swap_id, &state_chain_id)
+            .get_blinded_spend_signature(&swap_id, &statechain_id)
             .is_ok());
         let expected_err =
             SEError::SwapError("unknown swap id when getting swap status".to_string());
-        match sc_entity.get_blinded_spend_signature(&Uuid::default(), &state_chain_id) {
+        match sc_entity.get_blinded_spend_signature(&Uuid::default(), &statechain_id) {
             Err(e) => assert_eq!(
                 e.to_string(),
                 expected_err.to_string(),
@@ -1538,9 +1538,9 @@ mod tests {
     // Test examples flow of Conductor with Client. Uncomment #[test] below to view test.
     // #[test]
     fn conductor_mock() {
-        let state_chain_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let statechain_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
         let swap_id = Uuid::from_str("637203c9-37ab-46f9-abda-0678c891b2d3").unwrap();
-        let conductor = create_mock_conductor(state_chain_id, swap_id);
+        let conductor = create_mock_conductor(statechain_id, swap_id);
 
         // Client Registers utxo with Condutor
         // First sign StateChain to prove ownership of proof key
@@ -1551,7 +1551,7 @@ mod tests {
                 .unwrap();
         let swap_size: u64 = 10;
         let _ = conductor.register_utxo(&RegisterUtxo {
-            state_chain_id,
+            statechain_id,
             signature,
             swap_size,
         });
@@ -1562,7 +1562,7 @@ mod tests {
         loop {
             println!("\nSleeping for 3 seconds..");
             thread::sleep(Duration::from_secs(3));
-            let poll_utxo_res = conductor.poll_utxo(&state_chain_id);
+            let poll_utxo_res = conductor.poll_utxo(&statechain_id);
             println!("poll_utxo result: {:?}", poll_utxo_res);
             if let Ok(Some(v)) = poll_utxo_res {
                 println!("\nSwap began!");
@@ -1601,7 +1601,7 @@ mod tests {
                     let transfer_batch_sig = StateChainSig::new_transfer_batch_sig(
                         &proof_key_priv,
                         &swap_token.id,
-                        &state_chain_id,
+                        &statechain_id,
                     )
                     .unwrap();
                     println!("Swap token signature: {:?}", signature);
@@ -1617,7 +1617,7 @@ mod tests {
                     println!("Sending swap token signature and SCE address.");
                     // Send to Conductor
                     let first_msg_resp = conductor.swap_first_message(&SwapMsg1 {
-                        state_chain_id,
+                        statechain_id,
                         swap_id: swap_token.id.clone(),
                         swap_token_sig: signature,
                         transfer_batch_sig,
@@ -1651,7 +1651,7 @@ mod tests {
         println!("\nPolling of Swap loop ended. Client now has SCE-Address to transfer to. This is the end of our Client's interaction with Conductor.");
     }
 
-    fn create_mock_conductor(state_chain_id: Uuid, swap_id: Uuid) -> MockConductor {
+    fn create_mock_conductor(statechain_id: Uuid, swap_id: Uuid) -> MockConductor {
         //Create a new mock conductor
         let mut conductor = MockConductor::new();
         // Set the expectations
@@ -1659,12 +1659,12 @@ mod tests {
         conductor.expect_register_utxo().returning(|_| Ok(())); // Register UTXO with Conductor
         conductor
             .expect_poll_utxo() // utxo not yet involved
-            .with(predicate::eq(state_chain_id))
+            .with(predicate::eq(statechain_id))
             .times(2)
             .returning(|_| Ok(None));
         conductor
             .expect_poll_utxo() // utxo involved in swap
-            .with(predicate::eq(state_chain_id))
+            .with(predicate::eq(statechain_id))
             .returning(move |_| Ok(Some(swap_id)));
         conductor
             .expect_get_swap_info() // get swap status return phase 1. x3
@@ -1677,7 +1677,7 @@ mod tests {
                         id: swap_id,
                         amount: 1,
                         time_out: DEFAULT_TIMEOUT,
-                        state_chain_ids: vec![state_chain_id, state_chain_id],
+                        statechain_ids: vec![statechain_id, statechain_id],
                     },
                     bst_sender_data: BSTSenderData::setup(),
                 }))
@@ -1694,7 +1694,7 @@ mod tests {
                         id: swap_id,
                         amount: 1,
                         time_out: DEFAULT_TIMEOUT,
-                        state_chain_ids: vec![state_chain_id, state_chain_id],
+                        statechain_ids: vec![statechain_id, statechain_id],
                     },
                     bst_sender_data: BSTSenderData::setup(),
                 }))
@@ -1710,7 +1710,7 @@ mod tests {
                         id: swap_id,
                         amount: 1,
                         time_out: DEFAULT_TIMEOUT,
-                        state_chain_ids: vec![state_chain_id, state_chain_id],
+                        statechain_ids: vec![statechain_id, statechain_id],
                     },
                     bst_sender_data: BSTSenderData::setup(),
                 }))

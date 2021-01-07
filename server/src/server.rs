@@ -309,13 +309,13 @@ mock! {
         ) -> ecdsa::Result<Vec<Vec<u8>>>;
     }
     trait Conductor {
-        fn poll_utxo(&self, state_chain_id: &Uuid) -> conductor::Result<Option<Uuid>>;
+        fn poll_utxo(&self, statechain_id: &Uuid) -> conductor::Result<Option<Uuid>>;
         fn poll_swap(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapStatus>>;
         fn get_swap_info(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapInfo>>;
         fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> conductor::Result<()>;
         fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> conductor::Result<()>;
         fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> conductor::Result<SCEAddress>;
-        fn get_blinded_spend_signature(&self, swap_id: &Uuid, state_chain_id: &Uuid) -> conductor::Result<BlindedSpendSignature>;
+        fn get_blinded_spend_signature(&self, swap_id: &Uuid, statechain_id: &Uuid) -> conductor::Result<BlindedSpendSignature>;
         fn get_address_from_blinded_spend_token(&self, bst: &BlindedSpendToken) -> conductor::Result<SCEAddress>;
     }
 
@@ -333,7 +333,7 @@ mock! {
             finalized_data: &TransferFinalizeData,
         ) -> transfer::Result<()>;
         fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> transfer::Result<()>;
-        fn transfer_get_msg(&self, state_chain_id: Uuid) -> transfer::Result<TransferMsg3>;
+        fn transfer_get_msg(&self, statechain_id: Uuid) -> transfer::Result<TransferMsg3>;
     }
     trait BatchTransfer {
         fn transfer_batch_init(
@@ -384,7 +384,7 @@ mock! {
         fn get_smt_root(&self) -> storage::Result<Option<storage::Root>>;
         fn get_root(&self, id: i64) -> storage::Result<Option<storage::Root>>;
         fn update_root(&self, root: &storage::Root) -> storage::Result<i64>;
-        fn get_statechain_data_api(&self,state_chain_id: Uuid) -> storage::Result<StateChainDataAPI>;
-        fn get_statechain(&self, state_chain_id: Uuid) -> storage::Result<storage::StateChain>;
+        fn get_statechain_data_api(&self,statechain_id: Uuid) -> storage::Result<StateChainDataAPI>;
+        fn get_statechain(&self, statechain_id: Uuid) -> storage::Result<storage::StateChain>;
     }
 }

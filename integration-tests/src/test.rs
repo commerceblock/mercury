@@ -112,14 +112,14 @@ mod tests {
         // Get state chain owned by wallet
         let state_chains_info = wallets[0].get_state_chains_info().unwrap();
         let shared_key_id = state_chains_info.0.last().unwrap();
-        let (state_chain_id, funding_txid, _, _, _) =
+        let (statechain_id, funding_txid, _, _, _) =
             wallets[0].get_shared_key_info(shared_key_id).unwrap();
 
         let receiver_addr = wallets[1]
             .get_new_state_entity_address()
             .unwrap();
 
-        let (new_shared_key_id, theta) = run_transfer(&mut wallets, 0, 1, &receiver_addr, &state_chain_id);
+        let (new_shared_key_id, theta) = run_transfer(&mut wallets, 0, 1, &receiver_addr, &statechain_id);
 
         // check shared keys have the same master public key
         assert_eq!(
@@ -149,7 +149,7 @@ mod tests {
 
         // check state chain is updated
         let state_chain =
-            state_entity::api::get_statechain(&wallets[0].client_shim, &state_chain_id).unwrap();
+            state_entity::api::get_statechain(&wallets[0].client_shim, &statechain_id).unwrap();
         assert_eq!(state_chain.chain.len(), 2);
         assert_eq!(
             state_chain.chain.last().unwrap().data.to_string(),
@@ -184,12 +184,12 @@ mod tests {
         // Get state chain owned by wallets[0] info
         let state_chains_info = wallets[0].get_state_chains_info().unwrap();
         assert_eq!(state_chains_info.0.len(), 1);
-        let state_chain_id = state_chains_info.1.last().unwrap();
+        let statechain_id = state_chains_info.1.last().unwrap();
         let funding_txid: String;
         let shared_key_id0: Uuid;
         {
             let shared_key = wallets[0]
-                .get_shared_key_by_state_chain_id(state_chain_id)
+                .get_shared_key_by_statechain_id(statechain_id)
                 .unwrap();
             funding_txid = shared_key.funding_txid.to_owned();
             shared_key_id0 = shared_key.id.to_owned();
@@ -200,7 +200,7 @@ mod tests {
             .get_new_state_entity_address()
             .unwrap();
 
-        let (new_shared_key_id1, theta1) = run_transfer(&mut wallets, 0, 1, &receiver1_addr, state_chain_id);
+        let (new_shared_key_id1, theta1) = run_transfer(&mut wallets, 0, 1, &receiver1_addr, statechain_id);
 
         // Get state chain owned by wallets[1]
         let state_chains_info = wallets[0].get_state_chains_info().unwrap();
@@ -213,16 +213,16 @@ mod tests {
         assert_eq!(new_shared_key_id1, shared_key_id1.to_owned());
 
         let funding_txid1: String;
-        let state_chain_id1: Uuid;
+        let statechain_id1: Uuid;
         {
             let shared_key = wallets[1]
-                .get_shared_key_by_state_chain_id(state_chain_id)
+                .get_shared_key_by_statechain_id(statechain_id)
                 .unwrap();
             funding_txid1 = shared_key.funding_txid.to_owned();
-            state_chain_id1 = shared_key.state_chain_id.unwrap().to_owned();
+            statechain_id1 = shared_key.statechain_id.unwrap().to_owned();
         }
         // Should not have changed
-        assert_eq!(state_chain_id.to_string(), state_chain_id1.to_string());
+        assert_eq!(statechain_id.to_string(), statechain_id1.to_string());
         assert_eq!(funding_txid, funding_txid1);
 
         // Transfer 2
@@ -230,7 +230,7 @@ mod tests {
             .get_new_state_entity_address()
             .unwrap();
 
-        let (new_shared_key_id2, theta2) = run_transfer(&mut wallets, 1, 2, &receiver2_addr, state_chain_id);
+        let (new_shared_key_id2, theta2) = run_transfer(&mut wallets, 1, 2, &receiver2_addr, statechain_id);
 
         // check shared keys have the same master public key
         assert_eq!(
@@ -276,7 +276,7 @@ mod tests {
 
         // check state chain is updated
         let state_chain =
-            state_entity::api::get_statechain(&wallets[0].client_shim, &state_chain_id1).unwrap();
+            state_entity::api::get_statechain(&wallets[0].client_shim, &statechain_id1).unwrap();
         assert_eq!(state_chain.chain.len(), 3);
         assert_eq!(
             state_chain.chain.get(1).unwrap().data.to_string(),
@@ -311,12 +311,12 @@ mod tests {
 
         let deposit_resp = run_deposit(&mut wallet, &10000);
         let shared_key_id = &deposit_resp.0;
-        let state_chain_id = &deposit_resp.1;
+        let statechain_id = &deposit_resp.1;
 
         assert!(wallet.get_shared_key(shared_key_id).unwrap().unspent);
         assert!(
             wallet
-                .get_shared_key_by_state_chain_id(state_chain_id)
+                .get_shared_key_by_statechain_id(statechain_id)
                 .unwrap()
                 .unspent
         );
@@ -325,14 +325,14 @@ mod tests {
         assert!(state_entity::withdraw::withdraw(&mut wallet, &Uuid::new_v4()).is_err());
 
         // Check withdraw method completes without Err
-        run_withdraw(&mut wallet, state_chain_id);
+        run_withdraw(&mut wallet, statechain_id);
 
         // Check marked spent in wallet
         assert!(!wallet.get_shared_key(shared_key_id).unwrap().unspent);
 
         // Check state chain is updated
         let state_chain =
-            state_entity::api::get_statechain(&wallet.client_shim, state_chain_id).unwrap();
+            state_entity::api::get_statechain(&wallet.client_shim, statechain_id).unwrap();
         assert_eq!(state_chain.chain.len(), 2);
 
         // Check chain data is address

@@ -89,22 +89,22 @@ impl Withdraw for SCE {
 
         info!("WITHDRAW: Init. Shared Key ID: {}", user_id);
 
-        let state_chain_id = self.database.get_statechain_id(user_id)?;
+        let statechain_id = self.database.get_statechain_id(user_id)?;
 
         self.verify_statechain_sig(
-            &state_chain_id,
-            &withdraw_msg1.state_chain_sig,
+            &statechain_id,
+            &withdraw_msg1.statechain_sig,
             Some(user_id),
         )?;
 
         // Mark UserSession as authorised for withdrawal
 
         self.database
-            .update_withdraw_sc_sig(&user_id, withdraw_msg1.state_chain_sig)?;
+            .update_withdraw_sc_sig(&user_id, withdraw_msg1.statechain_sig)?;
 
         info!(
             "WITHDRAW: Authorised. Shared Key ID: {}. State Chain: {}",
-            user_id, state_chain_id
+            user_id, statechain_id
         );
 
         Ok(())
@@ -125,14 +125,14 @@ impl Withdraw for SCE {
         }
 
         // Get statechain and update with final StateChainSig
-        let mut state_chain: StateChain = self.database.get_statechain(wcd.state_chain_id)?;
+        let mut state_chain: StateChain = self.database.get_statechain(wcd.statechain_id)?;
 
         state_chain.add(wcd.withdraw_sc_sig.to_owned())?;
 
         self.database
-            .update_statechain_amount(&wcd.state_chain_id, state_chain, 0)?;
+            .update_statechain_amount(&wcd.statechain_id, state_chain, 0)?;
 
-        // Remove state_chain_id from user session to signal end of session
+        // Remove statechain_id from user session to signal end of session
         self.database.remove_statechain_id(&user_id)?;
 
         //increment withdrawals metric
@@ -151,21 +151,21 @@ impl Withdraw for SCE {
         )?;
 
         //remove backup tx from the backup db
-        self.database.remove_backup_tx(&wcd.state_chain_id)?;
+        self.database.remove_backup_tx(&wcd.statechain_id)?;
 
         info!(
             "WITHDRAW: Address included in sparse merkle tree. State Chain ID: {}",
-            wcd.state_chain_id
+            wcd.statechain_id
         );
         debug!(
             "WITHDRAW: State Chain ID: {}. New root: {:?}. Previous root: {:?}.",
-            wcd.state_chain_id, &new_root, &prev_root
+            wcd.statechain_id, &new_root, &prev_root
         );
 
         info!(
             "WITHDRAW: Complete. Shared Key ID: {}. State Chain: {}",
             user_id.to_string(),
-            wcd.state_chain_id
+            wcd.statechain_id
         );
 
         Ok(wcd.tx_withdraw.input[0].clone().witness)
@@ -209,7 +209,7 @@ mod tests {
     use uuid::Uuid;
 
     // Data from a run of transfer protocol.
-    static WITHDRAW_MSG_1: &str = "{\"shared_key_id\":\"ad8cb891-ce91-447d-9192-bd105f3de602\",\"state_chain_sig\":{\"purpose\":\"WITHDRAW\",\"data\":\"bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8\",\"sig\":\"3045022100cf280f1b03616d3ab27c485de7fa3931af4f9f0f515811eb6b145d68a47e248d022035931ad9779867fcaf04349bddff7ce30d56b8e001494c9fe3d095ef9eb1f773\"}}";
+    static WITHDRAW_MSG_1: &str = "{\"shared_key_id\":\"ad8cb891-ce91-447d-9192-bd105f3de602\",\"statechain_sig\":{\"purpose\":\"WITHDRAW\",\"data\":\"bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8\",\"sig\":\"3045022100cf280f1b03616d3ab27c485de7fa3931af4f9f0f515811eb6b145d68a47e248d022035931ad9779867fcaf04349bddff7ce30d56b8e001494c9fe3d095ef9eb1f773\"}}";
     static STATE_CHAIN_ID: &str = "2b41ff74-510d-4fe7-90a6-714a26a137da";
     static STATE_CHAIN: &str = "{\"chain\":[{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}]}";
     static STATE_CHAIN_SIG: &str = "{\"purpose\":\"WITHDRAW\",\"data\":\"bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8\",\"sig\":\"3045022100cf280f1b03616d3ab27c485de7fa3931af4f9f0f515811eb6b145d68a47e248d022035931ad9779867fcaf04349bddff7ce30d56b8e001494c9fe3d095ef9eb1f773\"}";
@@ -218,7 +218,7 @@ mod tests {
     fn itegration_test_withdraw_init() {
         let withdraw_msg_1 = serde_json::from_str::<WithdrawMsg1>(WITHDRAW_MSG_1).unwrap();
         let shared_key_id = withdraw_msg_1.shared_key_id;
-        let state_chain_id = Uuid::from_str(STATE_CHAIN_ID).unwrap();
+        let statechain_id = Uuid::from_str(STATE_CHAIN_ID).unwrap();
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
@@ -226,18 +226,18 @@ mod tests {
             .returning(move |_| Ok(shared_key_id));
         db.expect_get_statechain_id()
             .with(predicate::eq(shared_key_id))
-            .returning(move |_| Ok(state_chain_id));
+            .returning(move |_| Ok(statechain_id));
         // shared_key_id does not own a state chain (use state chain id as shared key id to test)
         db.expect_get_statechain_id()
-            .with(predicate::eq(state_chain_id))
+            .with(predicate::eq(statechain_id))
             .returning(move |_| {
                 Err(SEError::DBError(
                     DBErrorType::NoDataForID,
-                    state_chain_id.to_string(),
+                    statechain_id.to_string(),
                 ))
             });
         db.expect_get_statechain_owner() // sc locked
-            .with(predicate::eq(state_chain_id))
+            .with(predicate::eq(statechain_id))
             .times(1)
             .returning(move |_| {
                 Ok(StateChainOwner {
@@ -247,7 +247,7 @@ mod tests {
                 })
             });
         db.expect_get_statechain_owner()
-            .with(predicate::eq(state_chain_id))
+            .with(predicate::eq(statechain_id))
             .returning(move |_| {
                 Ok(StateChainOwner {
                     locked_until: Utc::now().naive_utc(),
@@ -261,7 +261,7 @@ mod tests {
 
         // user does not own State Chain
         let mut msg_1_wrong_shared_key = withdraw_msg_1.clone();
-        msg_1_wrong_shared_key.shared_key_id = state_chain_id;
+        msg_1_wrong_shared_key.shared_key_id = statechain_id;
         match sc_entity.withdraw_init(msg_1_wrong_shared_key.clone()) {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("DB Error: No data for identifier.")),
@@ -286,7 +286,7 @@ mod tests {
             shared_key_id,
             address: "bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8".to_string(),
         };
-        let state_chain_id = Uuid::from_str(STATE_CHAIN_ID).unwrap();
+        let statechain_id = Uuid::from_str(STATE_CHAIN_ID).unwrap();
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
@@ -301,7 +301,7 @@ mod tests {
                         &STATE_CHAIN_SIG.to_string(),
                     )
                     .unwrap(),
-                    state_chain_id,
+                    statechain_id,
                 })
             });
         db.expect_get_withdraw_confirm_data().returning(move |_| {
@@ -311,7 +311,7 @@ mod tests {
                     &STATE_CHAIN_SIG.to_string(),
                 )
                 .unwrap(),
-                state_chain_id,
+                statechain_id,
             })
         });
         db.expect_get_statechain()

@@ -10,7 +10,7 @@ use crate::ecdsa;
 use crate::wallet::wallet::Wallet;
 
 use shared_lib::structs::PrepareSignTxMsg;
-use shared_lib::util::get_sighash;
+use shared_lib::util::{transaction_deserialise, get_sighash};
 
 use curv::arithmetic::traits::Converter;
 use curv::BigInt;
@@ -34,9 +34,11 @@ pub fn cosign_tx_input(
         prepare_sign_msg,
     )?;
 
+    let tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
+
     // get sighash as message to be signed
     let sig_hash = get_sighash(
-        &prepare_sign_msg.tx,
+        &tx,
         &0,
         &prepare_sign_msg.input_addrs[0],
         &prepare_sign_msg.input_amounts[0],
@@ -54,6 +56,7 @@ pub fn cosign_tx_input(
         prepare_sign_msg.protocol,
         &shared_key.id,
     )?;
+
     Ok(witness)
 }
 

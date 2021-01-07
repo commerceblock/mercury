@@ -178,9 +178,9 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                         let balance = wallet.get_all_addresses_balance();
                         r.send(DaemonResponse::value_to_deamon_response(balance))
                     }
-                    DaemonRequest::GetBackup(state_chain_id) => {
+                    DaemonRequest::GetBackup(statechain_id) => {
                         debug!("Daemon: GetBackup");
-                        let backup_tx = wallet.get_backup_tx(&state_chain_id);
+                        let backup_tx = wallet.get_backup_tx(&statechain_id);
                         r.send(DaemonResponse::value_to_deamon_response(backup_tx))
                     }                    
                     DaemonRequest::GetStateChainsInfo => {
@@ -198,9 +198,9 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                         let fee_info_res = get_statechain_fee_info(&wallet.client_shim);
                         r.send(DaemonResponse::value_to_deamon_response(fee_info_res))
                     }
-                    DaemonRequest::GetStateChain(state_chain_id) => {
+                    DaemonRequest::GetStateChain(statechain_id) => {
                         debug!("Daemon: GetStateChain");
-                        let fee_info_res = get_statechain(&wallet.client_shim, &state_chain_id);
+                        let fee_info_res = get_statechain(&wallet.client_shim, &statechain_id);
                         r.send(DaemonResponse::value_to_deamon_response(fee_info_res))
                     }
                     DaemonRequest::Deposit(amount) => {
@@ -209,19 +209,19 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                         wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(deposit_res))
                     }
-                    DaemonRequest::Withdraw(state_chain_id) => {
+                    DaemonRequest::Withdraw(statechain_id) => {
                         debug!("Daemon: Withdraw");
                         let deposit_res =
-                            state_entity::withdraw::withdraw(&mut wallet, &state_chain_id);
+                            state_entity::withdraw::withdraw(&mut wallet, &statechain_id);
                         wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(deposit_res))
                     }
-                    DaemonRequest::TransferSender(state_chain_id, receiver_addr) => {
+                    DaemonRequest::TransferSender(statechain_id, receiver_addr) => {
                         debug!("Daemon: TransferSender");
                         let sce_address = encoding::decode_address(receiver_addr,&network).unwrap();
                         let transfer_sender_resp = state_entity::transfer::transfer_sender(
                             &mut wallet,
-                            &state_chain_id,
+                            &statechain_id,
                             sce_address,
                         );
                         let encoded_message = encoding::encode_message(transfer_sender_resp.unwrap());
@@ -243,14 +243,14 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                             transfer_receiver_resp,
                         ))
                     }
-                    DaemonRequest::Swap(state_chain_id, swap_size, force_no_tor) => {
+                    DaemonRequest::Swap(statechain_id, swap_size, force_no_tor) => {
                         debug!(
                             "Daemon: Swapping {} with swap size {}",
-                            state_chain_id, swap_size
+                            statechain_id, swap_size
                         );
                         state_entity::conductor::do_swap(
                             &mut wallet,
-                            &state_chain_id,
+                            &statechain_id,
                             &swap_size,
                             force_no_tor,
                         )

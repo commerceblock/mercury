@@ -31,14 +31,14 @@ pub struct SwapToken {
     pub id: Uuid,
     pub amount: u64,
     pub time_out: u64,
-    pub state_chain_ids: Vec<Uuid>,
+    pub statechain_ids: Vec<Uuid>,
 }
 impl SwapToken {
     /// Create message to be signed
     pub fn to_message(&self) -> Result<Message> {
         let mut str = self.amount.to_string();
         str.push_str(&self.time_out.to_string());
-        str.push_str(&format!("{:?}", self.state_chain_ids));
+        str.push_str(&format!("{:?}", self.statechain_ids));
         let hash = sha256d::Hash::hash(&str.as_bytes());
         Ok(Message::from_slice(&hash)?)
     }
@@ -74,7 +74,7 @@ pub struct SwapInfo {
 /// Owner -> Conductor
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RegisterUtxo {
-    pub state_chain_id: Uuid,
+    pub statechain_id: Uuid,
     pub signature: StateChainSig,
     pub swap_size: u64,
 }
@@ -83,7 +83,7 @@ pub struct RegisterUtxo {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SwapMsg1 {
     pub swap_id: Uuid,
-    pub state_chain_id: Uuid,
+    pub statechain_id: Uuid,
     pub swap_token_sig: Signature,
     pub transfer_batch_sig: StateChainSig,
     pub address: SCEAddress,
@@ -94,7 +94,7 @@ pub struct SwapMsg1 {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BSTMsg {
     pub swap_id: Uuid,
-    pub state_chain_id: Uuid,
+    pub statechain_id: Uuid,
 }
 
 /// Owner -> Conductor
