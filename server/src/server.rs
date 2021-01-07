@@ -24,6 +24,7 @@ use rocket_prometheus::{
     prometheus::{opts, IntCounter, IntCounterVec},
     PrometheusMetrics,
 };
+use reqwest;
 use once_cell::sync::Lazy;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
@@ -48,6 +49,26 @@ pub static REG_SWAP_UTXOS: Lazy<IntCounterVec> = Lazy::new(|| {
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+#[derive(Debug, Clone)]
+pub struct Lockbox {
+    pub client: reqwest::blocking::Client,
+    pub endpoint: String,
+    pub active: bool,
+}
+
+impl Lockbox {
+    pub fn new(endpoint: String) -> Lockbox {
+        let client = reqwest::blocking::Client::new();
+        let active = endpoint.len() > 0;
+        let lb = Lockbox {
+            client,
+            endpoint,
+            active,
+        };
+        lb
+    }
+}
+
 pub struct StateChainEntity<
     T: Database + Send + Sync + 'static,
     D: MonotreeDatabase + Send + Sync + 'static,
@@ -56,6 +77,7 @@ pub struct StateChainEntity<
     pub database: T,
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
     pub scheduler: Arc<Mutex<Scheduler>>,
+    pub lockbox: Lockbox,
 }
 
 impl<
@@ -66,6 +88,7 @@ impl<
     pub fn load(mut db: T, mut db_smt: D) -> Result<StateChainEntity<T, D>> {
         // Get config as defaults, Settings.toml and env vars
         let config_rs = Config::load()?;
+        let lockbox_url = config_rs.lockbox.clone();
         db.set_connection_from_config(&config_rs)?;
         db_smt.set_connection_from_config(&config_rs)?;
 
@@ -79,6 +102,7 @@ impl<
             database: db,
             smt: Arc::new(Mutex::new(smt)),
             scheduler: Arc::new(Mutex::new(Scheduler::new())),
+            lockbox: Lockbox::new(lockbox_url),
         };
 
         Self::start_conductor_thread(sce.scheduler.clone());
@@ -146,7 +170,6 @@ pub fn get_server<
     }
 
     let prometheus = PrometheusMetrics::new();
-
     prometheus.registry().register(Box::new(DEPOSITS_COUNT.clone())).unwrap();
     prometheus.registry().register(Box::new(WITHDRAWALS_COUNT.clone())).unwrap();
     prometheus.registry().register(Box::new(TRANSFERS_COUNT.clone())).unwrap();

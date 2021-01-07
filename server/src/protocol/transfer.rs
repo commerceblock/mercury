@@ -12,6 +12,7 @@ use shared_lib::{ecies, ecies::WalletDecryptable, state_chain::*, structs::*};
 use crate::error::SEError;
 use crate::Database;
 use crate::{server::StateChainEntity, storage::Storage};
+use super::requests::post_lb;
 
 use bitcoin::Transaction;
 use cfg_if::cfg_if;
@@ -105,18 +106,6 @@ impl Transfer for SCE {
         let x1: FE = ECScalar::new_random();
         let x1_ser = FESer::from_fe(&x1);
 
-        // call lockbox
-        if self.config.lockbox.is_empty() == false {
-            let path: &str = "/transfer/sender";
-            let url = format!("{}{}", self.config.lockbox, path);
-            let result = reqwest::blocking::get(&url);
-
-            let _response = match result {
-                Ok(res) => info!("transfer/sender lockbox call status: {}", res.status() ),
-                Err(err) => eprintln!("transfer/sender lockbox call status: {}", err),
-            };
-        }
-
         self.database
             .create_transfer(&state_chain_id, &transfer_msg1.state_chain_sig, &x1)?;
 
@@ -170,47 +159,53 @@ impl Transfer for SCE {
             )));
         }
 
-        // call lockbox
-        if self.config.lockbox.is_empty() == false {
-            let path: &str = "/transfer/receiver";
-            let url = format!("{}{}", self.config.lockbox, path);
-            let result = reqwest::blocking::get(&url);
-
-            let _response = match result {
-                Ok(res) => info!("transfer/receiver lockbox call status: {}", res.status() ),
-                Err(err) => eprintln!("transfer/receiver lockbox call status: {}", err),
+        let s2: FE;
+        let theta: FE;
+        let s2_pub: GE;
+        if self.lockbox.active {
+            let ku_send = KUSendMsg {
+                user_id: user_id,
+                state_chain_id: state_chain_id,
+                x1: td.x1,
+                t1: transfer_msg4.t2,
+                o2_pub: transfer_msg4.o2_pub,
             };
+            let path: &str = "ecdsa/keyupdate/first";
+            let ku_receive: KUReceiveMsg = post_lb(&self.lockbox, path, &ku_send)?;
+            s2 = FE::zero();
+            s2_pub = ku_receive.s2_pub;
+            theta = ku_receive.theta;
         }
+        else {
+            let kp = self.database.get_ecdsa_keypair(user_id)?;
 
-        let kp = self.database.get_ecdsa_keypair(user_id)?;
+            // let x1 = transfer_data.x1;
+            let t2 = transfer_msg4.t2;
+            let s1 = kp.party_1_private.get_private_key();
 
-        // let x1 = transfer_data.x1;
-        let t2 = transfer_msg4.t2;
+            //let mut rng = OsRng::new().expect("OsRng");
+            s2 = t2 * (td.x1.invert()) * s1;
 
-        let s1 = kp.party_1_private.get_private_key();
+            theta = FE::new_random();
+            // Note:
+            //  s2 = o1*o2_inv*s1
+            //  t2 = o1*x1*o2_inv
+            let s1_theta = s1 * theta;
+            let s2_theta = s2 * theta;
 
-        //let mut rng = OsRng::new().expect("OsRng");
-        let s2 = t2 * (td.x1.invert()) * s1;
+            let g: GE = ECPoint::generator();
+            s2_pub = g * s2;
 
-        let theta = FE::new_random();
-        // Note:
-        //  s2 = o1*o2_inv*s1
-        //  t2 = o1*x1*o2_inv
-        let s1_theta = s1 * theta;
-        let s2_theta = s2 * theta;
+            let p1_pub = kp.party_2_public * s1_theta;
+            let p2_pub = transfer_msg4.o2_pub * s2_theta;
 
-        let g: GE = ECPoint::generator();
-        let s2_pub: GE = g * s2;
-
-        let p1_pub = kp.party_2_public * s1_theta;
-        let p2_pub = transfer_msg4.o2_pub * s2_theta;
-
-        // Check P1 = o1_pub*s1 === p2 = o2_pub*s2
-        if p1_pub != p2_pub {
-            error!("TRANSFER: Protocol failed. P1 != P2.");
-            return Err(SEError::Generic(String::from(
-                "Transfer protocol error: P1 != P2",
-            )));
+            // Check P1 = o1_pub*s1 === p2 = o2_pub*s2
+            if p1_pub != p2_pub {
+                error!("TRANSFER: Protocol failed. P1 != P2.");
+                return Err(SEError::Generic(String::from(
+                    "Transfer protocol error: P1 != P2",
+                )));
+            }
         }
 
         // Create user ID for new UserSession (receiver of transfer)
@@ -295,6 +290,16 @@ impl Transfer for SCE {
             &state_chain_id,
             finalized_data.to_owned(),
         )?;
+
+        //lockbox finalise and delete key
+        if self.lockbox.active {
+            let ku_send = KUFinalize {
+                state_chain_id: state_chain_id,
+                shared_key_id: new_user_id,
+            };
+            let path: &str = "ecdsa/keyupdate/second";
+            let _ku_receive: KUAttest = post_lb(&self.lockbox, path, &ku_send)?;
+        }
 
         self.database
             .update_backup_tx(&state_chain_id, finalized_data.new_tx_backup.to_owned())?;
@@ -410,7 +415,8 @@ mod tests {
     };
     use chrono::{Duration, Utc};
     use mockall::predicate;
-    use std::str::FromStr;
+    use mockito;
+    use serde_json;
 
     // Data from a run of transfer protocol.
     // static TRANSFER_MSG_1: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"state_chain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"}}";
@@ -647,5 +653,146 @@ mod tests {
         }
 
         sc_entity.transfer_receiver(transfer_msg_4)
+    }
+
+    #[test]
+    fn do_transfer_receiver_lockbox() {
+        let transfer_msg_4 =
+            serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap();
+        let shared_key_id = transfer_msg_4.shared_key_id;
+        let state_chain_id = transfer_msg_4.state_chain_id;
+        let s2 = serde_json::from_str::<TransferFinalizeData>(&FINALIZED_DATA.to_string())
+            .unwrap()
+            .s2;
+        let theta = serde_json::from_str::<TransferFinalizeData>(&FINALIZED_DATA.to_string())
+            .unwrap()
+            .theta;
+        let msg2: TransferMsg2 = serde_json::from_str(&TRANSFER_MSG_2.to_string()).unwrap();
+        let x1 = msg2.x1.get_fe().expect("failed to get fe");
+
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_user_auth()
+            .returning(move |_| Ok(shared_key_id));
+        db.expect_get_transfer_data()
+            .with(predicate::eq(state_chain_id))
+            .returning(move |_| {
+                Ok(TransferData {
+                    state_chain_id,
+                    state_chain_sig: serde_json::from_str::<TransferMsg4>(
+                        &TRANSFER_MSG_4.to_string(),
+                    )
+                    .unwrap()
+                    .state_chain_sig,
+                    x1,
+                })
+            });
+        db.expect_get_ecdsa_keypair()
+            .with(predicate::eq(shared_key_id))
+            .returning(|_| {
+                Ok(ECDSAKeypair {
+                    party_1_private: serde_json::from_str(&PARTY_1_PRIVATE.to_string()).unwrap(),
+                    party_2_public: serde_json::from_str(&PARTY_2_PUBLIC.to_string()).unwrap(),
+                })
+            });
+        db.expect_get_statechain().returning(move |_| {
+            Ok(serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap())
+        });
+        db.expect_update_statechain_owner()
+            .returning(|_, _, _| Ok(()));
+        db.expect_transfer_init_user_session()
+            .returning(|_, _, _| Ok(()));
+        db.expect_update_backup_tx().returning(|_, _| Ok(()));
+        db.expect_remove_transfer_data().returning(|_| Ok(()));
+        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
+        db.expect_get_root().returning(|_| Ok(None));
+        db.expect_root_update().returning(|_| Ok(1));
+        db.expect_get_finalize_batch_data().returning(move |_| {
+            Ok(TransferFinalizeBatchData {
+                finalized_data_vec: vec![TransferFinalizeData {
+                    new_shared_key_id: shared_key_id,
+                    state_chain_id,
+                    state_chain_sig: serde_json::from_str::<TransferMsg4>(
+                        &TRANSFER_MSG_4.to_string(),
+                    )
+                    .unwrap()
+                    .state_chain_sig,
+                    s2: s2,
+                    theta,
+                    new_tx_backup: serde_json::from_str::<Transaction>(
+                        &BACKUP_TX_NOT_SIGNED.to_string(),
+                    )
+                    .unwrap(),
+                    batch_data: Some(BatchData {
+                        id: shared_key_id,
+                        commitment: String::default(),
+                    }),
+                }],
+                start_time: Utc::now().naive_utc(),
+            })
+        });
+                
+        db.expect_update_finalize_batch_data()
+            .returning(|_, _| Ok(()));
+
+        let mut sc_entity = test_sc_entity(db);
+        let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
+
+        sc_entity.lockbox.active = true;
+        sc_entity.lockbox.endpoint = mockito::server_url();
+
+        // simulate lockbox secret operations
+        let kp = ECDSAKeypair {
+                    party_1_private: serde_json::from_str(&PARTY_1_PRIVATE.to_string()).unwrap(),
+                    party_2_public: serde_json::from_str(&PARTY_2_PUBLIC.to_string()).unwrap(),
+                };
+        let t2 = transfer_msg_4.t2;
+        let s1 = kp.party_1_private.get_private_key();
+
+        //let mut rng = OsRng::new().expect("OsRng");
+        let s2t = t2 * (x1.invert()) * s1;
+        let g: GE = ECPoint::generator();
+        let s2_pub = g * s2t;
+
+        let ku_lb_rec = KUReceiveMsg {
+            s2_pub: s2_pub,
+            theta: theta,
+        };
+
+        let serialized_m1 = serde_json::to_string(&ku_lb_rec).unwrap();
+
+        let _m_1 = mockito::mock("POST", "/ecdsa/keyupdate/first")
+          .with_header("content-type", "application/json")
+          .with_body(serialized_m1)
+          .create();
+
+        let ku_lb_fin_rec = KUAttest {
+            state_chain_id: state_chain_id,
+            attestation: "Attestation".to_string(),
+        };
+
+        let serialized_m2 = serde_json::to_string(&ku_lb_fin_rec).unwrap();
+
+        let _m_2 = mockito::mock("POST", "/ecdsa/keyupdate/second")
+          .with_header("content-type", "application/json")
+          .with_body(serialized_m2)
+          .create();        
+
+        // Input data to transfer_receiver
+        let transfer_msg_4 =
+            serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap();
+
+        // StateChain incorreclty signed for
+        let mut msg_4_incorrect_sc = transfer_msg_4.clone();
+        msg_4_incorrect_sc.state_chain_sig.data =
+            "deadb33f88579c6aafcfcc8ca91b0556a2044e6c61dfb7fca5f90c40ed119349ec".to_string();
+        match sc_entity.transfer_receiver(msg_4_incorrect_sc) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e
+                .to_string()
+                .contains("Error: State chain siganture provided does not match state chain at")),
+        }
+        // Expected successful run
+        assert!(sc_entity.transfer_receiver(transfer_msg_4.clone()).is_ok());
     }
 }
