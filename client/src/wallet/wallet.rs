@@ -8,7 +8,7 @@ use shared_lib::{
     ecies::{SelfEncryptable, WalletDecryptable},
     mocks::mock_electrum::MockElectrum,
     structs::{Protocol, SCEAddress},
-    util::get_sighash,
+    util::{transaction_deserialise, get_sighash},
 };
 
 use super::key_paths::{KeyPath, KeyPathWithAddresses};
@@ -20,7 +20,6 @@ use bitcoin::{
     secp256k1::{key::SecretKey, All, Message, Secp256k1},
     util::bip32::{ChildNumber, ExtendedPrivKey},
     {Address, Network, OutPoint, PublicKey, TxIn},
-    consensus,
 };
 
 use electrumx_client::{
@@ -337,7 +336,7 @@ impl Wallet {
         // add proof key to address map
         let tx_backup_addr = Some(self.se_backup_keys.add_address(proof_key,priv_key)?);
 
-        Ok(SCEAddress {tx_backup_addr: tx_backup_addr, proof_key: proof_key.key})
+        Ok(SCEAddress {tx_backup_addr, proof_key: proof_key.key})
     }
 
     /// Sign inputs with given addresses derived by this wallet. input_indices, addresses and amoumts lists
@@ -457,9 +456,9 @@ impl Wallet {
     }
 
     /// Get unspent shared key by state chain id. Return Err if no shared key with given state chain id.
-    pub fn get_shared_key_by_state_chain_id(&self, state_chain_id: &Uuid) -> Result<&SharedKey> {
+    pub fn get_shared_key_by_statechain_id(&self, statechain_id: &Uuid) -> Result<&SharedKey> {
         for shared in &self.shared_keys {
-            if shared.state_chain_id == Some(state_chain_id.to_owned()) {
+            if shared.statechain_id == Some(statechain_id.to_owned()) {
                 if shared.unspent == true {
                     return Ok(shared);
                 }
@@ -471,7 +470,7 @@ impl Wallet {
         // At the moment wallet marks shared_keys as spent when transfer_sender() completes so we
         // cannot test for 'StateChain locked/spent' error messages without below code
         for shared in &self.shared_keys {
-            if shared.state_chain_id == Some(state_chain_id.to_owned()) {
+            if shared.statechain_id == Some(statechain_id.to_owned()) {
                 return Ok(shared);
             }
         }
@@ -481,13 +480,10 @@ impl Wallet {
     /// Return Shared key info: StateChain ID, Funding Txid, proof key, value, unspent
     pub fn get_shared_key_info(&self, id: &Uuid) -> Result<(Uuid, String, String, u64, bool)> {
         let shared_key = self.get_shared_key(id)?;
+        let tx = transaction_deserialise(&shared_key.tx_backup_psm.clone().unwrap().tx_hex)?;
         Ok((
-            shared_key.state_chain_id.clone().unwrap(),
-            shared_key
-                .tx_backup_psm
-                .clone()
-                .unwrap()
-                .tx
+            shared_key.statechain_id.clone().unwrap(),
+            tx
                 .input
                 .get(0)
                 .unwrap()
@@ -572,7 +568,7 @@ impl Wallet {
     /// Return balances of unspent state chains
     pub fn get_state_chains_info(&self) -> Result<(Vec<Uuid>, Vec<Uuid>, Vec<GetBalanceResponse>, Vec<u32>)> {
         let mut shared_key_ids: Vec<Uuid> = vec![];
-        let mut state_chain_ids: Vec<Uuid> = vec![];
+        let mut statechain_ids: Vec<Uuid> = vec![];
         let mut state_chain_balances: Vec<GetBalanceResponse> = vec![];
         let mut state_chain_locktimes: Vec<u32> = vec![];
         for shared_key in &self.shared_keys {
@@ -581,22 +577,23 @@ impl Wallet {
                     confirmed: shared_key.value,
                     unconfirmed: 0,
                 });
-                state_chain_locktimes.push(shared_key.tx_backup_psm.as_ref().unwrap().tx.lock_time.clone());
+                let tx = transaction_deserialise(&shared_key.tx_backup_psm.as_ref().unwrap().tx_hex)?;
+                state_chain_locktimes.push(tx.lock_time);
                 shared_key_ids.push(shared_key.id.to_owned());
-                if shared_key.state_chain_id.is_some() {
-                    state_chain_ids.push(shared_key.state_chain_id.clone().unwrap());
+                if shared_key.statechain_id.is_some() {
+                    statechain_ids.push(shared_key.statechain_id.clone().unwrap());
                 }
             }
         }
-        Ok((shared_key_ids, state_chain_ids, state_chain_balances, state_chain_locktimes))
+        Ok((shared_key_ids, statechain_ids, state_chain_balances, state_chain_locktimes))
     }
 
     /// Return specified sc backup tx
-    pub fn get_backup_tx(&self, state_chain_id: &Uuid) -> Result<String> {
+    pub fn get_backup_tx(&self, statechain_id: &Uuid) -> Result<String> {
         let mut backup_tx_hex: String = "".to_string();
         for shared_key in &self.shared_keys {
-            if shared_key.state_chain_id.clone().unwrap() == *state_chain_id {
-                backup_tx_hex = hex::encode(consensus::serialize(&shared_key.tx_backup_psm.as_ref().unwrap().tx));
+            if shared_key.statechain_id.clone().unwrap() == *statechain_id {
+                backup_tx_hex = shared_key.tx_backup_psm.as_ref().unwrap().tx_hex.clone();
             }
         }
         Ok(backup_tx_hex)

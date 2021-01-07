@@ -12,7 +12,7 @@
 use super::super::Result;
 extern crate shared_lib;
 use shared_lib::structs::{DepositMsg1, DepositMsg2, PrepareSignTxMsg, Protocol};
-use shared_lib::util::{tx_backup_build, tx_funding_build, FEE};
+use shared_lib::util::{tx_backup_build, tx_funding_build, FEE, transaction_serialise};
 
 use super::api::{get_smt_proof, get_smt_root, get_statechain_fee_info};
 use crate::error::{CError, WalletErrorType};
@@ -37,7 +37,7 @@ pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<Uuid> {
     )
 }
 
-/// Deposit coins into state entity. Returns shared_key_id, state_chain_id, funding txid,
+/// Deposit coins into state entity. Returns shared_key_id, statechain_id, funding txid,
 /// signed backup tx, back up transacion data and proof_key
 pub fn deposit(
     wallet: &mut Wallet,
@@ -109,11 +109,12 @@ pub fn deposit(
     let tx_backup_psm = PrepareSignTxMsg {
         shared_key_id: shared_key_id.to_owned(),
         protocol: Protocol::Deposit,
-        tx: tx_backup_unsigned.to_owned(),
+        tx_hex: transaction_serialise(&tx_backup_unsigned),
         input_addrs: vec![pk],
         input_amounts: vec![*amount],
         proof_key: Some(proof_key.to_string()),
     };
+
 
     let witness = cosign_tx_input(wallet, &tx_backup_psm)?;
 
@@ -128,10 +129,9 @@ pub fn deposit(
         .electrumx_client
         .instance
         .broadcast_transaction(hex::encode(consensus::serialize(&tx_funding_signed)))?;
-    debug!("Deposit: Funding tx broadcast. txid: {}", funding_txid);
 
     // Wait for server confirmation of funding tx and receive new StateChain's id
-    let state_chain_id: Uuid = requests::postb(
+    let statechain_id: Uuid = requests::postb(
         &wallet.client_shim,
         &format!("deposit/confirm"),
         &DepositMsg2 {
@@ -151,14 +151,14 @@ pub fn deposit(
     // Add proof and state chain id to Shared key
     {
         let shared_key = wallet.get_shared_key_mut(&shared_key_id)?;
-        shared_key.state_chain_id = Some(state_chain_id);
+        shared_key.statechain_id = Some(statechain_id);
         shared_key.tx_backup_psm = Some(tx_backup_psm.to_owned());
         shared_key.add_proof_data(&proof_key.to_string(), &root, &proof, &funding_txid);
     }
 
     Ok((
         shared_key_id,
-        state_chain_id,
+        statechain_id,
         funding_txid,
         tx_backup_signed,
         tx_backup_psm,

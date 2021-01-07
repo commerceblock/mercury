@@ -112,7 +112,7 @@ pub trait Database {
     fn update_sighash(&self, user_id: &Uuid, sig_hash: Hash) -> Result<()>;
     fn update_user_backup_tx(&self, user_id: &Uuid, tx: Transaction) -> Result<()>;
     fn get_user_backup_tx(&self, user_id: Uuid) -> Result<Transaction>;
-    fn update_backup_tx(&self, state_chain_id: &Uuid, tx: Transaction) -> Result<()>;
+    fn update_backup_tx(&self, statechain_id: &Uuid, tx: Transaction) -> Result<()>;
     fn get_withdraw_confirm_data(&self, user_id: Uuid) -> Result<WithdrawConfirmData>;
     /// Update root value in DB. Update root with ID or insert new DB item.
     fn root_update(&self, rt: &Root) -> Result<i64>;
@@ -125,62 +125,62 @@ pub trait Database {
     /// Find the latest confirmed root
     fn get_confirmed_smt_root(&self) -> Result<Option<Root>>;
     fn get_statechain_id(&self, user_id: Uuid) -> Result<Uuid>;
-    fn update_statechain_id(&self, user_id: &Uuid, state_chain_id: &Uuid) -> Result<()>;
-    fn get_statechain_amount(&self, state_chain_id: Uuid) -> Result<StateChainAmount>;
+    fn update_statechain_id(&self, user_id: &Uuid, statechain_id: &Uuid) -> Result<()>;
+    fn get_statechain_amount(&self, statechain_id: Uuid) -> Result<StateChainAmount>;
     fn update_statechain_amount(
         &self,
-        state_chain_id: &Uuid,
+        statechain_id: &Uuid,
         state_chain: StateChain,
         amount: u64,
     ) -> Result<()>;
     fn create_statechain(
         &self,
-        state_chain_id: &Uuid,
+        statechain_id: &Uuid,
         user_id: &Uuid,
         state_chain: &StateChain,
         amount: &i64,
     ) -> Result<()>;
-    fn get_statechain(&self, state_chain_id: Uuid) -> Result<StateChain>;
+    fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain>;
     fn update_statechain_owner(
         &self,
-        state_chain_id: &Uuid,
+        statechain_id: &Uuid,
         state_chain: StateChain,
         new_user_id: &Uuid,
     ) -> Result<()>;
-    // Remove state_chain_id from user session to signal end of session
+    // Remove statechain_id from user session to signal end of session
     fn remove_statechain_id(&self, user_id: &Uuid) -> Result<()>;
     fn create_backup_transaction(
         &self,
-        state_chain_id: &Uuid,
+        statechain_id: &Uuid,
         tx_backup: &Transaction,
     ) -> Result<()>;
     fn get_current_backup_txs(&self, locktime: i64) -> Result<Vec<BackupTxID>>;
-    fn remove_backup_tx(&self, state_chain_id: &Uuid) -> Result<()>;
-    fn get_backup_transaction(&self, state_chain_id: Uuid) -> Result<Transaction>;
+    fn remove_backup_tx(&self, statechain_id: &Uuid) -> Result<()>;
+    fn get_backup_transaction(&self, statechain_id: Uuid) -> Result<Transaction>;
     fn get_backup_transaction_and_proof_key(&self, user_id: Uuid) -> Result<(Transaction, String)>;
     fn get_proof_key(&self, user_id: Uuid) -> Result<String>;
-    fn get_sc_locked_until(&self, state_chain_id: Uuid) -> Result<NaiveDateTime>;
-    fn update_locked_until(&self, state_chain_id: &Uuid, time: &NaiveDateTime) -> Result<()>;
+    fn get_sc_locked_until(&self, statechain_id: Uuid) -> Result<NaiveDateTime>;
+    fn update_locked_until(&self, statechain_id: &Uuid, time: &NaiveDateTime) -> Result<()>;
     fn get_transfer_batch_data(&self, batch_id: Uuid) -> Result<TransferBatchData>;
     fn has_transfer_batch_id(&self, batch_id: Uuid) -> bool;
     fn get_transfer_batch_id(&self, batch_id: Uuid) -> Result<Uuid>;
     fn get_punished_state_chains(&self, batch_id: Uuid) -> Result<Vec<Uuid>>;
     fn create_transfer(
         &self,
-        state_chain_id: &Uuid,
-        state_chain_sig: &StateChainSig,
+        statechain_id: &Uuid,
+        statechain_sig: &StateChainSig,
         x1: &FE,
     ) -> Result<()>;
-    fn update_transfer_msg(&self, state_chain_id: &Uuid, msg: &TransferMsg3) -> Result<()>;
-    fn get_transfer_msg(&self, state_chain_id: &Uuid) -> Result<TransferMsg3>;
+    fn update_transfer_msg(&self, statechain_id: &Uuid, msg: &TransferMsg3) -> Result<()>;
+    fn get_transfer_msg(&self, statechain_id: &Uuid) -> Result<TransferMsg3>;
     fn create_transfer_batch_data(
         &self,
         batch_id: &Uuid,
         state_chains: Vec<Uuid>,
     ) -> Result<()>;
-    fn get_transfer_data(&self, state_chain_id: Uuid) -> Result<TransferData>;
-    fn remove_transfer_data(&self, state_chain_id: &Uuid) -> Result<()>;
-    fn transfer_is_completed(&self, state_chain_id: Uuid) -> bool;
+    fn get_transfer_data(&self, statechain_id: Uuid) -> Result<TransferData>;
+    fn remove_transfer_data(&self, statechain_id: &Uuid) -> Result<()>;
+    fn transfer_is_completed(&self, statechain_id: Uuid) -> bool;
     fn get_ecdsa_master(&self, user_id: Uuid) -> Result<Option<String>>;
     fn get_ecdsa_witness_keypair(
         &self,
@@ -211,15 +211,15 @@ pub trait Database {
     fn get_finalize_batch_data(&self, batch_id: Uuid) -> Result<TransferFinalizeBatchData>;
     fn get_sc_finalize_batch_data(
         &self,
-        state_chain_id: &Uuid
+        statechain_id: &Uuid
     ) -> Result<TransferFinalizeData>;
     fn update_finalize_batch_data(
         &self,
-        state_chain_id: &Uuid,
+        statechain_id: &Uuid,
         finalized_data: &TransferFinalizeData,
     ) -> Result<()>;
     fn update_transfer_batch_finalized(&self, batch_id: &Uuid, b_finalized: &bool) -> Result<()>;
-    fn get_statechain_owner(&self, state_chain_id: Uuid) -> Result<StateChainOwner>;
+    fn get_statechain_owner(&self, statechain_id: Uuid) -> Result<StateChainOwner>;
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
     fn create_user_session(&self, user_id: &Uuid, auth: &String, proof_key: &String) -> Result<()>;
@@ -227,7 +227,7 @@ pub trait Database {
     fn transfer_init_user_session(
         &self,
         new_user_id: &Uuid,
-        state_chain_id: &Uuid,
+        statechain_id: &Uuid,
         finalized_data: TransferFinalizeData,
     ) -> Result<()>;
     fn update_ecdsa_sign_first(
@@ -285,12 +285,12 @@ pub mod structs {
     pub struct WithdrawConfirmData {
         pub tx_withdraw: Transaction,
         pub withdraw_sc_sig: StateChainSig,
-        pub state_chain_id: Uuid,
+        pub statechain_id: Uuid,
     }
 
     pub struct TransferData {
-        pub state_chain_id: Uuid,
-        pub state_chain_sig: StateChainSig,
+        pub statechain_id: Uuid,
+        pub statechain_sig: StateChainSig,
         pub x1: FE,
     }
 

@@ -101,7 +101,7 @@ impl Deposit for SCE {
         self.verify_tx_confirmed(&tx_backup.input[0].previous_output.txid.to_string())?;
 
         // Create state chain DB object
-        let state_chain_id = Uuid::new_v4();
+        let statechain_id = Uuid::new_v4();
         let mut total = 0;
         for output in &tx_backup.output {
             total += output.value;
@@ -111,20 +111,20 @@ impl Deposit for SCE {
 
         // Insert into StateChain table
         self.database
-            .create_statechain(&state_chain_id, &user_id, &state_chain, &amount)?;
+            .create_statechain(&statechain_id, &user_id, &state_chain, &amount)?;
 
         // Insert into BackupTx table
         self.database
-            .create_backup_transaction(&state_chain_id, &tx_backup)?;
+            .create_backup_transaction(&statechain_id, &tx_backup)?;
 
         info!(
             "DEPOSIT: State Chain created. ID: {} For user ID: {}",
-            state_chain_id, user_id
+            statechain_id, user_id
         );
 
         // Update UserSession with StateChain's ID
         self.database
-            .update_statechain_id(&user_id, &state_chain_id)?;
+            .update_statechain_id(&user_id, &statechain_id)?;
 
         //increment fee metric
         DEPOSITS_COUNT.inc();
@@ -143,14 +143,14 @@ impl Deposit for SCE {
 
         info!(
             "DEPOSIT: Included in sparse merkle tree. State Chain ID: {}",
-            state_chain_id
+            statechain_id
         );
         debug!(
             "DEPOSIT: State Chain ID: {}. New root: {:?}. Previous root: {:?}.",
-            state_chain_id, new_root, current_root
+            statechain_id, new_root, current_root
         );
 
-        Ok(state_chain_id)
+        Ok(statechain_id)
     }
 }
 

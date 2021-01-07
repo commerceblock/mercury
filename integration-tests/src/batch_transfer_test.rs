@@ -23,9 +23,9 @@ mod tests {
         let mut wallet = gen_wallet();
         let num_state_chains = 3;
         // make deposits
-        let mut state_chain_ids = vec![];
+        let mut statechain_ids = vec![];
         for _ in 0..num_state_chains {
-            state_chain_ids.push(run_deposit(&mut wallet, &10000).1);
+            statechain_ids.push(run_deposit(&mut wallet, &10000).1);
         }
 
         // Create new batch transfer ID
@@ -37,7 +37,7 @@ mod tests {
             transfer_sigs.push(
                 state_entity::transfer::transfer_batch_sign(
                     &mut wallet,
-                    &state_chain_ids[i],
+                    &statechain_ids[i],
                     &batch_id,
                 )
                 .unwrap(),
@@ -60,7 +60,7 @@ mod tests {
             transfer_sigs.push(
                 state_entity::transfer::transfer_batch_sign(
                     &mut wallet,
-                    &state_chain_ids[i],
+                    &statechain_ids[i],
                     &batch_id,
                 )
                 .unwrap(),
@@ -82,21 +82,21 @@ mod tests {
         // First sign state chain
         let mut transfer_sigs = vec![];
         for _ in 0..1 {
-            let state_chain_data =
-                state_entity::api::get_statechain(&wallet.client_shim, &state_chain_ids[0])
+            let statechain_data =
+                state_entity::api::get_statechain(&wallet.client_shim, &statechain_ids[0])
                     .unwrap();
-            let state_chain = state_chain_data.chain;
+            let state_chain = statechain_data.chain;
             // Get proof key for signing
             let proof_key_derivation = wallet.se_proof_keys.get_key_derivation(
                 &PublicKey::from_str(&state_chain.last().unwrap().data).unwrap(),
             );
-            let state_chain_sig = StateChainSig::new(
+            let statechain_sig = StateChainSig::new(
                 &proof_key_derivation.unwrap().private_key.key,
                 &String::from("TRANSFER"),
                 &String::from("proof key dummy"),
             )
             .unwrap();
-            transfer_sigs.push(state_chain_sig);
+            transfer_sigs.push(statechain_sig);
         }
         let transfer_batch_init = state_entity::transfer::transfer_batch_init(
             &wallet.client_shim,
@@ -149,20 +149,20 @@ mod tests {
         let swap_map = vec![(0, 1), (1, 2), (2, 0)]; // rotate state chains right: 0->1, 1->2, 2->3
         let mut funding_txids = vec![];
         let mut shared_key_ids = vec![];
-        let mut state_chain_ids = vec![];
+        let mut statechain_ids = vec![];
         for deposit in deposits {
             funding_txids.push(deposit.2);
             shared_key_ids.push(deposit.0);
-            state_chain_ids.push(deposit.1);
+            statechain_ids.push(deposit.1);
         }
         let (batch_id, transfer_finalized_datas, commitments, nonces, transfer_sigs) =
-            run_batch_transfer(&mut wallets, &swap_map, &funding_txids, &state_chain_ids);
+            run_batch_transfer(&mut wallets, &swap_map, &funding_txids, &statechain_ids);
 
         // Check commitments verify
         for i in 0..num_state_chains {
             assert!(verify_commitment(
                 &commitments[i],
-                &state_chain_ids[i].to_string(),
+                &statechain_ids[i].to_string(),
                 &nonces[i]
             )
             .is_ok());
@@ -174,7 +174,7 @@ mod tests {
             .expect("expected state chain entity address");
         match state_entity::transfer::transfer_sender(
             &mut wallets[0],
-            &state_chain_ids[0],
+            &statechain_ids[0],
             receiver_addr.clone(),
         ) {
             Err(e) => {
@@ -192,7 +192,7 @@ mod tests {
         finalize_batch_transfer(&mut wallets, &swap_map, transfer_finalized_datas);
 
         // Check amounts have correctly transferred
-        batch_transfer_verify_amounts(&mut wallets, &amounts, &state_chain_ids, &swap_map);
+        batch_transfer_verify_amounts(&mut wallets, &amounts, &statechain_ids, &swap_map);
 
         // Check each wallet has only one state chain available
         for i in 0..swap_map.len() {

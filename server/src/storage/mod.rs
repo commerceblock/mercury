@@ -120,7 +120,7 @@ pub trait Storage {
     fn update_root(&self, root: &Root) -> Result<i64>;
 
     //Returns locked until time, owner id, state chain
-    fn get_statechain_data_api(&self, state_chain_id: Uuid) -> Result<StateChainDataAPI>;
+    fn get_statechain_data_api(&self, statechain_id: Uuid) -> Result<StateChainDataAPI>;
 
     //fn authorise_withdrawal(&self, user_id: &Uuid, signature: StateChainSig) -> Result<()>;
 
@@ -133,7 +133,7 @@ pub trait Storage {
     // Returns statechain_id, sstatechain_sig_str, x1_str
     //fn get_transfer(&self, statechain_id: &Uuid) -> Result<(Uuid, StateChainSig, FE)>;
 
-    fn get_statechain(&self, state_chain_id: Uuid) -> Result<StateChain>;
+    fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain>;
 
     //Returns party1_private_str, party2_public_str
     //fn get_transfer_ecdsa_pair(&self, user_id: &Uuid) -> Result<(Party1Private, GE)>;
@@ -151,7 +151,7 @@ pub trait Storage {
     //    -> Result<TransferBatchDataAPI>;
 
     // Update the locked until time of a state chain (used for punishment)
-    //fn update_locked_until(&self, state_chain_id: &Uuid, time: &NaiveDateTime);
+    //fn update_locked_until(&self, statechain_id: &Uuid, time: &NaiveDateTime);
 
     //Update the list of punished state chains
     //fn update_punished(&self, punished: &Vec<Uuid>);
