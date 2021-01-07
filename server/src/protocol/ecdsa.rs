@@ -67,16 +67,16 @@ impl Ecdsa for SCE {
     fn first_message(&self, key_gen_msg1: KeyGenMsg1) -> Result<(Uuid, party_one::KeyGenFirstMsg)> {
         let user_id = key_gen_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
-        let db = &self.database;
 
         let kg_first_msg;
         // call lockbox
         if self.lockbox.active {
-            let path: &str = "/ecdsa/keygen/first";
+            let path: &str = "ecdsa/keygen/first";
             let key_gen_first_msg: party_one::KeyGenFirstMsg = post_lb(&self.lockbox, path, &key_gen_msg1)?;
             kg_first_msg = key_gen_first_msg;
         }
         else {
+            let db = &self.database;
             // Create new entry in ecdsa table if key not already in table.
             match db.get_ecdsa_master(user_id) {
                 Ok(data) => match data {
@@ -119,7 +119,7 @@ impl Ecdsa for SCE {
         let kg_party_one_second_msg: party1::KeyGenParty1Message2;
         // call lockbox
         if self.lockbox.active {
-            let path: &str = "/ecdsa/keygen/second";
+            let path: &str = "ecdsa/keygen/second";
             let kg_party_one_second_message: party1::KeyGenParty1Message2 = post_lb(&self.lockbox, path, &key_gen_msg2)?;
             kg_party_one_second_msg = kg_party_one_second_message;
         }
@@ -164,7 +164,7 @@ impl Ecdsa for SCE {
         let sign_party_one_first_msg: party_one::EphKeyGenFirstMsg;
 
         if self.lockbox.active {
-            let path: &str = "/ecdsa/sign/first";
+            let path: &str = "ecdsa/sign/first";
             let sign_party_one_first_message: party_one::EphKeyGenFirstMsg = post_lb(&self.lockbox, path, &sign_msg1)?;
             sign_party_one_first_msg = sign_party_one_first_message;
         }
@@ -220,7 +220,7 @@ impl Ecdsa for SCE {
         let mut ws: Vec<Vec<u8>>;
 
         if self.lockbox.active {
-            let path: &str = "/ecdsa/sign/second";
+            let path: &str = "ecdsa/sign/second";
             let witness: Vec<Vec<u8>> = post_lb(&self.lockbox, path, &sign_msg2)?;
             ws = witness;
         }
@@ -338,4 +338,176 @@ pub fn sign_second(sc_entity: State<SCE>, sign_msg2: Json<SignMsg2>) -> Result<J
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use crate::protocol::util::tests::test_sc_entity;
+    use shared_lib::structs::SignSecondMsgRequest;
+    use crate::protocol::util::tests::BACKUP_TX_NOT_SIGNED;
+    use bitcoin::Transaction;
+    use std::str::FromStr;
+    use mockito;
+    use serde_json;
+    use curv::elliptic::curves::traits::ECScalar;
+    use curv::cryptographic_primitives::proofs::sigma_dlog::DLogProof;
+    use crate::curv::cryptographic_primitives::proofs::sigma_dlog::ProveDLog;
+    use curv::cryptographic_primitives::proofs::sigma_ec_ddh::ECDDHProof;
+
+    #[test]
+    fn test_keygen_lockbox_client() {
+        let user_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_create_user_session().returning(|_, _, _| Ok(()));
+        db.expect_get_user_auth().returning(move |_| Ok(user_id));
+
+        let mut sc_entity = test_sc_entity(db);
+
+        sc_entity.lockbox.active = true;
+        sc_entity.lockbox.endpoint = mockito::server_url();
+
+        let kg_first_msg = party_one::KeyGenFirstMsg { pk_commitment: BigInt::from(0), zk_pok_commitment: BigInt::from(1) };
+
+        let serialized_m1 = serde_json::to_string(&kg_first_msg).unwrap();
+
+        let _m_1 = mockito::mock("POST", "/ecdsa/keygen/first")
+          .with_header("content-type", "application/json")
+          .with_body(serialized_m1)
+          .create();
+
+        let kg_msg_1 = KeyGenMsg1 { shared_key_id: user_id, protocol: Protocol::Deposit };
+
+        let (_user_id, return_msg) = sc_entity.first_message(kg_msg_1).unwrap();
+
+        assert_eq!(kg_first_msg.pk_commitment,return_msg.pk_commitment);
+        assert_eq!(kg_first_msg.zk_pok_commitment,return_msg.zk_pok_commitment);
+
+        let secret_share: FE = ECScalar::new_random();
+        let d_log_proof = DLogProof::prove(&secret_share);
+        let json = r#"
+                {
+                    "public_share":{"x":"de6822e27f1223c9a8200408fa002c612c3635d801ea6c3315789f8cf3e3fe29","y":"e3231aca5034eb8bd5271b728a516720088a69e124ccbd982003c50b474bb22a"},
+                    "secret_share":"eddb897ad33e4fef8b71bd4b6eab7e6f3c6acfe8d6346989389706e4c2331be6"
+                }
+            "#;
+
+        let ec_key_pair: party_one::EcKeyPair = serde_json::from_str(&json.to_string()).unwrap();
+
+        let comm_witness = party_one::CommWitness {
+            pk_commitment_blind_factor: BigInt::from(0),
+            zk_pok_blind_factor: BigInt::from(1),
+            public_share: ECPoint::generator(),
+            d_log_proof: d_log_proof.clone(),
+        };
+
+        let (kg_party_one_second_message, _, _): (
+            party1::KeyGenParty1Message2,
+            party_one::PaillierKeyPair,
+            party_one::Party1Private,
+        ) = MasterKey1::key_gen_second_message(
+            comm_witness,
+            &ec_key_pair,
+            &d_log_proof,
+        );
+
+        let serialized_m2 = serde_json::to_string(&kg_party_one_second_message).unwrap();
+
+        let _m_2 = mockito::mock("POST", "/ecdsa/keygen/second")
+          .with_header("content-type", "application/json")
+          .with_body(serialized_m2)
+          .create();
+
+        let kg_msg_2 = KeyGenMsg2 { shared_key_id: user_id, dlog_proof: d_log_proof};
+
+        let return_msg = sc_entity.second_message(kg_msg_2).unwrap();
+
+        assert_eq!(kg_party_one_second_message.c_key,return_msg.c_key);        
+
+    }
+
+    #[test]
+    fn test_sign_lockbox_client() {
+        let user_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let tx_backup: Transaction = serde_json::from_str(&BACKUP_TX_NOT_SIGNED).unwrap();
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_create_user_session().returning(|_, _, _| Ok(()));
+        db.expect_get_user_auth().returning(move |_| Ok(user_id));
+        db.expect_get_user_backup_tx().returning(move |_| Ok(tx_backup.clone()));
+        db.expect_update_user_backup_tx().returning(|_, _| Ok(()));
+        let hexhash = r#"
+                "0000000000000000000000000000000000000000000000000000000000000000"
+            "#;
+        let sig_hash: sha256d::Hash = serde_json::from_str(&hexhash.to_string()).unwrap();
+        db.expect_get_sighash().returning(move |_| Ok(sig_hash));
+
+        let mut sc_entity = test_sc_entity(db);
+
+        sc_entity.lockbox.active = true;
+        sc_entity.lockbox.endpoint = mockito::server_url();
+
+        let (eph_key_gen_first_message_party_two, _, _) =
+            MasterKey2::sign_first_message();
+
+        let sign_msg1 = SignMsg1 {
+            shared_key_id: user_id,
+            eph_key_gen_first_message_party_two: eph_key_gen_first_message_party_two,
+        };
+
+        let (sign_party_one_first_message, _) :
+                (party_one::EphKeyGenFirstMsg, party_one::EphEcKeyPair) = MasterKey1::sign_first_message();
+
+        let serialized_m1 = serde_json::to_string(&sign_party_one_first_message).unwrap();
+
+        let _m_1 = mockito::mock("POST", "/ecdsa/sign/first")
+          .with_header("content-type", "application/json")
+          .with_body(serialized_m1)
+          .create();
+
+        let return_msg = sc_entity.sign_first(sign_msg1).unwrap();
+
+        assert_eq!(sign_party_one_first_message.public_share,return_msg.public_share);
+        assert_eq!(sign_party_one_first_message.c,return_msg.c);
+
+        let d_log_proof = ECDDHProof {
+            a1: ECPoint::generator(),
+            a2: ECPoint::generator(),
+            z: ECScalar::new_random(),
+        };
+        let comm_witness = party_two::EphCommWitness {
+            pk_commitment_blind_factor: BigInt::from(0),
+            zk_pok_blind_factor: BigInt::from(1),
+            public_share: ECPoint::generator(),
+            d_log_proof: d_log_proof.clone(),
+            c: ECPoint::generator(),
+        };
+
+        let sign_msg2 = SignMsg2 {
+            shared_key_id: user_id,
+            sign_second_msg_request: SignSecondMsgRequest {
+                protocol: Protocol::Deposit,
+                message: BigInt::from(0),
+                party_two_sign_message: party2::SignMessage {
+                    partial_sig: party_two::PartialSig {c3: BigInt::from(3)},
+                    second_message: party_two::EphKeyGenSecondMsg {comm_witness: comm_witness},
+                },
+            },
+        };
+
+        let witness: Vec<Vec<u8>> = vec![vec![48, 68, 2, 32, 94, 197, 64, 97, 183, 140, 229, 202, 52, 141, 214, 128, 218, 92, 31, 159, 14, 192, 114, 167, 169, 166, 85, 208, 129, 89, 59, 72, 233, 119, 11, 69, 2, 32, 101, 93, 62, 147, 163, 225, 79, 143, 112, 88, 161, 251, 186, 215, 255, 67, 246, 19, 93, 17, 135, 235, 196, 111, 228, 236, 109, 196, 131, 192, 230, 245, 1], vec![3, 120, 158, 98, 241, 124, 29, 175, 68, 206, 87, 99, 45, 189, 226, 48, 73, 247, 39, 150, 105, 96, 216, 148, 31, 95, 159, 155, 255, 127, 61, 19, 169]];
+
+        let serialized_m2 = serde_json::to_string(&witness).unwrap();
+        let _m_2 = mockito::mock("POST", "/ecdsa/sign/second")
+          .with_header("content-type", "application/json")
+          .with_body(serialized_m2)
+          .create();
+
+        let return_msg = sc_entity.sign_second(sign_msg2).unwrap();
+
+        assert_eq!(return_msg,witness);
+
+    }
+
 }
