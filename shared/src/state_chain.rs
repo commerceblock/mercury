@@ -55,21 +55,21 @@ impl StateChain {
             .clone())
     }
 
-    pub fn add(&mut self, state_chain_sig: StateChainSig) -> Result<()> {
+    pub fn add(&mut self, statechain_sig: StateChainSig) -> Result<()> {
         let mut tip = self.get_tip()?;
 
         // verify previous state has signature and signs for new proof_key
         let prev_proof_key = tip.data.clone();
-        state_chain_sig.verify(&prev_proof_key)?;
+        statechain_sig.verify(&prev_proof_key)?;
 
         // add sig to current tip
-        tip.next_state = Some(state_chain_sig.clone());
+        tip.next_state = Some(statechain_sig.clone());
         self.chain.pop();
         self.chain.push(tip);
 
         // add new tip to chain
         Ok(self.chain.push(State {
-            data: state_chain_sig.data,
+            data: statechain_sig.data,
             next_state: None,
         }))
     }
@@ -151,10 +151,10 @@ impl StateChainSig {
     pub fn new_transfer_batch_sig(
         proof_key_priv: &SecretKey,
         batch_id: &Uuid,
-        state_chain_id: &Uuid,
+        statechain_id: &Uuid,
     ) -> Result<Self> {
         let purpose = &Self::purpose_transfer_batch(batch_id);
-        let data = &state_chain_id.to_string();
+        let data = &statechain_id.to_string();
         Self::new(proof_key_priv, purpose, data)
     }
 
