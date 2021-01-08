@@ -229,7 +229,7 @@ pub struct TransferMsg4 {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct KUSendMsg {
     pub user_id: Uuid,
-    pub state_chain_id: Uuid,
+    pub statechain_id: Uuid,
     pub x1: FE,
     pub t1: FE,
     pub o2_pub: GE,
@@ -244,13 +244,13 @@ pub struct KUReceiveMsg {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct KUFinalize {
-    pub state_chain_id: Uuid,
+    pub statechain_id: Uuid,
     pub shared_key_id: Uuid,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct KUAttest {
-    pub state_chain_id: Uuid,
+    pub statechain_id: Uuid,
     pub attestation: String,
 }
 

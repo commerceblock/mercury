@@ -163,8 +163,8 @@ impl Transfer for SCE {
         let s2_pub: GE;
         if self.lockbox.active {
             let ku_send = KUSendMsg {
-                user_id: user_id,
-                state_chain_id: state_chain_id,
+                user_id,
+                statechain_id,
                 x1: td.x1,
                 t1: transfer_msg4.t2,
                 o2_pub: transfer_msg4.o2_pub,
@@ -293,15 +293,17 @@ impl Transfer for SCE {
         //lockbox finalise and delete key
         if self.lockbox.active {
             let ku_send = KUFinalize {
-                state_chain_id: state_chain_id,
+                statechain_id,
                 shared_key_id: new_user_id,
             };
             let path: &str = "ecdsa/keyupdate/second";
             let _ku_receive: KUAttest = post_lb(&self.lockbox, path, &ku_send)?;
         }
 
+        let new_tx_backup_hex = transaction_deserialise(&finalized_data.new_tx_backup_hex)?;
+
         self.database
-            .update_backup_tx(&statechain_id, new_tx_backup.clone())?;
+            .update_backup_tx(&statechain_id, new_tx_backup_hex.clone())?;
 
         info!(
             "TRANSFER: Finalized. New shared key ID: {}. State Chain ID: {}",
@@ -310,7 +312,7 @@ impl Transfer for SCE {
 
         // Update sparse merkle tree with new StateChain entry
         let (prev_root, new_root) = self.update_smt(
-            &new_tx_backup
+            &new_tx_backup_hex
                 .input
                 .get(0)
                 .unwrap()
@@ -415,6 +417,8 @@ mod tests {
     use mockall::predicate;
     use mockito;
     use serde_json;
+    use bitcoin::Transaction;
+    use crate::shared_lib::util::transaction_serialise;
 
     // Data from a run of transfer protocol.
     // static TRANSFER_MSG_1: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"}}";
@@ -660,7 +664,7 @@ mod tests {
         let transfer_msg_4 =
             serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap();
         let shared_key_id = transfer_msg_4.shared_key_id;
-        let state_chain_id = transfer_msg_4.state_chain_id;
+        let statechain_id = transfer_msg_4.statechain_id;
         let s2 = serde_json::from_str::<TransferFinalizeData>(&FINALIZED_DATA.to_string())
             .unwrap()
             .s2;
@@ -675,15 +679,15 @@ mod tests {
         db.expect_get_user_auth()
             .returning(move |_| Ok(shared_key_id));
         db.expect_get_transfer_data()
-            .with(predicate::eq(state_chain_id))
+            .with(predicate::eq(statechain_id))
             .returning(move |_| {
                 Ok(TransferData {
-                    state_chain_id,
-                    state_chain_sig: serde_json::from_str::<TransferMsg4>(
+                    statechain_id,
+                    statechain_sig: serde_json::from_str::<TransferMsg4>(
                         &TRANSFER_MSG_4.to_string(),
                     )
                     .unwrap()
-                    .state_chain_sig,
+                    .statechain_sig,
                     x1,
                 })
             });
@@ -711,18 +715,18 @@ mod tests {
             Ok(TransferFinalizeBatchData {
                 finalized_data_vec: vec![TransferFinalizeData {
                     new_shared_key_id: shared_key_id,
-                    state_chain_id,
-                    state_chain_sig: serde_json::from_str::<TransferMsg4>(
+                    statechain_id,
+                    statechain_sig: serde_json::from_str::<TransferMsg4>(
                         &TRANSFER_MSG_4.to_string(),
                     )
                     .unwrap()
-                    .state_chain_sig,
+                    .statechain_sig,
                     s2: s2,
                     theta,
-                    new_tx_backup: serde_json::from_str::<Transaction>(
-                        &BACKUP_TX_NOT_SIGNED.to_string(),
-                    )
-                    .unwrap(),
+                    new_tx_backup_hex: transaction_serialise(
+                        &serde_json::from_str::<Transaction>(
+                            &BACKUP_TX_NOT_SIGNED.to_string(),
+                        ).unwrap()),
                     batch_data: Some(BatchData {
                         id: shared_key_id,
                         commitment: String::default(),
@@ -731,7 +735,7 @@ mod tests {
                 start_time: Utc::now().naive_utc(),
             })
         });
-                
+
         db.expect_update_finalize_batch_data()
             .returning(|_, _| Ok(()));
 
@@ -755,8 +759,8 @@ mod tests {
         let s2_pub = g * s2t;
 
         let ku_lb_rec = KUReceiveMsg {
-            s2_pub: s2_pub,
-            theta: theta,
+            s2_pub,
+            theta,
         };
 
         let serialized_m1 = serde_json::to_string(&ku_lb_rec).unwrap();
@@ -767,7 +771,7 @@ mod tests {
           .create();
 
         let ku_lb_fin_rec = KUAttest {
-            state_chain_id: state_chain_id,
+            statechain_id,
             attestation: "Attestation".to_string(),
         };
 
@@ -776,7 +780,7 @@ mod tests {
         let _m_2 = mockito::mock("POST", "/ecdsa/keyupdate/second")
           .with_header("content-type", "application/json")
           .with_body(serialized_m2)
-          .create();        
+          .create();
 
         // Input data to transfer_receiver
         let transfer_msg_4 =
@@ -784,7 +788,7 @@ mod tests {
 
         // StateChain incorreclty signed for
         let mut msg_4_incorrect_sc = transfer_msg_4.clone();
-        msg_4_incorrect_sc.state_chain_sig.data =
+        msg_4_incorrect_sc.statechain_sig.data =
             "deadb33f88579c6aafcfcc8ca91b0556a2044e6c61dfb7fca5f90c40ed119349ec".to_string();
         match sc_entity.transfer_receiver(msg_4_incorrect_sc) {
             Ok(_) => assert!(false, "Expected failure."),
