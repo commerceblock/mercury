@@ -78,6 +78,10 @@ pub trait Utilities {
     ///     - Check tx data
     ///     - Calculate and store tx sighash for validation before performing ecdsa::sign
     fn prepare_sign_tx(&self, prepare_sign_msg: PrepareSignTxMsg) -> Result<()>;
+
+    /// API: Return statecoin info, proofs and backup txs to enable wallet recovery from the proof key. 
+    /// The request includes the public proof key and an authenticating signature
+    fn get_recovery_data(&self, recovery_request: RequestRecoveryData) -> Result<RecoveryDataMsg>;)
 }
 
 impl Utilities for SCE {
@@ -383,6 +387,17 @@ pub fn get_transfer_batch_status(
     batch_id: String,
 ) -> Result<Json<TransferBatchDataAPI>> {
     match sc_entity.get_transfer_batch_status(Uuid::from_str(&batch_id).unwrap()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[post("/prepare-sign", format = "json", data = "<request_recovery_data>")]
+pub fn get_recovery_data(
+    sc_entity: State<SCE>,
+    request_recovery_data: Json<RequestRecoveryData>,
+) -> Result<Json<RecoveryDataMsg>> {
+    match sc_entity.get_recovery_data(request_recovery_data.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }

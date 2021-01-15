@@ -90,6 +90,23 @@ pub struct TransferBatchDataAPI {
     pub finalized: bool,
 }
 
+/// /info/transfer-batch return struct
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RequestRecoveryData {
+    pub key: String,
+    pub sig: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RecoveryDataMsg {
+    pub shared_key_id: Uuid,
+    pub utxo: OutPoint,
+    pub amount: u64,
+    pub chain: Vec<State>,
+    pub locktime: u32,
+    pub tx_hex: String,
+}
+
 /// /info/statechain post struct
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SmtProofMsgAPI {
