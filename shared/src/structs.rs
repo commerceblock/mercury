@@ -100,6 +100,7 @@ pub struct RequestRecoveryData {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RecoveryDataMsg {
     pub shared_key_id: Uuid,
+    pub statchain_id: Uuid,
     pub utxo: OutPoint,
     pub amount: u64,
     pub chain: Vec<State>,

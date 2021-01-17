@@ -214,6 +214,7 @@ pub fn get_server<
                     util::get_fees,
                     util::prepare_sign_tx,
                     util::get_transfer_batch_status,
+                    util::get_recovery_data,
                     deposit::deposit_init,
                     deposit::deposit_confirm,
                     transfer::transfer_sender,

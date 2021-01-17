@@ -1458,11 +1458,29 @@ impl Database for PGDatabase {
     }
 
     // find statecoin and user information from supplied proof key to enable wallet recovery
-    fn get_current_backup_txs(&self, locktime: i64) -> Result<> {
+    fn get_recovery_data(&self, proofkey: String) -> Result<> {
         let dbr = self.database_r()?;
         let statement =
             dbr.prepare(&format!("SELECT * FROM {} WHERE proofkey = $1", Table::UserSession.to_string(),))?;
         let rows = statement.query(&[&proofkey])?;
+        if rows.is_empty() {
+            return Err(SEError::DBError(NoDataForID, String::from("Proof key")));
+        };
+        let row = rows.get(0);
+
+
+        // then get the chain from the statechain table
+
+
+
+        let recovery_data = RecoveryDataMsg {
+            shared_key_id: row.get("id"),
+            statchain_id: row.get("id"),
+            amount: u64,
+            chain: Vec<State>,
+            locktime: u32,
+            tx_hex: String,
+        }
 
 
     // UserSession
@@ -1476,7 +1494,15 @@ impl Database for PGDatabase {
 
 
 
-
+pub struct RecoveryDataMsg {
+    pub shared_key_id: Uuid,
+    pub statchain_id: Uuid,
+    pub utxo: OutPoint,
+    pub amount: u64,
+    pub chain: Vec<State>,
+    pub locktime: u32,
+    pub tx_hex: String,
+}
 
 
 
