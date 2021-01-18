@@ -72,7 +72,7 @@ impl Ecdsa for SCE {
         // call lockbox
         if self.lockbox.active {
             let path: &str = "ecdsa/keygen/first";
-            let key_gen_first_msg: party_one::KeyGenFirstMsg = post_lb(&self.lockbox, path, &key_gen_msg1)?;
+            let (_id, key_gen_first_msg): (Uuid, party_one::KeyGenFirstMsg) = post_lb(&self.lockbox, path, &key_gen_msg1)?;
             kg_first_msg = key_gen_first_msg;
         }
         else {
@@ -111,7 +111,6 @@ impl Ecdsa for SCE {
             db.update_keygen_first_msg(&user_id, &key_gen_first_msg, comm_witness, ec_key_pair)?;
             kg_first_msg = key_gen_first_msg;
         }
-
         Ok((user_id, kg_first_msg))
     }
 
@@ -370,7 +369,7 @@ pub mod tests {
 
         let kg_first_msg = party_one::KeyGenFirstMsg { pk_commitment: BigInt::from(0), zk_pok_commitment: BigInt::from(1) };
 
-        let serialized_m1 = serde_json::to_string(&kg_first_msg).unwrap();
+        let serialized_m1 = serde_json::to_string(&(&user_id,&kg_first_msg)).unwrap();
 
         let _m_1 = mockito::mock("POST", "/ecdsa/keygen/first")
           .with_header("content-type", "application/json")
@@ -423,7 +422,7 @@ pub mod tests {
 
         let return_msg = sc_entity.second_message(kg_msg_2).unwrap();
 
-        assert_eq!(kg_party_one_second_message.c_key,return_msg.c_key);        
+        assert_eq!(kg_party_one_second_message.c_key,return_msg.c_key);
 
     }
 
