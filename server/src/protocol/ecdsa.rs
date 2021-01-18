@@ -72,7 +72,7 @@ impl Ecdsa for SCE {
         // call lockbox
         if self.lockbox.active {
             let path: &str = "ecdsa/keygen/first";
-            let key_gen_first_msg: party_one::KeyGenFirstMsg = post_lb(&self.lockbox, path, &key_gen_msg1)?;
+            let (_id, key_gen_first_msg): (Uuid, party_one::KeyGenFirstMsg) = post_lb(&self.lockbox, path, &key_gen_msg1)?;
             kg_first_msg = key_gen_first_msg;
         }
         else {
@@ -111,7 +111,6 @@ impl Ecdsa for SCE {
             db.update_keygen_first_msg(&user_id, &key_gen_first_msg, comm_witness, ec_key_pair)?;
             kg_first_msg = key_gen_first_msg;
         }
-
         Ok((user_id, kg_first_msg))
     }
 
