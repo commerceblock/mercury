@@ -302,8 +302,6 @@ impl Utilities for SCE {
                     let statechain_id = self.database.get_statechain_id(user_id)?;
                     let current_tx_backup = self.database.get_backup_transaction(statechain_id)?;
 
-                    println!("current_tx_backup: {:?}", current_tx_backup);
-                    println!("tx: {:?}", tx);
                     if (current_tx_backup.lock_time as u32) != (tx.lock_time as u32) + (self.config.lh_decrement as u32) {
                         return Err(SEError::Generic(String::from(
                             "Backup tx locktime not correctly decremented.",
