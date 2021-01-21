@@ -37,6 +37,9 @@ error-chain="0.12.4"
 tor-stream = "0.2.0"
 bitcoincore-rpc = "0.12.0"
 jsonrpc = "0.11.0"
+rocket_okapi = "0.5"
+schemars = "0.7"
+okapi = { version = "0.4.0", features = ["derive_json_schema"] }
 
 [dev-dependencies]
 mockito = "0.27.0"

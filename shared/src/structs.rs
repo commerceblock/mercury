@@ -12,6 +12,8 @@ use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_two;
 use bitcoin::{secp256k1::PublicKey, Address};
 use std::{collections::HashSet, fmt};
 use uuid::Uuid;
+use rocket_okapi::JsonSchema;
+use schemars;
 
 use crate::ecies;
 use crate::{util::transaction_serialise, ecies::{Encryptable, SelfEncryptable, WalletDecryptable}};
@@ -55,7 +57,7 @@ impl FESer {
 }
 
 /// /info/info return struct
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct StateEntityFeeInfoAPI {
     pub address: String, // Receive address for fee payments
     pub deposit: u64,    // basis points

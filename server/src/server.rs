@@ -16,6 +16,8 @@ use crate::watch::watch_node;
 use mockall::*;
 use monotree::database::Database as MonotreeDatabase;
 use rocket;
+use rocket_okapi::{openapi, routes_with_openapi, JsonSchema};
+use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 use rocket::{
     config::{Config as RocketConfig, Environment},
     Request, Rocket,
@@ -136,6 +138,16 @@ fn not_found(req: &Request) -> String {
     format!("Unknown route '{}'.", req.uri())
 }
 
+fn get_docs() -> SwaggerUIConfig {
+    use rocket_okapi::swagger_ui::UrlObject;
+
+    SwaggerUIConfig {
+        url: "/my_resource/openapi.json".to_string(),
+        urls: vec![UrlObject::new("My Resource", "/v1/company/openapi.json")],
+        ..Default::default()
+    }
+}
+
 /// Start Rocket Server. mainstay_config parameter overrides Settings.toml and env var settings.
 /// If no db provided then use mock
 pub fn get_server<
@@ -233,6 +245,7 @@ pub fn get_server<
                     conductor::swap_second_message,
                 ],
             )
+            .mount("/my_resource", routes_with_openapi![util::get_fees])
             .mount("/metrics", prometheus)
             .manage(sc_entity);
 
