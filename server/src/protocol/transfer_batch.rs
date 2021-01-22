@@ -232,15 +232,17 @@ mod tests {
     use shared_lib::commitment::make_commitment;
     use std::str::FromStr;
     use uuid::Uuid;
-    use shared_lib::{state_chain::State as SCState};
+    use shared_lib::state_chain::State as SCState;
     use std::collections::{HashMap, HashSet};
     use crate::error::DBErrorType;
 
     // Useful data structs for transfer batch protocol.
     /// Batch id and Signatures for statechains to take part in batch-transfer
-    static TRANSFER_BATCH_INIT: &str = "{\"id\":\"dce55491-867a-485b-a036-cf96f2122ba5\",\"signatures\":[{\"purpose\":\"TRANSFER_BATCH:dce55491-867a-485b-a036-cf96f2122ba5\",\"data\":\"313bbb05-7d5e-475e-8d1e-4ef454a0e57a\",\"sig\":\"3044022062db3272cdf9b0551ee1466b58c9222ba71409f4c66714ef49e3be7e55c57a5b022075c71a3d965c27c41336047fd42ab8486e9d7bd6588e0d71e523b0c4eea651f9\"},{\"purpose\":\"TRANSFER_BATCH:dce55491-867a-485b-a036-cf96f2122ba5\",\"data\":\"f98957a9-9db4-4a0f-9a46-d21d5b8db4ec\",\"sig\":\"3045022100cdf5cfedd15f06885696fb5899a38b96ee8e55f6a8ffe029519fef47bb6e8469022013cc3e0d4740d9b790601efb685e94e93010efb4c6399954ae622ec124431cb6\"},{\"purpose\":\"TRANSFER_BATCH:dce55491-867a-485b-a036-cf96f2122ba5\",\"data\":\"ff33831e-f458-4a14-997c-abc460d1fe87\",\"sig\":\"3045022100844221eb7d324b8b6a1ca5007834e9802fd178b926850ffbe6ee084f523f5c8c02205cf12a77f104cb2b57623da0b0687a149244a87f273296a0eee3e2c5c9fd0231\"}]}";
+    static TRANSFER_BATCH_INIT: &str = "{\"id\":\"1304280d-60f3-443e-892e-9fd41ecb1b4f\",\"signatures\":[{\"purpose\":\"TRANSFER_BATCH:1304280d-60f3-443e-892e-9fd41ecb1b4f\",\"data\":\"06b7d64d-e88e-4de1-b596-0ee11c84f244\",\"sig\":\"3045022100fced97e99ad2700ee4ece2c398cd4092d73c09d2241ab438d63a9ab9d97abcdc02205c93d76d4692a4b396e1affe31adbc2a23af9859c7180644c1fb9a74fe3b5a01\"},
+    {\"purpose\":\"TRANSFER_BATCH:1304280d-60f3-443e-892e-9fd41ecb1b4f\",\"data\":\"92753256-2efa-43c1-8486-8c0f107bbeb9\",\"sig\":\"3045022100e21391ea17151d30357287607b08e0b18631bd177f1c0fc1b8b6eaef1320e2e6022018df26119cb8ee914a39f7c181ccc40842cdcf6f4a4514087031adf4386e41e9\"},
+    {\"purpose\":\"TRANSFER_BATCH:1304280d-60f3-443e-892e-9fd41ecb1b4f\",\"data\":\"217a001c-e2e3-441b-9a4e-59980591ddf0\",\"sig\":\"3045022100d72a6b8e0833a37c2b7ea3ce3a23fef529aaeb473be70373c900ab1d6ec394f9022009fbcfdb37b675f4013c65cb3a51e248cc70d0e37965abec5111f0ae8109652e\"}]}";
     /// Mapping of statechain_ids -> proof keys for above list of sigatures
-    static SIG_PROOF_KEYS: &str = "{\"313bbb05-7d5e-475e-8d1e-4ef454a0e57a\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"f98957a9-9db4-4a0f-9a46-d21d5b8db4ec\":\"022d7ea3d286541ed593e0158e315d73908646abcfa46aa56c12229a2910cce48c\",\"ff33831e-f458-4a14-997c-abc460d1fe87\":\"039afb8b85ba5c1b6664df7e68d4d79ea194e7022c76f0f9f3dadc3f94d8c79211\"}";
+    static SIG_PROOF_KEYS: &str = "{\"06b7d64d-e88e-4de1-b596-0ee11c84f244\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"92753256-2efa-43c1-8486-8c0f107bbeb9\":\"022d7ea3d286541ed593e0158e315d73908646abcfa46aa56c12229a2910cce48c\",\"217a001c-e2e3-441b-9a4e-59980591ddf0\":\"039afb8b85ba5c1b6664df7e68d4d79ea194e7022c76f0f9f3dadc3f94d8c79211\"}";
     /// Signs for incorrect batch id
     static STATE_CHAIN_SIG_ONE_WRONG_BATCH_ID: &str = "{\"purpose\":\"TRANSFER_BATCH:5d15c863-2ee3-46e2-935b-3f8702155fb6\",\"data\":\"ff33831e-f458-4a14-997c-abc460d1fe87\",\"sig\":\"30440220601a56ede4f2980e4b66d3b07a58b44dd5831b0ae300aa38de521147d74b49cc0220284923cd22b10c8edbf81535b53ab974757e875a39bc59bad84b3a01cf022e52\"}";
     /// Signs for "TRANSFER" instead of "TRANSFER-BATCH"

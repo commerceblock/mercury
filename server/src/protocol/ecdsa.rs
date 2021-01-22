@@ -452,7 +452,7 @@ pub mod tests {
 
         let sign_msg1 = SignMsg1 {
             shared_key_id: user_id,
-            eph_key_gen_first_message_party_two: eph_key_gen_first_message_party_two,
+            eph_key_gen_first_message_party_two,
         };
 
         let (sign_party_one_first_message, _) :
@@ -490,7 +490,7 @@ pub mod tests {
                 message: BigInt::from(0),
                 party_two_sign_message: party2::SignMessage {
                     partial_sig: party_two::PartialSig {c3: BigInt::from(3)},
-                    second_message: party_two::EphKeyGenSecondMsg {comm_witness: comm_witness},
+                    second_message: party_two::EphKeyGenSecondMsg {comm_witness},
                 },
             },
         };

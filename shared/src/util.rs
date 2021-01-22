@@ -73,13 +73,14 @@ pub fn get_sighash(
         .expect("failed to convert public key");
     comp.signature_hash(
         tx_index.to_owned(),
-        &bitcoin::Address::p2pkh(
+        &bitcoin::Address::p2wpkh(
             &bitcoin::util::key::PublicKey {
                 compressed: true,
                 key: pk_btc,
             },
             network.parse::<Network>().unwrap(),
         )
+        .unwrap()
         .script_pubkey(),
         *amount,
         bitcoin::blockdata::transaction::SigHashType::All,

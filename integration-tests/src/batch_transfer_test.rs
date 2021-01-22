@@ -24,8 +24,11 @@ mod tests {
         let num_state_chains = 3;
         // make deposits
         let mut statechain_ids = vec![];
+        let mut statechain_proof_keys = vec![];
         for _ in 0..num_state_chains {
-            statechain_ids.push(run_deposit(&mut wallet, &10000).1);
+            let dep_res = run_deposit(&mut wallet, &10000);
+            statechain_ids.push(dep_res.1);
+            statechain_proof_keys.push(dep_res.5.to_string());
         }
 
         // Create new batch transfer ID
@@ -427,11 +430,11 @@ mod tests {
 
             let (_shared_key_ids, _wallet_sc_ids, _bals, _locktimes) = wallets.last().unwrap().
                 get_state_chains_info().unwrap();
-    
-            
+
+
             wallet_sers.push((wallets.last().unwrap().to_json(),deposit.1));
         }
-         
+
         println!("Starting swaps...");
         let start = Instant::now();
         for (wallet_ser, deposit) in wallet_sers{
@@ -440,7 +443,7 @@ mod tests {
                     wallet_ser,
                     ClientShim::new("http://localhost:8000".to_string(), None, None),
                 )?;
-                        
+
                         state_entity::conductor::do_swap(&mut wallet, &deposit, &num_state_chains, false)
                 })
             )
