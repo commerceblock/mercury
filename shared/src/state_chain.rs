@@ -15,7 +15,7 @@ use crate::error::SharedLibError;
 use crate::Verifiable;
 
 use bitcoin::{
-    hashes::{sha256d, Hash},
+    hashes::{sha256, Hash},
     secp256k1::{Message, PublicKey, Secp256k1, SecretKey, Signature},
 };
 use monotree::{
@@ -127,7 +127,7 @@ impl StateChainSig {
     fn to_message(purpose: &String, data: &String) -> Result<Message> {
         let mut str = purpose.clone();
         str.push_str(&data);
-        let hash = sha256d::Hash::hash(&str.as_bytes());
+        let hash = sha256::Hash::hash(&str.as_bytes());
         Ok(Message::from_slice(&hash)?)
     }
 
