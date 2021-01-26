@@ -231,7 +231,7 @@ pub struct KUSendMsg {
     pub user_id: Uuid,
     pub statechain_id: Uuid,
     pub x1: FE,
-    pub t1: FE,
+    pub t2: FE,
     pub o2_pub: GE,
 }
 

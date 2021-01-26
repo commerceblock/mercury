@@ -166,7 +166,7 @@ impl Transfer for SCE {
                 user_id,
                 statechain_id,
                 x1: td.x1,
-                t1: transfer_msg4.t2,
+                t2: transfer_msg4.t2,
                 o2_pub: transfer_msg4.o2_pub,
             };
             let path: &str = "ecdsa/keyupdate/first";
