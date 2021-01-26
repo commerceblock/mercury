@@ -17,7 +17,7 @@ use shared_lib::{
 
 use shared_lib::structs::Protocol;
 
-use rocket_okapi::openapi;
+use rocket_okapi::{openapi, routes_with_openapi, JsonSchema};
 use crate::error::{DBErrorType, SEError};
 use crate::storage::Storage;
 use crate::{server::StateChainEntity, Database};
@@ -340,13 +340,22 @@ impl Utilities for SCE {
     }
 }
 
+#[derive(serde::Serialize, JsonSchema)]
+pub struct Response {
+    pub reply: String,
+}
+
 #[openapi]
 #[get("/info/fee", format = "json")]
-pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
-    match sc_entity.get_fees() {
-        Ok(res) => return Ok(Json(res)),
-        Err(e) => return Err(e),
-    }
+pub fn get_fees(sc_entity: State<SCE>) -> Json<Response> {
+    Json(Response {
+        reply: "show me the docs!".to_string(),
+    })
+
+//    match sc_entity.get_fees() {
+//        Ok(res) => return Ok(Json(res)),
+//        Err(e) => return Err(e),
+//    }
 }
 
 #[get("/info/statechain/<statechain_id>", format = "json")]

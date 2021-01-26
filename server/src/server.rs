@@ -143,7 +143,7 @@ fn get_docs() -> SwaggerUIConfig {
 
     SwaggerUIConfig {
         url: "/my_resource/openapi.json".to_string(),
-        urls: vec![UrlObject::new("My Resource", "/v1/company/openapi.json")],
+        urls: vec![UrlObject::new("My Resource", "/my_resource/openapi.json")],
         ..Default::default()
     }
 }
@@ -246,6 +246,7 @@ pub fn get_server<
                 ],
             )
             .mount("/my_resource", routes_with_openapi![util::get_fees])
+            .mount("/swagger", make_swagger_ui(&get_docs()))
             .mount("/metrics", prometheus)
             .manage(sc_entity);
 
