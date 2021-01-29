@@ -228,16 +228,7 @@ pub fn transfer_receiver(
             "Transfer Error: StateChain is signed over to proof key not owned by this wallet!",
         )))?;
 
-
-
-    // Check try_o2() comments and docs for justification of below code
-    let mut done = false;
-    let mut transfer_msg5 = TransferMsg5::default();
-    let mut o2 = FE::zero();
-    let mut num_tries = 0;
     // t1 in transfer_msg3 is ECIES encrypted.
-    // t1 is decrypted here before passing to try_o2 because try_o2 could
-    // be executed multiple times and t1 is a constant
     let t1 = match transfer_msg3.t1.get_fe() {
         Ok(r) => r,
         Err(e) => {
@@ -248,70 +239,9 @@ pub fn transfer_receiver(
             )))
         }
     };
-    while !done {
-        match try_o2(
-            wallet,
-            &statechain_data,
-            &transfer_msg3,
-            &t1,
-            &num_tries,
-            batch_data,
-        ) {
-            Ok(success_resp) => {
-                o2 = success_resp.0.clone();
-                transfer_msg5 = success_resp.1.clone();
-                done = true;
-            }
-            Err(e) => {
-                if !e.to_string().contains(&String::from("try again")) {
-                    return Err(e);
-                }
-                num_tries = num_tries + 1;
-                debug!("try o2 failure. Trying again...");
-            }
-        }
-    }
 
-    // Update tx_backup_psm shared_key_id with new one
-    let mut tx_backup_psm = transfer_msg3.tx_backup_psm.clone();
-    tx_backup_psm.shared_key_id = transfer_msg5.new_shared_key_id.clone();
-
-    // Data to update wallet with transfer. Should only be applied after StateEntity has finalized.
-    let finalize_data = TransferFinalizeData {
-        new_shared_key_id: transfer_msg5.new_shared_key_id,
-        o2,
-        s2_pub: transfer_msg5.s2_pub,
-        theta: transfer_msg5.theta,
-        statechain_data,
-        proof_key: transfer_msg3.rec_se_addr.proof_key.clone().to_string(),
-        statechain_id: transfer_msg3.statechain_id,
-        tx_backup_psm,
-    };
-
-    // In batch case this step is performed once all other transfers in the batch are complete.
-    if batch_data.is_none() {
-        // Finalize protocol run by generating new shared key and updating wallet.
-        transfer_receiver_finalize(wallet, finalize_data.clone())?;
-    }
-
-    Ok(finalize_data)
-}
-
-// Constraint on s2 size means that some (most) o2 values are not valid for the lindell_2017 protocol.
-// We must generate random o2, test if the resulting s2 is valid and try again if not.
-/// Carry out transfer_receiver() protocol with a randomly generated o2 value.
-pub fn try_o2(
-    wallet: &mut Wallet,
-    statechain_data: &StateChainDataAPI,
-    transfer_msg3: &TransferMsg3,
-    t1: &FE,
-    num_tries: &u32,
-    batch_data: &Option<BatchData>,
-) -> Result<(FE, TransferMsg5)> {
     // generate o2 private key and corresponding 02 public key
-    let mut encoded_txid = num_tries.to_string();
-    encoded_txid.push_str(&statechain_data.utxo.txid.to_string());
-    let funding_txid_int = match funding_txid_to_int(&encoded_txid) {
+    let funding_txid_int = match funding_txid_to_int(&statechain_data.utxo.txid.to_string()) {
         Ok(r) => r,
         Err(e) => {
             return Err(CError::Generic(format!(
@@ -339,10 +269,9 @@ pub fn try_o2(
     let g: GE = ECPoint::generator();
     let o2_pub: GE = g * o2;
 
-    // t2 = t1*o2_inv = o1*x1*o2_inv
+    let t2 = t1 * (o2.invert());
 
-    let t2 = *t1 * (o2.invert());
-    // encrypt t2 with SE key and sign with Receiver proof key (se_addr.proof_key)
+    // TODO encrypt t2 with SE/lockbox public key share
 
     let msg4 = &mut TransferMsg4 {
         shared_key_id: transfer_msg3.shared_key_id,
@@ -356,7 +285,29 @@ pub fn try_o2(
 
     let transfer_msg5: TransferMsg5 =
         requests::postb(&wallet.client_shim, &format!("transfer/receiver"), msg4)?;
-    Ok((o2, transfer_msg5))
+
+    // Update tx_backup_psm shared_key_id with new one
+    let mut tx_backup_psm = transfer_msg3.tx_backup_psm.clone();
+    tx_backup_psm.shared_key_id = transfer_msg5.new_shared_key_id.clone();
+
+    // Data to update wallet with transfer. Should only be applied after StateEntity has finalized.
+    let finalize_data = TransferFinalizeData {
+        new_shared_key_id: transfer_msg5.new_shared_key_id,
+        o2,
+        s2_pub: transfer_msg5.s2_pub,
+        statechain_data,
+        proof_key: transfer_msg3.rec_se_addr.proof_key.clone().to_string(),
+        statechain_id: transfer_msg3.statechain_id,
+        tx_backup_psm,
+    };
+
+    // In batch case this step is performed once all other transfers in the batch are complete.
+    if batch_data.is_none() {
+        // Finalize protocol run by generating new shared key and updating wallet.
+        transfer_receiver_finalize(wallet, finalize_data.clone())?;
+    }
+
+    Ok(finalize_data)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -364,7 +315,6 @@ pub struct TransferFinalizeData {
     pub new_shared_key_id: Uuid,
     pub o2: FE,
     pub s2_pub: GE,
-    pub theta: FE,
     pub statechain_data: StateChainDataAPI,
     pub proof_key: String,
     pub statechain_id: Uuid,
@@ -386,7 +336,7 @@ pub fn transfer_receiver_finalize(
     )?;
 
     // Check shared key master public key == private share * SE public share
-    if (finalize_data.s2_pub * finalize_data.o2 * finalize_data.theta).get_element()
+    if (finalize_data.s2_pub * finalize_data.o2).get_element()
         != wallet
             .get_shared_key(&finalize_data.new_shared_key_id)?
             .share

@@ -24,7 +24,6 @@ use client_lib::wallet::wallet::Wallet;
 use client_lib::*;
 
 use bitcoin::{PublicKey, Transaction};
-use curv::FE;
 use floating_duration::TimeFormat;
 use monotree::database::{Database as monotreeDatabase, MemoryDB};
 use rocket::error::LaunchError;
@@ -232,7 +231,7 @@ pub fn run_transfer(
     receiver_index: usize,
     receiver_addr: &SCEAddress,
     statechain_id: &Uuid,
-) -> (Uuid, FE) {
+) -> Uuid {
 
     let start = Instant::now();
     let mut tranfer_sender_resp = state_entity::transfer::transfer_sender(
@@ -249,11 +248,10 @@ pub fn run_transfer(
     )
     .unwrap();
     let new_shared_key_id = tfd.new_shared_key_id;
-    let theta = tfd.theta;
 
     println!("(Transfer Took: {})", TimeFormat(start.elapsed()));
 
-    return (new_shared_key_id, theta);
+    return new_shared_key_id;
 }
 
 /// Run a transfer with commitments between two wallets. Input vector of wallets with sender and receiver indexes in vector.
