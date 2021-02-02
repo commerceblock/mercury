@@ -231,14 +231,13 @@ pub struct KUSendMsg {
     pub user_id: Uuid,
     pub statechain_id: Uuid,
     pub x1: FE,
-    pub t1: FE,
+    pub t2: FE,
     pub o2_pub: GE,
 }
 
 /// Lockbox -> State Entity
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct KUReceiveMsg {
-    pub theta: FE,
     pub s2_pub: GE,
 }
 
@@ -259,7 +258,6 @@ pub struct KUAttest {
 pub struct TransferMsg5 {
     pub new_shared_key_id: Uuid,
     pub s2_pub: GE,
-    pub theta: FE,
 }
 
 /// Conductor -> StateEntity
@@ -305,7 +303,6 @@ impl Default for TransferMsg5 {
         TransferMsg5 {
             new_shared_key_id: Uuid::new_v4(),
             s2_pub: GE::base_point2(),
-            theta: ECScalar::zero(),
         }
     }
 }

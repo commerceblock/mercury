@@ -100,7 +100,6 @@ pub enum Column {
     TxWithdraw,
     SigHash,
     S2,
-    Theta,
     WithdrawScSig,
 
     // StateChain
@@ -237,7 +236,6 @@ impl PGDatabase {
                 statechainid uuid,
                 authentication varchar,
                 s2 varchar,
-                theta varchar,
                 sighash varchar,
                 withdrawscsig varchar,
                 txwithdraw varchar,
@@ -1273,12 +1271,6 @@ impl Database for PGDatabase {
         Ok(s2)
     }
 
-    fn get_ecdsa_theta(&self, user_id: Uuid) -> Result<FE> {
-        let s2_str = self.get_1(user_id, Table::UserSession, vec![Column::Theta])?;
-        let s2: FE = Self::deser(s2_str)?;
-        Ok(s2)
-    }
-
     fn update_keygen_first_msg(
         &self,
         user_id: &Uuid,
@@ -1486,7 +1478,6 @@ impl Database for PGDatabase {
                 Column::TxBackup,
                 Column::StateChainId,
                 Column::S2,
-                Column::Theta,
             ],
             vec![
                 &String::from("auth"),
@@ -1494,7 +1485,6 @@ impl Database for PGDatabase {
                 &Self::ser(transaction_deserialise(&finalized_data.new_tx_backup_hex)?)?,
                 &statechain_id,
                 &Self::ser(finalized_data.s2)?,
-                &Self::ser(finalized_data.theta)?,
             ],
         )
     }

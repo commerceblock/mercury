@@ -104,8 +104,7 @@ impl Ecdsa for SCE {
                     MasterKey1::key_gen_first_message()
                 } else {
                     let s2: FE = db.get_ecdsa_s2(user_id)?;
-                    let theta: FE = db.get_ecdsa_theta(user_id)?;
-                    MasterKey1::key_gen_first_message_predefined(s2 * theta)
+                    MasterKey1::key_gen_first_message_predefined(s2)
                 };
 
             db.update_keygen_first_msg(&user_id, &key_gen_first_msg, comm_witness, ec_key_pair)?;
