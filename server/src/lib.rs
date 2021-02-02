@@ -187,7 +187,6 @@ pub trait Database {
         user_id: Uuid,
     ) -> Result<(party_one::CommWitness, party_one::EcKeyPair)>;
     fn get_ecdsa_s2(&self, user_id: Uuid) -> Result<FE>;
-    fn get_ecdsa_theta(&self, user_id: Uuid) -> Result<FE>;
     fn update_keygen_first_msg(
         &self,
         user_id: &Uuid,

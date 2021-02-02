@@ -105,8 +105,7 @@ impl Ecdsa for SCE {
                     MasterKey1::key_gen_first_message()
                 } else {
                     let s2: FE = db.get_ecdsa_s2(user_id)?;
-                    let theta: FE = db.get_ecdsa_theta(user_id)?;
-                    MasterKey1::key_gen_first_message_predefined(s2 * theta)
+                    MasterKey1::key_gen_first_message_predefined(s2)
                 };
 
             db.update_keygen_first_msg(&user_id, &key_gen_first_msg, comm_witness, ec_key_pair)?;
@@ -457,7 +456,7 @@ pub mod tests {
 
         let sign_msg1 = SignMsg1 {
             shared_key_id: user_id,
-            eph_key_gen_first_message_party_two: eph_key_gen_first_message_party_two,
+            eph_key_gen_first_message_party_two,
         };
 
         let (sign_party_one_first_message, _) :
@@ -495,7 +494,7 @@ pub mod tests {
                 message: BigInt::from(0),
                 party_two_sign_message: party2::SignMessage {
                     partial_sig: party_two::PartialSig {c3: BigInt::from(3)},
-                    second_message: party_two::EphKeyGenSecondMsg {comm_witness: comm_witness},
+                    second_message: party_two::EphKeyGenSecondMsg {comm_witness},
                 },
             },
         };

@@ -521,9 +521,6 @@ impl Database for MemoryDB {
     fn get_ecdsa_s2(&self, _user_id: uuid::Uuid) -> crate::Result<curv::FE> {
         unimplemented!()
     }
-    fn get_ecdsa_theta(&self, _user_id: uuid::Uuid) -> crate::Result<curv::FE> {
-        unimplemented!()
-    }
     fn update_keygen_first_msg(
         &self,
         _user_id: &uuid::Uuid,
