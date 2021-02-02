@@ -22,6 +22,7 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use std::string::ToString;
 use uuid::Uuid;
+use rocket_okapi::openapi;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -298,6 +299,7 @@ impl Ecdsa for SCE {
     }
 }
 
+#[openapi]
 #[post("/ecdsa/keygen/first", format = "json", data = "<key_gen_msg1>")]
 pub fn first_message(
     sc_entity: State<SCE>,
@@ -309,6 +311,7 @@ pub fn first_message(
     }
 }
 
+#[openapi]
 #[post("/ecdsa/keygen/second", format = "json", data = "<key_gen_msg2>")]
 pub fn second_message(
     sc_entity: State<SCE>,
@@ -320,6 +323,7 @@ pub fn second_message(
     }
 }
 
+#[openapi]
 #[post("/ecdsa/sign/first", format = "json", data = "<sign_msg1>")]
 pub fn sign_first(
     sc_entity: State<SCE>,
@@ -331,6 +335,7 @@ pub fn sign_first(
     }
 }
 
+#[openapi]
 #[post("/ecdsa/sign/second", format = "json", data = "<sign_msg2>")]
 pub fn sign_second(sc_entity: State<SCE>, sign_msg2: Json<SignMsg2>) -> Result<Json<Vec<Vec<u8>>>> {
     match sc_entity.sign_second(sign_msg2.into_inner()) {

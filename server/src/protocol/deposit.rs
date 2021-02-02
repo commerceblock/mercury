@@ -17,6 +17,9 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use std::str::FromStr;
 use uuid::Uuid;
+use rocket_okapi::openapi;
+use rocket_okapi::JsonSchema;
+use schemars;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -154,6 +157,7 @@ impl Deposit for SCE {
     }
 }
 
+#[openapi]
 #[post("/deposit/init", format = "json", data = "<deposit_msg1>")]
 pub fn deposit_init(sc_entity: State<SCE>, deposit_msg1: Json<DepositMsg1>) -> Result<Json<Uuid>> {
     match sc_entity.deposit_init(deposit_msg1.into_inner()) {
@@ -162,6 +166,7 @@ pub fn deposit_init(sc_entity: State<SCE>, deposit_msg1: Json<DepositMsg1>) -> R
     }
 }
 
+#[openapi]
 #[post("/deposit/confirm", format = "json", data = "<deposit_msg2>")]
 pub fn deposit_confirm(
     sc_entity: State<SCE>,

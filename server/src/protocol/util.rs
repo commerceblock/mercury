@@ -340,24 +340,16 @@ impl Utilities for SCE {
     }
 }
 
-#[derive(serde::Serialize, JsonSchema)]
-pub struct Response {
-    pub reply: String,
+#[openapi]
+#[get("/info/fee", format = "json")]
+pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
+    match sc_entity.get_fees() {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
 }
 
 #[openapi]
-#[get("/info/fee", format = "json")]
-pub fn get_fees(sc_entity: State<SCE>) -> Json<Response> {
-    Json(Response {
-        reply: "show me the docs!".to_string(),
-    })
-
-//    match sc_entity.get_fees() {
-//        Ok(res) => return Ok(Json(res)),
-//        Err(e) => return Err(e),
-//    }
-}
-
 #[get("/info/statechain/<statechain_id>", format = "json")]
 pub fn get_statechain(
     sc_entity: State<SCE>,
@@ -369,6 +361,7 @@ pub fn get_statechain(
     }
 }
 
+#[openapi]
 #[get("/info/root", format = "json")]
 pub fn get_smt_root(sc_entity: State<SCE>) -> Result<Json<Option<Root>>> {
     match sc_entity.get_smt_root() {
@@ -377,6 +370,7 @@ pub fn get_smt_root(sc_entity: State<SCE>) -> Result<Json<Option<Root>>> {
     }
 }
 
+#[openapi]
 #[post("/info/proof", format = "json", data = "<smt_proof_msg>")]
 pub fn get_smt_proof(
     sc_entity: State<SCE>,
@@ -388,6 +382,7 @@ pub fn get_smt_proof(
     }
 }
 
+#[openapi]
 #[get("/info/transfer-batch/<batch_id>", format = "json")]
 pub fn get_transfer_batch_status(
     sc_entity: State<SCE>,
@@ -399,6 +394,7 @@ pub fn get_transfer_batch_status(
     }
 }
 
+#[openapi]
 #[post("/prepare-sign", format = "json", data = "<prepare_sign_msg>")]
 pub fn prepare_sign_tx(
     sc_entity: State<SCE>,

@@ -33,8 +33,15 @@ use std::str::FromStr;
 #[cfg(test)]
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
+use rocket_okapi::openapi;
+use rocket_okapi::JsonSchema;
+use schemars;
 
 static DEFAULT_TIMEOUT: u64 = 100;
+
+#[derive(JsonSchema)]
+#[schemars(remote = "Uuid")]
+pub struct UuidDef(String);
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -770,6 +777,7 @@ impl Conductor for SCE {
     }
 }
 
+#[openapi]
 #[post("/swap/poll/utxo", format = "json", data = "<statechain_id>")]
 pub fn poll_utxo(sc_entity: State<SCE>, statechain_id: Json<Uuid>) -> Result<Json<Option<Uuid>>> {
     match sc_entity.poll_utxo(&statechain_id.into_inner()) {
@@ -778,6 +786,7 @@ pub fn poll_utxo(sc_entity: State<SCE>, statechain_id: Json<Uuid>) -> Result<Jso
     }
 }
 
+#[openapi]
 #[post("/swap/poll/swap", format = "json", data = "<swap_id>")]
 pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<Uuid>) -> Result<Json<Option<SwapStatus>>> {
     match sc_entity.poll_swap(&swap_id.into_inner()) {
@@ -786,6 +795,7 @@ pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<Uuid>) -> Result<Json<Opti
     }
 }
 
+#[openapi]
 #[post("/swap/info", format = "json", data = "<swap_id>")]
 pub fn get_swap_info(sc_entity: State<SCE>, swap_id: Json<Uuid>) -> Result<Json<Option<SwapInfo>>> {
     match sc_entity.get_swap_info(&swap_id.into_inner()) {
@@ -794,6 +804,7 @@ pub fn get_swap_info(sc_entity: State<SCE>, swap_id: Json<Uuid>) -> Result<Json<
     }
 }
 
+#[openapi]
 #[post("/swap/blinded-spend-signature", format = "json", data = "<bst_msg>")]
 pub fn get_blinded_spend_signature(
     sc_entity: State<SCE>,
@@ -805,6 +816,7 @@ pub fn get_blinded_spend_signature(
         .map(|x| Json(x))
 }
 
+#[openapi]
 #[post("/swap/register-utxo", format = "json", data = "<register_utxo_msg>")]
 pub fn register_utxo(
     sc_entity: State<SCE>,
@@ -816,6 +828,7 @@ pub fn register_utxo(
     }
 }
 
+#[openapi]
 #[post("/swap/first", format = "json", data = "<swap_msg1>")]
 pub fn swap_first_message(sc_entity: State<SCE>, swap_msg1: Json<SwapMsg1>) -> Result<Json<()>> {
     match sc_entity.swap_first_message(&swap_msg1.into_inner()) {
@@ -824,6 +837,7 @@ pub fn swap_first_message(sc_entity: State<SCE>, swap_msg1: Json<SwapMsg1>) -> R
     }
 }
 
+#[openapi]
 #[post("/swap/second", format = "json", data = "<swap_msg2>")]
 pub fn swap_second_message(
     sc_entity: State<SCE>,

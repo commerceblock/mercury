@@ -13,6 +13,7 @@ use crate::error::SEError;
 use crate::Database;
 use crate::{server::StateChainEntity, storage::Storage};
 use super::requests::post_lb;
+use rocket_okapi::openapi;
 
 use cfg_if::cfg_if;
 use curv::{
@@ -23,6 +24,8 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use std::str::FromStr;
 use uuid::Uuid;
+use rocket_okapi::JsonSchema;
+use schemars;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -357,6 +360,7 @@ impl Transfer for SCE {
     }
 }
 
+#[openapi]
 #[post("/transfer/sender", format = "json", data = "<transfer_msg1>")]
 pub fn transfer_sender(
     sc_entity: State<SCE>,
@@ -368,6 +372,7 @@ pub fn transfer_sender(
     }
 }
 
+#[openapi]
 #[post("/transfer/receiver", format = "json", data = "<transfer_msg4>")]
 pub fn transfer_receiver(
     sc_entity: State<SCE>,
@@ -379,6 +384,7 @@ pub fn transfer_receiver(
     }
 }
 
+#[openapi]
 #[post("/transfer/update_msg", format = "json", data = "<transfer_msg3>")]
 pub fn transfer_update_msg(
     sc_entity: State<SCE>,
@@ -390,6 +396,7 @@ pub fn transfer_update_msg(
     }
 }
 
+#[openapi]
 #[post("/transfer/get_msg", format = "json", data = "<statechain_id>")]
 pub fn transfer_get_msg(
     sc_entity: State<SCE>,

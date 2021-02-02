@@ -142,8 +142,8 @@ fn get_docs() -> SwaggerUIConfig {
     use rocket_okapi::swagger_ui::UrlObject;
 
     SwaggerUIConfig {
-        url: "/my_resource/openapi.json".to_string(),
-        urls: vec![UrlObject::new("My Resource", "/my_resource/openapi.json")],
+        url: "/openapi.json".to_string(),
+        urls: vec![UrlObject::new("Mercury", "/openapi.json")],
         ..Default::default()
     }
 }
@@ -215,17 +215,21 @@ pub fn get_server<
                 "/",
                 routes![
                     ping::ping,
+                ],
+            )
+            .mount(
+                "/", 
+                routes_with_openapi![
+                    util::get_statechain,
+                    util::get_smt_root,
+                    util::get_smt_proof,
+                    util::get_fees,
+                    util::prepare_sign_tx,
+                    util::get_transfer_batch_status,  
                     ecdsa::first_message,
                     ecdsa::second_message,
                     ecdsa::sign_first,
                     ecdsa::sign_second,
-                    util::get_statechain,
-                    util::get_smt_root,
-                    //util::get_confirmed_smt_root,
-                    util::get_smt_proof,
-                    util::get_fees,
-                    util::prepare_sign_tx,
-                    util::get_transfer_batch_status,
                     deposit::deposit_init,
                     deposit::deposit_confirm,
                     transfer::transfer_sender,
@@ -242,10 +246,9 @@ pub fn get_server<
                     conductor::get_blinded_spend_signature,
                     conductor::register_utxo,
                     conductor::swap_first_message,
-                    conductor::swap_second_message,
+                    conductor::swap_second_message,              
                 ],
             )
-            .mount("/my_resource", routes_with_openapi![util::get_fees])
             .mount("/swagger", make_swagger_ui(&get_docs()))
             .mount("/metrics", prometheus)
             .manage(sc_entity);

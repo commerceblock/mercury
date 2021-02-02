@@ -19,7 +19,7 @@ use crate::ecies;
 use crate::{util::transaction_serialise, ecies::{Encryptable, SelfEncryptable, WalletDecryptable}};
 
 /// State Entity protocols
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, Copy, PartialEq)]
 pub enum Protocol {
     Deposit,
     Transfer,
@@ -28,9 +28,14 @@ pub enum Protocol {
 
 // API structs
 
+// schema struct for Uuid
+#[derive(JsonSchema)]
+#[schemars(remote = "Uuid")]
+pub struct UuidDef(String);
+
 //Encryptable version of FE
 //Secret key is stored as raw bytes
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
 pub struct FESer {
     secret_bytes: Vec<u8>,
 }
@@ -76,9 +81,18 @@ impl fmt::Display for StateEntityFeeInfoAPI {
     }
 }
 
+// schema dummy struct for outpoint
+#[derive(JsonSchema)]
+#[schemars(remote = "OutPoint")]
+pub struct OutPointDef {
+    pub txid: String,
+    pub vout: u32,
+}
+
 /// /info/statechain return struct
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct StateChainDataAPI {
+    #[schemars(with = "OutPointDef")]
     pub utxo: OutPoint,
     pub amount: u64,
     pub chain: Vec<State>,
@@ -86,28 +100,35 @@ pub struct StateChainDataAPI {
 }
 
 /// /info/transfer-batch return struct
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct TransferBatchDataAPI {
+    #[schemars(with = "UuidDef")]
     pub state_chains: HashSet<Uuid>,
     pub finalized: bool,
 }
 
 /// /info/statechain post struct
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct SmtProofMsgAPI {
     pub root: Root,
     pub funding_txid: String,
 }
 
+#[derive(JsonSchema)]
+#[schemars(remote = "PK")]
+pub struct PKDef(Vec<u8>);
+
 // PrepareSignTx structs
 
 /// Struct contains data necessary to caluculate backup tx's input sighash('s). This is required
 /// by Server before co-signing is performed for validation of tx.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct PrepareSignTxMsg {
+    #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
     pub protocol: Protocol,
     pub tx_hex: String,
+    #[schemars(with = "PKDef")]
     pub input_addrs: Vec<PK>, // pub keys being spent from
     pub input_amounts: Vec<u64>,
     pub proof_key: Option<String>,
@@ -133,95 +154,153 @@ impl Default for PrepareSignTxMsg {
     }
 }
 
+// schema information structs for openAPI/swagger
+#[derive(JsonSchema)]
+#[schemars(remote = "DLogProof")]
+pub struct DLogProofDef(String);
+
+#[derive(JsonSchema)]
+#[schemars(remote = "party_two::EphKeyGenFirstMsg")]
+pub struct EphKeyGenFirstMsgDef {
+    pub pk_commitment: String,
+    pub zk_pok_commitment: String,
+}
+
+#[derive(JsonSchema)]
+#[schemars(remote = "BigInt")]
+pub struct BigIntDef(String);
+
+#[derive(JsonSchema)]
+#[schemars(remote = "party2::SignMessage")]
+pub struct SignMessageDef(String);
+
 // 2P-ECDSA Co-signing algorithm structs
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct KeyGenMsg1 {
+    #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
     pub protocol: Protocol,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct KeyGenMsg2 {
+    #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
+    #[schemars(with = "DLogProofDef")]
     pub dlog_proof: DLogProof,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct SignMsg1 {
+    #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
+    #[schemars(with = "EphKeyGenFirstMsgDef")]
     pub eph_key_gen_first_message_party_two: party_two::EphKeyGenFirstMsg,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct SignMsg2 {
+    #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
     pub sign_second_msg_request: SignSecondMsgRequest,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct SignSecondMsgRequest {
     pub protocol: Protocol,
+    #[schemars(with = "BigIntDef")]
     pub message: BigInt,
+    #[schemars(with = "SignMessageDef")]
     pub party_two_sign_message: party2::SignMessage,
 }
 
 // Deposit algorithm structs
 
 /// Client -> SE
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct DepositMsg1 {
     pub auth: String,
     pub proof_key: String,
 }
 
 /// Client -> SE
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct DepositMsg2 {
+    #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
 }
+
+#[derive(JsonSchema)]
+#[schemars(remote = "Address")]
+pub struct AddressDef(String);
+#[derive(JsonSchema)]
+#[schemars(remote = "PublicKey")]
+pub struct PubKeyDef(Vec<u8>);
 
 // Transfer algorithm structs
 
 /// Address generated for State Entity transfer protocol
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Hash)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Hash)]
 pub struct SCEAddress {
+    #[schemars(with = "AddressDef")]
     pub tx_backup_addr: Option<Address>,
+    #[schemars(with = "PubKeyDef")]
     pub proof_key: PublicKey,
 }
 impl Eq for SCEAddress {}
 
 /// Sender -> SE
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct TransferMsg1 {
+    #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
     pub statechain_sig: StateChainSig,
 }
 
+#[derive(JsonSchema)]
+#[schemars(remote = "ecies::PublicKey")]
+pub struct PublicKeyDef(Vec<u8>);
+
 /// SE -> Sender
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct TransferMsg2 {
     pub x1: FESer,
+    #[schemars(with = "PublicKeyDef")]
     pub proof_key: ecies::PublicKey,
 }
 /// Sender -> Receiver
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct TransferMsg3 {
+    #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
     pub t1: FESer, // t1 = o1x1
     pub statechain_sig: StateChainSig,
+    #[schemars(with = "UuidDef")]
     pub statechain_id: Uuid,
     pub tx_backup_psm: PrepareSignTxMsg,
     pub rec_se_addr: SCEAddress, // receivers state entity address (btc address and proof key)
 }
 
+#[derive(JsonSchema)]
+#[schemars(remote = "FE")]
+pub struct FEDef(Vec<u8>);
+
+#[derive(JsonSchema)]
+#[schemars(remote = "GE")]
+pub struct GEDef(Vec<u8>);
+
 /// Receiver -> State Entity
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct TransferMsg4 {
+    #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
+    #[schemars(with = "UuidDef")]
     pub statechain_id: Uuid,
+    #[schemars(with = "FEDef")]
     pub t2: FE, // t2 = t1*o2_inv = o1*x1*o2_inv
     pub statechain_sig: StateChainSig,
+    #[schemars(with = "GEDef")]
     pub o2_pub: GE,
     pub tx_backup_hex: String,
     pub batch_data: Option<BatchData>,
@@ -257,47 +336,56 @@ pub struct KUAttest {
 }
 
 /// State Entity -> Receiver
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct TransferMsg5 {
+    #[schemars(with = "UuidDef")]
     pub new_shared_key_id: Uuid,
+    #[schemars(with = "GEDef")]
     pub s2_pub: GE,
+    #[schemars(with = "FEDef")]
     pub theta: FE,
 }
 
 /// Conductor -> StateEntity
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct TransferBatchInitMsg {
+    #[schemars(with = "UuidDef")]
     pub id: Uuid,
     pub signatures: Vec<StateChainSig>,
 }
 
 /// User -> State Entity
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct TransferRevealNonce {
+    #[schemars(with = "UuidDef")]
     pub batch_id: Uuid,
     pub hash: String,
+    #[schemars(with = "UuidDef")]
     pub statechain_id: Uuid,
     pub nonce: [u8; 32],
 }
 
 /// Data present if transfer is part of an atomic batch transfer
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct BatchData {
+    #[schemars(with = "UuidDef")]
     pub id: Uuid,
     pub commitment: String, // Commitment to transfer input UTXO in case of protocol failure
 }
 
 // Withdraw algorithm structs
 /// Owner -> State Entity
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct WithdrawMsg1 {
+    #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
     pub statechain_sig: StateChainSig,
 }
 
 /// Owner -> State Entity
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct WithdrawMsg2 {
+    #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
     pub address: String,
 }

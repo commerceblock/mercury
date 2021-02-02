@@ -11,6 +11,7 @@ use crate::error::SEError;
 use crate::{server::StateChainEntity, Database};
 use shared_lib::{commitment::verify_commitment, state_chain::*, structs::*};
 
+use rocket_okapi::openapi;
 use cfg_if::cfg_if;
 use chrono::{NaiveDateTime, Utc};
 use rocket::State;
@@ -189,6 +190,7 @@ pub fn transfer_batch_is_ended(start_time: NaiveDateTime, batch_lifetime: i64) -
     false
 }
 
+#[openapi]
 #[post(
     "/transfer/batch/init",
     format = "json",
@@ -204,6 +206,7 @@ pub fn transfer_batch_init(
     }
 }
 
+#[openapi]
 #[post(
     "/transfer/batch/reveal",
     format = "json",

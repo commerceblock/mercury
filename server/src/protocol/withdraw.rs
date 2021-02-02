@@ -16,6 +16,7 @@ use crate::Database;
 use crate::{server::StateChainEntity, storage::Storage};
 use cfg_if::cfg_if;
 use uuid::Uuid;
+use rocket_okapi::openapi;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -172,6 +173,7 @@ impl Withdraw for SCE {
     }
 }
 
+#[openapi]
 #[post("/withdraw/init", format = "json", data = "<withdraw_msg1>")]
 pub fn withdraw_init(sc_entity: State<SCE>, withdraw_msg1: Json<WithdrawMsg1>) -> Result<Json<()>> {
     match sc_entity.withdraw_init(withdraw_msg1.into_inner()) {
@@ -180,6 +182,7 @@ pub fn withdraw_init(sc_entity: State<SCE>, withdraw_msg1: Json<WithdrawMsg1>) -
     }
 }
 
+#[openapi]
 #[post("/withdraw/confirm", format = "json", data = "<withdraw_msg2>")]
 pub fn withdraw_confirm(
     sc_entity: State<SCE>,
