@@ -6,8 +6,8 @@ use crate::state_chain::{State, StateChainSig};
 use crate::Root;
 use bitcoin::{OutPoint, Transaction, TxIn, TxOut};
 use curv::{cryptographic_primitives::proofs::sigma_dlog::DLogProof, BigInt, FE, GE, PK};
-use kms::ecdsa::two_party::party2;
-use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_two;
+use kms::ecdsa::two_party::{party1,party2};
+use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one,party_two};
 
 use bitcoin::{secp256k1::PublicKey, Address};
 use std::{collections::HashSet, fmt};
@@ -32,6 +32,25 @@ pub enum Protocol {
 #[derive(JsonSchema)]
 #[schemars(remote = "Uuid")]
 pub struct UuidDef(String);
+
+// structs for ids
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
+pub struct UserID {
+    #[schemars(with = "UuidDef")]
+    pub id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
+pub struct StatechainID {
+    #[schemars(with = "UuidDef")]
+    pub id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
+pub struct SwapID {
+    #[schemars(with = "UuidDef")]
+    pub id: Option<Uuid>,
+}
 
 //Encryptable version of FE
 //Secret key is stored as raw bytes
@@ -174,6 +193,18 @@ pub struct BigIntDef(String);
 #[schemars(remote = "party2::SignMessage")]
 pub struct SignMessageDef(String);
 
+#[derive(JsonSchema)]
+#[schemars(remote = "party_one::KeyGenFirstMsg")]
+pub struct KeyGenFirstMsgDef(String);
+
+#[derive(JsonSchema)]
+#[schemars(remote = "party1::KeyGenParty1Message2")]
+pub struct KeyGenParty1Message2Def(String);
+
+#[derive(JsonSchema)]
+#[schemars(remote = "party_one::EphKeyGenFirstMsg")]
+pub struct EphKeyGenFirstMsg2Def(String);
+
 // 2P-ECDSA Co-signing algorithm structs
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
@@ -189,6 +220,26 @@ pub struct KeyGenMsg2 {
     pub shared_key_id: Uuid,
     #[schemars(with = "DLogProofDef")]
     pub dlog_proof: DLogProof,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct KeyGenReply2 {
+    #[schemars(with = "KeyGenParty1Message2Def")]
+    pub msg: party1::KeyGenParty1Message2,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct KeyGenReply1 {
+    #[schemars(with = "UuidDef")]
+    pub user_id: Uuid,
+    #[schemars(with = "KeyGenFirstMsgDef")]
+    pub msg: party_one::KeyGenFirstMsg,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct SignReply1 {
+    #[schemars(with = "EphKeyGenFirstMsg2Def")]
+    pub msg: party_one::EphKeyGenFirstMsg,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]

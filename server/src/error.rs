@@ -17,7 +17,7 @@ use std::error;
 use std::fmt;
 use std::io::Cursor;
 use std::time::SystemTimeError;
-use rocket_okapi::{JsonSchema,OpenApiError};
+use rocket_okapi::JsonSchema;
 use rocket_okapi::gen::OpenApiGenerator;
 use rocket_okapi::response::OpenApiResponder;
 use rocket_okapi::Result as OpenApiResult;

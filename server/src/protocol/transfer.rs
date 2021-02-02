@@ -24,8 +24,6 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use std::str::FromStr;
 use uuid::Uuid;
-use rocket_okapi::JsonSchema;
-use schemars;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -388,9 +386,9 @@ pub fn transfer_update_msg(
 #[post("/transfer/get_msg", format = "json", data = "<statechain_id>")]
 pub fn transfer_get_msg(
     sc_entity: State<SCE>,
-    statechain_id: Json<Uuid>,
+    statechain_id: Json<StatechainID>,
 ) -> Result<Json<TransferMsg3>> {
-    match sc_entity.transfer_get_msg(statechain_id.into_inner()) {
+    match sc_entity.transfer_get_msg(statechain_id.id) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }

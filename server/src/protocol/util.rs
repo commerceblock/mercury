@@ -17,7 +17,7 @@ use shared_lib::{
 
 use shared_lib::structs::Protocol;
 
-use rocket_okapi::{openapi, routes_with_openapi, JsonSchema};
+use rocket_okapi::openapi;
 use crate::error::{DBErrorType, SEError};
 use crate::storage::Storage;
 use crate::{server::StateChainEntity, Database};

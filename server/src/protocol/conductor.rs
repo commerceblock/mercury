@@ -61,7 +61,7 @@ cfg_if! {
 pub trait Conductor {
     /// API: Poll Conductor to check for status of registered utxo. Return Ok(None) if still waiting
     /// or swap_id if swap round has begun.
-    fn poll_utxo(&self, statechain_id: &Uuid) -> Result<Option<Uuid>>;
+    fn poll_utxo(&self, statechain_id: &Uuid) -> Result<SwapID>;
 
     /// API: Poll Conductor to check for status of swap.
     fn poll_swap(&self, swap_id: &Uuid) -> Result<Option<SwapStatus>>;
@@ -488,9 +488,9 @@ pub fn generate_blind_spend_signatures(
 }
 
 impl Conductor for SCE {
-    fn poll_utxo(&self, statechain_id: &Uuid) -> Result<Option<Uuid>> {
+    fn poll_utxo(&self, statechain_id: &Uuid) -> Result<SwapID> {
         let guard = self.scheduler.lock()?;
-        Ok(guard.get_swap_id(statechain_id))
+        Ok(SwapID { id: guard.get_swap_id(statechain_id) } )
     }
     fn poll_swap(&self, swap_id: &Uuid) -> Result<Option<SwapStatus>> {
         let mut guard = self.scheduler.lock()?;
@@ -779,8 +779,8 @@ impl Conductor for SCE {
 
 #[openapi]
 #[post("/swap/poll/utxo", format = "json", data = "<statechain_id>")]
-pub fn poll_utxo(sc_entity: State<SCE>, statechain_id: Json<Uuid>) -> Result<Json<Option<Uuid>>> {
-    match sc_entity.poll_utxo(&statechain_id.into_inner()) {
+pub fn poll_utxo(sc_entity: State<SCE>, statechain_id: Json<StatechainID>) -> Result<Json<SwapID>> {
+    match sc_entity.poll_utxo(&statechain_id.id) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -788,8 +788,8 @@ pub fn poll_utxo(sc_entity: State<SCE>, statechain_id: Json<Uuid>) -> Result<Jso
 
 #[openapi]
 #[post("/swap/poll/swap", format = "json", data = "<swap_id>")]
-pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<Uuid>) -> Result<Json<Option<SwapStatus>>> {
-    match sc_entity.poll_swap(&swap_id.into_inner()) {
+pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<SwapID>) -> Result<Json<Option<SwapStatus>>> {
+    match sc_entity.poll_swap(&swap_id.id.unwrap()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -797,8 +797,8 @@ pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<Uuid>) -> Result<Json<Opti
 
 #[openapi]
 #[post("/swap/info", format = "json", data = "<swap_id>")]
-pub fn get_swap_info(sc_entity: State<SCE>, swap_id: Json<Uuid>) -> Result<Json<Option<SwapInfo>>> {
-    match sc_entity.get_swap_info(&swap_id.into_inner()) {
+pub fn get_swap_info(sc_entity: State<SCE>, swap_id: Json<SwapID>) -> Result<Json<Option<SwapInfo>>> {
+    match sc_entity.get_swap_info(&swap_id.id.unwrap()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }

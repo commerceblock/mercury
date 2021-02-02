@@ -4,7 +4,7 @@ use crate::error::{DBErrorType, SEError};
 use crate::Database;
 use crate::{server::StateChainEntity, structs::*};
 use shared_lib::{
-    structs::{KeyGenMsg1, KeyGenMsg2, Protocol, SignMsg1, SignMsg2},
+    structs::{KeyGenMsg1, KeyGenMsg2, KeyGenReply1, KeyGenReply2, SignReply1, Protocol, SignMsg1, SignMsg2},
     util::reverse_hex_str,
 };
 use super::requests::post_lb;
@@ -39,11 +39,11 @@ cfg_if! {
 pub trait Ecdsa {
     fn master_key(&self, user_id: Uuid) -> Result<()>;
 
-    fn first_message(&self, key_gen_msg1: KeyGenMsg1) -> Result<(Uuid, party_one::KeyGenFirstMsg)>;
+    fn first_message(&self, key_gen_msg1: KeyGenMsg1) -> Result<KeyGenReply1>;
 
-    fn second_message(&self, key_gen_msg2: KeyGenMsg2) -> Result<party1::KeyGenParty1Message2>;
+    fn second_message(&self, key_gen_msg2: KeyGenMsg2) -> Result<KeyGenReply2>;
 
-    fn sign_first(&self, sign_msg1: SignMsg1) -> Result<party_one::EphKeyGenFirstMsg>;
+    fn sign_first(&self, sign_msg1: SignMsg1) -> Result<SignReply1>;
 
     fn sign_second(&self, sign_msg2: SignMsg2) -> Result<Vec<Vec<u8>>>;
 }
@@ -65,7 +65,7 @@ impl Ecdsa for SCE {
         db.update_ecdsa_master(&user_id, master_key)
     }
 
-    fn first_message(&self, key_gen_msg1: KeyGenMsg1) -> Result<(Uuid, party_one::KeyGenFirstMsg)> {
+    fn first_message(&self, key_gen_msg1: KeyGenMsg1) -> Result<KeyGenReply1> {
         let user_id = key_gen_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
 
@@ -111,10 +111,10 @@ impl Ecdsa for SCE {
             db.update_keygen_first_msg(&user_id, &key_gen_first_msg, comm_witness, ec_key_pair)?;
             kg_first_msg = key_gen_first_msg;
         }
-        Ok((user_id, kg_first_msg))
+        Ok(KeyGenReply1 {user_id: user_id, msg: kg_first_msg } )
     }
 
-    fn second_message(&self, key_gen_msg2: KeyGenMsg2) -> Result<party1::KeyGenParty1Message2> {
+    fn second_message(&self, key_gen_msg2: KeyGenMsg2) -> Result<KeyGenReply2> {
         let kg_party_one_second_msg: party1::KeyGenParty1Message2;
         // call lockbox
         if self.lockbox.active {
@@ -152,10 +152,10 @@ impl Ecdsa for SCE {
             kg_party_one_second_msg = kg_party_one_second_message;
         }
 
-        Ok(kg_party_one_second_msg)
+        Ok(KeyGenReply2 { msg: kg_party_one_second_msg } )
     }
 
-    fn sign_first(&self, sign_msg1: SignMsg1) -> Result<party_one::EphKeyGenFirstMsg> {
+    fn sign_first(&self, sign_msg1: SignMsg1) -> Result<SignReply1> {
 
         let user_id = sign_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
@@ -184,7 +184,7 @@ impl Ecdsa for SCE {
             sign_party_one_first_msg = sign_party_one_first_message;
         }
 
-        Ok(sign_party_one_first_msg)
+        Ok(SignReply1 { msg: sign_party_one_first_msg } )
     }
 
     fn sign_second(&self, sign_msg2: SignMsg2) -> Result<Vec<Vec<u8>>> {
@@ -303,7 +303,7 @@ impl Ecdsa for SCE {
 pub fn first_message(
     sc_entity: State<SCE>,
     key_gen_msg1: Json<KeyGenMsg1>,
-) -> Result<Json<(Uuid, party_one::KeyGenFirstMsg)>> {
+) -> Result<Json<KeyGenReply1>> {
     match sc_entity.first_message(key_gen_msg1.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -315,7 +315,7 @@ pub fn first_message(
 pub fn second_message(
     sc_entity: State<SCE>,
     key_gen_msg2: Json<KeyGenMsg2>,
-) -> Result<Json<party1::KeyGenParty1Message2>> {
+) -> Result<Json<KeyGenReply2>> {
     match sc_entity.second_message(key_gen_msg2.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -327,7 +327,7 @@ pub fn second_message(
 pub fn sign_first(
     sc_entity: State<SCE>,
     sign_msg1: Json<SignMsg1>,
-) -> Result<Json<party_one::EphKeyGenFirstMsg>> {
+) -> Result<Json<SignReply1>> {
     match sc_entity.sign_first(sign_msg1.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
