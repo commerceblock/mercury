@@ -995,11 +995,11 @@ mod tests {
         drop(guard);
         //let uxto_invited_to_swap = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
         match sc_entity.poll_utxo(&uxto_waiting_for_swap) {
-            Ok(no_swap_id) => assert!(no_swap_id.is_none()),
+            Ok(no_swap_id) => assert!(no_swap_id.id.is_none()),
             Err(_) => assert!(false, "Expected Ok(())."),
         }
         match sc_entity.poll_utxo(&utxo_invited_to_swap) {
-            Ok(swap_id) => assert!(swap_id.is_some()),
+            Ok(swap_id) => assert!(swap_id.id.is_some()),
             Err(_) => assert!(false, "Expected Ok((swap_id))."),
         }
     }
@@ -1578,7 +1578,7 @@ mod tests {
             thread::sleep(Duration::from_secs(3));
             let poll_utxo_res = conductor.poll_utxo(&statechain_id);
             println!("poll_utxo result: {:?}", poll_utxo_res);
-            if let Ok(Some(v)) = poll_utxo_res {
+            if let Some(v) = poll_utxo_res.unwrap().id {
                 println!("\nSwap began!");
                 swap_id = v;
                 println!("Swap id: {}", swap_id);
@@ -1675,11 +1675,11 @@ mod tests {
             .expect_poll_utxo() // utxo not yet involved
             .with(predicate::eq(statechain_id))
             .times(2)
-            .returning(|_| Ok(None));
+            .returning(|_| Ok(SwapID{id:None}));
         conductor
             .expect_poll_utxo() // utxo involved in swap
             .with(predicate::eq(statechain_id))
-            .returning(move |_| Ok(Some(swap_id)));
+            .returning(move |_| Ok(SwapID{ id: Some(swap_id)}));
         conductor
             .expect_get_swap_info() // get swap status return phase 1. x3
             .with(predicate::eq(swap_id))

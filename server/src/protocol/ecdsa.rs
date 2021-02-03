@@ -382,10 +382,10 @@ pub mod tests {
 
         let kg_msg_1 = KeyGenMsg1 { shared_key_id: user_id, protocol: Protocol::Deposit };
 
-        let (_user_id, return_msg) = sc_entity.first_message(kg_msg_1).unwrap();
+        let return_msg = sc_entity.first_message(kg_msg_1).unwrap();
 
-        assert_eq!(kg_first_msg.pk_commitment,return_msg.pk_commitment);
-        assert_eq!(kg_first_msg.zk_pok_commitment,return_msg.zk_pok_commitment);
+        assert_eq!(kg_first_msg.pk_commitment,return_msg.msg.pk_commitment);
+        assert_eq!(kg_first_msg.zk_pok_commitment,return_msg.msg.zk_pok_commitment);
 
         let secret_share: FE = ECScalar::new_random();
         let d_log_proof = DLogProof::prove(&secret_share);
@@ -426,7 +426,7 @@ pub mod tests {
 
         let return_msg = sc_entity.second_message(kg_msg_2).unwrap();
 
-        assert_eq!(kg_party_one_second_message.c_key,return_msg.c_key);
+        assert_eq!(kg_party_one_second_message.c_key,return_msg.msg.c_key);
 
     }
 
@@ -471,8 +471,8 @@ pub mod tests {
 
         let return_msg = sc_entity.sign_first(sign_msg1).unwrap();
 
-        assert_eq!(sign_party_one_first_message.public_share,return_msg.public_share);
-        assert_eq!(sign_party_one_first_message.c,return_msg.c);
+        assert_eq!(sign_party_one_first_message.public_share,return_msg.msg.public_share);
+        assert_eq!(sign_party_one_first_message.c,return_msg.msg.c);
 
         let d_log_proof = ECDDHProof {
             a1: ECPoint::generator(),
