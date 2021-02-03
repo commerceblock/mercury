@@ -153,7 +153,7 @@ pub fn transfer_get_msg(wallet: &mut Wallet, statechain_id: &Uuid) -> Result<Tra
     requests::postb(
         &wallet.client_shim,
         &format!("transfer/get_msg"),
-        &statechain_id,
+        &StatechainID {id: *statechain_id},
     )
 }
 

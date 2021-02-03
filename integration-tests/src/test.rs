@@ -21,7 +21,7 @@ mod tests {
         let init_res =
             client_lib::state_entity::deposit::session_init(&mut wallet, &proof_key.to_string());
         assert!(init_res.is_ok());
-        let key_res = wallet.gen_shared_key(&init_res.unwrap(), &1000);
+        let key_res = wallet.gen_shared_key(&init_res.unwrap().id, &1000);
         assert!(key_res.is_ok());
     }
 
