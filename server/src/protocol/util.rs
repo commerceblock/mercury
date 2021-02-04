@@ -339,6 +339,7 @@ impl Utilities for SCE {
 }
 
 #[openapi]
+/// # Get statechain entity operating information
 #[get("/info/fee", format = "json")]
 pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
     match sc_entity.get_fees() {
@@ -348,6 +349,7 @@ pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
 }
 
 #[openapi]
+/// # Get current statechain information for specified statechain ID
 #[get("/info/statechain/<statechain_id>", format = "json")]
 pub fn get_statechain(
     sc_entity: State<SCE>,

@@ -28,6 +28,10 @@ pub enum Protocol {
 
 // API structs
 
+pub trait SchemaExample{
+    fn example() -> Self;
+}
+
 // schema struct for Uuid
 #[derive(JsonSchema)]
 #[schemars(remote = "Uuid")]
@@ -80,14 +84,34 @@ impl FESer {
     }
 }
 
-/// /info/info return struct
+/// # Get statechain entity operating information
+/// This struct is returned containing information on operating requirements 
+/// of the statechain entity which must be conformed with in the protocol. 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
+#[schemars(example = "Self::example")]
 pub struct StateEntityFeeInfoAPI {
+    /// The Bitcoin address that the SE fee must be paid to
     pub address: String, // Receive address for fee payments
+    /// The deposit fee, which is specified as a proportion of the deposit amount in basis points
     pub deposit: u64,    // basis points
+    /// The withdrawal fee, which is specified as a proportion of the deposit amount in basis points
     pub withdraw: u64,   // basis points
+    /// The decementing nLocktime (block height) interval enforced for backup transactions
     pub interval: u32,   // locktime decrement interval in blocks
+    /// The initial nLocktime from the current blockheight for the first backup
     pub initlock: u32,   // inital backup locktime
+}
+
+impl StateEntityFeeInfoAPI{
+    pub fn example() -> Self{
+        Self{
+            address: "bc1qzvv6yfeg0navfkrxpqc0fjdsu9ey4qgqqsarq4".to_string(),
+            deposit: 0,
+            withdraw: 300,
+            interval: 144,
+            initlock: 14400,
+        }
+    }
 }
 
 impl fmt::Display for StateEntityFeeInfoAPI {
@@ -101,21 +125,53 @@ impl fmt::Display for StateEntityFeeInfoAPI {
 }
 
 // schema dummy struct for outpoint
-#[derive(JsonSchema)]
+/// # Bitcoin UTXO Outpoint
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 #[schemars(remote = "OutPoint")]
+#[schemars(example = "Self::example")]
 pub struct OutPointDef {
+    /// Transaction ID
     pub txid: String,
+    /// Vout Index
     pub vout: u32,
 }
 
-/// /info/statechain return struct
+impl OutPointDef{
+    pub fn example() -> Self{
+        Self{
+            txid: "320b2abfbfda6b722c0e6c712efedd1341296a387d4e63d44507179b183283a0".to_string(),
+            vout: 0,
+        }
+    }
+}
+
+// /info/statechain return struct
+/// # Get statechain information
+/// This struct is returned containing information on operating requirements 
+/// of the statechain entity which must be conformed with in the protocol. 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[schemars(example = "Self::example")]
 pub struct StateChainDataAPI {
+    /// The statecoin UTXO OutPoint
     #[schemars(with = "OutPointDef")]
     pub utxo: OutPoint,
+    /// The value of the statecoin (in satoshis)
     pub amount: u64,
+    /// The statechain of owner proof keys and signatures
     pub chain: Vec<State>,
+    /// The current owner nLocktime
     pub locktime: u32,  // the curent owner nlocktime
+}
+
+impl StateChainDataAPI {
+    pub fn example() -> Self{
+        Self{
+            utxo: OutPoint::null(),
+            amount: 1000000,
+            chain: vec![State::example()],
+            locktime: 712903,
+        }
+    }
 }
 
 /// /info/transfer-batch return struct
