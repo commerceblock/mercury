@@ -84,7 +84,7 @@ impl FESer {
     }
 }
 
-/// # Get statechain entity operating information
+/// Statechain entity operating information
 /// This struct is returned containing information on operating requirements 
 /// of the statechain entity which must be conformed with in the protocol. 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
@@ -125,7 +125,7 @@ impl fmt::Display for StateEntityFeeInfoAPI {
 }
 
 // schema dummy struct for outpoint
-/// # Bitcoin UTXO Outpoint
+/// Bitcoin UTXO Outpoint
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 #[schemars(remote = "OutPoint")]
 #[schemars(example = "Self::example")]
@@ -146,9 +146,8 @@ impl OutPointDef{
 }
 
 // /info/statechain return struct
-/// # Get statechain information
-/// This struct is returned containing information on operating requirements 
-/// of the statechain entity which must be conformed with in the protocol. 
+/// Statechain data
+/// This struct is returned containing the statechain of the specified statechain ID 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 #[schemars(example = "Self::example")]
 pub struct StateChainDataAPI {

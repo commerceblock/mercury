@@ -109,7 +109,7 @@ pub fn is_locked(locked_until: NaiveDateTime) -> Result<()> {
     }
 }
 
-/// # State update object
+/// State update object
 /// State to change statecoin ownership to new owner
 #[derive(Serialize, Deserialize, JsonSchema, Debug, PartialEq, Clone)]
 #[schemars(example = "Self::example")]
@@ -129,7 +129,7 @@ impl State {
     }
 }
 
-/// # State change signature object
+/// State change signature object
 /// Data necessary to create ownership transfer signatures
 #[derive(Serialize, Deserialize, JsonSchema, Debug, PartialEq, Clone, Default, Hash, Eq)]
 #[schemars(example = "Self::example")]
