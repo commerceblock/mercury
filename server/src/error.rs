@@ -17,9 +17,15 @@ use std::error;
 use std::fmt;
 use std::io::Cursor;
 use std::time::SystemTimeError;
+use rocket_okapi::JsonSchema;
+use rocket_okapi::gen::OpenApiGenerator;
+use rocket_okapi::response::OpenApiResponder;
+use rocket_okapi::Result as OpenApiResult;
+use okapi::openapi3::Responses;
+
 
 /// State Entity library specific errors
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub enum SEError {
     /// Generic error from string error message
     Generic(String),
@@ -106,7 +112,7 @@ impl From<Box<dyn std::error::Error>>
 }
 
 /// DB error types
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub enum DBErrorType {
     /// No identifier
     NoDataForID,
@@ -148,6 +154,27 @@ impl fmt::Display for SEError {
     }
 }
 
+fn add_500_error(responses: &mut Responses) {
+    responses
+        .responses
+        .entry("500".to_owned())
+        .or_insert_with(|| {
+            let response = okapi::openapi3::Response {
+                description: format!(
+                    "\
+                    # [500 Internal Server Error]\
+                    (https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\n\
+                    This response is given when the server has an internal error that it could not \
+                    recover from.\n\n\
+                    If you get this response please report this as an issue at github.com/commerceblock/mercury.\
+                    "
+                ),
+                ..Default::default()
+            };
+            response.into()
+        });
+}
+
 impl error::Error for SEError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match *self {
@@ -162,5 +189,13 @@ impl Responder<'static> for SEError {
             .header(ContentType::JSON)
             .sized_body(Cursor::new(format!("{}", self)))
             .ok()
+    }
+}
+
+impl OpenApiResponder<'static> for SEError {
+    fn responses(_: &mut OpenApiGenerator) -> OpenApiResult<Responses> {
+        let mut responses = Responses::default();
+        add_500_error(&mut responses);
+        Ok(responses)
     }
 }

@@ -17,6 +17,7 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use std::str::FromStr;
 use uuid::Uuid;
+use rocket_okapi::openapi;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -36,17 +37,17 @@ pub trait Deposit {
     /// API: Initiliase deposit protocol:
     ///     - Generate and return shared wallet ID
     ///     - Can do auth or other DoS mitigation here
-    fn deposit_init(&self, deposit_msg1: DepositMsg1) -> Result<Uuid>;
+    fn deposit_init(&self, deposit_msg1: DepositMsg1) -> Result<UserID>;
 
     /// API: Complete deposit protocol:
     ///     - Wait for confirmation of funding tx in blockchain
     ///     - Create StateChain DB object
     ///     - Update sparse merkle tree with new StateChain entry
-    fn deposit_confirm(&self, deposit_msg2: DepositMsg2) -> Result<Uuid>;
+    fn deposit_confirm(&self, deposit_msg2: DepositMsg2) -> Result<StatechainID>;
 }
 
 impl Deposit for SCE {
-    fn deposit_init(&self, deposit_msg1: DepositMsg1) -> Result<Uuid> {
+    fn deposit_init(&self, deposit_msg1: DepositMsg1) -> Result<UserID> {
         // Generate shared wallet ID (user ID)
         let user_id = Uuid::new_v4();
 
@@ -77,10 +78,10 @@ impl Deposit for SCE {
             deposit_msg1.proof_key.to_owned()
         );
 
-        Ok(user_id)
+        Ok(UserID {id: user_id})
     }
 
-    fn deposit_confirm(&self, deposit_msg2: DepositMsg2) -> Result<Uuid> {
+    fn deposit_confirm(&self, deposit_msg2: DepositMsg2) -> Result<StatechainID> {
         // let shared_key_id = deposit_msg2.shared_key_id.clone();
         let user_id = deposit_msg2.shared_key_id;
         self.check_user_auth(&user_id)?;
@@ -150,23 +151,27 @@ impl Deposit for SCE {
             statechain_id, new_root, current_root
         );
 
-        Ok(statechain_id)
+        Ok(StatechainID {id: statechain_id})
     }
 }
 
+#[openapi]
+/// # Initiate a statechain deposit and generate a shared key ID
 #[post("/deposit/init", format = "json", data = "<deposit_msg1>")]
-pub fn deposit_init(sc_entity: State<SCE>, deposit_msg1: Json<DepositMsg1>) -> Result<Json<Uuid>> {
+pub fn deposit_init(sc_entity: State<SCE>, deposit_msg1: Json<DepositMsg1>) -> Result<Json<UserID>> {
     match sc_entity.deposit_init(deposit_msg1.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
 }
 
+#[openapi]
+/// # Confirm the deposit process has completed and retreive the statechain ID
 #[post("/deposit/confirm", format = "json", data = "<deposit_msg2>")]
 pub fn deposit_confirm(
     sc_entity: State<SCE>,
     deposit_msg2: Json<DepositMsg2>,
-) -> Result<Json<Uuid>> {
+) -> Result<Json<StatechainID>> {
     match sc_entity.deposit_confirm(deposit_msg2.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),

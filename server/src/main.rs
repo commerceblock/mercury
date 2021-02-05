@@ -1,3 +1,5 @@
+#![feature(proc_macro_hygiene, decl_macro)]
+
 extern crate server_lib;
 use server_lib::{server, Database, PGDatabase};
 

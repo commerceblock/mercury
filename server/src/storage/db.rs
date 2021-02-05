@@ -30,6 +30,7 @@ use shared_lib::state_chain::*;
 use shared_lib::structs::TransferMsg3;
 use shared_lib::Root;
 use shared_lib::util::transaction_deserialise;
+use rocket_okapi::JsonSchema;
 
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
@@ -85,7 +86,7 @@ impl Table {
     }
 }
 
-#[derive(Debug, Deserialize, Clone, Copy)]
+#[derive(Debug, Deserialize, JsonSchema, Clone, Copy)]
 pub enum Column {
     Data,
     Complete,

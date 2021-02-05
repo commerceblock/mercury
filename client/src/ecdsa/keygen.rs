@@ -1,12 +1,11 @@
 use curv::{BigInt, FE};
 use kms::ecdsa::two_party::*;
-use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
 
 use super::super::utilities::requests;
 use super::super::ClientShim;
 use super::super::Result;
 use crate::wallet::shared_key::SharedKey;
-use shared_lib::structs::{KeyGenMsg1, KeyGenMsg2, Protocol};
+use shared_lib::structs::{KeyGenMsg1, KeyGenMsg2, Protocol, KeyGenReply1, KeyGenReply2};
 use uuid::Uuid;
 
 const KG_PATH_PRE: &str = "ecdsa/keygen";
@@ -18,7 +17,7 @@ pub fn get_master_key(
     value: &u64,
     protocol: Protocol,
 ) -> Result<SharedKey> {
-    let (id, kg_party_one_first_message): (Uuid, party_one::KeyGenFirstMsg) = requests::postb(
+    let key_gen_reply_1: KeyGenReply1  = requests::postb(
         client_shim,
         &format!("{}/first", KG_PATH_PRE),
         KeyGenMsg1 {
@@ -35,7 +34,7 @@ pub fn get_master_key(
         dlog_proof: kg_party_two_first_message.d_log_proof,
     };
 
-    let kg_party_one_second_message: party1::KeyGenParty1Message2 = requests::postb(
+    let kg_party_one_second_message: KeyGenReply2 = requests::postb(
         client_shim,
         &format!("{}/second", KG_PATH_PRE),
         key_gen_msg2,
@@ -43,8 +42,8 @@ pub fn get_master_key(
     .unwrap();
 
     let key_gen_second_message = MasterKey2::key_gen_second_message(
-        &kg_party_one_first_message,
-        &kg_party_one_second_message,
+        &key_gen_reply_1.msg,
+        &kg_party_one_second_message.msg,
     );
 
     let (_, party_two_paillier) = key_gen_second_message.unwrap();
@@ -52,7 +51,7 @@ pub fn get_master_key(
     let master_key = MasterKey2::set_master_key(
         &BigInt::from(0),
         &kg_ec_key_pair_party2,
-        &kg_party_one_second_message
+        &kg_party_one_second_message.msg
             .ecdh_second_message
             .comm_witness
             .public_share,
@@ -60,7 +59,7 @@ pub fn get_master_key(
     );
 
     Ok(SharedKey {
-        id,
+        id: key_gen_reply_1.user_id,
         share: master_key,
         value: value.to_owned(),
         statechain_id: None,

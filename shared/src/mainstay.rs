@@ -21,6 +21,7 @@ use std::hash::Hasher;
 use std::io::Cursor;
 use std::str::FromStr;
 use std::string::ToString;
+use rocket_okapi::JsonSchema;
 
 pub type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 
@@ -28,7 +29,7 @@ pub type Hash = monotree::Hash;
 
 type Payload<'a> = HashMap<&'a str, &'a str>;
 
-#[derive(Serialize, Deserialize, PartialEq, Copy, Default, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, PartialEq, Copy, Default, Debug)]
 pub struct Commitment(Hash);
 
 impl APIObject for Commitment {
@@ -497,7 +498,7 @@ impl APIObject for Response {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, PartialEq, Debug, Clone)]
 //Information about a commitment: it's attestation, if any, and its proof
 pub struct CommitmentInfo {
     attestation: Option<Attestation>,
@@ -572,7 +573,7 @@ impl APIObject for CommitmentInfo {
 
 impl CommitmentIndexed for CommitmentInfo {}
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, PartialEq, Debug, Clone)]
 pub struct Attestation {
     merkle_root: Commitment,
     txid: Commitment,
@@ -743,7 +744,7 @@ pub mod merkle {
         }
     }
 
-    #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
+    #[derive(Serialize, Deserialize, JsonSchema, PartialEq, Clone, Debug)]
     pub struct Proof {
         merkle_root: Commitment,
         commitment: Commitment,

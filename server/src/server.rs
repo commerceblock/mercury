@@ -16,6 +16,8 @@ use crate::watch::watch_node;
 use mockall::*;
 use monotree::database::Database as MonotreeDatabase;
 use rocket;
+use rocket_okapi::routes_with_openapi;
+use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 use rocket::{
     config::{Config as RocketConfig, Environment},
     Request, Rocket,
@@ -136,6 +138,16 @@ fn not_found(req: &Request) -> String {
     format!("Unknown route '{}'.", req.uri())
 }
 
+fn get_docs() -> SwaggerUIConfig {
+    use rocket_okapi::swagger_ui::UrlObject;
+
+    SwaggerUIConfig {
+        url: "/openapi.json".to_string(),
+        urls: vec![UrlObject::new("Mercury", "/openapi.json")],
+        ..Default::default()
+    }
+}
+
 /// Start Rocket Server. mainstay_config parameter overrides Settings.toml and env var settings.
 /// If no db provided then use mock
 pub fn get_server<
@@ -203,17 +215,21 @@ pub fn get_server<
                 "/",
                 routes![
                     ping::ping,
+                ],
+            )
+            .mount(
+                "/", 
+                routes_with_openapi![
+                    util::get_statechain,
+                    util::get_smt_root,
+                    util::get_smt_proof,
+                    util::get_fees,
+                    util::prepare_sign_tx,
+                    util::get_transfer_batch_status,  
                     ecdsa::first_message,
                     ecdsa::second_message,
                     ecdsa::sign_first,
                     ecdsa::sign_second,
-                    util::get_statechain,
-                    util::get_smt_root,
-                    //util::get_confirmed_smt_root,
-                    util::get_smt_proof,
-                    util::get_fees,
-                    util::prepare_sign_tx,
-                    util::get_transfer_batch_status,
                     deposit::deposit_init,
                     deposit::deposit_confirm,
                     transfer::transfer_sender,
@@ -230,9 +246,10 @@ pub fn get_server<
                     conductor::get_blinded_spend_signature,
                     conductor::register_utxo,
                     conductor::swap_first_message,
-                    conductor::swap_second_message,
+                    conductor::swap_second_message,              
                 ],
             )
+            .mount("/swagger", make_swagger_ui(&get_docs()))
             .mount("/metrics", prometheus)
             .manage(sc_entity);
 
@@ -302,11 +319,11 @@ use shared_lib::structs::*;
 mock! {
     StateChainEntity{}
     trait Deposit {
-        fn deposit_init(&self, deposit_msg1: DepositMsg1) -> deposit::Result<Uuid>;
+        fn deposit_init(&self, deposit_msg1: DepositMsg1) -> deposit::Result<UserID>;
         fn deposit_confirm(
             &self,
             deposit_msg2: DepositMsg2,
-        ) -> deposit::Result<Uuid>;
+        ) -> deposit::Result<StatechainID>;
     }
     trait Ecdsa {
         fn master_key(&self, user_id: Uuid) -> ecdsa::Result<()>;
@@ -314,17 +331,17 @@ mock! {
         fn first_message(
             &self,
             key_gen_msg1: KeyGenMsg1,
-        ) -> ecdsa::Result<(Uuid, ecdsa::party_one::KeyGenFirstMsg)>;
+        ) -> ecdsa::Result<KeyGenReply1>;
 
         fn second_message(
             &self,
             key_gen_msg2: KeyGenMsg2,
-        ) -> ecdsa::Result<ecdsa::party1::KeyGenParty1Message2>;
+        ) -> ecdsa::Result<KeyGenReply2>;
 
         fn sign_first(
             &self,
             sign_msg1: SignMsg1,
-        ) -> ecdsa::Result<ecdsa::party_one::EphKeyGenFirstMsg>;
+        ) -> ecdsa::Result<SignReply1>;
 
         fn sign_second(
             &self,
@@ -332,7 +349,7 @@ mock! {
         ) -> ecdsa::Result<Vec<Vec<u8>>>;
     }
     trait Conductor {
-        fn poll_utxo(&self, statechain_id: &Uuid) -> conductor::Result<Option<Uuid>>;
+        fn poll_utxo(&self, statechain_id: &Uuid) -> conductor::Result<SwapID>;
         fn poll_swap(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapStatus>>;
         fn get_swap_info(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapInfo>>;
         fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> conductor::Result<()>;
