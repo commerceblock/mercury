@@ -29,6 +29,7 @@ use std::panic;
 use std::sync::{Arc, Mutex};
 use std::{convert::TryInto, panic::AssertUnwindSafe, str::FromStr};
 use uuid::Uuid;
+use rocket_okapi::JsonSchema;
 
 /// A list of States in which each State signs for the next State.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -108,18 +109,48 @@ pub fn is_locked(locked_until: NaiveDateTime) -> Result<()> {
     }
 }
 
-/// Each State in the Chain of States
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+/// State update object
+/// State to change statecoin ownership to new owner
+#[derive(Serialize, Deserialize, JsonSchema, Debug, PartialEq, Clone)]
+#[schemars(example = "Self::example")]
 pub struct State {
+    /// The new owner proof public key (if transfer) or address (if withdrawal)
     pub data: String,                      // proof key or address
+    /// Current owner signature representing passing of ownership
     pub next_state: Option<StateChainSig>, // signature representing passing of ownership
 }
+
+impl State {
+    pub fn example() -> Self{
+        Self{
+            data: "037f8d5dfb3c8f99b1641d200e808dd0b6c52f53b04e972c2e61ab901133902ebd".to_string(),
+            next_state: Some(StateChainSig::example()),
+        }
+    }
+}
+
+/// State change signature object
 /// Data necessary to create ownership transfer signatures
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default, Hash, Eq)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, PartialEq, Clone, Default, Hash, Eq)]
+#[schemars(example = "Self::example")]
 pub struct StateChainSig {
+    /// Purpose: "TRANSFER", "TRANSFER-BATCH" or "WITHDRAW"
     pub purpose: String, // "TRANSFER", "TRANSFER-BATCH" or "WITHDRAW"
+    /// The new owner proof public key (if transfer) or address (if withdrawal)    
     pub data: String,    // proof key, state chain id or address
+    /// Current owner signature (DER encoded). 
     pub sig: String,
+}
+
+impl StateChainSig {
+    pub fn example() -> Self{
+        Self{
+            purpose: "TRANSFER".to_string(),
+            data: "037f8d5dfb3c8f99b1641d200e808dd0b6c52f53b04e972c2e61ab901133902ebd".to_string(),
+            sig: "3045022100abe02f0d1918aca36b634eb1af8a4e0714f3f699fb425de65cc661e538da3f2002200a538a22df665a95adb739ff6bb592b152dba5613602c453c58adf70858f05f6".to_string(),
+        }
+    }
+    // add code here
 }
 
 impl StateChainSig {

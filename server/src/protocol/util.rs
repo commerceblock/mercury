@@ -17,6 +17,7 @@ use shared_lib::{
 
 use shared_lib::structs::Protocol;
 
+use rocket_okapi::openapi;
 use crate::error::{DBErrorType, SEError};
 use crate::storage::Storage;
 use crate::{server::StateChainEntity, Database};
@@ -337,6 +338,8 @@ impl Utilities for SCE {
     }
 }
 
+#[openapi]
+/// # Get statechain entity operating information
 #[get("/info/fee", format = "json")]
 pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
     match sc_entity.get_fees() {
@@ -345,6 +348,8 @@ pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
     }
 }
 
+#[openapi]
+/// # Get current statechain information for specified statechain ID
 #[get("/info/statechain/<statechain_id>", format = "json")]
 pub fn get_statechain(
     sc_entity: State<SCE>,
@@ -356,6 +361,8 @@ pub fn get_statechain(
     }
 }
 
+#[openapi]
+/// # Get the current Sparse Merkle Tree commitment root
 #[get("/info/root", format = "json")]
 pub fn get_smt_root(sc_entity: State<SCE>) -> Result<Json<Option<Root>>> {
     match sc_entity.get_smt_root() {
@@ -364,6 +371,8 @@ pub fn get_smt_root(sc_entity: State<SCE>) -> Result<Json<Option<Root>>> {
     }
 }
 
+#[openapi]
+/// # Get the Merkle path proof for a specified statechain (TxID) and root
 #[post("/info/proof", format = "json", data = "<smt_proof_msg>")]
 pub fn get_smt_proof(
     sc_entity: State<SCE>,
@@ -375,6 +384,8 @@ pub fn get_smt_proof(
     }
 }
 
+#[openapi]
+/// # Get batch transfer status and statecoin IDs for specified batch ID
 #[get("/info/transfer-batch/<batch_id>", format = "json")]
 pub fn get_transfer_batch_status(
     sc_entity: State<SCE>,
@@ -386,6 +397,8 @@ pub fn get_transfer_batch_status(
     }
 }
 
+#[openapi]
+/// # Submit transaction details to the server in preparation for 2P-ECDSA signing
 #[post("/prepare-sign", format = "json", data = "<prepare_sign_msg>")]
 pub fn prepare_sign_tx(
     sc_entity: State<SCE>,

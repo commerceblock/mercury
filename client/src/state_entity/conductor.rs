@@ -51,20 +51,20 @@ pub fn swap_register_utxo(wallet: &Wallet, statechain_id: &Uuid, swap_size: &u64
     )
 }
 
-pub fn swap_poll_utxo(client_shim: &ClientShim, statechain_id: &Uuid) -> Result<Option<Uuid>> {
+pub fn swap_poll_utxo(client_shim: &ClientShim, statechain_id: &Uuid) -> Result<SwapID> {
     requests::postb(
         &client_shim,
         &String::from("swap/poll/utxo"),
-        &statechain_id,
+        &StatechainID { id: *statechain_id },
     )
 }
 
 pub fn swap_poll_swap(client_shim: &ClientShim, swap_id: &Uuid) -> Result<Option<SwapStatus>> {
-    requests::postb(&client_shim, &String::from("swap/poll/swap"), &swap_id)
+    requests::postb(&client_shim, &String::from("swap/poll/swap"), &SwapID{id: Some(*swap_id)})
 }
 
 pub fn swap_info(client_shim: &ClientShim, swap_id: &Uuid) -> Result<Option<SwapInfo>> {
-    requests::postb(&client_shim, &String::from("swap/info"), &swap_id)
+    requests::postb(&client_shim, &String::from("swap/info"), &SwapID{id: Some(*swap_id)})
 }
 
 pub fn swap_first_message(
@@ -201,7 +201,7 @@ pub fn do_swap(
     //Wait for swap to commence
 
     loop {
-        match swap_poll_utxo(&wallet.client_shim, &statechain_id)? {
+        match swap_poll_utxo(&wallet.client_shim, &statechain_id)?.id {
             Some(v) => {
                 swap_id = v;
                 break;

@@ -17,6 +17,8 @@ use curv::{
     BigInt, FE, GE,
 };
 use uuid::Uuid;
+use rocket_okapi::JsonSchema;
+use schemars;
 
 // Notation:
 //  x: Signer Priv key
@@ -44,9 +46,18 @@ use uuid::Uuid;
 // And verifies
 //      sp=eq+r
 
+#[derive(JsonSchema)]
+#[schemars(remote = "FE")]
+pub struct FEDef(Vec<u8>);
+
+#[derive(JsonSchema)]
+#[schemars(remote = "GE")]
+pub struct GEDef(Vec<u8>);
+
 /// blind spend signature
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct BlindedSpendSignature {
+    #[schemars(with = "FEDef")]
     s_prime: FE,
 }
 impl Default for BlindedSpendSignature {
@@ -58,9 +69,11 @@ impl Default for BlindedSpendSignature {
 }
 
 /// (s,r) blind spend token
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct BlindedSpendToken {
+    #[schemars(with = "FEDef")]
     s: FE,
+    #[schemars(with = "GEDef")]
     r: GE,
     m: String,
 }
@@ -90,11 +103,15 @@ impl BlindedSpendToken {
 }
 
 /// Blind Spend Token data for each Swap. (priv, pub) keypair, k and R' value for signing and verification.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct BSTSenderData {
+    #[schemars(with = "FEDef")]
     x: FE,
+    #[schemars(with = "GEDef")]
     q: GE,
+    #[schemars(with = "FEDef")]
     k: FE,
+    #[schemars(with = "GEDef")]
     r_prime: GE,
 }
 impl BSTSenderData {
@@ -125,11 +142,15 @@ impl BSTSenderData {
 }
 
 /// Blind Spend Token data for each Swap. (priv, pub) keypair, k and R' value for signing and verification.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct BSTRequestorData {
+    #[schemars(with = "FEDef")]
     u: FE,
+    #[schemars(with = "FEDef")]
     v: FE,
+    #[schemars(with = "GEDef")]
     r: GE,
+    #[schemars(with = "FEDef")]
     e_prime: FE,
     m: String,
 }
