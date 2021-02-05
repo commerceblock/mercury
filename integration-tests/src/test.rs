@@ -6,15 +6,18 @@ mod tests {
     extern crate client_lib;
     extern crate server_lib;
     extern crate shared_lib;
+    extern crate time_test;
 
     use shared_lib::structs::Protocol;
 
     use curv::elliptic::curves::traits::ECScalar;
     use curv::FE;
+    use self::time_test::time_test;
 
     #[test]
     #[serial]
     fn test_gen_shared_key() {
+        time_test!();
         let _ = start_server();
         let mut wallet = gen_wallet();
         let proof_key = wallet.se_proof_keys.get_new_key().unwrap();
@@ -28,6 +31,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_failed_auth() {
+        time_test!();
         let _handle = start_server();
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None, None);
         let secret_key: FE = ECScalar::new_random();
@@ -45,6 +49,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_deposit() {
+        time_test!();
         let _handle = start_server();
         let wallet = gen_wallet_with_deposit(10000);
         //handle.join().expect("The thread being joined has panicked");
@@ -86,6 +91,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_get_statechain() {
+        time_test!();
         let _handle = start_server();
         let mut wallet = gen_wallet();
 
@@ -104,6 +110,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_transfer() {
+        time_test!();
         let _handle = start_server();
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
@@ -174,6 +181,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_double_transfer() {
+        time_test!();
         let _handle = start_server();
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
@@ -303,6 +311,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_withdraw() {
+        time_test!();
         let _handle = start_server();
         let mut wallet = gen_wallet();
 
@@ -361,6 +370,7 @@ mod tests {
     #[serial]
     /// Test wallet load from json correctly when shared key present.
     fn test_wallet_load_with_shared_key() {
+        time_test!();
         let _handle = start_server();
 
         let mut wallet = gen_wallet();

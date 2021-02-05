@@ -191,6 +191,7 @@ pub fn transfer_batch_is_ended(start_time: NaiveDateTime, batch_lifetime: i64) -
 }
 
 #[openapi]
+/// # Initiate the batch transfer protocol: provide statechain signatures
 #[post(
     "/transfer/batch/init",
     format = "json",
@@ -207,6 +208,7 @@ pub fn transfer_batch_init(
 }
 
 #[openapi]
+/// # Complete Batch transfer: reveal transfer nonce
 #[post(
     "/transfer/batch/reveal",
     format = "json",

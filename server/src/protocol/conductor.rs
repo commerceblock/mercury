@@ -778,6 +778,7 @@ impl Conductor for SCE {
 }
 
 #[openapi]
+/// # Poll conductor for the status of a specified registered statecoin ID
 #[post("/swap/poll/utxo", format = "json", data = "<statechain_id>")]
 pub fn poll_utxo(sc_entity: State<SCE>, statechain_id: Json<StatechainID>) -> Result<Json<SwapID>> {
     match sc_entity.poll_utxo(&statechain_id.id) {
@@ -787,6 +788,7 @@ pub fn poll_utxo(sc_entity: State<SCE>, statechain_id: Json<StatechainID>) -> Re
 }
 
 #[openapi]
+/// # Poll conductor for the status of a specified swap ID
 #[post("/swap/poll/swap", format = "json", data = "<swap_id>")]
 pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<SwapID>) -> Result<Json<Option<SwapStatus>>> {
     match sc_entity.poll_swap(&swap_id.id.unwrap()) {
@@ -796,6 +798,7 @@ pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<SwapID>) -> Result<Json<Op
 }
 
 #[openapi]
+/// # Get information a specified swap ID
 #[post("/swap/info", format = "json", data = "<swap_id>")]
 pub fn get_swap_info(sc_entity: State<SCE>, swap_id: Json<SwapID>) -> Result<Json<Option<SwapInfo>>> {
     match sc_entity.get_swap_info(&swap_id.id.unwrap()) {
@@ -805,6 +808,7 @@ pub fn get_swap_info(sc_entity: State<SCE>, swap_id: Json<SwapID>) -> Result<Jso
 }
 
 #[openapi]
+/// # Get blinded spend token required for second message
 #[post("/swap/blinded-spend-signature", format = "json", data = "<bst_msg>")]
 pub fn get_blinded_spend_signature(
     sc_entity: State<SCE>,
@@ -817,6 +821,7 @@ pub fn get_blinded_spend_signature(
 }
 
 #[openapi]
+/// # Phase 0 of coinswap: Notify conductor of desire to take part in a swap with signature to prove ownership of statecoin. 
 #[post("/swap/register-utxo", format = "json", data = "<register_utxo_msg>")]
 pub fn register_utxo(
     sc_entity: State<SCE>,
@@ -829,6 +834,7 @@ pub fn register_utxo(
 }
 
 #[openapi]
+/// # Phase 1 of coinswap: Participants sign SwapToken and provide a statechain address and e_prime for blind spend token.
 #[post("/swap/first", format = "json", data = "<swap_msg1>")]
 pub fn swap_first_message(sc_entity: State<SCE>, swap_msg1: Json<SwapMsg1>) -> Result<Json<()>> {
     match sc_entity.swap_first_message(&swap_msg1.into_inner()) {
@@ -838,6 +844,7 @@ pub fn swap_first_message(sc_entity: State<SCE>, swap_msg1: Json<SwapMsg1>) -> R
 }
 
 #[openapi]
+/// # Phase 2 of coinswap: Participants provide blind spend token and recieve address.
 #[post("/swap/second", format = "json", data = "<swap_msg2>")]
 pub fn swap_second_message(
     sc_entity: State<SCE>,

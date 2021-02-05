@@ -1,9 +1,10 @@
 [package]
 name = "server"
-version = "0.1.0"
+version = "0.1.1"
 authors = [
 	"Lawrence Deacon <lawrence.deacon@gmail.com>",
-  "Tomos <tomos@commerceblock.com"
+  "Tomos <tomos@commerceblock.com",
+  "Tom Trevethan <tom@commerceblock.com>"
 ]
 edition = "2018"
 

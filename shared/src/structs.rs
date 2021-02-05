@@ -181,7 +181,7 @@ pub struct TransferBatchDataAPI {
     pub finalized: bool,
 }
 
-/// /info/statechain post struct
+// /info/statechain post struct
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct SmtProofMsgAPI {
     pub root: Root,
@@ -198,13 +198,19 @@ pub struct PKDef(Vec<u8>);
 /// by Server before co-signing is performed for validation of tx.
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct PrepareSignTxMsg {
+    /// The shared key ID
     #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
+    /// Purpose: "TRANSFER", "TRANSFER-BATCH" or "WITHDRAW"
     pub protocol: Protocol,
+    /// Hex encoding of the unsigned transaction
     pub tx_hex: String,
+    /// Vector of the transaction input public keys
     #[schemars(with = "PKDef")]
     pub input_addrs: Vec<PK>, // pub keys being spent from
+    /// Vector of input amounts
     pub input_amounts: Vec<u64>,
+    /// Proof public key
     pub proof_key: Option<String>,
 }
 
@@ -227,6 +233,19 @@ impl Default for PrepareSignTxMsg {
         }
     }
 }
+
+//impl PrepareSignTxMsg {
+//    pub fn example() -> Self{
+//        Self{
+//            shared_key_id: Uuid::new_v4(),
+//            protocol: Protocol::Deposit,
+//            tx_hex: "02000000011333183ddf384da83ed49296136c70d206ad2b19331bf25d390e69b222165e370000000000feffffff0200e1f5050000000017a914a860f76561c85551594c18eecceffaee8c4822d787F0C1A4350000000017a914d8b6fcc85a383261df05423ddf068a8987bf0287878c000000".to_string(),
+//            input_addrs: vec![PK::from_slice(&[3, 203, 250, 103, 44, 175, 45, 118, 114, 227, 88, 79, 151, 147, 57, 93, 64, 179, 159, 123, 212, 118, 151, 210, 3, 231, 97, 50, 111, 56, 152, 9, 218]).unwrap()], // pub keys being spent from
+//            input_amounts: vec![100000],
+//            proof_key: Some("02a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe".to_string()),
+//        }
+//    }
+//}
 
 // schema information structs for openAPI/swagger
 #[derive(JsonSchema)]

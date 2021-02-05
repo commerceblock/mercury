@@ -299,6 +299,7 @@ impl Ecdsa for SCE {
 }
 
 #[openapi]
+/// # First round of the 2P-ECDSA key generation protocol: get pubkey and ZK proof commitments
 #[post("/ecdsa/keygen/first", format = "json", data = "<key_gen_msg1>")]
 pub fn first_message(
     sc_entity: State<SCE>,
@@ -311,6 +312,7 @@ pub fn first_message(
 }
 
 #[openapi]
+/// # Second round of the 2P-ECDSA key generation protocol: get Paillier share and proofs
 #[post("/ecdsa/keygen/second", format = "json", data = "<key_gen_msg2>")]
 pub fn second_message(
     sc_entity: State<SCE>,
@@ -323,6 +325,7 @@ pub fn second_message(
 }
 
 #[openapi]
+/// # First round of the 2P-ECDSA signing protocol: shared ephemeral keygen and proofs 
 #[post("/ecdsa/sign/first", format = "json", data = "<sign_msg1>")]
 pub fn sign_first(
     sc_entity: State<SCE>,
@@ -335,6 +338,7 @@ pub fn sign_first(
 }
 
 #[openapi]
+/// # Second round of the 2P-ECDSA signing protocol: signature generation and verification
 #[post("/ecdsa/sign/second", format = "json", data = "<sign_msg2>")]
 pub fn sign_second(sc_entity: State<SCE>, sign_msg2: Json<SignMsg2>) -> Result<Json<Vec<Vec<u8>>>> {
     match sc_entity.sign_second(sign_msg2.into_inner()) {

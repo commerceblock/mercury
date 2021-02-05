@@ -156,6 +156,7 @@ impl Deposit for SCE {
 }
 
 #[openapi]
+/// # Initiate a statechain deposit and generate a shared key ID
 #[post("/deposit/init", format = "json", data = "<deposit_msg1>")]
 pub fn deposit_init(sc_entity: State<SCE>, deposit_msg1: Json<DepositMsg1>) -> Result<Json<UserID>> {
     match sc_entity.deposit_init(deposit_msg1.into_inner()) {
@@ -165,6 +166,7 @@ pub fn deposit_init(sc_entity: State<SCE>, deposit_msg1: Json<DepositMsg1>) -> R
 }
 
 #[openapi]
+/// # Confirm the deposit process has completed and retreive the statechain ID
 #[post("/deposit/confirm", format = "json", data = "<deposit_msg2>")]
 pub fn deposit_confirm(
     sc_entity: State<SCE>,

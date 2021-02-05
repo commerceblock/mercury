@@ -417,7 +417,6 @@ mod tests {
         let mut thread_handles = vec![];
         let mut wallet_sers = vec![];
 
-
         for i in 0..num_state_chains as usize {
             wallets.push(gen_wallet());
             for _ in 0..i {

@@ -347,6 +347,7 @@ impl Transfer for SCE {
 }
 
 #[openapi]
+/// # Transfer initiation by sender: get x1 and new backup transaction
 #[post("/transfer/sender", format = "json", data = "<transfer_msg1>")]
 pub fn transfer_sender(
     sc_entity: State<SCE>,
@@ -359,6 +360,7 @@ pub fn transfer_sender(
 }
 
 #[openapi]
+/// # Transfer completing by receiver: key share update and deletion
 #[post("/transfer/receiver", format = "json", data = "<transfer_msg4>")]
 pub fn transfer_receiver(
     sc_entity: State<SCE>,
@@ -371,6 +373,7 @@ pub fn transfer_receiver(
 }
 
 #[openapi]
+/// # Update stored transfer message (TransferMsg3)
 #[post("/transfer/update_msg", format = "json", data = "<transfer_msg3>")]
 pub fn transfer_update_msg(
     sc_entity: State<SCE>,
@@ -383,6 +386,7 @@ pub fn transfer_update_msg(
 }
 
 #[openapi]
+/// # Get stored transfer message (TransferMsg3)
 #[post("/transfer/get_msg", format = "json", data = "<statechain_id>")]
 pub fn transfer_get_msg(
     sc_entity: State<SCE>,
