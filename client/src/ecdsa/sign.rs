@@ -1,11 +1,10 @@
 use super::super::utilities::requests;
 use super::super::ClientShim;
 use super::super::Result;
-use shared_lib::structs::{Protocol, SignMsg1, SignMsg2, SignSecondMsgRequest};
+use shared_lib::structs::{Protocol, SignMsg1, SignMsg2, SignSecondMsgRequest, SignReply1};
 
 use curv::BigInt;
 use kms::ecdsa::two_party::MasterKey2;
-use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one;
 use uuid::Uuid;
 
 /// Co-sign message with shared key
@@ -23,13 +22,13 @@ pub fn sign(
         shared_key_id: *shared_key_id,
         eph_key_gen_first_message_party_two,
     };
-    let sign_party_one_first_message: party_one::EphKeyGenFirstMsg =
+    let sign_party_one_first_message: SignReply1 =
         requests::postb(client_shim, &format!("ecdsa/sign/first"), &sign_msg1)?;
 
     let party_two_sign_message = mk.sign_second_message(
         &eph_ec_key_pair_party2,
         eph_comm_witness.clone(),
-        &sign_party_one_first_message,
+        &sign_party_one_first_message.msg,
         &message,
     );
 

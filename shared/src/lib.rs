@@ -17,6 +17,7 @@ extern crate electrumx_client;
 extern crate kms;
 extern crate monotree;
 extern crate multi_party_ecdsa;
+extern crate rocket_okapi;
 
 #[macro_use]
 extern crate serde_derive;
@@ -39,6 +40,7 @@ pub mod swap_data;
 pub mod util;
 
 use bitcoin::secp256k1::{Message, PublicKey, Secp256k1, Signature};
+use rocket_okapi::JsonSchema;
 
 type Result<T> = std::result::Result<T, error::SharedLibError>;
 
@@ -46,7 +48,7 @@ pub type Hash = monotree::Hash;
 
 use crate::mainstay::{Attestable, Commitment, CommitmentInfo};
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct Root {
     id: Option<i64>,
     pub value: Option<Hash>,

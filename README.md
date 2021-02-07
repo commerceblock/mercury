@@ -35,3 +35,9 @@ To run the tests:
 
 To run integration tests with a real database - database and mainstay environment variables should be set. See server/README.
 1. ```(cd integration-tests && cargo test --no-default-features -- --test-threads=1)```
+
+# Issue Tracker
+
+# License 
+
+Mercury Wallet is released under the terms of the GNU General Public License. See for more information https://opensource.org/licenses/GPL-3.0

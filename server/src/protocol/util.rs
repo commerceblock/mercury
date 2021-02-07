@@ -17,6 +17,7 @@ use shared_lib::{
 
 use shared_lib::structs::Protocol;
 
+use rocket_okapi::openapi;
 use crate::error::{DBErrorType, SEError};
 use crate::storage::Storage;
 use crate::{server::StateChainEntity, Database};
@@ -306,8 +307,6 @@ impl Utilities for SCE {
                     let statechain_id = self.database.get_statechain_id(user_id)?;
                     let current_tx_backup = self.database.get_backup_transaction(statechain_id)?;
 
-                    println!("current_tx_backup: {:?}", current_tx_backup);
-                    println!("tx: {:?}", tx);
                     if (current_tx_backup.lock_time as u32) != (tx.lock_time as u32) + (self.config.lh_decrement as u32) {
                         return Err(SEError::Generic(String::from(
                             "Backup tx locktime not correctly decremented.",
@@ -346,6 +345,8 @@ impl Utilities for SCE {
 
 }
 
+#[openapi]
+/// # Get statechain entity operating information
 #[get("/info/fee", format = "json")]
 pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
     match sc_entity.get_fees() {
@@ -354,6 +355,8 @@ pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
     }
 }
 
+#[openapi]
+/// # Get current statechain information for specified statechain ID
 #[get("/info/statechain/<statechain_id>", format = "json")]
 pub fn get_statechain(
     sc_entity: State<SCE>,
@@ -365,6 +368,8 @@ pub fn get_statechain(
     }
 }
 
+#[openapi]
+/// # Get the current Sparse Merkle Tree commitment root
 #[get("/info/root", format = "json")]
 pub fn get_smt_root(sc_entity: State<SCE>) -> Result<Json<Option<Root>>> {
     match sc_entity.get_smt_root() {
@@ -373,6 +378,8 @@ pub fn get_smt_root(sc_entity: State<SCE>) -> Result<Json<Option<Root>>> {
     }
 }
 
+#[openapi]
+/// # Get the Merkle path proof for a specified statechain (TxID) and root
 #[post("/info/proof", format = "json", data = "<smt_proof_msg>")]
 pub fn get_smt_proof(
     sc_entity: State<SCE>,
@@ -384,6 +391,8 @@ pub fn get_smt_proof(
     }
 }
 
+#[openapi]
+/// # Get batch transfer status and statecoin IDs for specified batch ID
 #[get("/info/transfer-batch/<batch_id>", format = "json")]
 pub fn get_transfer_batch_status(
     sc_entity: State<SCE>,
@@ -395,6 +404,8 @@ pub fn get_transfer_batch_status(
     }
 }
 
+#[openapi]
+/// # Recover statechain and backup transaction for proof key
 #[post("/info/recover", format = "json", data = "<request_recovery_data>")]
 pub fn get_recovery_data(
     sc_entity: State<SCE>,
@@ -406,6 +417,8 @@ pub fn get_recovery_data(
     }
 }
 
+#[openapi]
+/// # Submit transaction details to the server in preparation for 2P-ECDSA signing
 #[post("/prepare-sign", format = "json", data = "<prepare_sign_msg>")]
 pub fn prepare_sign_tx(
     sc_entity: State<SCE>,
@@ -908,7 +921,7 @@ pub mod tests {
     pub static BACKUP_TX_NOT_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
     pub static BACKUP_TX_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,68,2,32,45,42,91,77,252,143,55,65,154,96,191,149,204,131,88,79,80,161,231,209,234,229,217,100,28,99,48,148,136,194,204,98,2,32,90,111,183,68,74,24,75,120,179,80,20,183,60,198,127,106,102,64,37,193,174,226,199,118,237,35,96,236,45,94,203,49,1],[2,242,131,110,175,215,21,123,219,179,199,144,85,14,163,42,19,197,97,249,41,130,243,139,15,17,51,185,147,228,100,122,213]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
     pub static STATE_CHAIN: &str = "{\"chain\":[{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}]}";
-    pub static STATE_CHAIN_SIG: &str = "{ \"purpose\": \"TRANSFER\", \"data\": \"024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766\", \"sig\": \"3045022100e1171094db96e68392bb2a72695dc7cbce86db7be9d2e943444b6fa08877eec9022036dc63a3b2536d8e2327e0f44ff990f18e6166dce66d87bdcb57f825158a507c\"}";
+    pub static STATE_CHAIN_SIG: &str = "{ \"purpose\": \"TRANSFER\", \"data\": \"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\", \"sig\": \"3045022100abe02f0d1918aca36b634eb1af8a4e0714f3f699fb425de65cc661e538da3f2002200a538a22df665a95adb739ff6bb592b152dba5613602c453c58adf70858f05f6\"}";
 
     pub fn test_sc_entity(db: MockDatabase) -> SCE {
         let mut sc_entity = SCE::load(db, MemoryDB::new("")).unwrap();

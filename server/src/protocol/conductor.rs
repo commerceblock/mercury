@@ -33,8 +33,15 @@ use std::str::FromStr;
 #[cfg(test)]
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
+use rocket_okapi::openapi;
+use rocket_okapi::JsonSchema;
+use schemars;
 
 static DEFAULT_TIMEOUT: u64 = 100;
+
+#[derive(JsonSchema)]
+#[schemars(remote = "Uuid")]
+pub struct UuidDef(String);
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -54,7 +61,7 @@ cfg_if! {
 pub trait Conductor {
     /// API: Poll Conductor to check for status of registered utxo. Return Ok(None) if still waiting
     /// or swap_id if swap round has begun.
-    fn poll_utxo(&self, statechain_id: &Uuid) -> Result<Option<Uuid>>;
+    fn poll_utxo(&self, statechain_id: &Uuid) -> Result<SwapID>;
 
     /// API: Poll Conductor to check for status of swap.
     fn poll_swap(&self, swap_id: &Uuid) -> Result<Option<SwapStatus>>;
@@ -481,9 +488,9 @@ pub fn generate_blind_spend_signatures(
 }
 
 impl Conductor for SCE {
-    fn poll_utxo(&self, statechain_id: &Uuid) -> Result<Option<Uuid>> {
+    fn poll_utxo(&self, statechain_id: &Uuid) -> Result<SwapID> {
         let guard = self.scheduler.lock()?;
-        Ok(guard.get_swap_id(statechain_id))
+        Ok(SwapID { id: guard.get_swap_id(statechain_id) } )
     }
     fn poll_swap(&self, swap_id: &Uuid) -> Result<Option<SwapStatus>> {
         let mut guard = self.scheduler.lock()?;
@@ -770,30 +777,38 @@ impl Conductor for SCE {
     }
 }
 
+#[openapi]
+/// # Poll conductor for the status of a specified registered statecoin ID
 #[post("/swap/poll/utxo", format = "json", data = "<statechain_id>")]
-pub fn poll_utxo(sc_entity: State<SCE>, statechain_id: Json<Uuid>) -> Result<Json<Option<Uuid>>> {
-    match sc_entity.poll_utxo(&statechain_id.into_inner()) {
+pub fn poll_utxo(sc_entity: State<SCE>, statechain_id: Json<StatechainID>) -> Result<Json<SwapID>> {
+    match sc_entity.poll_utxo(&statechain_id.id) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
 }
 
+#[openapi]
+/// # Poll conductor for the status of a specified swap ID
 #[post("/swap/poll/swap", format = "json", data = "<swap_id>")]
-pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<Uuid>) -> Result<Json<Option<SwapStatus>>> {
-    match sc_entity.poll_swap(&swap_id.into_inner()) {
+pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<SwapID>) -> Result<Json<Option<SwapStatus>>> {
+    match sc_entity.poll_swap(&swap_id.id.unwrap()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
 }
 
+#[openapi]
+/// # Get information a specified swap ID
 #[post("/swap/info", format = "json", data = "<swap_id>")]
-pub fn get_swap_info(sc_entity: State<SCE>, swap_id: Json<Uuid>) -> Result<Json<Option<SwapInfo>>> {
-    match sc_entity.get_swap_info(&swap_id.into_inner()) {
+pub fn get_swap_info(sc_entity: State<SCE>, swap_id: Json<SwapID>) -> Result<Json<Option<SwapInfo>>> {
+    match sc_entity.get_swap_info(&swap_id.id.unwrap()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
 }
 
+#[openapi]
+/// # Get blinded spend token required for second message
 #[post("/swap/blinded-spend-signature", format = "json", data = "<bst_msg>")]
 pub fn get_blinded_spend_signature(
     sc_entity: State<SCE>,
@@ -805,6 +820,8 @@ pub fn get_blinded_spend_signature(
         .map(|x| Json(x))
 }
 
+#[openapi]
+/// # Phase 0 of coinswap: Notify conductor of desire to take part in a swap with signature to prove ownership of statecoin. 
 #[post("/swap/register-utxo", format = "json", data = "<register_utxo_msg>")]
 pub fn register_utxo(
     sc_entity: State<SCE>,
@@ -816,6 +833,8 @@ pub fn register_utxo(
     }
 }
 
+#[openapi]
+/// # Phase 1 of coinswap: Participants sign SwapToken and provide a statechain address and e_prime for blind spend token.
 #[post("/swap/first", format = "json", data = "<swap_msg1>")]
 pub fn swap_first_message(sc_entity: State<SCE>, swap_msg1: Json<SwapMsg1>) -> Result<Json<()>> {
     match sc_entity.swap_first_message(&swap_msg1.into_inner()) {
@@ -824,6 +843,8 @@ pub fn swap_first_message(sc_entity: State<SCE>, swap_msg1: Json<SwapMsg1>) -> R
     }
 }
 
+#[openapi]
+/// # Phase 2 of coinswap: Participants provide blind spend token and recieve address.
 #[post("/swap/second", format = "json", data = "<swap_msg2>")]
 pub fn swap_second_message(
     sc_entity: State<SCE>,
@@ -981,11 +1002,11 @@ mod tests {
         drop(guard);
         //let uxto_invited_to_swap = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
         match sc_entity.poll_utxo(&uxto_waiting_for_swap) {
-            Ok(no_swap_id) => assert!(no_swap_id.is_none()),
+            Ok(no_swap_id) => assert!(no_swap_id.id.is_none()),
             Err(_) => assert!(false, "Expected Ok(())."),
         }
         match sc_entity.poll_utxo(&utxo_invited_to_swap) {
-            Ok(swap_id) => assert!(swap_id.is_some()),
+            Ok(swap_id) => assert!(swap_id.id.is_some()),
             Err(_) => assert!(false, "Expected Ok((swap_id))."),
         }
     }
@@ -1564,7 +1585,7 @@ mod tests {
             thread::sleep(Duration::from_secs(3));
             let poll_utxo_res = conductor.poll_utxo(&statechain_id);
             println!("poll_utxo result: {:?}", poll_utxo_res);
-            if let Ok(Some(v)) = poll_utxo_res {
+            if let Some(v) = poll_utxo_res.unwrap().id {
                 println!("\nSwap began!");
                 swap_id = v;
                 println!("Swap id: {}", swap_id);
@@ -1661,11 +1682,11 @@ mod tests {
             .expect_poll_utxo() // utxo not yet involved
             .with(predicate::eq(statechain_id))
             .times(2)
-            .returning(|_| Ok(None));
+            .returning(|_| Ok(SwapID{id:None}));
         conductor
             .expect_poll_utxo() // utxo involved in swap
             .with(predicate::eq(statechain_id))
-            .returning(move |_| Ok(Some(swap_id)));
+            .returning(move |_| Ok(SwapID{ id: Some(swap_id)}));
         conductor
             .expect_get_swap_info() // get swap status return phase 1. x3
             .with(predicate::eq(swap_id))

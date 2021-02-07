@@ -11,7 +11,7 @@
 
 use super::super::Result;
 extern crate shared_lib;
-use shared_lib::structs::{DepositMsg1, DepositMsg2, PrepareSignTxMsg, Protocol};
+use shared_lib::structs::{DepositMsg1, DepositMsg2, PrepareSignTxMsg, Protocol, UserID, StatechainID};
 use shared_lib::util::{tx_backup_build, tx_funding_build, FEE, transaction_serialise};
 
 use super::api::{get_smt_proof, get_smt_root, get_statechain_fee_info};
@@ -26,7 +26,7 @@ use uuid::Uuid;
 
 /// Message to server initiating state entity protocol.
 /// Shared wallet ID returned
-pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<Uuid> {
+pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<UserID> {
     requests::postb(
         &wallet.client_shim,
         &format!("deposit/init"),
@@ -63,10 +63,10 @@ pub fn deposit(
     let proof_key = wallet.se_proof_keys.get_new_key()?;
 
     // Init. session - Receive shared wallet ID
-    let shared_key_id: Uuid = session_init(wallet, &proof_key.to_string())?;
+    let shared_key_id: UserID = session_init(wallet, &proof_key.to_string())?;
 
     // 2P-ECDSA with state entity to create a Shared key
-    let shared_key = wallet.gen_shared_key(&shared_key_id, amount)?;
+    let shared_key = wallet.gen_shared_key(&shared_key_id.id, amount)?;
 
     // Create funding tx
     let pk = shared_key.share.public.q.get_element(); // co-owned key address to send funds to (P_addr)
@@ -107,7 +107,7 @@ pub fn deposit(
 
     // Co-sign tx backup tx
     let tx_backup_psm = PrepareSignTxMsg {
-        shared_key_id: shared_key_id.to_owned(),
+        shared_key_id: shared_key_id.id,
         protocol: Protocol::Deposit,
         tx_hex: transaction_serialise(&tx_backup_unsigned),
         input_addrs: vec![pk],
@@ -131,11 +131,11 @@ pub fn deposit(
         .broadcast_transaction(hex::encode(consensus::serialize(&tx_funding_signed)))?;
 
     // Wait for server confirmation of funding tx and receive new StateChain's id
-    let statechain_id: Uuid = requests::postb(
+    let statechain_id: StatechainID = requests::postb(
         &wallet.client_shim,
         &format!("deposit/confirm"),
         &DepositMsg2 {
-            shared_key_id: shared_key_id.to_owned(),
+            shared_key_id: shared_key_id.id,
         },
     )?;
 
@@ -150,15 +150,15 @@ pub fn deposit(
 
     // Add proof and state chain id to Shared key
     {
-        let shared_key = wallet.get_shared_key_mut(&shared_key_id)?;
-        shared_key.statechain_id = Some(statechain_id);
+        let shared_key = wallet.get_shared_key_mut(&shared_key_id.id)?;
+        shared_key.statechain_id = Some(statechain_id.id);
         shared_key.tx_backup_psm = Some(tx_backup_psm.to_owned());
         shared_key.add_proof_data(&proof_key.to_string(), &root, &proof, &funding_txid);
     }
 
     Ok((
-        shared_key_id,
-        statechain_id,
+        shared_key_id.id,
+        statechain_id.id,
         funding_txid,
         tx_backup_signed,
         tx_backup_psm,

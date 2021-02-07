@@ -9,7 +9,7 @@ use bitcoin::secp256k1;
 use bitcoin::{Address, Network, PublicKey};
 use crate::wallet::wallet::to_bitcoin_public_key;
 use uuid::Uuid;
-use bincode;
+use rmp_serde;
 
 use super::super::Result;
 use crate::error::CError;
@@ -63,7 +63,7 @@ pub fn encode_message(message: TransferMsg3) -> Result<String> {
 		tx_backup_psm: message.tx_backup_psm.clone(),
 	};
 
-	let encoded_msg: Vec<u8> = bincode::serialize(&compact).unwrap();
+	let encoded_msg = rmp_serde::to_vec(&compact).unwrap();
 	let bech32_encoded = bech32::encode("mm",encoded_msg.to_base32()).unwrap();
 
 	Ok(bech32_encoded)
@@ -81,7 +81,7 @@ pub fn decode_message(message: String, network: &String) -> Result<TransferMsg3>
 	}
 
 	let decoded_bytes = Vec::<u8>::from_base32(&decoded_msg).unwrap();
-	let decoded_struct: CompactTransfer = bincode::deserialize(&decoded_bytes[..]).unwrap();
+	let decoded_struct: CompactTransfer = rmp_serde::from_read_ref(&decoded_bytes[..]).unwrap();
     let tx_backup_addr = Some(Address::p2wpkh(&decoded_struct.proof_key.clone(), network.parse::<Network>().unwrap())?);
 
 	let transfer_msg3 = TransferMsg3 {
@@ -128,12 +128,13 @@ mod tests {
 
     #[test]
     fn test_message_encoding() {
-
-		let mmessage: String = "mm1syqqqqqqqqqqqpxd849xht08yqt965js60am3f20chvv9hqegm0wud8sn56626y4nxzgaed75h3pjauf2a5t989fv6qlev8s2w28jckjhut3vuuugac6ltdsn7syt3fg8hhcct77cvw5gu8yye2zhlmvn7vsg0z7lg3msyycd7eyukw32hk465wtc7wks0sfk2fqs63zuq37fgtr5fmn3hav7vujzqqqqqqqqqqqq2zvhvcpj3v7vqa4yskcvq46952t3k0mywrcypyzs7lr96cqmtaxdrqqqqqqqqqqqqenqdp5xqeryvpnxc6rwwpc8pjn2d3ex5exyc33x4sk2wtyx5mrvcfnxesnvcf3xd3kyep38yur2vrpxdjnqvtr8yek2wp3v93rqvekxc6nsdp4vyckyvpjxgcr2wp3xymnqvf3xc6rwwfevcunwcmx8qmn2ep4v4jkzcehxumxxctzxscrxve38ymxzwpe8ycnvwry8qenxvnz8qmkye3nxuunxe3kvcjqqqqqqqqqqqpevejrxvtrvd3z6efkvvcj6dpe8p3j6wpsvfjj6efcvsukget9vvmkxdeeysqqqqqqqqqqqcn9vvcrjvpcxckkve34vykngd34xsknjwp5v5kngc3sxuerycesv33x2espqqqqpqqpqqqqqqqqqqcryvpsxqcrqvpsxqcrzvp3x3jnxefnvgen2cen89skxvesx4skzcfnv33nxd35vvmnxdecve3k2ctxxd3kgvfjxscnqvt9x3nryve5xcmnycf4x9jnwdrrxymkgvfsxqcrqvpsxqcrqvrxvenxvenxvenrqvf3vesk2vp3xqcrqvpsxqcrqvpsxymrqvp3xs6nzef4xa3rywfexcer2cfsvvenwdf4vccnsvp4xp3nvwp5vymxzerxv33n2drrxycrydpcxvcrgdfsxgerzvpsv3jnvwp589jxzcfnxc6xvdf4vfjxyenxxy6kzv35xg6nqerpvsenqwp3xycxvcnxx43nxvn9xqerydfexv6rjcmpxgekxdp3v5ck2desxgerqvt9ve3k2efkx5unqenpvvenvwp48q6nzdejvyukzcenxyersvfsx56k2ve48ycx2wf5xuuxycfex56r2vpsv56rjcmyx5ckyefsxyerqvfjxycrywfexfsnqcm9xscxvwphvsukye3nxvekgcnzvcmrqc3hxgmxydfsxgekvce3xp3nywpn8qcnwwtzxcmxxdfhxa3kywp5xd3xvv3nx56kzdfs8qcrqvpsqyqqqqqqqqqqqggqqqqqqqqqqqp50kn23mqckmed3p9jjk4hhcq3v0wj3d24k9z79unqjadsv83udzgpqqqqqqqqqqqq0vspqqqqqqqqq9pqqqqqqqqqqqpsxvexycnpxvmrwvmzv9jkxe3cvf3rjctz89snwepcvy6nvdpsxc6njdfnxg6kgdnpvvcnscmzxsexxcmz89nrwwtrxdjrwde4xqcnscf595pk23".to_string();
+		let mmessage: String = "mm1jkgacqypqnxv6022d0x2mn88yqt965jsenfue77vhrx22n7vchxd3nxzenwpj3kvmmxwudxv7rxf6dwv545ve9wvn8xgfnywenjue0kv5hxwyxthejy4w6xvktxfen9fvmxgrn8uejcveuznej28jckv6txt79ckw0xfc3m3ejhuetwvkrxfln9qghxv22paenhuerp0en0vescag3cveepx2s4uelmvej0uexgy830ve73rejuppnycdlxtynjeeng4tn8dt4guej7vclxf66p7p8xt9nyjpp4z9n8qy0xwfn9pv0x2yaecen0uetxv7vuugggzsn9mxqv5t8nq8dfy9krq9w3dzjudn7ers7pqfq58hcewkqx6lfndnrpnxq6rgvpjxgcrxd35xuurswr9x5mrjdfjvf3rzdtpv5ukgdfkxesnxdnpxesnzvmrvfjrzwfcx5cxzvm9xqckxwfnv5urzctzxqenvd348q6r2cf3vgcryv3sx5urzvfhxqcnzd35xuunje3exa3kvwphx4jr2et9v93nwdekvdskydpsxvenzwfkvyurjwf3xcuxgwpnxvexywphvfnrxdeexdnrvekeysukvepnx93kxc3dv5mxxvfdxsunsced8qcxyefdv5uxgwtyv4jkxdmrxuuedkfyvfjkxvpexqurvttxvc6kztf5xc6ngtfe8q6x2tf5vgcrwv3jvvcxgcn9v6qsrsx6qxqrqv3sxqcrqvpsxqcrqvfsxy6x2vm9xd3rxdtrxvukzcenxq6kzctpxdjxxvekx33nwveh8pnxxetpvcekxep3xg6rzvp3v56xvv3nxsmrwvnpx5ck2de5vvcnwep3xqcrqvpsxqcrqvpsvenxvenxvenxvvp3x9nxzefsxycrqvpsxqcrqvpsxqcnvvpsxy6r2vt9x5mkyv3e8ymrydtpxp3nxde4x4nrzwpsx5cxxd3cx3snvctyvejxxdf5vvcnqv358qenqdp4xqeryvfsxpjx2d3cxsukgctpxvmrge34x43xgcnxvccn2cfjxser2vryv9jrxvpcxycnqenzvc6kxvejv5cryv348yengwtrvyerxce5x9jnzefhxqeryvp3v4nxxet9xc6njvrxv93nxd3cx5ur2vfhxfsnjctrxvcnywp3xq6n2efnx5unqefexsmnscnp8y6ngdfsxpjngwtrvs6nzcn9xqcnyvp3xgcnqv3e8yexzvrrv56rqe3cxajrjcnxxvenxerzvfnrvvrzxuervc34xqerxenrxycxxv3cxvurzdeevgmrvce4xumkxc3cxsekye3jxv6n2cf4xqurqvpsxzgugggrgldx4rkp3dhjmzzt99dt00spzc7a9z64tv29utexp96mqc0rc6yernsqqxeq0k2zxqenycnzvyenvdenvfsk2cmx8p3xywtpvgukzdmy8psn2d35xqmr2wf4xver2epkv93nzwrrvg6rycmrvgukvdeevvekgdehx5crzwrpxs32wk57".to_string();
         let transfer_msg_3 =
             serde_json::from_str::<TransferMsg3>(&TRANSFER_MSG_3.to_string()).unwrap();
 
         let b32enc = encode_message(transfer_msg_3).unwrap();
+
+        println!("{:?}", b32enc);
 
         assert_eq!(b32enc.to_string(),mmessage);
     }

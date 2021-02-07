@@ -16,6 +16,7 @@ use crate::Database;
 use crate::{server::StateChainEntity, storage::Storage};
 use cfg_if::cfg_if;
 use uuid::Uuid;
+use rocket_okapi::openapi;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -172,6 +173,8 @@ impl Withdraw for SCE {
     }
 }
 
+#[openapi]
+/// # Initiate the withdrawal process: provide signed statechain
 #[post("/withdraw/init", format = "json", data = "<withdraw_msg1>")]
 pub fn withdraw_init(sc_entity: State<SCE>, withdraw_msg1: Json<WithdrawMsg1>) -> Result<Json<()>> {
     match sc_entity.withdraw_init(withdraw_msg1.into_inner()) {
@@ -180,6 +183,8 @@ pub fn withdraw_init(sc_entity: State<SCE>, withdraw_msg1: Json<WithdrawMsg1>) -
     }
 }
 
+#[openapi]
+/// # Complete the withdrawal process: confirm withdrawal transaction
 #[post("/withdraw/confirm", format = "json", data = "<withdraw_msg2>")]
 pub fn withdraw_confirm(
     sc_entity: State<SCE>,
@@ -209,10 +214,10 @@ mod tests {
     use uuid::Uuid;
 
     // Data from a run of transfer protocol.
-    static WITHDRAW_MSG_1: &str = "{\"shared_key_id\":\"ad8cb891-ce91-447d-9192-bd105f3de602\",\"statechain_sig\":{\"purpose\":\"WITHDRAW\",\"data\":\"bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8\",\"sig\":\"3045022100cf280f1b03616d3ab27c485de7fa3931af4f9f0f515811eb6b145d68a47e248d022035931ad9779867fcaf04349bddff7ce30d56b8e001494c9fe3d095ef9eb1f773\"}}";
+    static WITHDRAW_MSG_1: &str = "{\"shared_key_id\":\"ad8cb891-ce91-447d-9192-bd105f3de602\",\"statechain_sig\":{\"purpose\":\"WITHDRAW\",\"data\":\"bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8\",\"sig\":\"304402201abaa7f64b50e8a75ca840a2be6317b501e3b5b5abd057465c165c9b872799f4022000d8e36734857237cab323c7244dd5249295b51905b43bf4e93396b58317d872\"}}";
     static STATE_CHAIN_ID: &str = "2b41ff74-510d-4fe7-90a6-714a26a137da";
     static STATE_CHAIN: &str = "{\"chain\":[{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}]}";
-    static STATE_CHAIN_SIG: &str = "{\"purpose\":\"WITHDRAW\",\"data\":\"bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8\",\"sig\":\"3045022100cf280f1b03616d3ab27c485de7fa3931af4f9f0f515811eb6b145d68a47e248d022035931ad9779867fcaf04349bddff7ce30d56b8e001494c9fe3d095ef9eb1f773\"}";
+    static STATE_CHAIN_SIG: &str = "{\"purpose\":\"WITHDRAW\",\"data\":\"bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8\",\"sig\":\"304402201abaa7f64b50e8a75ca840a2be6317b501e3b5b5abd057465c165c9b872799f4022000d8e36734857237cab323c7244dd5249295b51905b43bf4e93396b58317d872\"}";
 
     #[test]
     fn itegration_test_withdraw_init() {

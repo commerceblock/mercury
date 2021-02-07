@@ -6,28 +6,32 @@ mod tests {
     extern crate client_lib;
     extern crate server_lib;
     extern crate shared_lib;
+    extern crate time_test;
 
     use shared_lib::structs::Protocol;
 
     use curv::elliptic::curves::traits::ECScalar;
     use curv::FE;
+    use self::time_test::time_test;
 
     #[test]
     #[serial]
     fn test_gen_shared_key() {
+        time_test!();
         let _ = start_server();
         let mut wallet = gen_wallet();
         let proof_key = wallet.se_proof_keys.get_new_key().unwrap();
         let init_res =
             client_lib::state_entity::deposit::session_init(&mut wallet, &proof_key.to_string());
         assert!(init_res.is_ok());
-        let key_res = wallet.gen_shared_key(&init_res.unwrap(), &1000);
+        let key_res = wallet.gen_shared_key(&init_res.unwrap().id, &1000);
         assert!(key_res.is_ok());
     }
 
     #[test]
     #[serial]
     fn test_failed_auth() {
+        time_test!();
         let _handle = start_server();
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None, None);
         let secret_key: FE = ECScalar::new_random();
@@ -45,6 +49,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_deposit() {
+        time_test!();
         let _handle = start_server();
         let wallet = gen_wallet_with_deposit(10000);
         //handle.join().expect("The thread being joined has panicked");
@@ -86,6 +91,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_get_statechain() {
+        time_test!();
         let _handle = start_server();
         let mut wallet = gen_wallet();
 
@@ -104,6 +110,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_transfer() {
+        time_test!();
         let _handle = start_server();
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
@@ -119,7 +126,7 @@ mod tests {
             .get_new_state_entity_address()
             .unwrap();
 
-        let (new_shared_key_id, theta) = run_transfer(&mut wallets, 0, 1, &receiver_addr, &statechain_id);
+        let new_shared_key_id = run_transfer(&mut wallets, 0, 1, &receiver_addr, &statechain_id);
 
         // check shared keys have the same master public key
         assert_eq!(
@@ -128,8 +135,7 @@ mod tests {
                 .unwrap()
                 .share
                 .public
-                .q
-                * theta,
+                .q,
             wallets[1]
                 .get_shared_key(&new_shared_key_id)
                 .unwrap()
@@ -175,6 +181,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_double_transfer() {
+        time_test!();
         let _handle = start_server();
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
@@ -200,7 +207,7 @@ mod tests {
             .get_new_state_entity_address()
             .unwrap();
 
-        let (new_shared_key_id1, theta1) = run_transfer(&mut wallets, 0, 1, &receiver1_addr, statechain_id);
+        let new_shared_key_id1 = run_transfer(&mut wallets, 0, 1, &receiver1_addr, statechain_id);
 
         // Get state chain owned by wallets[1]
         let state_chains_info = wallets[0].get_state_chains_info().unwrap();
@@ -230,7 +237,7 @@ mod tests {
             .get_new_state_entity_address()
             .unwrap();
 
-        let (new_shared_key_id2, theta2) = run_transfer(&mut wallets, 1, 2, &receiver2_addr, statechain_id);
+        let new_shared_key_id2 = run_transfer(&mut wallets, 1, 2, &receiver2_addr, statechain_id);
 
         // check shared keys have the same master public key
         assert_eq!(
@@ -239,8 +246,7 @@ mod tests {
                 .unwrap()
                 .share
                 .public
-                .q
-                * theta1,
+                .q,
             wallets[1]
                 .get_shared_key(shared_key_id1)
                 .unwrap()
@@ -254,8 +260,7 @@ mod tests {
                 .unwrap()
                 .share
                 .public
-                .q
-                * theta2,
+                .q,
             wallets[2]
                 .get_shared_key(&new_shared_key_id2)
                 .unwrap()
@@ -306,6 +311,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_withdraw() {
+        time_test!();
         let _handle = start_server();
         let mut wallet = gen_wallet();
 
@@ -364,6 +370,7 @@ mod tests {
     #[serial]
     /// Test wallet load from json correctly when shared key present.
     fn test_wallet_load_with_shared_key() {
+        time_test!();
         let _handle = start_server();
 
         let mut wallet = gen_wallet();

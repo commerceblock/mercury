@@ -13,10 +13,12 @@ use bitcoin::{
 };
 use curv::FE;
 use uuid::Uuid;
+use rocket_okapi::JsonSchema;
+use schemars;
 
 // Swaps
 #[allow(dead_code)]
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, Copy)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub enum SwapStatus {
     Phase1,
     Phase2,
@@ -26,11 +28,13 @@ pub enum SwapStatus {
 }
 
 /// Struct defines a Swap. This is signed by each participant as agreement to take part in the swap.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct SwapToken {
+    #[schemars(with = "UuidDef")]
     pub id: Uuid,
     pub amount: u64,
     pub time_out: u64,
+    #[schemars(with = "UuidDef")]
     pub statechain_ids: Vec<Uuid>,
 }
 impl SwapToken {
@@ -64,7 +68,7 @@ impl SwapToken {
 }
 
 #[allow(dead_code)]
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct SwapInfo {
     pub status: SwapStatus,
     pub swap_token: SwapToken,
@@ -72,34 +76,46 @@ pub struct SwapInfo {
 }
 
 /// Owner -> Conductor
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct RegisterUtxo {
+    #[schemars(with = "UuidDef")]
     pub statechain_id: Uuid,
     pub signature: StateChainSig,
     pub swap_size: u64,
 }
 
+#[derive(JsonSchema)]
+#[schemars(remote = "Signature")]
+pub struct SignatureDef(String);
+
 /// Owner -> Conductor
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct SwapMsg1 {
+    #[schemars(with = "UuidDef")]
     pub swap_id: Uuid,
+    #[schemars(with = "UuidDef")]
     pub statechain_id: Uuid,
+    #[schemars(with = "SignatureDef")]
     pub swap_token_sig: Signature,
     pub transfer_batch_sig: StateChainSig,
     pub address: SCEAddress,
+    #[schemars(with = "FEDef")]
     pub bst_e_prime: FE,
 }
 
 // Message to request a blinded spend token
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct BSTMsg {
+    #[schemars(with = "UuidDef")]
     pub swap_id: Uuid,
+    #[schemars(with = "UuidDef")]
     pub statechain_id: Uuid,
 }
 
 /// Owner -> Conductor
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct SwapMsg2 {
+    #[schemars(with = "UuidDef")]
     pub swap_id: Uuid,
     pub blinded_spend_token: BlindedSpendToken,
 }
