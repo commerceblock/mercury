@@ -11,7 +11,7 @@ use shared_lib::{
     mocks::mock_electrum::MockElectrum,
     state_chain::*,
     structs::*,
-    util::{get_sighash, tx_withdraw_verify, transaction_deserialise},
+    util::{get_sighash, tx_withdraw_verify, transaction_deserialise, transaction_serialise},
     Root,
 };
 
@@ -82,7 +82,7 @@ pub trait Utilities {
 
     /// API: Return statecoin info, proofs and backup txs to enable wallet recovery from the proof key. 
     /// The request includes the public proof key and an authenticating signature
-    fn get_recovery_data(&self, recovery_request: RequestRecoveryData) -> Result<RecoveryDataMsg>;
+    fn get_recovery_data(&self, recovery_request: RecoveryRequest) -> Result<RecoveryDataMsg>;
 }
 
 impl Utilities for SCE {
@@ -340,9 +340,19 @@ impl Utilities for SCE {
         Ok(())
     }
 
-    fn get_recovery_data(&self, recovery_request: RequestRecoveryData) -> Result<RecoveryDataMsg>;
+    fn get_recovery_data(&self, recovery_request: RecoveryRequest) -> Result<RecoveryDataMsg> {
 
+        let (user_id, statechain_id, tx) = self.database.get_recovery_data(recovery_request.key)?;
 
+        let state_chain = self.database.get_statechain(statechain_id)?;
+
+        return Ok(RecoveryDataMsg {
+            shared_key_id: user_id,
+            statchain_id: statechain_id,
+            chain: state_chain,
+            tx_hex: transaction_serialise(&tx),
+        });
+    }
 }
 
 #[openapi]
@@ -409,7 +419,7 @@ pub fn get_transfer_batch_status(
 #[post("/info/recover", format = "json", data = "<request_recovery_data>")]
 pub fn get_recovery_data(
     sc_entity: State<SCE>,
-    request_recovery_data: Json<RequestRecoveryData>,
+    request_recovery_data: Json<RecoveryRequest>,
 ) -> Result<Json<RecoveryDataMsg>> {
     match sc_entity.get_recovery_data(request_recovery_data.into_inner()) {
         Ok(res) => return Ok(Json(res)),

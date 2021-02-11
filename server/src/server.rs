@@ -402,6 +402,10 @@ mock! {
             &self,
             prepare_sign_msg: PrepareSignTxMsg,
         ) -> util::Result<()>;
+        fn get_recovery_data(
+            &self, 
+            recovery_request: RecoveryRequest,
+        ) -> util::Result<RecoveryDataMsg>;
     }
     trait Withdraw{
         fn verify_statechain_sig(&self,

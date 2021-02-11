@@ -219,6 +219,7 @@ pub trait Database {
     ) -> Result<()>;
     fn update_transfer_batch_finalized(&self, batch_id: &Uuid, b_finalized: &bool) -> Result<()>;
     fn get_statechain_owner(&self, statechain_id: Uuid) -> Result<StateChainOwner>;
+    fn get_recovery_data(&self, proofkey: String) -> Result<(Uuid,Uuid,Transaction)>;
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
     fn create_user_session(&self, user_id: &Uuid, auth: &String, proof_key: &String) -> Result<()>;

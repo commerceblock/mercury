@@ -1451,7 +1451,7 @@ impl Database for PGDatabase {
     }
 
     // find statecoin and user information from supplied proof key to enable wallet recovery
-    fn get_recovery_data(&self, proofkey: String) -> Result<> {
+    fn get_recovery_data(&self, proofkey: String) -> Result<(Uuid,Uuid,Transaction)> {
         let dbr = self.database_r()?;
         let statement =
             dbr.prepare(&format!("SELECT * FROM {} WHERE proofkey = $1", Table::UserSession.to_string(),))?;
@@ -1461,88 +1461,12 @@ impl Database for PGDatabase {
         };
         let row = rows.get(0);
 
+        let tx_backup: Transaction = Self::deser(row.get("txbackup"))?;
+        let user_id: Uuid = row.get("id");
+        let statechain_id: Uuid = row.get("statechainid");
 
-        // then get the chain from the statechain table
-
-
-
-        let recovery_data = RecoveryDataMsg {
-            shared_key_id: row.get("id"),
-            statchain_id: row.get("id"),
-            amount: u64,
-            chain: Vec<State>,
-            locktime: u32,
-            tx_hex: String,
-        }
-
-
-    // UserSession
-    Id,
-    Authentication,
-    ProofKey,
-    StateChainId,
-    TxBackup,
-
-
-
-
-
-pub struct RecoveryDataMsg {
-    pub shared_key_id: Uuid,
-    pub statchain_id: Uuid,
-    pub utxo: OutPoint,
-    pub amount: u64,
-    pub chain: Vec<State>,
-    pub locktime: u32,
-    pub tx_hex: String,
-}
-
-
-
-    /// Get Id of current Root
-    fn root_get_current_id(&self) -> Result<i64> {
-        let dbr = self.database_r()?;
-        let statement =
-            dbr.prepare(&format!("SELECT MAX(id) FROM {}", Table::Root.to_string(),))?;
-        let rows = statement.query(&[])?;
-        if rows.is_empty() {
-            return Err(SEError::DBError(NoDataForID, String::from("Current Root")));
-        };
-        let row = rows.get(0);
-        match row.get_opt::<usize, i64>(0) {
-            None => return Ok(0),
-            Some(data) => match data {
-                Ok(v) => return Ok(v),
-                Err(_) => return Ok(0),
-            },
-        }
+        Ok((user_id,statechain_id,tx_backup))
     }
-
-
-
-
-
-
-
-        let mut txs: Vec<BackupTxID> = Vec::new();
-        if rows.is_empty() {
-            return Ok(txs);
-        };
-        for row in &rows {
-            let tx_backup: Transaction = Self::deser(row.get("txbackup"))?;
-            let id: Uuid = row.get("id");
-            let backup_obj = BackupTxID { tx: tx_backup, id };
-            txs.push(backup_obj);
-        }
-        Ok(txs)
-    }    
-
-
-
-
-
-
-
 
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity

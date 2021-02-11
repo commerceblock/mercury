@@ -609,6 +609,12 @@ impl Database for MemoryDB {
     ) -> crate::Result<crate::structs::StateChainOwner> {
         unimplemented!()
     }
+    fn get_recovery_data(
+        &self, 
+        _proofkey: String,
+    ) -> crate::Result<(uuid::Uuid,uuid::Uuid,bitcoin::Transaction)> {
+        unimplemented!()
+    }
     fn create_user_session(
         &self,
         _user_id: &uuid::Uuid,
