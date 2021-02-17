@@ -101,6 +101,7 @@ pub enum Column {
     TxWithdraw,
     SigHash,
     S2,
+    S1PubKey,
     WithdrawScSig,
 
     // StateChain
@@ -237,6 +238,7 @@ impl PGDatabase {
                 statechainid uuid,
                 authentication varchar,
                 s2 varchar,
+                s1pubkey varchar,
                 sighash varchar,
                 withdrawscsig varchar,
                 txwithdraw varchar,
@@ -707,6 +709,21 @@ impl Database for PGDatabase {
             vec![Column::WithdrawScSig],
             vec![&Self::ser(sig)?],
         )
+    }
+
+    fn update_s1_pubkey(&self, user_id: &Uuid, pubkey: &GE) -> Result<()> {
+        self.update(
+            user_id,
+            Table::UserSession,
+            vec![Column::S1PubKey],
+            vec![&Self::ser(pubkey)?],
+        )
+    }
+
+    fn get_s1_pubkey(&self, user_id: &Uuid) -> Result<GE> {
+        let pubkey: GE =
+            Self::deser(self.get_1(*user_id, Table::UserSession, vec![Column::S1PubKey])?)?;
+        Ok(pubkey)
     }
 
     fn update_withdraw_tx_sighash(

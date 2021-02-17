@@ -236,6 +236,7 @@ pub fn get_server<
                     transfer::transfer_receiver,
                     transfer::transfer_update_msg,
                     transfer::transfer_get_msg,
+                    transfer::transfer_get_pubkey,
                     transfer_batch::transfer_batch_init,
                     transfer_batch::transfer_reveal_nonce,
                     withdraw::withdraw_init,
@@ -364,6 +365,10 @@ mock! {
             &self,
             transfer_msg1: TransferMsg1,
         ) -> transfer::Result<TransferMsg2>;
+        fn transfer_get_pubkey(
+            &self,
+            user_id: Uuid,
+            ) -> transfer::Result<S1PubKey>;
         fn transfer_receiver(
             &self,
             transfer_msg4: TransferMsg4,

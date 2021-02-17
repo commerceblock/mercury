@@ -25,7 +25,7 @@ use crate::state_entity::{
 };
 use crate::wallet::{key_paths::funding_txid_to_int, wallet::Wallet};
 use crate::{utilities::requests, ClientShim};
-use shared_lib::{ecies::WalletDecryptable, state_chain::StateChainSig, structs::*, util::{transaction_serialise, transaction_deserialise}};
+use shared_lib::{ecies::WalletDecryptable, ecies::SelfEncryptable, state_chain::StateChainSig, structs::*, util::{transaction_serialise, transaction_deserialise}};
 
 use bitcoin::{Address, PublicKey};
 use curv::elliptic::curves::traits::{ECPoint, ECScalar};
@@ -270,18 +270,24 @@ pub fn transfer_receiver(
     let o2_pub: GE = g * o2;
 
     let t2 = t1 * (o2.invert());
+    let t2_encryptable = FESer::from_fe(&t2);
 
-    // TODO encrypt t2 with SE/lockbox public key share
+    // get SE/lockbox public key share
+    let s1_pub: S1PubKey =
+        requests::postb(&wallet.client_shim, &format!("transfer/pubkey"), UserID { id: transfer_msg3.shared_key_id })?;    
 
     let msg4 = &mut TransferMsg4 {
         shared_key_id: transfer_msg3.shared_key_id,
         statechain_id: transfer_msg3.statechain_id,
-        t2,
+        t2: t2_encryptable,
         statechain_sig: transfer_msg3.statechain_sig.clone(),
         o2_pub,
         tx_backup_hex: transfer_msg3.tx_backup_psm.tx_hex.clone(),
         batch_data: batch_data.to_owned(),
     };
+
+    //encrypt then make immutable
+    msg4.encrypt_with_pubkey(&PublicKey::from_slice(&s1_pub.key.pk_to_key_slice()).unwrap())?;    
 
     let transfer_msg5: TransferMsg5 =
         requests::postb(&wallet.client_shim, &format!("transfer/receiver"), msg4)?;

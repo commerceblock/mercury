@@ -116,6 +116,7 @@ impl Ecdsa for SCE {
 
     fn second_message(&self, key_gen_msg2: KeyGenMsg2) -> Result<KeyGenReply2> {
         let kg_party_one_second_msg: party1::KeyGenParty1Message2;
+        let db = &self.database;
         // call lockbox
         if self.lockbox.active {
             let path: &str = "ecdsa/keygen/second";
@@ -123,8 +124,6 @@ impl Ecdsa for SCE {
             kg_party_one_second_msg = kg_party_one_second_message;
         }
         else {
-            let db = &self.database;
-
             let user_id = key_gen_msg2.shared_key_id;
 
             let party2_public: GE = key_gen_msg2.dlog_proof.pk.clone();
@@ -151,6 +150,13 @@ impl Ecdsa for SCE {
             self.master_key(user_id)?;
             kg_party_one_second_msg = kg_party_one_second_message;
         }
+
+        db.update_s1_pubkey(&key_gen_msg2.shared_key_id, 
+            &kg_party_one_second_msg
+            .ecdh_second_message
+            .comm_witness
+            .public_share
+        )?;
 
         Ok(KeyGenReply2 { msg: kg_party_one_second_msg } )
     }

@@ -7,7 +7,10 @@ extern crate shared_lib;
 extern crate reqwest;
 use crate::server::TRANSFERS_COUNT;
 use super::transfer_batch::transfer_batch_is_ended;
-use shared_lib::{ecies, ecies::WalletDecryptable, state_chain::*, structs::*, util::transaction_deserialise};
+use shared_lib::{ecies, ecies::WalletDecryptable, ecies::SelfEncryptable, state_chain::*, structs::*, util::transaction_deserialise};
+use bitcoin::secp256k1::key::SecretKey;
+use bitcoin::util::key::PrivateKey;
+use bitcoin::network::constants::Network;
 
 use crate::error::SEError;
 use crate::Database;
@@ -18,7 +21,8 @@ use rocket_okapi::openapi;
 use cfg_if::cfg_if;
 use curv::{
     elliptic::curves::traits::{ECPoint, ECScalar},
-    {FE, GE},
+    arithmetic::traits::Converter,
+    {FE, GE, BigInt},
 };
 use rocket::State;
 use rocket_contrib::json::Json;
@@ -54,6 +58,9 @@ pub trait Transfer {
     ///     - Validate transfer parameters
     ///     - Store transfer parameters
     fn transfer_sender(&self, transfer_msg1: TransferMsg1) -> Result<TransferMsg2>;
+
+    /// API: Get the current SE/Lockbox public key share
+    fn transfer_get_pubkey(&self, user_id: Uuid) -> Result<S1PubKey>;
 
     /// API: Transfer shared wallet to new Owner:
     ///     - Check new Owner's state chain is correct
@@ -141,7 +148,12 @@ impl Transfer for SCE {
         Ok(msg2)
     }
 
-    fn transfer_receiver(&self, transfer_msg4: TransferMsg4) -> Result<TransferMsg5> {
+    fn transfer_get_pubkey(&self, user_id: Uuid) -> Result<S1PubKey> {
+        let pubkey = self.database.get_s1_pubkey(&user_id)?;
+        Ok(S1PubKey { key: pubkey } )
+    }
+
+    fn transfer_receiver(&self, mut transfer_msg4: TransferMsg4) -> Result<TransferMsg5> {
         let user_id = transfer_msg4.shared_key_id;
         let statechain_id = transfer_msg4.statechain_id;
 
@@ -177,10 +189,30 @@ impl Transfer for SCE {
             let kp = self.database.get_ecdsa_keypair(user_id)?;
 
             // let x1 = transfer_data.x1;
-            let t2 = transfer_msg4.t2;
             let s1 = kp.party_1_private.get_private_key();
 
-            //let mut rng = OsRng::new().expect("OsRng");
+            let s1_priv = PrivateKey {
+                compressed: true,
+                network: Network::Regtest,
+                key: SecretKey::from_slice(&BigInt::to_vec(&s1.clone().to_big_int())).unwrap(),
+            };
+
+            match transfer_msg4.decrypt(&s1_priv) {
+            Ok(_) => (),
+            Err(e) => return Err(SEError::SharedLibError(format!("{}", e))),
+            };
+
+            let t2 = match transfer_msg4.t2.get_fe() {
+                Ok(r) => r,
+                Err(e) => {
+                    return Err(SEError::Generic(format!(
+                        "Failed to get FE from transfer_msg_4 {:?} error: {}",
+                        transfer_msg4,
+                        e.to_string()
+                    )))
+                }
+            };
+
             s2 = t2 * (td.x1.invert()) * s1;
 
             let g: GE = ECPoint::generator();
@@ -354,6 +386,19 @@ pub fn transfer_sender(
     transfer_msg1: Json<TransferMsg1>,
 ) -> Result<Json<TransferMsg2>> {
     match sc_entity.transfer_sender(transfer_msg1.into_inner()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Retreive the current SE public key share for t2 encryption
+#[post("/transfer/pubkey", format = "json", data = "<user_id>")]
+pub fn transfer_get_pubkey(
+    sc_entity: State<SCE>,
+    user_id: Json<UserID>,
+) -> Result<Json<S1PubKey>> {
+    match sc_entity.transfer_get_pubkey(user_id.id) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
