@@ -418,8 +418,7 @@ pub struct GEDef(Vec<u8>);
 /// SE public key share for encryption
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct S1PubKey {
-    #[schemars(with = "GEDef")]
-    pub key: GE,
+    pub key: String,
 }
 
 /// Receiver -> State Entity

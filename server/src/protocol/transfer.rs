@@ -9,6 +9,7 @@ use crate::server::TRANSFERS_COUNT;
 use super::transfer_batch::transfer_batch_is_ended;
 use shared_lib::{ecies, ecies::WalletDecryptable, ecies::SelfEncryptable, state_chain::*, structs::*, util::transaction_deserialise};
 use bitcoin::secp256k1::key::SecretKey;
+use bitcoin::secp256k1::PublicKey;
 use bitcoin::util::key::PrivateKey;
 use bitcoin::network::constants::Network;
 
@@ -150,7 +151,7 @@ impl Transfer for SCE {
 
     fn transfer_get_pubkey(&self, user_id: Uuid) -> Result<S1PubKey> {
         let pubkey = self.database.get_s1_pubkey(&user_id)?;
-        Ok(S1PubKey { key: pubkey } )
+        Ok(S1PubKey { key: hex::encode(&PublicKey::from_slice(&pubkey.pk_to_key_slice()).unwrap().serialize()) } )
     }
 
     fn transfer_receiver(&self, mut transfer_msg4: TransferMsg4) -> Result<TransferMsg5> {
