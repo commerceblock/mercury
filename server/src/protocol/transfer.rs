@@ -293,9 +293,6 @@ impl Transfer for SCE {
         // Update state chain
         let mut state_chain: StateChain = self.database.get_statechain(statechain_id)?;
 
-        println!("{:?}", "state_chain");
-        println!("{:?}", state_chain);
-
         state_chain.add(finalized_data.statechain_sig.to_owned())?;
 
         let new_user_id = finalized_data.new_shared_key_id;

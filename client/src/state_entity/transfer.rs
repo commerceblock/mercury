@@ -288,6 +288,7 @@ pub fn transfer_receiver(
 
     //encrypt then make immutable
     msg4.encrypt_with_pubkey(&PublicKey::from_slice(&s1_pub.key.pk_to_key_slice()).unwrap())?;    
+    let msg4 = msg4;
 
     let transfer_msg5: TransferMsg5 =
         requests::postb(&wallet.client_shim, &format!("transfer/receiver"), msg4)?;
