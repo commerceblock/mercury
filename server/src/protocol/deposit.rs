@@ -98,7 +98,7 @@ impl Deposit for SCE {
             )));
         }
 
-        // Wait for funding tx existence in blockchain and confs
+        // Check that the funding transaction has the required number of confirmations
         self.verify_tx_confirmed(&tx_backup.input[0].previous_output.txid.to_string())?;
 
         // Create state chain DB object
