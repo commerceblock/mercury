@@ -7,7 +7,11 @@ extern crate shared_lib;
 extern crate reqwest;
 use crate::server::TRANSFERS_COUNT;
 use super::transfer_batch::transfer_batch_is_ended;
-use shared_lib::{ecies, ecies::WalletDecryptable, state_chain::*, structs::*, util::transaction_deserialise};
+use shared_lib::{ecies, ecies::WalletDecryptable, ecies::SelfEncryptable, state_chain::*, structs::*, util::transaction_deserialise};
+use bitcoin::secp256k1::key::SecretKey;
+use bitcoin::secp256k1::PublicKey;
+use bitcoin::util::key::PrivateKey;
+use bitcoin::network::constants::Network;
 
 use crate::error::SEError;
 use crate::Database;
@@ -18,7 +22,8 @@ use rocket_okapi::openapi;
 use cfg_if::cfg_if;
 use curv::{
     elliptic::curves::traits::{ECPoint, ECScalar},
-    {FE, GE},
+    arithmetic::traits::Converter,
+    {FE, GE, BigInt},
 };
 use rocket::State;
 use rocket_contrib::json::Json;
@@ -54,6 +59,9 @@ pub trait Transfer {
     ///     - Validate transfer parameters
     ///     - Store transfer parameters
     fn transfer_sender(&self, transfer_msg1: TransferMsg1) -> Result<TransferMsg2>;
+
+    /// API: Get the current SE/Lockbox public key share
+    fn transfer_get_pubkey(&self, user_id: Uuid) -> Result<S1PubKey>;
 
     /// API: Transfer shared wallet to new Owner:
     ///     - Check new Owner's state chain is correct
@@ -141,7 +149,12 @@ impl Transfer for SCE {
         Ok(msg2)
     }
 
-    fn transfer_receiver(&self, transfer_msg4: TransferMsg4) -> Result<TransferMsg5> {
+    fn transfer_get_pubkey(&self, user_id: Uuid) -> Result<S1PubKey> {
+        let pubkey = self.database.get_s1_pubkey(&user_id)?;
+        Ok(S1PubKey { key: hex::encode(&PublicKey::from_slice(&pubkey.pk_to_key_slice()).unwrap().serialize()) } )
+    }
+
+    fn transfer_receiver(&self, mut transfer_msg4: TransferMsg4) -> Result<TransferMsg5> {
         let user_id = transfer_msg4.shared_key_id;
         let statechain_id = transfer_msg4.statechain_id;
 
@@ -177,10 +190,30 @@ impl Transfer for SCE {
             let kp = self.database.get_ecdsa_keypair(user_id)?;
 
             // let x1 = transfer_data.x1;
-            let t2 = transfer_msg4.t2;
             let s1 = kp.party_1_private.get_private_key();
 
-            //let mut rng = OsRng::new().expect("OsRng");
+            let s1_priv = PrivateKey {
+                compressed: true,
+                network: Network::Regtest,
+                key: SecretKey::from_slice(&BigInt::to_vec(&s1.clone().to_big_int())).unwrap(),
+            };
+
+            match transfer_msg4.decrypt(&s1_priv) {
+                Ok(_) => (),
+                Err(e) => return Err(SEError::SharedLibError(format!("Failed to decrypt t2 in transfer_msg4. Error: {}", e.to_string()))),
+            };
+
+            let t2 = match transfer_msg4.t2.get_fe() {
+                Ok(r) => r,
+                Err(e) => {
+                    return Err(SEError::Generic(format!(
+                        "Failed to get FE from transfer_msg_4 {:?} error: {}",
+                        transfer_msg4,
+                        e.to_string()
+                    )))
+                }
+            };
+
             s2 = t2 * (td.x1.invert()) * s1;
 
             let g: GE = ECPoint::generator();
@@ -360,6 +393,19 @@ pub fn transfer_sender(
 }
 
 #[openapi]
+/// # Retreive the current SE public key share for t2 encryption
+#[post("/transfer/pubkey", format = "json", data = "<user_id>")]
+pub fn transfer_get_pubkey(
+    sc_entity: State<SCE>,
+    user_id: Json<UserID>,
+) -> Result<Json<S1PubKey>> {
+    match sc_entity.transfer_get_pubkey(user_id.id) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
 /// # Transfer completing by receiver: key share update and deletion
 #[post("/transfer/receiver", format = "json", data = "<transfer_msg4>")]
 pub fn transfer_receiver(
@@ -406,7 +452,7 @@ mod tests {
         error::DBErrorType,
         protocol::util::{
             mocks,
-            tests::{test_sc_entity, BACKUP_TX_NOT_SIGNED, STATE_CHAIN},
+            tests::{test_sc_entity, BACKUP_TX_NOT_SIGNED},
         },
         structs::{ECDSAKeypair, StateChainOwner, TransferData, TransferFinalizeBatchData},
     };
@@ -419,13 +465,13 @@ mod tests {
 
     // Data from a run of transfer protocol.
     // static TRANSFER_MSG_1: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"}}";
-    static TRANSFER_MSG_2: &str = "{\"x1\":{\"secret_bytes\":[217,214,207,25,253,52,22,248,213,221,5,144,234,167,41,113,133,7,4,157,15,84,91,60,178,40,179,202,26,62,186,105]},\"proof_key\":\"04b42845b4e8477af2133ea5b5c15a4e8864e48d553c018a20ef6fa54526b8879c87306264ad3b4d1525ecf863734f6145a59cc940bb0a8813bedd9a8f6d816814\"}";
-
+    static TRANSFER_MSG_2: &str = "{\"x1\":{\"secret_bytes\":[88,245,63,83,101,154,49,170,232,129,177,102,30,130,74,32,197,83,72,92,6,154,167,239,106,224,14,55,162,67,230,112]},\"proof_key\":\"0325e1688baf8ab36e40be1e5362bd4bb24f78e2428aa8ff7631fc2fd8bd0a8bbc\"}";
     // static TRANSFER_MSG_3: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"t1\":\"34c9a329617b8dd3cdeb3d491fa09f023f84f28005bdf40f0682eb020969183b\",\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"},\"statechain_id\":\"9b0ba36b-406a-499c-8c83-696b77f003a9\",\"tx_backup_psm\":{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"protocol\":\"Transfer\",\"tx\":{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"53e1d67d837fdaddb016c5de85d8903bc033f7f2208d3ff40430fc42edeab4cb:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,69,2,33,0,177,248,103,71,170,95,47,217,222,7,130,181,12,9,254,115,96,166,180,164,162,4,14,110,145,113,106,97,155,231,190,22,2,32,63,119,90,178,253,249,43,242,42,177,250,25,29,251,156,37,12,61,70,252,201,155,252,188,56,242,36,211,50,136,203,95,1],[2,108,195,112,80,86,19,121,166,106,134,63,140,162,115,194,178,158,147,92,173,6,188,127,94,107,131,160,62,11,191,241,230]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"0014a5c378a7de7311e6836253a28830b48cc6b9e252\"}]},\"input_addrs\":[\"026cc37050561379a66a863f8ca273c2b29e935cad06bc7f5e6b83a03e0bbff1e6\"],\"input_amounts\":[10000],\"proof_key\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\"},\"rec_se_addr\":{\"tx_backup_addr\":\"bcrt1q5hph3f77wvg7dqmz2w3gsv953nrtncjjzyj3m9\",\"proof_key\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\"}}";
-    static TRANSFER_MSG_4: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"statechain_id\":\"9b0ba36b-406a-499c-8c83-696b77f003a9\",\"t2\":\"a1563a0006e1dac1cdb89d592327f7c5e292193365a0f15ebf805900261f9bb2\",\"statechain_sig\":{ \"purpose\": \"TRANSFER\", \"data\": \"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\", \"sig\": \"3045022100abe02f0d1918aca36b634eb1af8a4e0714f3f699fb425de65cc661e538da3f2002200a538a22df665a95adb739ff6bb592b152dba5613602c453c58adf70858f05f6\"},\"o2_pub\":{\"x\":\"e60171f570be0c6b673acbb5df775001b634e474e7ad329ab07b0fb50fead479\",\"y\":\"1ef781c8cde5310eb748a305dcab6b3ee302160d49d83b7ae8e7fde67979eb13\"},\"tx_backup_hex\":\"02000000000101cbb4eaed42fc3004f43f8d20f2f733c03b90d885dec516b0ddda7f837dd6e1530000000000ffffffff012823000000000000160014a5c378a7de7311e6836253a28830b48cc6b9e25202483045022100b1f86747aa5f2fd9de0782b50c09fe7360a6b4a4a2040e6e91716a619be7be1602203f775ab2fdf92bf22ab1fa191dfb9c250c3d46fcc99bfcbc38f224d33288cb5f0121026cc37050561379a66a863f8ca273c2b29e935cad06bc7f5e6b83a03e0bbff1e600000000\",\"batch_data\":null}";
-    static FINALIZED_DATA: &str = "{\"new_shared_key_id\":\"22f73737-efde-49a0-977a-ffaf8ba1e0f0\",\"statechain_id\":\"9b0ba36b-406a-499c-8c83-696b77f003a9\",\"statechain_sig\":{ \"purpose\": \"TRANSFER\", \"data\": \"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\", \"sig\": \"3045022100abe02f0d1918aca36b634eb1af8a4e0714f3f699fb425de65cc661e538da3f2002200a538a22df665a95adb739ff6bb592b152dba5613602c453c58adf70858f05f6\"},\"s2\":\"28d85004c2a896df7f205882930ead6c7a95d84b3978174c51ebd06a4bd1589a\",\"new_tx_backup_hex\":\"02000000000101cbb4eaed42fc3004f43f8d20f2f733c03b90d885dec516b0ddda7f837dd6e1530000000000ffffffff012823000000000000160014a5c378a7de7311e6836253a28830b48cc6b9e25202483045022100b1f86747aa5f2fd9de0782b50c09fe7360a6b4a4a2040e6e91716a619be7be1602203f775ab2fdf92bf22ab1fa191dfb9c250c3d46fcc99bfcbc38f224d33288cb5f0121026cc37050561379a66a863f8ca273c2b29e935cad06bc7f5e6b83a03e0bbff1e600000000\",\"batch_data\":null}";
-    pub static PARTY_1_PRIVATE: &str = "{\"x1\":\"827089d12423e80ac4d6cd463d524326e3aa89c4623178df41a6581fec42fc4\",\"paillier_priv\":{\"p\":\"175105153600741631732008635643568979650827093652618445865555498830310239779193993937919065748609864882562533521325401979357004940357735331137242744377931301179917304999674039005453503946248939473532166164488354001195043141677905998318715771948374633284282386723061505364048790027483575020641965955188382828043\",\"q\":\"176107056094363704009530683741685388080833654947191096034654854567664678756371593133182239495448766868278040275902304993107585397542355074990977649321727244853545689372964609905231205840920297987033622047920439606987774726496544858149573923439784574804611753120265479364394401830948243108767573192431824915223\"},\"c_key_randomness\":\"c3d4d31f59de5dc74bd5f89a92d498197ea5fd93069556cde819db50b0fa9fc4649ee5f89404d943c2a227453defb2c58908869f13ec12897b150778c41dd037a6c88015e53be46beeed355ce2e41d8351005b06264f397cde4adde9d881e9abf3d4278a89b1d66beb335a4f81128e1e78e069a8ddfee1756585ff3aa80f714fe4f4ced8822b73a1d8c9c04375b76f055791a60b683443eb959ffb292aa152fd23561a69bfe20c1d711cc8be4a404591bf04cab07c472ca013e06b9b370cdb53a668af4f1646854a225a7cf07ea12e6c53f7d55014d445d2a1ed061e2320656a4afad19593f9de4fef4f0c73f018373a0eb61b7cd8c1d5efd1c485bd90b845bb\"}";
-    pub static PARTY_2_PUBLIC: &str = "{\"x\":\"5220bc6ebcc83d0a1e4482ab1f2194cb69648100e8be78acde47ca56b996bd9e\",\"y\":\"8dfbb36ef76f2197598738329ffab7d3b3a06d80467db8e739c6b165abc20231\"}";
+    static TRANSFER_MSG_4: &str = "{\"shared_key_id\":\"c2c864d0-12df-4a31-ad17-1d9779b55097\",\"statechain_id\":\"86d9483a-11f6-412a-b117-572695f9f7dd\",\"t2\":{\"secret_bytes\":[4,244,43,195,129,203,211,215,196,36,206,154,82,104,119,27,73,46,95,178,212,1,242,72,74,179,197,30,0,234,137,66,249,208,187,141,37,85,176,22,242,152,190,240,46,206,104,114,58,35,4,76,17,4,136,183,40,225,11,73,235,132,28,129,7,89,81,112,187,237,202,12,174,109,83,170,103,238,138,195,137,138,67,30,48,57,115,151,45,39,212,92,99,15,128,206,50,123,74,105,27,53,250,96,22,69,134,143,163,193,249,12,172,33,38,109,45,178,183,162,162,238,64,65,62,233,219,98,120]},\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"02ec87054ed8d2f04ac9d71f44243023821fec6fc60f3e230ffa7626089033d8b1\",\"sig\":\"3044022005dbe013f6d93725a92af0c1bca687c8d8b02167ef13e221470d361127e537fb02205157db1b5267ba985339bd8e0d944d8a77ea465fcd8acb80761cfefbabf39661\"},\"o2_pub\":{\"x\":\"6e7374dc612b65f1f3b634b82ca867e66635e65bf29794b256047bbd8f2dc911\",\"y\":\"fc04939b4df3cca6fadebff3f8188b6a77f396446e04e818ce16daf76aebe0a3\"},\"tx_backup_hex\":\"02000000000101adb81a8811447ae7d568c42e55ad2725fa67f5c3e471342ba7fcac1a4055bb620000000000ffffffff02eca800000000000016001460804be0d67f1107dae3af48f4a20223572e97dd58050000000000001600141319a227287cfac4d8660830f4c9b0e1724a8100024730440220334cbb130ccb168121741e33b87b83c1f7d07f504c5a181973ad82a2e93482fa02203bb31ef62bf08d2ed268fb7042665be5a3f686519a4c0765fa58757b713536cf01210353ce5b54d23d07de4828cb96d0485f6ab1a8db9c589486cd8d4362524bee405317340000\",\"batch_data\":null}";
+    static FINALIZED_DATA: &str = "{\"new_shared_key_id\":\"d1a3a9a6-b64e-4b4e-b3c6-0c55a0e1f8c6\",\"statechain_id\":\"86d9483a-11f6-412a-b117-572695f9f7dd\",\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"02ec87054ed8d2f04ac9d71f44243023821fec6fc60f3e230ffa7626089033d8b1\",\"sig\":\"3044022005dbe013f6d93725a92af0c1bca687c8d8b02167ef13e221470d361127e537fb02205157db1b5267ba985339bd8e0d944d8a77ea465fcd8acb80761cfefbabf39661\"},\"s2\":\"9a06341e81792bca72ef7120e94c93a3c97e8f150f9c4fd57f1758f50232f938\",\"new_tx_backup_hex\":\"02000000000101adb81a8811447ae7d568c42e55ad2725fa67f5c3e471342ba7fcac1a4055bb620000000000ffffffff02eca800000000000016001460804be0d67f1107dae3af48f4a20223572e97dd58050000000000001600141319a227287cfac4d8660830f4c9b0e1724a8100024730440220334cbb130ccb168121741e33b87b83c1f7d07f504c5a181973ad82a2e93482fa02203bb31ef62bf08d2ed268fb7042665be5a3f686519a4c0765fa58757b713536cf01210353ce5b54d23d07de4828cb96d0485f6ab1a8db9c589486cd8d4362524bee405317340000\",\"batch_data\":null}";
+    pub static PARTY_1_PRIVATE: &str = "{\"x1\":\"62fccd3b8e1ec9847a81da39dbd12248649a56a5bd826993a0be1ef7e5dbaff6\",\"paillier_priv\":{\"p\":\"175105153600741631732008635643568979650827093652618445865555498830310239779193993937919065748609864882562533521325401979357004940357735331137242744377931301179917304999674039005453503946248939473532166164488354001195043141677905998318715771948374633284282386723061505364048790027483575020641965955188382828043\",\"q\":\"176107056094363704009530683741685388080833654947191096034654854567664678756371593133182239495448766868278040275902304993107585397542355074990977649321727244853545689372964609905231205840920297987033622047920439606987774726496544858149573923439784574804611753120265479364394401830948243108767573192431824915223\"},\"c_key_randomness\":\"c3d4d31f59de5dc74bd5f89a92d498197ea5fd93069556cde819db50b0fa9fc4649ee5f89404d943c2a227453defb2c58908869f13ec12897b150778c41dd037a6c88015e53be46beeed355ce2e41d8351005b06264f397cde4adde9d881e9abf3d4278a89b1d66beb335a4f81128e1e78e069a8ddfee1756585ff3aa80f714fe4f4ced8822b73a1d8c9c04375b76f055791a60b683443eb959ffb292aa152fd23561a69bfe20c1d711cc8be4a404591bf04cab07c472ca013e06b9b370cdb53a668af4f1646854a225a7cf07ea12e6c53f7d55014d445d2a1ed061e2320656a4afad19593f9de4fef4f0c73f018373a0eb61b7cd8c1d5efd1c485bd90b845bb\"}";
+    pub static PARTY_2_PUBLIC: &str = "{\"x\":\"f4d5ddb9e3a9aab03a75b30b287e007016894c528d2d41949a142c8361a6323a\",\"y\":\"67905d786f47a76a09338bed4360327b12831afdf01d376dd3d2308d882c9f3a\"}";
+    static STATE_CHAIN: &str = "{\"chain\":[{\"data\":\"0325e1688baf8ab36e40be1e5362bd4bb24f78e2428aa8ff7631fc2fd8bd0a8bbc\",\"next_state\":null}]}";
 
     #[test]
     fn test_transfer_sender() {
@@ -615,11 +661,11 @@ mod tests {
         //Generate an invalid x1 by adding x1 to itself
         let sk = x1.get_element();
         let x1_invalid = x1.add(&sk);
-        msg_4_incorrect_t2.t2 = x1_invalid;
+        msg_4_incorrect_t2.t2 = FESer::from_fe(&x1_invalid);
 
         match sc_entity.transfer_receiver(msg_4_incorrect_t2) {
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("Transfer protocol error: P1 != P2")),
+            Err(e) => assert!(e.to_string().contains("Error: Invalid message")),
         }
 
         // StateChain incorreclty signed for
@@ -632,7 +678,7 @@ mod tests {
                 .to_string()
                 .contains("Error: State chain siganture provided does not match state chain at")),
         }
-        // Expected successful run
+
         assert!(sc_entity.transfer_receiver(transfer_msg_4.clone()).is_ok());
 
         // Test transfer involved in batch
@@ -654,7 +700,7 @@ mod tests {
 
     #[test]
     fn do_transfer_receiver_lockbox() {
-        let transfer_msg_4 =
+        let mut transfer_msg_4 =
             serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap();
         let shared_key_id = transfer_msg_4.shared_key_id;
         let statechain_id = transfer_msg_4.statechain_id;
@@ -739,11 +785,23 @@ mod tests {
                     party_1_private: serde_json::from_str(&PARTY_1_PRIVATE.to_string()).unwrap(),
                     party_2_public: serde_json::from_str(&PARTY_2_PUBLIC.to_string()).unwrap(),
                 };
-        let t2 = transfer_msg_4.t2;
         let s1 = kp.party_1_private.get_private_key();
 
+        let s1_priv = PrivateKey {
+            compressed: true,
+            network: Network::Regtest,
+            key: SecretKey::from_slice(&BigInt::to_vec(&s1.clone().to_big_int())).unwrap(),
+        };
+
+        match transfer_msg_4.decrypt(&s1_priv) {
+            Ok(_) => (),
+            Err(e) => println!("{:?}", e.to_string()),
+        };
+
+        let t2 = transfer_msg_4.t2;
+
         //let mut rng = OsRng::new().expect("OsRng");
-        let s2t = t2 * (x1.invert()) * s1;
+        let s2t = t2.get_fe().unwrap() * (x1.invert()) * s1;
         let g: GE = ECPoint::generator();
         let s2_pub = g * s2t;
 
