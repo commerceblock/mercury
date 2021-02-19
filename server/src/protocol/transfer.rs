@@ -91,6 +91,12 @@ impl Transfer for SCE {
         // Get state_chain id
         let statechain_id = self.database.get_statechain_id(user_id)?;
 
+        // Get back up tx and proof key
+        let (tx_backup,_) = self.database.get_backup_transaction_and_proof_key(user_id)?;
+
+        // Check that the funding transaction has the required number of confirmations
+        self.verify_tx_confirmed(&tx_backup.input[0].previous_output.txid.to_string())?;
+
         // Check if transfer has already been completed (but not finalized)
         if self.database.transfer_is_completed(statechain_id) {
             return Err(SEError::Generic(String::from(
@@ -484,6 +490,7 @@ mod tests {
             serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string())
                 .unwrap()
                 .statechain_sig;
+        let tx_backup: Transaction = serde_json::from_str(&BACKUP_TX_NOT_SIGNED).unwrap();
         let transfer_msg_1 = TransferMsg1 {
             shared_key_id,
             statechain_sig,
@@ -499,6 +506,9 @@ mod tests {
         db.expect_get_statechain_id()
             .with(predicate::eq(shared_key_id))
             .returning(move |_| Ok(statechain_id));
+        db.expect_get_backup_transaction_and_proof_key()
+            .with(predicate::eq(shared_key_id))
+            .returning(move |_| Ok((tx_backup.clone(), no_sc_shared_key_id.to_string())));        
         // userid does not own a state
         db.expect_get_statechain_id()
             .with(predicate::eq(no_sc_shared_key_id))

@@ -77,7 +77,7 @@ impl Electrumx for MockElectrum {
     ) -> Result<GetTransactionConfStatus, Box<dyn std::error::Error>> {
         Ok(GetTransactionConfStatus {
             in_active_chain: Some(true),
-            confirmations: Some(2),
+            confirmations: Some(3),
             blocktime: Some(123456789),
         })
     }
