@@ -278,7 +278,7 @@ impl Transfer for SCE {
         }
 
         info!(
-            "TRANSFER: Receiver side complete. State Chain ID: {}",
+            "TRANSFER: Receiver side complete. New shared key ID: {}",
             new_shared_key_id
         );
         debug!("TRANSFER: Receiver side complete. State Chain ID: {}. New Shared Key ID: {}. Finalized data: {:?}",statechain_id,statechain_id,finalized_data);

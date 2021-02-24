@@ -285,7 +285,6 @@ impl Ecdsa for SCE {
             Protocol::Withdraw => {
                 // Store signed withdraw tx in UserSession DB object
                 db.update_tx_withdraw(user_id, tx)?;
-
                 info!("WITHDRAW: Tx signed and stored. User ID: {}", user_id);
                 // Do not return withdraw tx witness until /withdraw/confirm is complete
                 ws = vec![];
