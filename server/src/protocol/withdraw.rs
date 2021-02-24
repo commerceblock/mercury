@@ -17,6 +17,7 @@ use crate::{server::StateChainEntity, storage::Storage};
 use cfg_if::cfg_if;
 use uuid::Uuid;
 use rocket_okapi::openapi;
+use bitcoin::consensus;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -117,6 +118,9 @@ impl Withdraw for SCE {
 
         // Get withdraw data - Checking that withdraw tx and statechain signature exists
         let wcd = self.database.get_withdraw_confirm_data(user_id)?;
+
+
+        println!("{:?}", hex::encode(consensus::serialize(&wcd.tx_withdraw)) );
 
         // Ensure withdraw tx has been signed. i,e, that prepare-sign-tx has been completed.
         if wcd.tx_withdraw.input[0].witness.len() == 0 {

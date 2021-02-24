@@ -91,7 +91,7 @@ impl Deposit for SCE {
             .database
             .get_backup_transaction_and_proof_key(user_id)?;
 
-        // Ensure backup tx exists and is signed
+        // Skip check if zero confs set
         if tx_backup.input[0].witness.len() == 0 {
             return Err(SEError::Generic(String::from(
                 "Signed Back up transaction not found.",

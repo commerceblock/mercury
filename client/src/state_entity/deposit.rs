@@ -91,6 +91,10 @@ pub fn deposit(
         &amounts,
     );
 
+    println!("{:?}", hex::encode(consensus::serialize(&tx_funding_signed)) );
+
+    let funding_txid = "5c066bc509f0cfce5c20fce20642cea07ecba501afa1f38cf2989c23141bcbcf".to_string();
+
     //get initial locktime
     let chaintip = wallet
         .electrumx_client
@@ -124,11 +128,11 @@ pub fn deposit(
 
     // TODO: check signature is valid?
 
-    // Broadcast funding transcation
-    let funding_txid = wallet
-        .electrumx_client
-        .instance
-        .broadcast_transaction(hex::encode(consensus::serialize(&tx_funding_signed)))?;
+//    // Broadcast funding transcation
+//    let funding_txid = wallet
+//        .electrumx_client
+//        .instance
+//        .broadcast_transaction(hex::encode(consensus::serialize(&tx_funding_signed)))?;
 
     // Wait for server confirmation of funding tx and receive new StateChain's id
     let statechain_id: StatechainID = requests::postb(

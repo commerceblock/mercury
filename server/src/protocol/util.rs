@@ -429,6 +429,11 @@ impl SCE {
     /// Query an Electrum Server for a transaction's confirmation status.
     /// Return Ok() if confirmed or Error if not within configured confirmation number.
     pub fn verify_tx_confirmed(&self, txid: &String) -> Result<()> {
+
+        if self.config.required_confirmation == 0 {
+            return Ok(());
+        };
+
         let mut electrum: Box<dyn Electrumx> = if self.config.testing_mode {
             Box::new(MockElectrum::new())
         } else {
