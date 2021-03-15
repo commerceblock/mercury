@@ -15,6 +15,7 @@ use curv::FE;
 use uuid::Uuid;
 use rocket_okapi::JsonSchema;
 use schemars;
+use log::info;
 
 // Swaps
 #[allow(dead_code)]
@@ -43,7 +44,9 @@ impl SwapToken {
         let mut str = self.amount.to_string();
         str.push_str(&self.time_out.to_string());
         str.push_str(&format!("{:?}", self.statechain_ids));
+        info!("swap token message str: {}", str);
         let hash = sha256d::Hash::hash(&str.as_bytes());
+        info!("swap token message hash: {}", hash);
         Ok(Message::from_slice(&hash)?)
     }
 
@@ -57,12 +60,20 @@ impl SwapToken {
 
     /// Verify self's signature for transfer or withdraw
     pub fn verify_sig(&self, pk: &PublicKey, sig: Signature) -> Result<()> {
-        match sig.verify(pk, &self.to_message()?) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(SharedLibError::SwapError(format!(
-                "signature does not sign for token: {}",
-                e
-            ))),
+        let secp = Secp256k1::new();
+
+        match secp.verify(&self.to_message()?, &sig, &pk) {
+            Ok(_) => {
+                info!("verify_sig: ok");
+                Ok(())
+            },
+            Err(e) => {
+                info!("verify_sig: not ok");
+                Err(SharedLibError::SwapError(format!(
+                    "swap token signature does not sign for token: {}",
+                    e
+                )))
+            },
         }
     }
 }
@@ -96,7 +107,7 @@ pub struct SwapMsg1 {
     #[schemars(with = "UuidDef")]
     pub statechain_id: Uuid,
     #[schemars(with = "SignatureDef")]
-    pub swap_token_sig: Signature,
+    pub swap_token_sig: String,
     pub transfer_batch_sig: StateChainSig,
     pub address: SCEAddress,
     #[schemars(with = "FEDef")]

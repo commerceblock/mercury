@@ -36,6 +36,7 @@ use uuid::Uuid;
 use rocket_okapi::openapi;
 use rocket_okapi::JsonSchema;
 use schemars;
+use bitcoin::secp256k1::Signature;
 
 static DEFAULT_TIMEOUT: u64 = 100;
 
@@ -554,13 +555,18 @@ impl Conductor for SCE {
         let key_id = &register_utxo_msg.statechain_id;
         let swap_size = &register_utxo_msg.swap_size;
         //Verify the signature
+        info!("Register utxo - verifying statechain sig...");
         let _ = self.verify_statechain_sig(key_id, sig, None)?;
+        info!("Register utxo - get statechain amount...");
         let sc_amount = self.database.get_statechain_amount(*key_id)?;
         let amount: u64 = sc_amount.amount as u64;
+        info!("Register utxo - get scheduler...");
         let mut guard = self.scheduler.lock()?;
+        info!("Register utxo - register...");
         let _ = guard.register_amount_swap_size(key_id, amount, *swap_size);
 
         //increment swap histogram
+        info!("Register utxo - increment swap histogram...");
         REG_SWAP_UTXOS.with_label_values(&[&swap_size.clone().to_string(),&amount.clone().to_string()]).inc();
 
         Ok(())
@@ -571,6 +577,9 @@ impl Conductor for SCE {
         let proof_key_str = &state_chain.last().unwrap().data.clone();
         let proof_key = bitcoin::secp256k1::PublicKey::from_str(&proof_key_str)?;
 
+        info!("swap first message - proof key str: {}", proof_key_str);
+        info!("swap first message - sig str: {}", &swap_msg1.swap_token_sig);
+
         //let proof_key = &swap_msg1.address.proof_key;
         //Find the correct swap token and verify
         let mut guard = self.scheduler.lock()?;
@@ -578,7 +587,7 @@ impl Conductor for SCE {
         match guard.get_swap_info(swap_id) {
             Some(i) => {
                 i.swap_token
-                    .verify_sig(&proof_key, swap_msg1.swap_token_sig)?;
+                    .verify_sig(&proof_key, Signature::from_str(&swap_msg1.swap_token_sig)?)?;
 
                 //Swap token signature ok
                 //Verify purpose and data of batch transfer signature
@@ -862,7 +871,7 @@ mod tests {
     use super::*;
     use crate::protocol::util::tests::test_sc_entity;
     use crate::structs::{StateChainAmount, StateChainOwner};
-    use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
+    use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey, Signature};
     use bitcoin::Address;
     use curv::{elliptic::curves::traits::ECScalar, FE};
     use mockall::predicate;
@@ -895,8 +904,21 @@ mod tests {
             )
             .unwrap(),
         );
+        println!("{:?}", swap_token);
+        println!("{:?}", proof_key_priv.to_string());
+        println!("{:?}", proof_key.to_string());
         let sig = swap_token.sign(&proof_key_priv).unwrap();
+        println!("{:?}", sig);
         assert!(swap_token.verify_sig(&proof_key, sig).is_ok());
+        let proof_key_2 = PublicKey::from_str("038914b26a8c9821803a34f801e0e651eb53b8b5280d134dba37be0ebcd3e48608").unwrap();
+        assert!(swap_token.verify_sig(&proof_key_2, sig).is_err());
+
+
+        let proof_key_priv = SecretKey::from_str("be9d842c8abdd5c2f582e2b3967b2617c6ed587430cd5280f7c02d693d953288").unwrap(); // Proof key priv part
+        let proof_key = PublicKey::from_secret_key(&Secp256k1::new(), &proof_key_priv); // proof key
+        let proof_key_expected = PublicKey::from_str("030603d0c586be28581d7dbac6363e3b1825e0df8d424fb8cd330c6745ac14f5a3");
+        assert!(proof_key == proof_key_expected);
+        
     }
 
     //get a scheduler preset with requests
@@ -1181,7 +1203,7 @@ mod tests {
         let mut swap_token_no_sc = swap_token.clone();
         swap_token_no_sc.statechain_ids = Vec::new();
 
-        let swap_token_sig = swap_token_no_sc.sign(&proof_key_priv_vec[0]).unwrap();
+        let swap_token_sig = swap_token_no_sc.sign(&proof_key_priv_vec[0]).unwrap().to_string();
         let statechain_id = statechain_ids[0];
         let transfer_batch_sig = StateChainSig::new_transfer_batch_sig(
             &proof_key_priv_vec[0],
@@ -1208,7 +1230,7 @@ mod tests {
             ),
         }
 
-        swap_msg_1.swap_token_sig = swap_token.sign(&proof_key_priv_invalid).unwrap();
+        swap_msg_1.swap_token_sig = swap_token.sign(&proof_key_priv_invalid).unwrap().to_string();
 
         match sc_entity.swap_first_message(&swap_msg_1) {
             Ok(_) => assert!(false, "Expected failure."),
@@ -1221,7 +1243,7 @@ mod tests {
 
         // Sign swap token with invalid swap_id
         swap_msg_1.swap_id = invalid_swap_id;
-        swap_msg_1.swap_token_sig = swap_token.sign(&proof_key_priv_vec[0]).unwrap();
+        swap_msg_1.swap_token_sig = swap_token.sign(&proof_key_priv_vec[0]).unwrap().to_string();
 
         match sc_entity.swap_first_message(&swap_msg_1) {
             Ok(_) => assert!(false, "Expected failure."),
@@ -1251,7 +1273,7 @@ mod tests {
             let swap_msg_1 = SwapMsg1 {
                 statechain_id: statechain_ids[i],
                 swap_id,
-                swap_token_sig: swap_token.sign(&proof_key_priv_vec[i]).unwrap(),
+                swap_token_sig: swap_token.sign(&proof_key_priv_vec[i]).unwrap().to_string(),
                 transfer_batch_sig,
                 address: sce_addresses[i].clone(),
                 bst_e_prime: FE::new_random(),
@@ -1640,7 +1662,7 @@ mod tests {
                     let first_msg_resp = conductor.swap_first_message(&SwapMsg1 {
                         statechain_id,
                         swap_id: swap_token.id.clone(),
-                        swap_token_sig: signature,
+                        swap_token_sig: signature.to_string(),
                         transfer_batch_sig,
                         address: sce_address,
                         bst_e_prime: FE::zero(),

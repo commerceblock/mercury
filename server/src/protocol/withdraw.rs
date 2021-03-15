@@ -59,14 +59,17 @@ impl Withdraw for SCE {
         user_id: Option<Uuid>,
     ) -> Result<StateChainOwner> {
         // Get statechain owner
+        info!("verify_statechain_sig - get statechain owner...");
         let sco = self.database.get_statechain_owner(*statechain_id)?;
         //If a user id is supplied then check it,
         //and check that the statechain is unlocked
         match user_id {
             Some(id) => {
                 // Check if locked
+                info!("verify_statechain_sig - check if locked...");
                 is_locked(sco.locked_until)?;
                 // check if owned by caller
+                info!("verify_statechain_sig - check if owned by caller...");
                 if sco.owner_id != id {
                     return Err(SEError::Generic(format!(
                         "State Chain not owned by User ID: {}.",
@@ -79,7 +82,9 @@ impl Withdraw for SCE {
         };
 
         // Verify StateChainSig
+        info!("verify_statechain_sig - get prev proof key...");    
         let prev_proof_key = sco.chain.get_tip()?.data;
+        info!("verify_statechain_sig - verify sig...");  
         statechain_sig.verify(&prev_proof_key)?;
         Ok(sco)
     }
