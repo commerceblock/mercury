@@ -22,7 +22,7 @@ use std::str::FromStr;
 pub const RBF: u32 = 0xffffffff - 2;
 pub const DUSTLIMIT: u64 = 100;
 /// Temporary - fees should be calculated dynamically
-pub const FEE: u64 = 1000;
+pub const FEE: u64 = 300;
 
 pub fn reverse_hex_str(hex_str: String) -> Result<String> {
     if hex_str.len() % 2 != 0 {
@@ -73,14 +73,13 @@ pub fn get_sighash(
         .expect("failed to convert public key");
     comp.signature_hash(
         tx_index.to_owned(),
-        &bitcoin::Address::p2wpkh(
+        &bitcoin::Address::p2pkh(
             &bitcoin::util::key::PublicKey {
                 compressed: true,
                 key: pk_btc,
             },
             network.parse::<Network>().unwrap(),
         )
-        .unwrap()
         .script_pubkey(),
         *amount,
         bitcoin::blockdata::transaction::SigHashType::All,
@@ -178,7 +177,7 @@ pub fn tx_backup_build(
             txid: *funding_txid,
             vout: 0,
         },
-        sequence: 0xFFFFFFFF,
+        sequence: 0xFFFFFFFE,
         witness: Vec::new(),
         script_sig: bitcoin::Script::default(),
     };

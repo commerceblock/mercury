@@ -327,6 +327,12 @@ impl Database for MemoryDB {
     fn update_sighash(&self, _user_id: &uuid::Uuid, _sig_hash: crate::Hash) -> crate::Result<()> {
         unimplemented!()
     }
+    fn update_s1_pubkey(&self, _user_id: &uuid::Uuid, _pubkey: &crate::GE) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_s1_pubkey(&self, _user_id: &uuid::Uuid) -> crate::Result<crate::GE> {
+        unimplemented!()   
+    }
     fn update_user_backup_tx(
         &self,
         _user_id: &uuid::Uuid,

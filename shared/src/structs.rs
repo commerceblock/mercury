@@ -456,6 +456,12 @@ pub struct FEDef(Vec<u8>);
 #[schemars(remote = "GE")]
 pub struct GEDef(Vec<u8>);
 
+/// SE public key share for encryption
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+pub struct S1PubKey {
+    pub key: String,
+}
+
 /// Receiver -> State Entity
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct TransferMsg4 {
@@ -464,7 +470,7 @@ pub struct TransferMsg4 {
     #[schemars(with = "UuidDef")]
     pub statechain_id: Uuid,
     #[schemars(with = "FEDef")]
-    pub t2: FE, // t2 = t1*o2_inv = o1*x1*o2_inv
+    pub t2: FESer, // t2 = t1*o2_inv = o1*x1*o2_inv
     pub statechain_sig: StateChainSig,
     #[schemars(with = "GEDef")]
     pub o2_pub: GE,
@@ -478,7 +484,7 @@ pub struct KUSendMsg {
     pub user_id: Uuid,
     pub statechain_id: Uuid,
     pub x1: FE,
-    pub t2: FE,
+    pub t2: FESer,
     pub o2_pub: GE,
 }
 
@@ -670,6 +676,32 @@ impl SelfEncryptable for &mut TransferMsg3 {
 impl WalletDecryptable for &mut TransferMsg3 {
     fn get_public_key(&self) -> crate::ecies::Result<Option<crate::ecies::PublicKey>> {
         (**self).get_public_key()
+    }
+}
+
+impl Encryptable for TransferMsg4 {}
+impl SelfEncryptable for TransferMsg4 {
+    fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) -> crate::ecies::Result<()> {
+        self.t2.decrypt(privkey)
+    }
+
+    fn encrypt_with_pubkey(
+        &mut self,
+        pubkey: &crate::ecies::PublicKey,
+    ) -> crate::ecies::Result<()> {
+        self.t2.encrypt_with_pubkey(pubkey)
+    }
+}
+
+impl SelfEncryptable for &mut TransferMsg4 {
+    fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) -> crate::ecies::Result<()> {
+        (**self).decrypt(privkey)
+    }
+    fn encrypt_with_pubkey(
+        &mut self,
+        pubkey: &crate::ecies::PublicKey,
+    ) -> crate::ecies::Result<()> {
+        (**self).encrypt_with_pubkey(pubkey)
     }
 }
 

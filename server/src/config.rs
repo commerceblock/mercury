@@ -84,14 +84,14 @@ pub struct Config {
     pub lockbox: String,
     /// Bitcoin network name (testnet, regtest, mainnet)
     pub network: String,
-    /// Block time of network
-    pub block_time: u64,
     /// Testing mode
     pub testing_mode: bool,
     /// Initial deposit backup nlocktime
     pub lockheight_init: u32,
     /// Transfer nlocktime decrement
     pub lh_decrement: u32,
+    /// Required confirmations for deposit
+    pub required_confirmation: u32,
     /// Receive address for fee payments
     pub fee_address: String,
     /// Despoit fee (basis points)
@@ -121,10 +121,10 @@ impl Default for Config {
             electrum_server: String::from("127.0.0.1:60401"),
             lockbox: String::from(""),
             network: String::from("regtest"),
-            block_time: 2,
             testing_mode: true,
             lockheight_init: 10000,
             lh_decrement: 100,
+            required_confirmation: 3,
             fee_address: String::from("bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x"),
             fee_deposit: 40,
             fee_withdraw: 40,
