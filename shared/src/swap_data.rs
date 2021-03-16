@@ -43,8 +43,16 @@ impl SwapToken {
     pub fn to_message(&self) -> Result<Message> {
         let mut str = self.amount.to_string();
         str.push_str(&self.time_out.to_string());
-        str.push_str(&format!("{:?}", self.statechain_ids));
+        let mut id_str_vec: Vec::<String> = vec![];
+        for id in &self.statechain_ids{
+            id_str_vec.push(id.to_string());
+        }
+        let mut ids_str = format!("{:?}",id_str_vec);
+        ids_str.retain(|c| !c.is_whitespace());
+        str.push_str(&ids_str);
+
         info!("swap token message str: {}", str);
+        println!("swap token message str: {}", str);
         let hash = sha256d::Hash::hash(&str.as_bytes());
         info!("swap token message hash: {}", hash);
         Ok(Message::from_slice(&hash)?)

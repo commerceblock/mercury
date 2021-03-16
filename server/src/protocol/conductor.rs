@@ -596,7 +596,8 @@ impl Conductor for SCE {
                     .is_transfer_batch(Some(swap_id))
                 {
                     return Err(SEError::SwapError(
-                        "swap_first_message: signature is not transfer batch".to_string(),
+                        format!("swap_first_message: signature is not transfer batch: {:?}", swap_msg1
+                        .transfer_batch_sig)
                     ));
                 }
 
@@ -677,11 +678,19 @@ impl Conductor for SCE {
             };
 
         // Ensure swap_ids match
-        if bst_msg.swap_id != swap_msg2.swap_id {
-            return Err(SEError::SwapError(
-                "swap_second_message: swap_ids do not match.".to_string(),
-            ));
-        }
+        match Uuid::from_str(&bst_msg.swap_id) {
+            Ok(id) => {
+                if id != swap_msg2.swap_id {
+                    return Err(SEError::SwapError(
+                        "swap_second_message: swap_ids do not match.".to_string(),
+                    ));
+                }
+            }, 
+            Err(err) => return Err(SEError::SwapError(
+                "BlindedSpendTokenMessage - invalid swap id".to_string()
+            )),
+        };
+        
         let swap_id = &swap_msg2.swap_id;
         let mut guard = self.scheduler.lock()?;
         let swap_info = match guard.get_swap_info(&swap_id) {
@@ -710,7 +719,10 @@ impl Conductor for SCE {
                     )))?;
 
             // First check if claimed_nonce is already assigned to a SCEAddress
-            let claimed_nonce = Some(bst_msg.nonce);
+            let claimed_nonce = match Uuid::from_str(&bst_msg.nonce){
+                Ok(nonce) => Some(nonce),
+                Err(err) => return Err(SEError::SwapError(format!("invalid nonce: {}", err)))
+            };
             let claimed_nonce_sce_addrs_vec = sce_address_bisetmap.rev_get(&claimed_nonce);
             let claimed_nonce_assignments_num = claimed_nonce_sce_addrs_vec.len();
             if claimed_nonce_assignments_num > 1 {
@@ -757,17 +769,26 @@ impl Conductor for SCE {
             }
         };
 
+        let bst_swap_id = match Uuid::from_str(&bst_msg.swap_id){
+            Ok(id) => id,
+            Err(err) => return Err(SEError::SwapError(format!("invalid swap id: {}", err)))
+        };
+
         let mut guard = self.scheduler.lock()?;
         let sce_address_bisetmap =
             guard
                 .out_addr_map
-                .get_mut(&bst_msg.swap_id)
+                .get_mut(&bst_swap_id)
                 .ok_or(SEError::SwapError(format!(
                     "No swap with id {}",
                     bst_msg.swap_id
                 )))?;
 
-        let claimed_nonce = Some(bst_msg.nonce);
+        let claimed_nonce = match Uuid::from_str(&bst_msg.nonce){
+            Ok(nonce) => Some(nonce),
+            Err(err) => return Err(SEError::SwapError(format!("invalid nonce: {}", err)))
+        };
+        
         let claimed_nonce_sce_addrs_vec = sce_address_bisetmap.rev_get(&claimed_nonce);
         let claimed_nonce_assignments_num = claimed_nonce_sce_addrs_vec.len();
         if claimed_nonce_assignments_num > 1 {
@@ -898,7 +919,7 @@ mod tests {
         assert_eq!(
             swap_token.to_message().unwrap(),
             Message::from_slice(
-                hex::decode("023a63469c4b87fc88b9137d99a10cce19b0a3778c2cd4257ccf7b323247d270")
+                hex::decode("6d4574375a0dea62b40f418c0974049f41487fe56f8201c1eca841b80b9e7d1e")
                     .unwrap()
                     .as_slice()
             )
@@ -910,15 +931,39 @@ mod tests {
         let sig = swap_token.sign(&proof_key_priv).unwrap();
         println!("{:?}", sig);
         assert!(swap_token.verify_sig(&proof_key, sig).is_ok());
-        let proof_key_2 = PublicKey::from_str("038914b26a8c9821803a34f801e0e651eb53b8b5280d134dba37be0ebcd3e48608").unwrap();
-        assert!(swap_token.verify_sig(&proof_key_2, sig).is_err());
+        let proof_key_err = PublicKey::from_str("038914b26a8c9821803a34f801e0e651eb53b8b5280d134dba37be0ebcd3e48608").unwrap();
+        assert!(swap_token.verify_sig(&proof_key_err, sig).is_err());
 
 
-        let proof_key_priv = SecretKey::from_str("be9d842c8abdd5c2f582e2b3967b2617c6ed587430cd5280f7c02d693d953288").unwrap(); // Proof key priv part
+        /*
+        let proof_key_priv = SecretKey::from_slice(&hex::decode("110e9c149ac9b7c1bc9949ba07ba87c0257ad900f633e03a087e0237404b9186").unwrap()).unwrap(); // Proof key priv part
         let proof_key = PublicKey::from_secret_key(&Secp256k1::new(), &proof_key_priv); // proof key
-        let proof_key_expected = PublicKey::from_str("030603d0c586be28581d7dbac6363e3b1825e0df8d424fb8cd330c6745ac14f5a3");
-        assert!(proof_key == proof_key_expected);
-        
+        let proof_key_expected = PublicKey::from_str("03c871dfda91bc707a38aaade5dc99c643ba33fa312010fa955d327b9ed89b4c94").unwrap();
+        assert_eq!(proof_key, proof_key_expected);
+*/
+        let swap_token = SwapToken {
+            id: Uuid::from_str("927271f3-a43a-42e7-89d5-424b0c0b946f").unwrap(),
+            amount: 1000,
+            time_out: 100,
+            statechain_ids: vec![Uuid::from_str("f8a3129c-7aa3-4142-8ff2-491e5e98a47a").unwrap(),
+            Uuid::from_str("ac0d59ea-6316-4357-852e-fa63ffa72ccc").unwrap(),
+            Uuid::from_str("0143bee3-1273-47b0-bedc-973ef6f477b7").unwrap()
+            ],
+        };
+
+        println!("{:?}", swap_token);
+
+        //swap token message hash: 2b9add579e929e88220f239c374fa9f2d29799b8453d7ae2bf8cc2496f1e2c6e
+
+        let message_expected = Message::from_slice(&hex::decode("932f880741335b0fb6a91fe9c95247e99e682ea748f1f536a4a898bfd13f6e55").unwrap()).unwrap();
+        let message = swap_token.to_message().unwrap();
+        assert_eq!(message, message_expected);
+
+
+
+
+        let sig_expected = "3044022010c1bed8712d96b6ed81aa41456ebd6fc75a43e0b0503f998497e1f25972960e02203d42da48203f046346c1f6a05910c9c441b43b71684feb4cf18407369d4229d7";
+
     }
 
     //get a scheduler preset with requests
@@ -1225,7 +1270,7 @@ mod tests {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(
                 e.to_string()
-                    .contains("Swap Error: signature does not sign for token"),
+                    .contains("Swap Error: swap token signature does not sign for token"),
                 e.to_string()
             ),
         }
@@ -1236,7 +1281,7 @@ mod tests {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(
                 e.to_string()
-                    .contains("Swap Error: signature does not sign for token"),
+                    .contains("Swap Error: swap token signature does not sign for token"),
                 e.to_string()
             ),
         }
@@ -1474,11 +1519,12 @@ mod tests {
         let mut guard = sc_entity.scheduler.lock().unwrap();
         let sce_addr_biset_map = guard.out_addr_map.get_mut(&swap_id).unwrap();
         assert_eq!(sce_addr_biset_map.len(), 1);
-        let nonce = serde_json::from_str::<BlindedSpentTokenMessage>(
+        let nonce = Uuid::from_str(&serde_json::from_str::<BlindedSpentTokenMessage>(
             &swap_msg_2.blinded_spend_token.get_msg(),
         )
         .unwrap()
-        .nonce;
+        .nonce).unwrap();
+
         assert_eq!(
             sce_addr_biset_map.get(&sce_addr).get(0).unwrap().unwrap(),
             nonce
@@ -1564,9 +1610,9 @@ mod tests {
         sce_addr_biset_map.insert(
             sce_addr.clone(),
             Some(
-                serde_json::from_str::<BlindedSpentTokenMessage>(&blinded_spend_token.get_msg())
+                Uuid::from_str(&serde_json::from_str::<BlindedSpentTokenMessage>(&blinded_spend_token.get_msg())
                     .unwrap()
-                    .nonce,
+                    .nonce).unwrap(),
             ),
         );
         drop(guard);

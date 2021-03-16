@@ -253,14 +253,15 @@ pub fn verify_blind_sig(s: FE, m: &String, q: GE, r: GE) -> Result<bool> {
 /// Struct serialized to string to be used as Blind sign token message
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BlindedSpentTokenMessage {
-    pub swap_id: Uuid,
-    pub nonce: Uuid,
+    pub swap_id: String,
+    pub nonce: String,
 }
 impl BlindedSpentTokenMessage {
     pub fn new(swap_id: Uuid) -> Self {
+        let nonce = Uuid::new_v4().to_string();
         BlindedSpentTokenMessage {
-            swap_id,
-            nonce: Uuid::new_v4(),
+            swap_id: swap_id.to_string(),
+            nonce,
         }
     }
 }
