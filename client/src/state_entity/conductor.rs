@@ -122,8 +122,8 @@ pub fn swap_get_blinded_spend_signature(
         &client_shim,
         &String::from("swap/blinded-spend-signature"),
         &BSTMsg {
-            swap_id: swap_id.to_owned(),
-            statechain_id: statechain_id.to_owned(),
+            swap_id: swap_id.to_owned().to_string(),
+            statechain_id: statechain_id.to_owned().to_string(),
         },
     )
 }

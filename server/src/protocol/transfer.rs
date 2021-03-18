@@ -161,6 +161,7 @@ impl Transfer for SCE {
     }
 
     fn transfer_receiver(&self, mut transfer_msg4: TransferMsg4) -> Result<TransferMsg5> {
+        info!("transfer receiver: TransferMsg4 received: {:?}", transfer_msg4);
         let user_id = transfer_msg4.shared_key_id;
         let statechain_id = transfer_msg4.statechain_id;
 

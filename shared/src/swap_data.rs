@@ -125,10 +125,8 @@ pub struct SwapMsg1 {
 // Message to request a blinded spend token
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct BSTMsg {
-    #[schemars(with = "UuidDef")]
-    pub swap_id: Uuid,
-    #[schemars(with = "UuidDef")]
-    pub statechain_id: Uuid,
+    pub swap_id: String,
+    pub statechain_id: String,
 }
 
 /// Owner -> Conductor

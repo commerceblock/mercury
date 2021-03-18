@@ -577,8 +577,9 @@ impl Conductor for SCE {
         let proof_key_str = &state_chain.last().unwrap().data.clone();
         let proof_key = bitcoin::secp256k1::PublicKey::from_str(&proof_key_str)?;
 
-        info!("swap first message - proof key str: {}", proof_key_str);
-        info!("swap first message - sig str: {}", &swap_msg1.swap_token_sig);
+        info!("swap first message - SwapMsg1 received: {:?}", swap_msg1);
+        info!("swap first message - SwapMsg1.address.proof_key: {}", swap_msg1.address.proof_key.to_string());
+        info!("swap first message - SwapMsg1.address.bst_e_prime: {:?}", swap_msg1.bst_e_prime);
 
         //let proof_key = &swap_msg1.address.proof_key;
         //Find the correct swap token and verify
@@ -666,6 +667,7 @@ impl Conductor for SCE {
     }
 
     fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> Result<SCEAddress> {
+        info!("swap_second_message: SwapMsg2 received: {:?}", swap_msg2);
         // Get message that is signed
         let bst_msg: BlindedSpentTokenMessage =
             match serde_json::from_str(&swap_msg2.blinded_spend_token.get_msg()) {
@@ -845,8 +847,11 @@ pub fn get_blinded_spend_signature(
     bst_msg: Json<BSTMsg>,
 ) -> Result<Json<BlindedSpendSignature>> {
     let bst_msg = bst_msg.into_inner();
+    info!("get_blinded_spend_signature BSTMsg received: {:?}", bst_msg);
+    let swap_uuid = &Uuid::from_str(&bst_msg.swap_id)?; 
+    let statechain_uuid = &Uuid::from_str(&bst_msg.statechain_id)?; 
     sc_entity
-        .get_blinded_spend_signature(&bst_msg.swap_id, &bst_msg.statechain_id)
+        .get_blinded_spend_signature(swap_uuid, statechain_uuid)
         .map(|x| Json(x))
 }
 
