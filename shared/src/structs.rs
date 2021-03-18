@@ -205,7 +205,7 @@ pub struct RecoveryDataMsg {
     #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
     #[schemars(with = "UuidDef")]
-    pub statchain_id: Uuid,
+    pub statechain_id: Uuid,
     pub chain: StateChain,
     pub tx_hex: String,
 }
@@ -214,7 +214,7 @@ impl RecoveryDataMsg {
     pub fn example() -> Self{
         Self{
             shared_key_id: Uuid::new_v4(),
-            statchain_id: Uuid::new_v4(),
+            statechain_id: Uuid::new_v4(),
             chain: StateChain::example(),
             tx_hex: "02000000000101ca878085da49c33eb9816c10e4056424e5e062689ea547ea91bb3aa840a3c5fb0000000000ffffffff02307500000000000016001412cc36c9533290c02f0c78f992df6e6ddfe50c8c0064f50500000000160014658fd2dc72e58168f3656fb632d63be54f80fbe4024730440220457cf52873ae5854859a7d48b39cb57eba880ea4011806e5058da7619f4c0fab02206303326f06bbebf7170b679ba787c856dec4b6462109bf66e1cb8dc087be7ebf012102a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe00000000".to_string(),
         }

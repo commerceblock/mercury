@@ -347,7 +347,7 @@ impl Utilities for SCE {
 
         return Ok(RecoveryDataMsg {
             shared_key_id: user_id,
-            statchain_id: statechain_id,
+            statechain_id: statechain_id,
             chain: state_chain,
             tx_hex: transaction_serialise(&tx),
         });
@@ -920,6 +920,7 @@ pub mod tests {
     use monotree::database::{Database as monotreeDatabase, MemoryDB};
     use std::convert::TryInto;
     use std::str::FromStr;
+    use bitcoin::Transaction;
 
     // Useful data structs for tests throughout codebase
     pub static BACKUP_TX_NOT_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
@@ -1042,4 +1043,47 @@ pub mod tests {
 
         assert_eq!(new_root.hash(), hash_exp, "new root incorrect");
     }
+
+    #[test]
+    #[serial]
+    fn test_get_recovery_data() {
+        let user_id = Uuid::new_v4();
+        let statechain_id = Uuid::new_v4();
+        let tx_backup = serde_json::from_str::<Transaction>(
+                            &BACKUP_TX_SIGNED.to_string(),
+                        ).unwrap();
+        let statechain = serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap();
+
+        let recovery_data = RecoveryDataMsg {
+            chain: statechain,
+            shared_key_id: user_id,
+            statechain_id: statechain_id,
+            tx_hex: transaction_serialise(&tx_backup),
+        };
+
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));   
+        db.expect_get_statechain().returning(move |_| {
+            Ok(serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap())
+        });
+        db.expect_get_recovery_data().returning(move |_| {
+            Ok((user_id,statechain_id,serde_json::from_str::<Transaction>(
+                            &BACKUP_TX_SIGNED.to_string(),
+                        ).unwrap()))
+        });
+        let sc_entity = test_sc_entity(db);
+
+        // get_recovery invalid public key
+        let recover_msg = RecoveryRequest {
+            key: "0297901882fc1601c3ea2b5326c4e635455b5451573c619782502894df69e24548".to_string(),
+            sig: "".to_string(),
+        };
+
+        let recovery_return = sc_entity.get_recovery_data(recover_msg).unwrap();
+        assert_eq!(recovery_data.shared_key_id, recovery_return.shared_key_id);
+        assert_eq!(recovery_data.statechain_id, recovery_return.statechain_id);
+        assert_eq!(recovery_data.tx_hex,recovery_return.tx_hex);
+    }
+
+
 }

@@ -16,7 +16,7 @@ use tokio::prelude::*;
 use tokio::{run, spawn};
 
 use rand::Rng;
-use state_entity::api::get_statechain;
+use state_entity::api::{get_statechain,get_recovery_data};
 use uuid::Uuid;
 use wallet::wallet::{DEFAULT_TEST_WALLET_LOC, ElectrumxBox, DEFAULT_WALLET_LOC};
 use crate::utilities::encoding;
@@ -35,6 +35,7 @@ pub enum DaemonRequest {
     GetBackup(Uuid),
     GetFeeInfo,
     GetStateChain(Uuid),
+    GetRecoveryData(String),
     Deposit(u64),
     Withdraw(Uuid),
     TransferSender(Uuid, String),
@@ -202,6 +203,11 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                         debug!("Daemon: GetStateChain");
                         let fee_info_res = get_statechain(&wallet.client_shim, &statechain_id);
                         r.send(DaemonResponse::value_to_deamon_response(fee_info_res))
+                    }
+                    DaemonRequest::GetRecoveryData(pubkey_hex) => {
+                        debug!("Daemon: GetRecoveryData");
+                        let recovery_data = get_recovery_data(&wallet.client_shim, &pubkey_hex);
+                        r.send(DaemonResponse::value_to_deamon_response(recovery_data))
                     }
                     DaemonRequest::Deposit(amount) => {
                         debug!("Daemon: Deposit");

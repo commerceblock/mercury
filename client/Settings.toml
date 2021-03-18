@@ -1,4 +1,4 @@
-endpoint = "https://fakeapi.mercurywallet.io"
+endpoint = "http://0.0.0.0:8000"
 electrum_server = "" # Empty string for Mock Electrum server
 testing_mode = "true" # Use testing wallet
 network = "testnet"
