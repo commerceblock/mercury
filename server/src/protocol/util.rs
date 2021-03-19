@@ -506,7 +506,7 @@ impl SCE {
         debug!("TRANSFER_BATCH: data: {:?}", tbd);
         let mut finalized = tbd.finalized;
         if !finalized {
-            debug!("TRANSFER_BATCH: attempting to finalize batch transfer");
+            debug!("TRANSFER_BATCH: attempting to finalize batch transfer - batch id: {}", batch_id);
             // Attempt to finalize transfers - will fail with Err if not all ready to be finalized
             match self.finalize_batch(batch_id){
                 Ok(_) => {
