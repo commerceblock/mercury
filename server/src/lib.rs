@@ -110,6 +110,8 @@ pub trait Database {
         tx: Transaction,
     ) -> Result<()>;
     fn update_sighash(&self, user_id: &Uuid, sig_hash: Hash) -> Result<()>;
+    fn update_s1_pubkey(&self, user_id: &Uuid, pubkey: &GE) -> Result<()>;
+    fn get_s1_pubkey(&self, user_id: &Uuid) -> Result<GE>;
     fn update_user_backup_tx(&self, user_id: &Uuid, tx: Transaction) -> Result<()>;
     fn get_user_backup_tx(&self, user_id: Uuid) -> Result<Transaction>;
     fn update_backup_tx(&self, statechain_id: &Uuid, tx: Transaction) -> Result<()>;

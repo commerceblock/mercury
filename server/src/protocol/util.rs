@@ -30,7 +30,6 @@ pub use monotree::Proof;
 use rocket::State;
 use rocket_contrib::json::Json;
 use std::str::FromStr;
-use std::{thread, time::Duration};
 use uuid::Uuid;
 use bitcoin::OutPoint;
 
@@ -428,8 +427,13 @@ pub fn reset_test_dbs(sc_entity: State<SCE>) -> Result<Json<()>> {
 // Utily functions for StateChainEntity to be used throughout codebase.
 impl SCE {
     /// Query an Electrum Server for a transaction's confirmation status.
-    /// Return Ok() if confirmed or Error if not after some waiting period.
+    /// Return Ok() if confirmed or Error if not within configured confirmation number.
     pub fn verify_tx_confirmed(&self, txid: &String) -> Result<()> {
+
+        if self.config.required_confirmation == 0 {
+            return Ok(());
+        };
+
         let mut electrum: Box<dyn Electrumx> = if self.config.testing_mode {
             Box::new(MockElectrum::new())
         } else {
@@ -437,43 +441,33 @@ impl SCE {
         };
 
         info!(
-            "DEPOSIT: Waiting for funding transaction confirmation. Txid: {}",
+            "DEPOSIT: Verifying funding transaction confirmation. Txid: {}",
             txid
         );
 
-        let mut is_broadcast = 0; // num blocks waited for tx to be broadcast
-        let mut is_mined = 0; // num blocks waited for tx to be mined
-        while is_broadcast < 3 {
-            // Check for tx broadcast. If not after 3*(block time) then return error.
-            match electrum.get_transaction_conf_status(txid.clone(), false) {
-                Ok(res) => {
-                    // Check for tx confs. If none after 10*(block time) then return error.
-                    if res.confirmations.is_none() {
-                        is_mined += 1;
-                        if is_mined > 9 {
-                            warn!("Funding transaction not mined after 10 blocks. Deposit failed. Txid: {}", txid);
-                            return Err(SEError::Generic(String::from("Funding transaction failure to be mined - consider increasing the fee. Deposit failed.")));
-                        }
-                        thread::sleep(Duration::from_millis(self.config.block_time));
-                    } else {
-                        // If confs increase then wait 6*(block time) and return Ok()
-                        info!(
-                            "Funding transaction mined. Waiting for 6 blocks confirmation. Txid: {}",
-                            txid
-                        );
-                        thread::sleep(Duration::from_millis(6 * self.config.block_time));
-                        return Ok(());
-                    }
+        match electrum.get_transaction_conf_status(txid.clone(), false) {
+            Ok(res) => {
+                // Check for tx confs. If none after 10*(block time) then return error.
+                if res.confirmations.is_none() {
+                    return Err(SEError::Generic(String::from(
+                        "Funding Transaction not confirmed.",
+                    )));
+                } 
+                else if res.confirmations.unwrap() < self.config.required_confirmation {
+                    return Err(SEError::Generic(String::from(
+                        "Funding Transaction insufficient confirmations.",
+                    )));                    
                 }
-                Err(_) => {
-                    is_broadcast += 1;
-                    thread::sleep(Duration::from_millis(self.config.block_time));
+                else {
+                    return Ok(());
                 }
             }
+            Err(_) => {
+                return Err(SEError::Generic(String::from(
+                    "Funding Transaction not found.",
+                )));
+            }
         }
-        return Err(SEError::Generic(String::from(
-            "Funding Transaction not found in blockchain. Deposit failed.",
-        )));
     }
 
     // Set state chain time-out

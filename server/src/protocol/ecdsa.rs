@@ -116,6 +116,7 @@ impl Ecdsa for SCE {
 
     fn second_message(&self, key_gen_msg2: KeyGenMsg2) -> Result<KeyGenReply2> {
         let kg_party_one_second_msg: party1::KeyGenParty1Message2;
+        let db = &self.database;
         // call lockbox
         if self.lockbox.active {
             let path: &str = "ecdsa/keygen/second";
@@ -123,8 +124,6 @@ impl Ecdsa for SCE {
             kg_party_one_second_msg = kg_party_one_second_message;
         }
         else {
-            let db = &self.database;
-
             let user_id = key_gen_msg2.shared_key_id;
 
             let party2_public: GE = key_gen_msg2.dlog_proof.pk.clone();
@@ -151,6 +150,13 @@ impl Ecdsa for SCE {
             self.master_key(user_id)?;
             kg_party_one_second_msg = kg_party_one_second_message;
         }
+
+        db.update_s1_pubkey(&key_gen_msg2.shared_key_id, 
+            &kg_party_one_second_msg
+            .ecdh_second_message
+            .comm_witness
+            .public_share
+        )?;
 
         Ok(KeyGenReply2 { msg: kg_party_one_second_msg } )
     }
@@ -279,7 +285,6 @@ impl Ecdsa for SCE {
             Protocol::Withdraw => {
                 // Store signed withdraw tx in UserSession DB object
                 db.update_tx_withdraw(user_id, tx)?;
-
                 info!("WITHDRAW: Tx signed and stored. User ID: {}", user_id);
                 // Do not return withdraw tx witness until /withdraw/confirm is complete
                 ws = vec![];
@@ -369,6 +374,7 @@ pub mod tests {
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_create_user_session().returning(|_, _, _| Ok(()));
         db.expect_get_user_auth().returning(move |_| Ok(user_id));
+        db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
 
         let mut sc_entity = test_sc_entity(db);
 
