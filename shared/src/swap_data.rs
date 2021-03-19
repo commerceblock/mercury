@@ -12,10 +12,12 @@ use bitcoin::{
     secp256k1::{PublicKey, Secp256k1, SecretKey, Signature},
 };
 use curv::FE;
+use curv_client;
 use uuid::Uuid;
 use rocket_okapi::JsonSchema;
 use schemars;
 use log::info;
+use std::str::FromStr;
 
 // Swaps
 #[allow(dead_code)]
@@ -119,7 +121,7 @@ pub struct SwapMsg1 {
     pub transfer_batch_sig: StateChainSig,
     pub address: SCEAddress,
     #[schemars(with = "FEDef")]
-    pub bst_e_prime: FE,
+    pub bst_e_prime: curv_client::FE,
 }
 
 // Message to request a blinded spend token
@@ -135,4 +137,45 @@ pub struct SwapMsg2 {
     #[schemars(with = "UuidDef")]
     pub swap_id: Uuid,
     pub blinded_spend_token: BlindedSpendToken,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static SWAP_TOKEN: &str = "{id:\"00000000-0000-0000-0000-000000000001\",amount:100,time_out:1000,statechain_ids:[\"00000000-0000-0000-0000-000000000001\",\"00000000-0000-0000-0000-000000000002\",\"00000000-0000-0000-0000-000000000003\"]}";  
+    static SECRET_KEY: &[u8;32] = &[1;32];
+
+    #[test]
+    fn test_swap_token_sign() {
+
+        /*
+        let statechain_ids : Vec::<Uuid> = vec![
+            Uuid::from_str("00000000-0000-0000-0000-000000000001").unwrap(),
+            Uuid::from_str("00000000-0000-0000-0000-000000000002").unwrap(),
+            Uuid::from_str("00000000-0000-0000-0000-000000000003").unwrap(),
+        ];
+        */
+
+        let st : SwapToken = serde_json::from_str(SWAP_TOKEN).unwrap();
+        //{id: Uuid::from_str("00000000-0000-0000-0000-000000000001").unwrap(),
+                    //amount: 100, time_out: 1000, statechain_ids};
+
+        let st_str = serde_json::to_string(&st).unwrap();
+        println!("swap token: {}", st_str);
+        let sk = SecretKey::from_slice(SECRET_KEY).unwrap();
+
+        let st_sig = st.sign(&sk).unwrap();
+        let st_sig_str = serde_json::to_string(&st_sig).unwrap();
+
+        println!("st sig str: {}", st_sig_str);
+
+        let secp = Secp256k1::new();
+
+        let pk = &PublicKey::from_secret_key(&secp, &sk);
+            
+            //&sk);
+
+        assert!(st.verify_sig(pk, st_sig).is_ok());
+    }
 }

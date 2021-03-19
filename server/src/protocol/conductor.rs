@@ -22,7 +22,7 @@ use crate::storage::Storage;
 use crate::Database;
 use bisetmap::BisetMap;
 use cfg_if::cfg_if;
-use curv::FE;
+use curv_client::FE;
 use mockall::predicate::*;
 use mockall::*;
 use rocket::State;
@@ -899,7 +899,7 @@ mod tests {
     use crate::structs::{StateChainAmount, StateChainOwner};
     use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey, Signature};
     use bitcoin::Address;
-    use curv::{elliptic::curves::traits::ECScalar, FE};
+    use curv_client::{elliptic::curves::traits::ECScalar, FE};
     use mockall::predicate;
     use shared_lib::{
         blinded_token::{BSTRequestorData, BlindedSpendToken},

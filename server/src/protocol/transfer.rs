@@ -274,6 +274,10 @@ impl Transfer for SCE {
 
         // If not batch then finalize transfer now
         } else {
+            info!(
+                "TRANSFER: Single (non-batch) transfer. State Chain ID: {}",
+                 statechain_id
+            );
             // Update DB and SMT with new transfer data
             self.transfer_finalize(&finalized_data)?;
         }

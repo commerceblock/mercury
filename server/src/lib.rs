@@ -24,6 +24,7 @@ extern crate rusoto_dynamodb;
 extern crate serde_dynamodb;
 
 extern crate curv;
+extern crate curv_client;
 extern crate electrumx_client;
 extern crate kms;
 extern crate monotree;
@@ -258,6 +259,7 @@ pub mod structs {
         pub amount: i64,
     }
 
+    #[derive(Clone, Debug)]
     pub struct TransferBatchData {
         pub state_chains: HashSet<Uuid>,
         pub punished_state_chains: Vec<Uuid>,
@@ -265,6 +267,7 @@ pub mod structs {
         pub finalized: bool,
     }
 
+    #[derive(Clone, Debug)]
     pub struct TransferFinalizeBatchData {
         pub finalized_data_vec: Vec<TransferFinalizeData>,
         pub start_time: NaiveDateTime,
