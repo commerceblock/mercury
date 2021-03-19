@@ -5,19 +5,15 @@ use crate::{
     state_chain::StateChainSig,
     structs::*,
     util::keygen::Message,
-    Verifiable,
 };
 use bitcoin::{
     hashes::{sha256d, Hash},
     secp256k1::{PublicKey, Secp256k1, SecretKey, Signature},
 };
-use curv::FE;
-use curv_client;
 use uuid::Uuid;
 use rocket_okapi::JsonSchema;
 use schemars;
 use log::info;
-use std::str::FromStr;
 
 // Swaps
 #[allow(dead_code)]
@@ -121,7 +117,7 @@ pub struct SwapMsg1 {
     pub transfer_batch_sig: StateChainSig,
     pub address: SCEAddress,
     #[schemars(with = "FEDef")]
-    pub bst_e_prime: curv_client::FE,
+    pub bst_e_prime: curv::FE,
 }
 
 // Message to request a blinded spend token
@@ -143,7 +139,7 @@ pub struct SwapMsg2 {
 mod tests {
     use super::*;
 
-    static SWAP_TOKEN: &str = "{id:\"00000000-0000-0000-0000-000000000001\",amount:100,time_out:1000,statechain_ids:[\"00000000-0000-0000-0000-000000000001\",\"00000000-0000-0000-0000-000000000002\",\"00000000-0000-0000-0000-000000000003\"]}";  
+    static SWAP_TOKEN: &str = "{\"id\":\"00000000-0000-0000-0000-000000000001\",\"amount\":100,\"time_out\":1000,\"statechain_ids\":[\"00000000-0000-0000-0000-000000000001\",\"00000000-0000-0000-0000-000000000002\",\"00000000-0000-0000-0000-000000000003\"]}";  
     static SECRET_KEY: &[u8;32] = &[1;32];
 
     #[test]

@@ -86,8 +86,6 @@ impl Transfer for SCE {
         let user_id = transfer_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
 
-        info!("TRANSFER: Sender Side. Shared Key ID: {}", user_id);
-
         // Get state_chain id
         let statechain_id = self.database.get_statechain_id(user_id)?;
 
@@ -161,11 +159,8 @@ impl Transfer for SCE {
     }
 
     fn transfer_receiver(&self, mut transfer_msg4: TransferMsg4) -> Result<TransferMsg5> {
-        info!("transfer receiver: TransferMsg4 received: {:?}", transfer_msg4);
         let user_id = transfer_msg4.shared_key_id;
         let statechain_id = transfer_msg4.statechain_id;
-
-        info!("TRANSFER: Receiver side. Shared Key ID: {}", user_id);
 
         // Get Transfer Data for statechain_id
         let td = self.database.get_transfer_data(statechain_id)?;
@@ -254,7 +249,7 @@ impl Transfer for SCE {
         // This is so the transfers can be finalized when all transfers in the batch are complete.
         if transfer_msg4.batch_data.is_some() {
             let batch_id = transfer_msg4.batch_data.clone().unwrap().id;
-            info!(
+            debug!(
                 "TRANSFER: Transfer as part of batch {}. State Chain ID: {}",
                 batch_id, statechain_id
             );
@@ -274,7 +269,7 @@ impl Transfer for SCE {
 
         // If not batch then finalize transfer now
         } else {
-            info!(
+            debug!(
                 "TRANSFER: Single (non-batch) transfer. State Chain ID: {}",
                  statechain_id
             );

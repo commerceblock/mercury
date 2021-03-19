@@ -503,10 +503,10 @@ impl SCE {
 
     pub fn get_transfer_batch_status(&self, batch_id: Uuid) -> Result<TransferBatchDataAPI> {
         let tbd = self.database.get_transfer_batch_data(batch_id)?;
-        info!("TRANSFER_BATCH: data: {:?}", tbd);
+        debug!("TRANSFER_BATCH: data: {:?}", tbd);
         let mut finalized = tbd.finalized;
         if !finalized {
-            info!("attempting to finalize batch transfer");
+            debug!("TRANSFER_BATCH: attempting to finalize batch transfer");
             // Attempt to finalize transfers - will fail with Err if not all ready to be finalized
             match self.finalize_batch(batch_id){
                 Ok(_) => {
@@ -519,7 +519,7 @@ impl SCE {
                 Err(_) => (),
             }
             // Check batch is still within lifetime
-            info!("TRANSFER_BATCH: checking if batch transfer has ended");
+            debug!("TRANSFER_BATCH: checking if batch transfer has ended");
             if transfer_batch_is_ended(tbd.start_time, self.config.batch_lifetime as i64) {
                 let mut punished_state_chains: Vec<Uuid> =
                     self.database.get_punished_state_chains(batch_id)?;
@@ -551,10 +551,10 @@ impl SCE {
                 }
                 return Err(SEError::TransferBatchEnded(String::from("Timeout")));
             }
-            info!("TRANSFER_BATCH: batch transfer ongoing: {:?}", tbd);
+            debug!("TRANSFER_BATCH: batch transfer ongoing: {:?}", tbd);
         }
 
-        info!("TRANSFER_BATCH: batch transfer ended: {:?}, finalized: {}", tbd, finalized);
+        debug!("TRANSFER_BATCH: batch transfer ended: {:?}, finalized: {}", tbd, finalized);
         // return status of transfers
         Ok(TransferBatchDataAPI {
             state_chains: tbd.state_chains,

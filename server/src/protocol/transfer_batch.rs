@@ -104,18 +104,18 @@ impl BatchTransfer for SCE {
     }
 
     fn finalize_batch(&self, batch_id: Uuid) -> Result<()> {
-        info!("TRANSFER_FINALIZE_BATCH: ID: {}", batch_id);
+        debug!("TRANSFER_FINALIZE_BATCH: ID: {}", batch_id);
 
         let fbd = self.database.get_finalize_batch_data(batch_id)?;
 
-        info!("TRANSFER_FINALIZE_BATCH: data: {:?}", fbd);
+        debug!("TRANSFER_FINALIZE_BATCH: data: {:?}", fbd);
 
         for finalized_data in fbd.finalized_data_vec.clone() {
-            info!("TRANSFER_FINALIZE_BATCH: doing transfer_finalize for {:?}", finalized_data);
+            debug!("TRANSFER_FINALIZE_BATCH: doing transfer_finalize for {:?}", finalized_data);
             self.transfer_finalize(&finalized_data)?;
         }
 
-        info!("TRANSFER_FINALIZE_BATCH: updating database for batch ID: {}", batch_id);
+        debug!("TRANSFER_FINALIZE_BATCH: updating database for batch ID: {}", batch_id);
         self.database
             .update_transfer_batch_finalized(&batch_id, &true)?;
 

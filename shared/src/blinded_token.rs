@@ -11,7 +11,7 @@
 
 use super::Result;
 use bitcoin::hashes::{sha256d, Hash};
-use curv_client::{
+use curv::{
     arithmetic::traits::Converter,
     elliptic::curves::traits::{ECPoint, ECScalar},
     BigInt, FE, GE,
@@ -19,7 +19,6 @@ use curv_client::{
 use uuid::Uuid;
 use rocket_okapi::JsonSchema;
 use schemars;
-use crate::swap_data::SwapToken;
 
 // Notation:
 //  x: Signer Priv key
@@ -271,10 +270,11 @@ impl BlindedSpentTokenMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::swap_data::SwapToken;
     
     static BST_SENDER_DATA: &str = "{\"x\":\"a69ee11dd94ebb7d45194c5fc5b0f001b6836894aaf93e0c1a85bad88280a5bc\",\"q\":{\"x\":\"41fc72226373d61df5fa0aabcd257d9f65e54b42906fe2871de406cacb675594\",\"y\":\"f57b5133122a7a8066fd956a32df9c1f9959df3079dbfa980512c91c5d7cd160\"},\"k\":\"73098242f2b18a70a7d91aa27cf959ca88a56b3fd9493b651f7f94771ee10e90\",\"r_prime\":{\"x\":\"cde12c788fa16a0235ac148353bc4469edfd0f8e417b00eb66c18b83dff53f0f\",\"y\":\"e280715e647dcd3e0e4d390ca2098035e955796aeb50f335ddd7e20bff334942\"}}";
     static SWAP_TOKEN: &str = "{\"id\":\"00000000-0000-0000-0000-000000000001\",\"amount\":100,\"time_out\":1000,\"statechain_ids\":[\"00000000-0000-0000-0000-000000000001\",\"00000000-0000-0000-0000-000000000002\",\"00000000-0000-0000-0000-000000000003\"]}";  
-    static SECRET_KEY: &[u8;32] = &[1;32];
+    static _SECRET_KEY: &[u8;32] = &[1;32];
 
     #[test]
     fn test_bst_sender_data() {
@@ -313,7 +313,7 @@ mod tests {
 
         println!("blind spend token: {}", blind_spend_token_str);
         
-        assert!(bst_sender.verify_blind_spend_token(&blind_spend_token).unwrap())
+        assert!(bst_sender.verify_blind_spend_token(blind_spend_token).unwrap())
 
     }
 }

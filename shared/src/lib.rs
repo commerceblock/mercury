@@ -13,7 +13,6 @@ extern crate rocket_contrib;
 extern crate uuid;
 
 extern crate curv;
-extern crate curv_client;
 extern crate electrumx_client;
 extern crate kms;
 extern crate monotree;
