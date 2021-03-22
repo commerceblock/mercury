@@ -78,6 +78,9 @@ pub trait Utilities {
     ///     - Check tx data
     ///     - Calculate and store tx sighash for validation before performing ecdsa::sign
     fn prepare_sign_tx(&self, prepare_sign_msg: PrepareSignTxMsg) -> Result<()>;
+
+    // get amount histogram of statecoins
+    fn get_coin_info(&self) -> Result<CoinValueInfo>;
 }
 
 impl Utilities for SCE {
@@ -335,6 +338,13 @@ impl Utilities for SCE {
 
         Ok(())
     }
+
+    fn get_coin_info(&self) -> Result<CoinValueInfo> {
+        println!("{:?}", "GET COIN INFO");
+        let mut coins = CoinValueInfo::new();
+        coins.values.insert(100000,5);
+        Ok(coins)
+    }
 }
 
 #[openapi]
@@ -342,6 +352,16 @@ impl Utilities for SCE {
 #[get("/info/fee", format = "json")]
 pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
     match sc_entity.get_fees() {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Get statechain entity operating information
+#[get("/info/coins", format = "json")]
+pub fn get_coin_info(sc_entity: State<SCE>) -> Result<Json<CoinValueInfo>> {
+    match sc_entity.get_coin_info() {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }

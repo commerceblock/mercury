@@ -121,6 +121,9 @@ pub trait Conductor {
     // list of those StateChains that have caused recent failures. Participants that completed their
     // transfers can reveal the nonce to the their Comm(statechain_id, nonce) and thus prove which
     // StateChain they own and should not take any responsibility for the failure.
+
+    // Get map of values/sizes to registrations
+    fn get_group_info(&self) -> Result<HashMap<SwapGroup,u64>>;
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -129,6 +132,8 @@ pub struct Scheduler {
     statechain_swap_size_map: BisetMap<Uuid, u64>,
     //A map of state chain registereds for swap to amount
     statechain_amount_map: BisetMap<Uuid, u64>,
+    //A map of swap groups to registrations
+    group_info_map: HashMap<SwapGroup, u64>,
     //A map of state chain id to swap id
     swap_id_map: HashMap<Uuid, Uuid>,
     //A map of swap id to swap info
@@ -152,6 +157,7 @@ impl Scheduler {
         Self {
             statechain_swap_size_map: BisetMap::<Uuid, u64>::new(),
             statechain_amount_map: BisetMap::<Uuid, u64>::new(),
+            group_info_map: HashMap::<SwapGroup, u64>::new(),
             swap_id_map: HashMap::<Uuid, Uuid>::new(),
             swap_info_map: HashMap::<Uuid, SwapInfo>::new(),
             status_map: BisetMap::<Uuid, SwapStatus>::new(),
@@ -179,6 +185,11 @@ impl Scheduler {
             .insert(statechain_id.to_owned(), amount);
         self.statechain_swap_size_map
             .insert(statechain_id.to_owned(), swap_size);
+
+        let group = SwapGroup { amount: amount, size: swap_size};
+
+        let count = self.group_info_map.entry(group).or_insert(0);
+        *count += 1;
     }
 
     pub fn get_statechain_ids_by_amount(&self, amount: &u64) -> Vec<Uuid> {
@@ -306,6 +317,13 @@ impl Scheduler {
                         //as a coherence check
                         assert!(self.statechain_swap_size_map.delete(&id).len() == 1);
                         assert!(self.statechain_amount_map.delete(&id).len() == 1);
+
+                        let group = SwapGroup { amount: amount, size: swap_size};
+
+                        let count = self.group_info_map.entry(group).or_insert(0);
+                        *count -= 1;
+
+                        println!("{:?}", self.group_info_map);
                     }
                     info!("SCHEDULER: Created Swap ID: {}", swap_id);
                     debug!("SCHEDULER: Swap Info: {:?}", si);
@@ -564,6 +582,11 @@ impl Conductor for SCE {
         REG_SWAP_UTXOS.with_label_values(&[&swap_size.clone().to_string(),&amount.clone().to_string()]).inc();
 
         Ok(())
+    }
+
+    fn get_group_info(&self) -> Result<HashMap<SwapGroup,u64>> {
+        let guard = self.scheduler.lock()?;
+        Ok(guard.group_info_map.clone())
     }
 
     fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> Result<()> {
@@ -851,6 +874,18 @@ pub fn swap_second_message(
     swap_msg2: Json<SwapMsg2>,
 ) -> Result<Json<(SCEAddress)>> {
     match sc_entity.swap_second_message(&swap_msg2.into_inner()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Get information on current group registrations
+#[get("/swap/groupinfo", format = "json")]
+pub fn get_group_info(
+    sc_entity: State<SCE>,
+    ) -> Result<Json<(HashMap<SwapGroup,u64>)>> {
+    match sc_entity.get_group_info() {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
