@@ -321,9 +321,9 @@ impl Scheduler {
                         let group = SwapGroup { amount: amount, size: swap_size};
 
                         let count = self.group_info_map.entry(group).or_insert(0);
-                        *count -= 1;
-
-                        println!("{:?}", self.group_info_map);
+                        if count > &mut 0 {
+                            *count -= 1;
+                        }
                     }
                     info!("SCHEDULER: Created Swap ID: {}", swap_id);
                     debug!("SCHEDULER: Swap Info: {:?}", si);
@@ -948,7 +948,7 @@ mod tests {
         Scheduler {
             statechain_swap_size_map,
             statechain_amount_map,
-            group_info_map: HashMap::<u64,u64>::new(),
+            group_info_map: HashMap::<SwapGroup,u64>::new(),
             swap_id_map: HashMap::<Uuid, Uuid>::new(),
             swap_info_map: HashMap::<Uuid, SwapInfo>::new(),
             status_map: BisetMap::<Uuid, SwapStatus>::new(),
