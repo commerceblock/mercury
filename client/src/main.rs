@@ -279,7 +279,7 @@ fn main() {
         } else if matches.is_present("recover-statecoin") {
             if let Some(matches) = matches.subcommand_matches("recover-statecoin") {
                 let publickey_hex = matches.value_of("pk").unwrap();
-                let recovery_info: RecoveryDataMsg = match query_wallet_daemon(
+                let recovery_info: Vec<RecoveryDataMsg> = match query_wallet_daemon(
                     DaemonRequest::GetRecoveryData(publickey_hex.to_string()),
                 )
                 .unwrap()
@@ -288,14 +288,17 @@ fn main() {
                     DaemonResponse::Error(e) => panic!(e.to_string()),
                     DaemonResponse::None => panic!("None value returned."),
                 };
-                println!("\nStateChain ID {} \n", recovery_info.statechain_id);
-                println!("\nShared key ID {} \n", recovery_info.shared_key_id);
-                println!("StateChain: ");
-                for state in recovery_info.chain.chain.clone() {
+                if recovery_info.len()==0 {
+                    println!("No StateCoin data for given key.");
+                    return
+                }
+                println!("\nStateChain ID {}", recovery_info[0].statechain_id);
+                println!("\nShared key ID {}", recovery_info[0].shared_key_id);
+                println!("\nStateChain: ");
+                for state in recovery_info[0].chain.chain.clone() {
                     println!("\t{:?}", state);
                 }
-                println!();
-                println!("\nBackup tx: {} \n", recovery_info.tx_hex);
+                println!("\nBackup tx: {} \n", recovery_info[0].tx_hex);
             }
         }
     }

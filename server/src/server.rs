@@ -218,7 +218,7 @@ pub fn get_server<
                 ],
             )
             .mount(
-                "/", 
+                "/",
                 routes_with_openapi![
                     util::get_statechain,
                     util::get_smt_root,
@@ -226,7 +226,7 @@ pub fn get_server<
                     util::get_fees,
                     util::prepare_sign_tx,
                     util::get_recovery_data,
-                    util::get_transfer_batch_status,  
+                    util::get_transfer_batch_status,
                     ecdsa::first_message,
                     ecdsa::second_message,
                     ecdsa::sign_first,
@@ -248,7 +248,7 @@ pub fn get_server<
                     conductor::get_blinded_spend_signature,
                     conductor::register_utxo,
                     conductor::swap_first_message,
-                    conductor::swap_second_message,              
+                    conductor::swap_second_message,
                 ],
             )
             .mount("/swagger", make_swagger_ui(&get_docs()))
@@ -408,9 +408,9 @@ mock! {
             prepare_sign_msg: PrepareSignTxMsg,
         ) -> util::Result<()>;
         fn get_recovery_data(
-            &self, 
-            recovery_request: RecoveryRequest,
-        ) -> util::Result<RecoveryDataMsg>;
+            &self,
+            recovery_request: Vec<RecoveryRequest>,
+        ) -> util::Result<Vec<RecoveryDataMsg>>;
     }
     trait Withdraw{
         fn verify_statechain_sig(&self,

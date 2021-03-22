@@ -31,11 +31,11 @@ pub fn get_statechain(
 pub fn get_recovery_data(
     client_shim: &ClientShim,
     pubkey_hex: &str,
-) -> Result<RecoveryDataMsg> {
-    let recovery_request = RecoveryRequest {
+) -> Result<Vec<RecoveryDataMsg>> {
+    let recovery_request = vec!(RecoveryRequest {
             key: pubkey_hex.to_string(),
             sig: "".to_string(),
-        };
+        });
     requests::postb(client_shim, &format!("info/recover/"), recovery_request)
 }
 
