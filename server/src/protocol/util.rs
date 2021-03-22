@@ -340,10 +340,7 @@ impl Utilities for SCE {
     }
 
     fn get_coin_info(&self) -> Result<CoinValueInfo> {
-        println!("{:?}", "GET COIN INFO");
-        let mut coins = CoinValueInfo::new();
-        coins.values.insert(100000,5);
-        Ok(coins)
+        Ok(CoinValueInfo::new())
     }
 }
 

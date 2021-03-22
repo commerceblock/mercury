@@ -948,7 +948,7 @@ mod tests {
         Scheduler {
             statechain_swap_size_map,
             statechain_amount_map,
-            group_info_map: HashMap<u64,u64>::new(),
+            group_info_map: HashMap::<u64,u64>::new(),
             swap_id_map: HashMap::<Uuid, Uuid>::new(),
             swap_info_map: HashMap::<Uuid, SwapInfo>::new(),
             status_map: BisetMap::<Uuid, SwapStatus>::new(),
