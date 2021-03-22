@@ -259,6 +259,7 @@ pub mod structs {
         pub amount: i64,
     }
 
+    #[derive(Clone, Debug)]
     pub struct TransferBatchData {
         pub state_chains: HashSet<Uuid>,
         pub punished_state_chains: Vec<Uuid>,
@@ -266,6 +267,7 @@ pub mod structs {
         pub finalized: bool,
     }
 
+    #[derive(Clone, Debug)]
     pub struct TransferFinalizeBatchData {
         pub finalized_data_vec: Vec<TransferFinalizeData>,
         pub start_time: NaiveDateTime,

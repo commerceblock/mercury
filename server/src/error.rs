@@ -22,6 +22,7 @@ use rocket_okapi::gen::OpenApiGenerator;
 use rocket_okapi::response::OpenApiResponder;
 use rocket_okapi::Result as OpenApiResult;
 use okapi::openapi3::Responses;
+use uuid;
 
 
 /// State Entity library specific errors
@@ -90,6 +91,13 @@ impl From<ReqwestError> for SEError {
         SEError::Generic(e.to_string())
     }
 }
+
+impl From<uuid::ParseError> for SEError {
+    fn from(e: uuid::ParseError) -> SEError {
+        SEError::Generic(e.to_string())
+    }
+}
+
 
 impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, crate::protocol::conductor::Scheduler>>>
     for SEError
