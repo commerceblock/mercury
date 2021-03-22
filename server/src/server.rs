@@ -190,9 +190,6 @@ pub fn get_server<
 
     let rocket_config = get_rocket_config(&sc_entity.config);
 
-    //Get the current statecoin amount histogram
-    let mut coins_histogram = sc_entity.database.get_coins_histogram();
-
     let bitcoind = sc_entity.config.bitcoind.clone();
 
     if sc_entity.config.watch_only {
@@ -258,8 +255,7 @@ pub fn get_server<
             )
             .mount("/swagger", make_swagger_ui(&get_docs()))
             .mount("/metrics", prometheus)
-            .manage(sc_entity)
-            .manage(coins_histogram);
+            .manage(sc_entity);
 
         Ok(rock)
     }

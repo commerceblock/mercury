@@ -196,7 +196,7 @@ impl<'de> Deserialize<'de> for SwapGroup {
 }
 
 /// List of current statecoin amounts and the number of each 
-#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct CoinValueInfo {
     pub values: HashMap<u64,u64>,
 }
