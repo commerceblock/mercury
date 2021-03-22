@@ -27,7 +27,7 @@ use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
 use shared_lib::mainstay::CommitmentInfo;
 use shared_lib::state_chain::*;
-use shared_lib::structs::TransferMsg3;
+use shared_lib::structs::{TransferMsg3,CoinValueInfo};
 use shared_lib::Root;
 use shared_lib::util::transaction_deserialise;
 use rocket_okapi::JsonSchema;
@@ -689,6 +689,10 @@ impl Database for PGDatabase {
     fn reset(&self) -> Result<()> {
         // truncate all postgres tables
         self.truncate_tables()
+    }
+
+    fn get_coins_histogram(&self) -> Result<CoinValueInfo> {
+        Ok(CoinValueInfo::new())
     }
 
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid> {

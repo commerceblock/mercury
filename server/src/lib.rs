@@ -71,7 +71,7 @@ use mockall::*;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
 use rocket_contrib::databases::postgres;
-use shared_lib::{state_chain::*, structs::TransferMsg3, Root};
+use shared_lib::{state_chain::*, structs::TransferMsg3, Root, structs::CoinValueInfo};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
@@ -102,6 +102,7 @@ pub trait Database {
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self;
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid>;
     fn has_withdraw_sc_sig(&self, user_id: Uuid) -> Result<()>;
+    fn get_coins_histogram(&self) -> Result<CoinValueInfo>;
     fn update_withdraw_sc_sig(&self, user_id: &Uuid, sig: StateChainSig) -> Result<()>;
     fn update_withdraw_tx_sighash(
         &self,

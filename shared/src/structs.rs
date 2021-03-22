@@ -170,8 +170,7 @@ impl<'de> Visitor<'de> for SwapGroupVisitor {
     where
         E: de::Error,
     {
-        let re = Regex::new(r"(\d+):(\d+)").unwrap(); 
-        if let Some(nums) = re.captures_iter(s).next() {
+        if let Some(nums) = Regex::new(r"(\d+):(\d+)").unwrap().captures_iter(s).next() {
             if let Ok(amount) = u64::from_str(&nums[1]) { 
                 if let Ok(size) = u64::from_str(&nums[2]) {
                     Ok(SwapGroup::new(amount, size))
