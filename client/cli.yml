@@ -113,6 +113,12 @@ subcommands:
         - fee-info:
           short: Get State Entity's Fee information
           help: State Entity Fees information
+        - groups-info:
+          short: Swap groups information
+          help: Get current swap groups with registrations
+        - coins-info:
+          short: Get coins amount histogram
+          help: Histogram of current coin amounts with SE
         - get-statechain:
             about: Get a State Chain's information
             version: "1.0"

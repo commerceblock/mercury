@@ -104,7 +104,7 @@ pub fn swap_first_message(
         &SwapMsg1 {
             swap_id: swap_token.id.to_owned(),
             statechain_id: statechain_id.to_owned(),
-            swap_token_sig: swap_token_sig.to_owned(),
+            swap_token_sig: swap_token_sig.to_owned().to_string(),
             transfer_batch_sig: transfer_batch_sig.to_owned(),
             address: new_address.to_owned(),
             bst_e_prime: my_bst_data.get_e_prime().clone(),
@@ -122,8 +122,8 @@ pub fn swap_get_blinded_spend_signature(
         &client_shim,
         &String::from("swap/blinded-spend-signature"),
         &BSTMsg {
-            swap_id: swap_id.to_owned(),
-            statechain_id: statechain_id.to_owned(),
+            swap_id: swap_id.to_owned().to_string(),
+            statechain_id: statechain_id.to_owned().to_string(),
         },
     )
 }

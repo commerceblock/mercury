@@ -27,7 +27,7 @@ use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
 use shared_lib::mainstay::CommitmentInfo;
 use shared_lib::state_chain::*;
-use shared_lib::structs::TransferMsg3;
+use shared_lib::structs::{TransferMsg3,CoinValueInfo};
 use shared_lib::Root;
 use shared_lib::util::transaction_deserialise;
 use rocket_okapi::JsonSchema;
@@ -689,6 +689,23 @@ impl Database for PGDatabase {
     fn reset(&self) -> Result<()> {
         // truncate all postgres tables
         self.truncate_tables()
+    }
+
+    fn get_coins_histogram(&self) -> Result<CoinValueInfo> {
+        let dbr = self.database_r()?;
+        let statement =
+            dbr.prepare(&format!("SELECT amount,count(1) FROM {} GROUP BY amount", Table::StateChain.to_string(),))?;
+        let rows = statement.query(&[])?;
+        let mut coins_hist = CoinValueInfo::new();
+        if rows.is_empty() {
+            return Ok(coins_hist);
+        };
+        for row in &rows {
+            let amount: u64 = row.get_opt::<usize, i64>(0).unwrap().unwrap() as u64;
+            let count: u64 = row.get_opt::<usize, i64>(1).unwrap().unwrap() as u64;
+            coins_hist.values.insert(amount,count);
+        }
+        Ok(coins_hist)
     }
 
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid> {

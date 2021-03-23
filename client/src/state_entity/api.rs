@@ -4,7 +4,7 @@
 
 use super::super::Result;
 use shared_lib::structs::{
-    SmtProofMsgAPI, StateChainDataAPI, StateEntityFeeInfoAPI, TransferBatchDataAPI, RecoveryDataMsg, RecoveryRequest,
+    SmtProofMsgAPI, StateChainDataAPI, StateEntityFeeInfoAPI, TransferBatchDataAPI, RecoveryDataMsg, RecoveryRequest, CoinValueInfo
 };
 use shared_lib::Root;
 
@@ -13,10 +13,21 @@ use crate::ClientShim;
 
 use monotree::Proof;
 use uuid::Uuid;
+use std::collections::HashMap;
 
 /// Get state chain fee
 pub fn get_statechain_fee_info(client_shim: &ClientShim) -> Result<StateEntityFeeInfoAPI> {
     requests::get(client_shim, &format!("info/fee"))
+}
+
+/// Get state chain fee
+pub fn get_swaps_group_info(client_shim: &ClientShim) -> Result<HashMap<String,u64>> {
+    requests::get(client_shim, &format!("/swap/groupinfo"))
+}
+
+/// Get state chain fee
+pub fn get_coins_info(client_shim: &ClientShim) -> Result<CoinValueInfo> {
+    requests::get(client_shim, &format!("/info/coins"))
 }
 
 /// Get state chain by ID
