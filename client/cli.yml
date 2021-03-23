@@ -113,6 +113,12 @@ subcommands:
         - fee-info:
           short: Get State Entity's Fee information
           help: State Entity Fees information
+        - groups-info:
+          short: Swap groups information
+          help: Get current swap groups with registrations
+        - coins-info:
+          short: Get coins amount histogram
+          help: Histogram of current coin amounts with SE
         - get-statechain:
             about: Get a State Chain's information
             version: "1.0"
@@ -122,3 +128,12 @@ subcommands:
                   required: true
                   value_name: ID
                   help: State Chain ID
+        - recover-statecoin:
+            about: Recover statcoin data with the public key share
+            version: "1.0"
+            args:
+              - pk:
+                  short: p
+                  required: true
+                  value_name: Pubkey
+                  help: Public key share

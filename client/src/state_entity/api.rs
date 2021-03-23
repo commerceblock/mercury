@@ -4,7 +4,7 @@
 
 use super::super::Result;
 use shared_lib::structs::{
-    SmtProofMsgAPI, StateChainDataAPI, StateEntityFeeInfoAPI, TransferBatchDataAPI,
+    SmtProofMsgAPI, StateChainDataAPI, StateEntityFeeInfoAPI, TransferBatchDataAPI, RecoveryDataMsg, RecoveryRequest, CoinValueInfo
 };
 use shared_lib::Root;
 
@@ -13,10 +13,21 @@ use crate::ClientShim;
 
 use monotree::Proof;
 use uuid::Uuid;
+use std::collections::HashMap;
 
 /// Get state chain fee
 pub fn get_statechain_fee_info(client_shim: &ClientShim) -> Result<StateEntityFeeInfoAPI> {
     requests::get(client_shim, &format!("info/fee"))
+}
+
+/// Get state chain fee
+pub fn get_swaps_group_info(client_shim: &ClientShim) -> Result<HashMap<String,u64>> {
+    requests::get(client_shim, &format!("/swap/groupinfo"))
+}
+
+/// Get state chain fee
+pub fn get_coins_info(client_shim: &ClientShim) -> Result<CoinValueInfo> {
+    requests::get(client_shim, &format!("/info/coins"))
 }
 
 /// Get state chain by ID
@@ -25,6 +36,18 @@ pub fn get_statechain(
     statechain_id: &Uuid,
 ) -> Result<StateChainDataAPI> {
     requests::get(client_shim, &format!("info/statechain/{}", statechain_id))
+}
+
+/// Get state chain by ID
+pub fn get_recovery_data(
+    client_shim: &ClientShim,
+    pubkey_hex: &str,
+) -> Result<Vec<RecoveryDataMsg>> {
+    let recovery_request = vec!(RecoveryRequest {
+            key: pubkey_hex.to_string(),
+            sig: "".to_string(),
+        });
+    requests::postb(client_shim, &format!("info/recover/"), recovery_request)
 }
 
 /// Get state entity's sparse merkle tree root

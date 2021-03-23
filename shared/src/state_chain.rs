@@ -32,7 +32,8 @@ use uuid::Uuid;
 use rocket_okapi::JsonSchema;
 
 /// A list of States in which each State signs for the next State.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, PartialEq, Clone)]
+#[schemars(example = "Self::example")]
 pub struct StateChain {
     /// chain of transitory key history
     pub chain: Vec<State>,
@@ -73,6 +74,12 @@ impl StateChain {
             data: statechain_sig.data,
             next_state: None,
         }))
+    }
+
+    pub fn example() -> Self{
+        Self{
+            chain: vec![State::example()],
+        }
     }
 }
 

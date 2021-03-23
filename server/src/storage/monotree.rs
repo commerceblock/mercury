@@ -309,6 +309,9 @@ impl Database for MemoryDB {
     fn has_withdraw_sc_sig(&self, _user_id: uuid::Uuid) -> crate::Result<()> {
         unimplemented!()
     }
+    fn get_coins_histogram(&self) -> crate::Result<shared_lib::structs::CoinValueInfo> {
+        unimplemented!()
+    }
     fn update_withdraw_sc_sig(
         &self,
         _user_id: &uuid::Uuid,
@@ -613,6 +616,12 @@ impl Database for MemoryDB {
         &self,
         _statechain_id: uuid::Uuid,
     ) -> crate::Result<crate::structs::StateChainOwner> {
+        unimplemented!()
+    }
+    fn get_recovery_data(
+        &self, 
+        _proofkey: String,
+    ) -> crate::Result<(uuid::Uuid,uuid::Uuid,bitcoin::Transaction)> {
         unimplemented!()
     }
     fn create_user_session(

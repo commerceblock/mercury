@@ -27,7 +27,7 @@ use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
 use shared_lib::mainstay::CommitmentInfo;
 use shared_lib::state_chain::*;
-use shared_lib::structs::TransferMsg3;
+use shared_lib::structs::{TransferMsg3,CoinValueInfo};
 use shared_lib::Root;
 use shared_lib::util::transaction_deserialise;
 use rocket_okapi::JsonSchema;
@@ -689,6 +689,23 @@ impl Database for PGDatabase {
     fn reset(&self) -> Result<()> {
         // truncate all postgres tables
         self.truncate_tables()
+    }
+
+    fn get_coins_histogram(&self) -> Result<CoinValueInfo> {
+        let dbr = self.database_r()?;
+        let statement =
+            dbr.prepare(&format!("SELECT amount,count(1) FROM {} GROUP BY amount", Table::StateChain.to_string(),))?;
+        let rows = statement.query(&[])?;
+        let mut coins_hist = CoinValueInfo::new();
+        if rows.is_empty() {
+            return Ok(coins_hist);
+        };
+        for row in &rows {
+            let amount: u64 = row.get_opt::<usize, i64>(0).unwrap().unwrap() as u64;
+            let count: u64 = row.get_opt::<usize, i64>(1).unwrap().unwrap() as u64;
+            coins_hist.values.insert(amount,count);
+        }
+        Ok(coins_hist)
     }
 
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid> {
@@ -1465,6 +1482,24 @@ impl Database for PGDatabase {
             owner_id,
             chain,
         })
+    }
+
+    // find statecoin and user information from supplied proof key to enable wallet recovery
+    fn get_recovery_data(&self, proofkey: String) -> Result<(Uuid,Uuid,Transaction)> {
+        let dbr = self.database_r()?;
+        let statement =
+            dbr.prepare(&format!("SELECT * FROM {} WHERE proofkey = $1", Table::UserSession.to_string(),))?;
+        let rows = statement.query(&[&proofkey])?;
+        if rows.is_empty() {
+            return Err(SEError::DBError(NoDataForID, String::from("Proof key")));
+        };
+        let row = rows.get(0);
+
+        let tx_backup: Transaction = Self::deser(row.get("txbackup"))?;
+        let user_id: Uuid = row.get("id");
+        let statechain_id: Uuid = row.get("statechainid");
+
+        Ok((user_id,statechain_id,tx_backup))
     }
 
     // Create DB entry for newly generated ID signalling that user has passed some

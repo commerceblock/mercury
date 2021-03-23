@@ -6,7 +6,7 @@ mod tests {
     use rocket::http::{ContentType, Status};
     use rocket::local::Client;
     use shared_lib::structs::{
-        DepositMsg1, KeyGenMsg1, Protocol, SmtProofMsgAPI, StateEntityFeeInfoAPI,
+        DepositMsg1, KeyGenMsg1, Protocol, SmtProofMsgAPI, StateEntityFeeInfoAPI, RecoveryRequest,
     };
     use shared_lib::{mainstay, Root};
 
@@ -94,6 +94,30 @@ mod tests {
             .dispatch();
         let res = response.body_string().unwrap();
         assert_eq!(res, "Unknown route \'/info/statechain/\'.".to_string());
+    }
+
+    #[test]
+    #[serial]
+    fn test_err_get_recovery() {
+        let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
+        let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
+
+        // get_recovery invalid public key
+        let recover_msg = RecoveryRequest {
+            key: "0297901882fc1601c3ea2b5326c4e635455b5451573c619782502894df69e24548",
+            sig: "",
+        }
+        let body = serde_json::to_string(&recover_msg).unwrap();
+        let mut response = client
+            .post(format!("/info/recover"))
+            .body(body)
+            .header(ContentType::JSON)
+            .dispatch();
+        let res = response.body_string().unwrap();
+        assert_eq!(
+            res,
+            format!("DB Error: No data for identifier. (id: Proof key)")
+        );
     }
 
     #[test]

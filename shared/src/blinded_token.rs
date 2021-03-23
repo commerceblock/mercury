@@ -121,7 +121,8 @@ impl BSTSenderData {
         let x = FE::new_random(); // priv
         let q = p * x; //pub
         let (k, r_prime) = signer_gen_r_prime();
-        BSTSenderData { x, q, k, r_prime }
+        let result = BSTSenderData { x, q, k, r_prime };
+        result
     }
 
     pub fn get_r_prime(&self) -> GE {
@@ -205,7 +206,7 @@ fn calc_e(r: GE, m: &String) -> Result<FE> {
     let e = sha256d::Hash::hash(&data_vec);
     let hex = hex::encode(e);
     let big_int = BigInt::from_hex(&hex);
-    Ok(curv::elliptic::curves::traits::ECScalar::from(&big_int))
+    Ok(ECScalar::from(&big_int))
 }
 
 ///  Requester calculates
@@ -253,14 +254,15 @@ pub fn verify_blind_sig(s: FE, m: &String, q: GE, r: GE) -> Result<bool> {
 /// Struct serialized to string to be used as Blind sign token message
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BlindedSpentTokenMessage {
-    pub swap_id: Uuid,
-    pub nonce: Uuid,
+    pub swap_id: String,
+    pub nonce: String,
 }
 impl BlindedSpentTokenMessage {
     pub fn new(swap_id: Uuid) -> Self {
+        let nonce = Uuid::new_v4().to_string();
         BlindedSpentTokenMessage {
-            swap_id,
-            nonce: Uuid::new_v4(),
+            swap_id: swap_id.to_string(),
+            nonce,
         }
     }
 }
@@ -268,41 +270,50 @@ impl BlindedSpentTokenMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn test_blind_sign() {
-        // Sender init vars for BST
-        let p: GE = ECPoint::generator(); // gen
-        let x = FE::new_random(); // priv
-        let q = p * x; //pub
-        let (k, r_prime) = signer_gen_r_prime();
-
-        let m = "swap ID".to_string();
-
-        // Requester setup BST generation
-        let (u, v, r, e_prime) = requester_calc_e_prime(r_prime, &m).unwrap();
-
-        // Sender create BST
-        let s_prime = sender_calc_s_prime(x, e_prime, k);
-
-        // Requester unblind
-        let s = requester_calc_s(s_prime, u, v);
-
-        // Sender verify
-        assert!(verify_blind_sig(s, &m, q, r).unwrap());
-    }
+    use crate::swap_data::SwapToken;
+    
+    static BST_SENDER_DATA: &str = "{\"x\":\"a69ee11dd94ebb7d45194c5fc5b0f001b6836894aaf93e0c1a85bad88280a5bc\",\"q\":{\"x\":\"41fc72226373d61df5fa0aabcd257d9f65e54b42906fe2871de406cacb675594\",\"y\":\"f57b5133122a7a8066fd956a32df9c1f9959df3079dbfa980512c91c5d7cd160\"},\"k\":\"73098242f2b18a70a7d91aa27cf959ca88a56b3fd9493b651f7f94771ee10e90\",\"r_prime\":{\"x\":\"cde12c788fa16a0235ac148353bc4469edfd0f8e417b00eb66c18b83dff53f0f\",\"y\":\"e280715e647dcd3e0e4d390ca2098035e955796aeb50f335ddd7e20bff334942\"}}";
+    static SWAP_TOKEN: &str = "{\"id\":\"00000000-0000-0000-0000-000000000001\",\"amount\":100,\"time_out\":1000,\"statechain_ids\":[\"00000000-0000-0000-0000-000000000001\",\"00000000-0000-0000-0000-000000000002\",\"00000000-0000-0000-0000-000000000003\"]}";  
+    static _SECRET_KEY: &[u8;32] = &[1;32];
 
     #[test]
-    fn test_blind_sign_structs() {
-        let msg = "Message".to_string();
-        // Sender, Requestor init
-        let sender = BSTSenderData::setup();
-        let requestor = BSTRequestorData::setup(sender.r_prime, &msg).unwrap();
+    fn test_bst_sender_data() {
+        //let data = BSTSenderData::setup();
+        //let data_str = serde_json::to_string(&data).unwrap();
+        let bst_sender: BSTSenderData = serde_json::from_str(BST_SENDER_DATA).unwrap();
+        //println!("bst sender data: {}", data_str);
 
-        let blind_sig = sender.gen_blind_signature(requestor.e_prime);
-        let unblind_sig = requestor.unblind_signature(blind_sig);
+        let swap_token : SwapToken = serde_json::from_str(SWAP_TOKEN).unwrap();
 
-        let blind_spend_token = requestor.make_blind_spend_token(unblind_sig);
+        //Requester
+        let m = serde_json::to_string(&BlindedSpentTokenMessage::new(swap_token.id)).unwrap();
+        println!("BSTMsg: {}", m);
 
-        assert!(sender.verify_blind_spend_token(blind_spend_token).unwrap());
+        let bst_requestor = BSTRequestorData::setup(bst_sender.get_r_prime(),&m).unwrap();
+        
+        let req_data_str = serde_json::to_string(&bst_requestor).unwrap();
+
+        println!("bst requestor data: {}", req_data_str);
+
+        let blind_sig = bst_sender.gen_blind_signature(bst_requestor.get_e_prime());
+
+        let blind_sig_str = serde_json::to_string(&blind_sig).unwrap();
+
+        println!("blind sig: {}", blind_sig_str);
+
+        let unblind_sig = bst_requestor.unblind_signature(blind_sig);
+
+        let unblind_sig_str = serde_json::to_string(&unblind_sig).unwrap();
+
+        println!("unblind sig: {}", unblind_sig_str);
+
+        let blind_spend_token = bst_requestor.make_blind_spend_token(unblind_sig);
+
+        let blind_spend_token_str = serde_json::to_string(&blind_spend_token).unwrap();
+
+        println!("blind spend token: {}", blind_spend_token_str);
+        
+        assert!(bst_sender.verify_blind_spend_token(blind_spend_token).unwrap())
+
     }
 }

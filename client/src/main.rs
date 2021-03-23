@@ -10,7 +10,7 @@ use client_lib::{
     state_entity::transfer::TransferFinalizeData,
 };
 use shared_lib::{util::transaction_deserialise, structs::{
-    PrepareSignTxMsg, StateChainDataAPI, StateEntityFeeInfoAPI,
+    PrepareSignTxMsg, StateChainDataAPI, StateEntityFeeInfoAPI, CoinValueInfo, RecoveryDataMsg
 }};
 
 use bitcoin::util::key::PublicKey;
@@ -19,6 +19,7 @@ use clap::{load_yaml, App};
 use electrumx_client::response::{GetBalanceResponse, GetListUnspentResponse};
 use std::str::FromStr;
 use uuid::Uuid;
+use std::collections::HashMap;
 
 fn main() {
     let yaml = load_yaml!("../cli.yml");
@@ -276,6 +277,42 @@ fn main() {
                     DaemonResponse::None => panic!("None value returned."),
                 };
             println!("State Entity fee info: \n\n{}", fee_info);
+        } else if matches.is_present("recover-statecoin") {
+            if let Some(matches) = matches.subcommand_matches("recover-statecoin") {
+                let publickey_hex = matches.value_of("pk").unwrap();
+                let recovery_info: Vec<RecoveryDataMsg> = match query_wallet_daemon(
+                    DaemonRequest::GetRecoveryData(publickey_hex.to_string()),
+                )
+                .unwrap()
+                {
+                if recovery_info.len()==0 {
+                    println!("No StateCoin data for given key.");
+                    return
+                }
+                println!("\nStateChain ID {}", recovery_info[0].statechain_id);
+                println!("\nShared key ID {}", recovery_info[0].shared_key_id);
+                println!("\nStateChain: ");
+                for state in recovery_info[0].chain.chain.clone() {
+                    println!("\t{:?}", state);
+                }
+                println!("\nBackup tx: {} \n", recovery_info[0].tx_hex);
+            }
+        } else if matches.is_present("coins-info") {
+            let coins_info: CoinValueInfo =
+                match query_wallet_daemon(DaemonRequest::GetCoinsInfo).unwrap() {
+                    DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::None => panic!("None value returned."),
+                };
+            println!("Coin amounts histogram: \n\n{:?}", coins_info);
+        } else if matches.is_present("groups-info") {
+            let swap_groups: HashMap<String,u64> =
+                match query_wallet_daemon(DaemonRequest::GetSwapGroups).unwrap() {
+                    DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::None => panic!("None value returned."),
+                };
+            println!("Swap group registrations: \n\n{:?}", swap_groups);
         }
     }
 }
