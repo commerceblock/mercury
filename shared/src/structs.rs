@@ -10,10 +10,13 @@ use kms::ecdsa::two_party::{party1,party2};
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one,party_two};
 
 use bitcoin::{secp256k1::PublicKey, Address};
-use std::{collections::HashSet, fmt};
+use std::{collections::{HashSet,HashMap}, fmt};
 use uuid::Uuid;
 use rocket_okapi::JsonSchema;
 use schemars;
+use serde::{Serialize, Serializer, Deserialize, Deserializer};
+use serde::de::{self, Visitor, Unexpected};
+use regex::Regex;
 
 use crate::ecies;
 use crate::{util::transaction_serialise, ecies::{Encryptable, SelfEncryptable, WalletDecryptable}};
@@ -121,6 +124,86 @@ impl fmt::Display for StateEntityFeeInfoAPI {
             "Fee address: {},\nDeposit fee rate: {}\nWithdrawal fee rate: {}\nLock interval: {}\nInitial lock: {}",
             self.address, self.deposit, self.withdraw, self.interval, self.initlock
         )
+    }
+}
+
+/// Swap group status data
+#[derive(JsonSchema, Debug, Hash, Eq, PartialEq, Clone)]
+#[schemars(example = "Self::example")]
+pub struct SwapGroup {
+    pub amount: u64,
+    pub size: u64,
+}
+
+impl SwapGroup {
+    pub fn new(amount: u64, size: u64) -> SwapGroup {
+        SwapGroup {amount, size}
+    }
+    
+    pub fn example() -> Self{
+        Self{
+            amount: 1000000,
+            size: 5,
+        }
+    }
+}
+
+impl Serialize for SwapGroup {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&format!("{}:{}", self.amount, self.size))
+    }
+}
+
+struct SwapGroupVisitor;
+
+impl<'de> Visitor<'de> for SwapGroupVisitor {
+    type Value = SwapGroup;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a colon-separated pair of u64 integers")
+    }
+
+    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        if let Some(nums) = Regex::new(r"(\d+):(\d+)").unwrap().captures_iter(s).next() {
+            if let Ok(amount) = u64::from_str(&nums[1]) { 
+                if let Ok(size) = u64::from_str(&nums[2]) {
+                    Ok(SwapGroup::new(amount, size))
+                } else {
+                    Err(de::Error::invalid_value(Unexpected::Str(s), &self))
+                }
+            } else {
+                Err(de::Error::invalid_value(Unexpected::Str(s), &self))
+            }
+        } else {
+            Err(de::Error::invalid_value(Unexpected::Str(s), &self))
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for SwapGroup {
+    fn deserialize<D>(deserializer: D) -> Result<SwapGroup, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_string(SwapGroupVisitor)
+    }
+}
+
+/// List of current statecoin amounts and the number of each 
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct CoinValueInfo {
+    pub values: HashMap<u64,u64>,
+}
+
+impl CoinValueInfo {
+    pub fn new() -> Self {
+        Self { values: HashMap::<u64,u64>::new() }
     }
 }
 

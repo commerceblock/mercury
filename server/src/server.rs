@@ -30,6 +30,7 @@ use reqwest;
 use once_cell::sync::Lazy;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
+use std::collections::HashMap;
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -225,7 +226,8 @@ pub fn get_server<
                     util::get_smt_proof,
                     util::get_fees,
                     util::prepare_sign_tx,
-                    util::get_transfer_batch_status,  
+                    util::get_transfer_batch_status,
+                    util::get_coin_info,
                     ecdsa::first_message,
                     ecdsa::second_message,
                     ecdsa::sign_first,
@@ -247,7 +249,8 @@ pub fn get_server<
                     conductor::get_blinded_spend_signature,
                     conductor::register_utxo,
                     conductor::swap_first_message,
-                    conductor::swap_second_message,              
+                    conductor::swap_second_message,
+                    conductor::get_group_info,      
                 ],
             )
             .mount("/swagger", make_swagger_ui(&get_docs()))
@@ -356,6 +359,7 @@ mock! {
         fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> conductor::Result<()>;
         fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> conductor::Result<()>;
         fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> conductor::Result<SCEAddress>;
+        fn get_group_info(&self) -> conductor::Result<HashMap<SwapGroup,u64>>;
         fn get_blinded_spend_signature(&self, swap_id: &Uuid, statechain_id: &Uuid) -> conductor::Result<BlindedSpendSignature>;
         fn get_address_from_blinded_spend_token(&self, bst: &BlindedSpendToken) -> conductor::Result<SCEAddress>;
     }
@@ -396,7 +400,7 @@ mock! {
     }
     trait Utilities {
         fn get_fees(&self) -> util::Result<StateEntityFeeInfoAPI>;
-
+        fn get_coin_info(&self) -> util::Result<CoinValueInfo>;
         /// API: Generates sparse merkle tree inclusion proof for some key in a tree with some root.
         fn get_smt_proof(
             &self,

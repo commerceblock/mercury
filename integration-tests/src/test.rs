@@ -73,6 +73,10 @@ mod tests {
         assert_eq!(shared_key.smt_proof.clone().unwrap().proof, proof);
         assert_eq!(shared_key.proof_key.clone().unwrap(), proof_key);
 
+        let coins = state_entity::api::get_coins_info(&wallet.client_shim).unwrap();
+
+        assert_eq!(*coins.values.get(&10000).unwrap(),1);
+
         println!("Shared wallet id: {:?} ", funding_txid);
         println!("Funding txid: {:?} ", funding_txid);
     }
