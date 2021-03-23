@@ -285,6 +285,10 @@ fn main() {
                 )
                 .unwrap()
                 {
+                    DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::None => panic!("None value returned."),
+                };
                 if recovery_info.len()==0 {
                     println!("No StateCoin data for given key.");
                     return
