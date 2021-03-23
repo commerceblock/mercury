@@ -79,9 +79,9 @@ pub trait Utilities {
     ///     - Calculate and store tx sighash for validation before performing ecdsa::sign
     fn prepare_sign_tx(&self, prepare_sign_msg: PrepareSignTxMsg) -> Result<()>;
 
-    /// API: Return statecoin info, proofs and backup txs to enable wallet recovery from the proof key. 
+    /// API: Return statecoin info, proofs and backup txs to enable wallet recovery from the proof key.
     /// The request includes the public proof key and an authenticating signature
-    fn get_recovery_data(&self, recovery_request: RecoveryRequest) -> Result<RecoveryDataMsg>;
+    fn get_recovery_data(&self, recovery_request: Vec<RecoveryRequest>) -> Result<Vec<RecoveryDataMsg>>;
 }
 
 impl Utilities for SCE {
@@ -339,18 +339,22 @@ impl Utilities for SCE {
         Ok(())
     }
 
-    fn get_recovery_data(&self, recovery_request: RecoveryRequest) -> Result<RecoveryDataMsg> {
-
-        let (user_id, statechain_id, tx) = self.database.get_recovery_data(recovery_request.key)?;
-
-        let state_chain = self.database.get_statechain(statechain_id)?;
-
-        return Ok(RecoveryDataMsg {
-            shared_key_id: user_id,
-            statechain_id: statechain_id,
-            chain: state_chain,
-            tx_hex: transaction_serialise(&tx),
-        });
+    fn get_recovery_data(&self, recovery_requests: Vec<RecoveryRequest>) -> Result<Vec<RecoveryDataMsg>> {
+        let mut recovery_data = vec!();
+        for recovery_request in recovery_requests {
+            let (user_id, statechain_id, tx) = match self.database.get_recovery_data(recovery_request.key) {
+                Ok(res) => res,
+                Err(_) => continue
+            };
+            let state_chain = self.database.get_statechain(statechain_id)?;
+            recovery_data.push(RecoveryDataMsg {
+                shared_key_id: user_id,
+                statechain_id: statechain_id,
+                chain: state_chain,
+                tx_hex: transaction_serialise(&tx),
+            })
+        }
+        return Ok(recovery_data);
     }
 }
 
@@ -418,8 +422,8 @@ pub fn get_transfer_batch_status(
 #[post("/info/recover", format = "json", data = "<request_recovery_data>")]
 pub fn get_recovery_data(
     sc_entity: State<SCE>,
-    request_recovery_data: Json<RecoveryRequest>,
-) -> Result<Json<RecoveryDataMsg>> {
+    request_recovery_data: Json<Vec<RecoveryRequest>>,
+) -> Result<Json<Vec<RecoveryDataMsg>>> {
     match sc_entity.get_recovery_data(request_recovery_data.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -482,11 +486,11 @@ impl SCE {
                     return Err(SEError::Generic(String::from(
                         "Funding Transaction not confirmed.",
                     )));
-                } 
+                }
                 else if res.confirmations.unwrap() < self.config.required_confirmation {
                     return Err(SEError::Generic(String::from(
                         "Funding Transaction insufficient confirmations.",
-                    )));                    
+                    )));
                 }
                 else {
                     return Ok(());
@@ -1057,33 +1061,39 @@ pub mod tests {
         let recovery_data = RecoveryDataMsg {
             chain: statechain,
             shared_key_id: user_id,
-            statechain_id: statechain_id,
+            statechain_id,
             tx_hex: transaction_serialise(&tx_backup),
         };
 
         let mut db = MockDatabase::new();
-        db.expect_set_connection_from_config().returning(|_| Ok(()));   
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_recovery_data().returning(move |key| {
+            // return error to simulate no statecoin for key
+            if key.len() == 0 {
+                return Err(SEError::Generic("error".to_string()));
+            }
+            Ok((user_id,statechain_id,serde_json::from_str::<Transaction>(
+                &BACKUP_TX_SIGNED.to_string(),
+            ).unwrap()))
+        });
         db.expect_get_statechain().returning(move |_| {
             Ok(serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap())
-        });
-        db.expect_get_recovery_data().returning(move |_| {
-            Ok((user_id,statechain_id,serde_json::from_str::<Transaction>(
-                            &BACKUP_TX_SIGNED.to_string(),
-                        ).unwrap()))
         });
         let sc_entity = test_sc_entity(db);
 
         // get_recovery invalid public key
-        let recover_msg = RecoveryRequest {
+        let recover_msg = vec!(RecoveryRequest {
             key: "0297901882fc1601c3ea2b5326c4e635455b5451573c619782502894df69e24548".to_string(),
             sig: "".to_string(),
-        };
+        },RecoveryRequest {
+            key: "".to_string(),
+            sig: "".to_string(),
+        });
 
         let recovery_return = sc_entity.get_recovery_data(recover_msg).unwrap();
-        assert_eq!(recovery_data.shared_key_id, recovery_return.shared_key_id);
-        assert_eq!(recovery_data.statechain_id, recovery_return.statechain_id);
-        assert_eq!(recovery_data.tx_hex,recovery_return.tx_hex);
+        assert_eq!(recovery_return.len(), 1);
+        assert_eq!(recovery_data.shared_key_id, recovery_return[0].shared_key_id);
+        assert_eq!(recovery_data.statechain_id, recovery_return[0].statechain_id);
+        assert_eq!(recovery_data.tx_hex,recovery_return[0].tx_hex);
     }
-
-
 }
