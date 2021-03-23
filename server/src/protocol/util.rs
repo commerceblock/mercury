@@ -340,7 +340,7 @@ impl Utilities for SCE {
     }
 
     fn get_coin_info(&self) -> Result<CoinValueInfo> {
-        Ok(CoinValueInfo::new())
+        Ok(self.database.get_coins_histogram()?)
     }
 }
 
@@ -355,7 +355,7 @@ pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
 }
 
 #[openapi]
-/// # Get statechain entity operating information
+/// # Get the current statecoin amount histogram
 #[get("/info/coins", format = "json")]
 pub fn get_coin_info(sc_entity: State<SCE>) -> Result<Json<CoinValueInfo>> {
     match sc_entity.get_coin_info() {

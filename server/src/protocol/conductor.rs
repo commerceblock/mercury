@@ -1201,6 +1201,11 @@ mod tests {
                 swap_size: 10,
             })
             .is_ok());
+
+        let swap_group = SwapGroup { amount: 10, size: 10 };
+        let groupinfo = sc_entity.get_group_info().unwrap();
+
+        assert_eq!(*groupinfo.get(&swap_group).unwrap(),1);
     }
 
     #[test]
