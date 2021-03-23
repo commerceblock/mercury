@@ -1484,6 +1484,24 @@ impl Database for PGDatabase {
         })
     }
 
+    // find statecoin and user information from supplied proof key to enable wallet recovery
+    fn get_recovery_data(&self, proofkey: String) -> Result<(Uuid,Uuid,Transaction)> {
+        let dbr = self.database_r()?;
+        let statement =
+            dbr.prepare(&format!("SELECT * FROM {} WHERE proofkey = $1", Table::UserSession.to_string(),))?;
+        let rows = statement.query(&[&proofkey])?;
+        if rows.is_empty() {
+            return Err(SEError::DBError(NoDataForID, String::from("Proof key")));
+        };
+        let row = rows.get(0);
+
+        let tx_backup: Transaction = Self::deser(row.get("txbackup"))?;
+        let user_id: Uuid = row.get("id");
+        let statechain_id: Uuid = row.get("statechainid");
+
+        Ok((user_id,statechain_id,tx_backup))
+    }
+
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
     fn create_user_session(&self, user_id: &Uuid, auth: &String, proof_key: &String) -> Result<()> {

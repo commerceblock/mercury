@@ -4,7 +4,7 @@
 
 use super::super::Result;
 use shared_lib::structs::{
-    SmtProofMsgAPI, StateChainDataAPI, StateEntityFeeInfoAPI, TransferBatchDataAPI, CoinValueInfo
+    SmtProofMsgAPI, StateChainDataAPI, StateEntityFeeInfoAPI, TransferBatchDataAPI, RecoveryDataMsg, RecoveryRequest, CoinValueInfo
 };
 use shared_lib::Root;
 
@@ -36,6 +36,18 @@ pub fn get_statechain(
     statechain_id: &Uuid,
 ) -> Result<StateChainDataAPI> {
     requests::get(client_shim, &format!("info/statechain/{}", statechain_id))
+}
+
+/// Get state chain by ID
+pub fn get_recovery_data(
+    client_shim: &ClientShim,
+    pubkey_hex: &str,
+) -> Result<Vec<RecoveryDataMsg>> {
+    let recovery_request = vec!(RecoveryRequest {
+            key: pubkey_hex.to_string(),
+            sig: "".to_string(),
+        });
+    requests::postb(client_shim, &format!("info/recover/"), recovery_request)
 }
 
 /// Get state entity's sparse merkle tree root

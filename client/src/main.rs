@@ -10,7 +10,7 @@ use client_lib::{
     state_entity::transfer::TransferFinalizeData,
 };
 use shared_lib::{util::transaction_deserialise, structs::{
-    PrepareSignTxMsg, StateChainDataAPI, StateEntityFeeInfoAPI, CoinValueInfo
+    PrepareSignTxMsg, StateChainDataAPI, StateEntityFeeInfoAPI, CoinValueInfo, RecoveryDataMsg
 }};
 
 use bitcoin::util::key::PublicKey;
@@ -276,7 +276,27 @@ fn main() {
                     DaemonResponse::Error(e) => panic!(e.to_string()),
                     DaemonResponse::None => panic!("None value returned."),
                 };
-            println!("State Entity fee info: \n\n{}", fee_info); 
+            println!("State Entity fee info: \n\n{}", fee_info);
+        } else if matches.is_present("recover-statecoin") {
+            if let Some(matches) = matches.subcommand_matches("recover-statecoin") {
+                let publickey_hex = matches.value_of("pk").unwrap();
+                let recovery_info: Vec<RecoveryDataMsg> = match query_wallet_daemon(
+                    DaemonRequest::GetRecoveryData(publickey_hex.to_string()),
+                )
+                .unwrap()
+                {
+                if recovery_info.len()==0 {
+                    println!("No StateCoin data for given key.");
+                    return
+                }
+                println!("\nStateChain ID {}", recovery_info[0].statechain_id);
+                println!("\nShared key ID {}", recovery_info[0].shared_key_id);
+                println!("\nStateChain: ");
+                for state in recovery_info[0].chain.chain.clone() {
+                    println!("\t{:?}", state);
+                }
+                println!("\nBackup tx: {} \n", recovery_info[0].tx_hex);
+            }
         } else if matches.is_present("coins-info") {
             let coins_info: CoinValueInfo =
                 match query_wallet_daemon(DaemonRequest::GetCoinsInfo).unwrap() {
