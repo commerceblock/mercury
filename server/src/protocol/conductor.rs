@@ -326,6 +326,8 @@ impl Scheduler {
             });
             let mut n_remaining = sc_id_vec.len();
 
+            if n_remaining == 0 {continue};
+
             let swap_size_map = swap_size_map.rev();
 
             //Loop through swap sizes in descending order
@@ -1111,6 +1113,22 @@ mod tests {
         assert_eq!(scheduler.swap_info_map.len(), 2);
         assert_eq!(scheduler.status_map.len(), 2);
         assert_eq!(scheduler.time_out_map.len(), 2);
+        assert_eq!(scheduler.statechain_amount_map.len(),5);
+
+        //Wait for newly registered statechains to time out
+        thread::sleep(Duration::from_secs(7));
+        scheduler.update_swap_info().unwrap();
+        //Unpolled statechain ids should have been removed from memory
+        assert_eq!(scheduler.statechain_amount_map.len(),0);
+
+        //Replace the timed out requests
+        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 5);
+        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 5);
+        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 5);
+        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 5);
+        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 6);
+        scheduler.update_swap_info().unwrap();
+        assert_eq!(scheduler.statechain_amount_map.len(),5);
 
         //Regsiter a new request for the amount 5, but require 6 to be in the swap
         let sc_id = Uuid::new_v4();
