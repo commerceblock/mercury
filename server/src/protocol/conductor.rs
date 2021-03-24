@@ -15,7 +15,7 @@ use shared_lib::{
 };
 extern crate shared_lib;
 use crate::server::StateChainEntity;
-
+use crate::config::ConductorConfig;
 use crate::protocol::transfer_batch::BatchTransfer;
 use crate::protocol::withdraw::Withdraw;
 use crate::storage::Storage;
@@ -37,6 +37,8 @@ use rocket_okapi::openapi;
 use rocket_okapi::JsonSchema;
 use schemars;
 use bitcoin::secp256k1::Signature;
+use chrono::{NaiveDateTime, Utc, Duration};
+use config::Config;
 
 static DEFAULT_TIMEOUT: u64 = 100;
 
@@ -129,6 +131,8 @@ pub trait Conductor {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Scheduler {
+    //Timeout for poll utx
+    utxo_timeout: u32,
     //State chain id to requested swap size map
     statechain_swap_size_map: BisetMap<Uuid, u64>,
     //A map of state chain registereds for swap to amount
@@ -143,6 +147,8 @@ pub struct Scheduler {
     status_map: BisetMap<Uuid, SwapStatus>,
     //swap id to time out
     time_out_map: BisetMap<Uuid, u64>,
+    //A map of state chain id to poll_utxo timeout
+    poll_timeout_map: HashMap<Uuid, NaiveDateTime>,
     //map of swap_id to output addresses and claimed_nonces
     out_addr_map: HashMap<Uuid, BisetMap<SCEAddress, Option<Uuid>>>,
     //map of swap_id to map of state chain id to bst_e_prime values
@@ -154,8 +160,9 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
-    pub fn new() -> Self {
+    pub fn new(config: &ConductorConfig) -> Self {
         Self {
+            utxo_timeout: config.utxo_timeout.clone(),
             statechain_swap_size_map: BisetMap::<Uuid, u64>::new(),
             statechain_amount_map: BisetMap::<Uuid, u64>::new(),
             group_info_map: HashMap::<SwapGroup, u64>::new(),
@@ -163,6 +170,7 @@ impl Scheduler {
             swap_info_map: HashMap::<Uuid, SwapInfo>::new(),
             status_map: BisetMap::<Uuid, SwapStatus>::new(),
             time_out_map: BisetMap::<Uuid, u64>::new(),
+            poll_timeout_map: HashMap::<Uuid, NaiveDateTime>::new(),
             out_addr_map: HashMap::new(),
             bst_e_prime_map: HashMap::new(),
             bst_sig_map: HashMap::new(),
@@ -172,6 +180,33 @@ impl Scheduler {
 
     pub fn get_swap_id(&self, statechain_id: &Uuid) -> Option<Uuid> {
         self.swap_id_map.get(statechain_id).cloned()
+    }
+
+
+    pub fn reset_poll_utxo_timeout(&mut self, statechain_id: &Uuid) -> bool{
+        let now: NaiveDateTime = Utc::now().naive_utc();
+        let t = now + Duration::seconds(self.utxo_timeout as i64);
+        match self.poll_timeout_map.insert(*statechain_id, t){
+            Some(t_prev) => {
+                if t_prev <= now {
+                    self.poll_timeout_map.remove(statechain_id);
+                    false
+                } else {
+                    true
+                }
+            },
+            None => true
+        }
+    }
+
+    pub fn get_poll_utxo_timeout(&self, statechain_id: &Uuid) -> Option<bool> {
+        let now: NaiveDateTime = Utc::now().naive_utc();
+        match self.poll_timeout_map.get(statechain_id){
+            Some(t) => {
+                Some(&now < t)
+            },
+            None => None
+        }
     }
 
     pub fn register_amount_swap_size(
@@ -191,6 +226,7 @@ impl Scheduler {
 
         let count = self.group_info_map.entry(group).or_insert(0);
         *count += 1;
+        self.reset_poll_utxo_timeout(statechain_id);
     }
 
     pub fn get_statechain_ids_by_amount(&self, amount: &u64) -> Vec<Uuid> {
@@ -239,6 +275,19 @@ impl Scheduler {
         }
     }
 
+    //Remove the "registered" statechain info that exists before a swap group has been formed
+    pub fn remove_statechain_info(&mut self, statechain_id: &Uuid) {
+        let swap_size_vec = self.statechain_swap_size_map.get(statechain_id);
+        for swap_size in swap_size_vec{
+            self.statechain_swap_size_map.remove(statechain_id, &swap_size);
+        }
+        let amount_vec = self.statechain_amount_map.get(statechain_id);
+        for amount in amount_vec{
+            self.statechain_amount_map.remove(statechain_id, &amount);
+        }
+        self.poll_timeout_map.remove(statechain_id);
+    }
+
     pub fn get_swap_info(&self, swap_id: &Uuid) -> Option<SwapInfo> {
         self.swap_info_map.get(swap_id).cloned()
     }
@@ -257,16 +306,25 @@ impl Scheduler {
     pub fn update_swap_requests(&mut self) {
         //Get amount to sc id map
         let amount_collect: Vec<(u64, Vec<Uuid>)> = self.statechain_amount_map.rev().collect();
-        for (amount, sc_id_vec) in amount_collect {
-            let mut n_remaining = sc_id_vec.len();
+        for (amount, mut sc_id_vec) in amount_collect {
             //Get a reduced swap size map containing items of this amount
             let swap_size_map = BisetMap::<Uuid, u64>::new();
-            for id in &sc_id_vec {
-                let swap_size = self.statechain_swap_size_map.get(id);
-                if (!swap_size.is_empty()) {
-                    swap_size_map.insert(id.to_owned(), swap_size[0]);
-                }
-            }
+            sc_id_vec.retain(|id|{
+                match self.get_poll_utxo_timeout(id) {
+                    Some(true) => {
+                        let swap_size = self.statechain_swap_size_map.get(id);
+                        if (!swap_size.is_empty()) {
+                            swap_size_map.insert(id.to_owned(), swap_size[0]);
+                        }
+                        true
+                    },
+                    _ => {
+                        self.remove_statechain_info(id);
+                        false
+                    }
+                } 
+            });
+            let mut n_remaining = sc_id_vec.len();
 
             let swap_size_map = swap_size_map.rev();
 
@@ -508,9 +566,15 @@ pub fn generate_blind_spend_signatures(
 
 impl Conductor for SCE {
     fn poll_utxo(&self, statechain_id: &Uuid) -> Result<SwapID> {
-        let guard = self.scheduler.lock()?;
-        Ok(SwapID { id: guard.get_swap_id(statechain_id) } )
+        let mut guard = self.scheduler.lock()?;
+        let result = match guard.reset_poll_utxo_timeout(statechain_id){
+            true => Ok(SwapID { id: guard.get_swap_id(statechain_id) } ),
+            false => Err(SEError::SwapError(format!("statechain timed out: {}", statechain_id))),
+        };
+        drop(guard);
+        result
     }
+
     fn poll_swap(&self, swap_id: &Uuid) -> Result<Option<SwapStatus>> {
         let mut guard = self.scheduler.lock()?;
         let status = guard.get_swap_status(swap_id);
@@ -984,16 +1048,24 @@ mod tests {
 
     //get a scheduler preset with requests
     fn get_scheduler(swap_size_amounts: Vec<(u64, u64)>) -> Scheduler {
+        let utxo_timeout: u32 = 6;
+        let now: NaiveDateTime = Utc::now().naive_utc();
+        let t = now + chrono::Duration::seconds(utxo_timeout as i64);
+        
+
         let statechain_swap_size_map = BisetMap::new();
         let statechain_amount_map = BisetMap::new();
+        let mut poll_timeout_map = HashMap::<Uuid, NaiveDateTime>::new();
 
         for (swap_size, amount) in swap_size_amounts {
             let id = Uuid::new_v4();
             statechain_swap_size_map.insert(id, swap_size);
             statechain_amount_map.insert(id, amount);
+            poll_timeout_map.insert(id,t);
         }
 
         Scheduler {
+            utxo_timeout,
             statechain_swap_size_map,
             statechain_amount_map,
             group_info_map: HashMap::<SwapGroup,u64>::new(),
@@ -1001,6 +1073,7 @@ mod tests {
             swap_info_map: HashMap::<Uuid, SwapInfo>::new(),
             status_map: BisetMap::<Uuid, SwapStatus>::new(),
             time_out_map: BisetMap::<Uuid, u64>::new(),
+            poll_timeout_map,
             out_addr_map: HashMap::new(),
             bst_e_prime_map: HashMap::new(),
             bst_sig_map: HashMap::new(),
