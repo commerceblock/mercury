@@ -161,11 +161,24 @@ mod tests {
         let (batch_id, transfer_finalized_datas, commitments, nonces, transfer_sigs) =
             run_batch_transfer(&mut wallets, &swap_map, &funding_txids, &statechain_ids);
 
+        let mut sorted_statechain_ids = statechain_ids.clone();
+        sorted_statechain_ids.sort();
+        let sorted_id_str = {
+            let mut result = String::new();
+            for id in sorted_statechain_ids {
+                result.push_str(&id.to_string());
+            }
+            result
+        };
+
         // Check commitments verify
         for i in 0..num_state_chains {
+            let mut commitment_data = statechain_ids[i].to_string();
+            commitment_data.push_str(&sorted_id_str);
+            println!("test_batch_transfer - verifying commitment data for statechain {}: {}",statechain_ids[i] , commitment_data);
             assert!(verify_commitment(
                 &commitments[i],
-                &statechain_ids[i].to_string(),
+                &commitment_data,
                 &nonces[i]
             )
             .is_ok());
@@ -234,14 +247,21 @@ mod tests {
         // Gen some wallets and deposit coins into SCE from each with amount 10000, 20000, 30000...
         let mut wallets = vec![];
         let mut deposits = vec![];
+        let mut participants = vec![];
         for i in 0..num_state_chains {
             wallets.push(gen_wallet());
             for _ in 0..i {
                 // Gen keys so different wallets have different proof keys (since wallets have the same seed)
                 let _ = wallets[i].se_proof_keys.get_new_key();
             }
-            deposits.push(run_deposit(&mut wallets[i], &amounts[i]));
+            let deposit = run_deposit(&mut wallets[i], &amounts[i]);
+            participants.push(deposit.1);
+            deposits.push(deposit);
         }
+
+        //Sort the participants vector
+        participants.sort();
+
         // Check deposits exist
         for i in 0..num_state_chains {
             let (_, _, bals,_) = wallets[i].get_state_chains_info().unwrap();
@@ -284,6 +304,7 @@ mod tests {
         // Perform transfers
         let (transfer_finalized_data1, commitment1, nonce1) = run_transfer_with_commitment(
             &mut wallets,
+            &participants,
             0,
             &deposits[0].1, // state chain id
             1,
@@ -293,6 +314,7 @@ mod tests {
         );
         let (_, commitment2, nonce2) = run_transfer_with_commitment(
             &mut wallets,
+            &participants,
             1,
             &deposits[1].1, // state chain id
             2,

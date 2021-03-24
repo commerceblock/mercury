@@ -258,6 +258,7 @@ pub fn run_transfer(
 /// Return new shared key id, commitments and nonces.
 pub fn run_transfer_with_commitment(
     wallets: &mut Vec<Wallet>,
+    participant_statechain_ids: &Vec<Uuid>,
     sender_index: usize,
     sender_statechain_id: &Uuid,
     receiver_index: usize,
@@ -278,7 +279,14 @@ pub fn run_transfer_with_commitment(
     )
     .unwrap();
 
-    let (commitment, nonce) = make_commitment(&receiver_statechain_id.to_string());
+    let mut commitment_data = String::from(&receiver_statechain_id.to_string());
+    let mut ids_sorted = participant_statechain_ids.clone();
+    ids_sorted.sort();
+    for id in ids_sorted{
+        commitment_data.push_str(&id.to_string());
+    }
+
+    let (commitment, nonce) = make_commitment(&commitment_data);
 
     let transfer_finalized_data = state_entity::transfer::transfer_receiver(
         &mut wallets[receiver_index],
@@ -343,6 +351,7 @@ pub fn run_batch_transfer(
         let receiver_index = i + 1 % num_state_chains - 1;
         let (transfer_finalized_data, commitment, nonce) = run_transfer_with_commitment(
             wallets,
+            &statechain_ids,
             i,
             &statechain_ids[i], // state chian id
             receiver_index,

@@ -11,6 +11,24 @@ use std::env;
 use std::str::FromStr;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ConductorConfig {
+    //Time in seconds that a UTXO registered for a swap must be polled for 
+    //in order to remain in a swap group
+    pub utxo_timeout: u32, 
+    /// Length of punishment for unresponsivve/misbehaving batch-transfer utxo
+    pub punishment_duration: u64,
+}
+
+impl Default for ConductorConfig {
+    fn default() -> Self {
+        Self {
+            utxo_timeout: 60,
+            punishment_duration: 360
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 /// Storage specific config
 pub struct StorageConfig {
     /// Storage write host
@@ -100,8 +118,6 @@ pub struct Config {
     pub fee_withdraw: u64,
     /// Time to allow batch transfer to take
     pub batch_lifetime: u64,
-    /// Length of punishment for unresponsivve/misbehaving batch-transfer utxo
-    pub punishment_duration: u64,
     /// Watch-only
     pub watch_only: bool,
     /// bitcoind node connecton
@@ -112,6 +128,8 @@ pub struct Config {
     pub mainstay: Option<MainstayConfig>,
     /// Rocket config
     pub rocket: RocketConfig,
+    /// Conductor config
+    pub conductor: ConductorConfig
 }
 
 impl Default for Config {
@@ -129,12 +147,12 @@ impl Default for Config {
             fee_deposit: 40,
             fee_withdraw: 40,
             batch_lifetime: 3600,     // 1 hour
-            punishment_duration: 360, // 1 minute
             watch_only: false,
             bitcoind: String::from(""),
             storage: StorageConfig::default(),
             mainstay: Some(MainstayConfig::default()),
             rocket: RocketConfig::default(),
+            conductor: ConductorConfig::default(),
         }
     }
 }

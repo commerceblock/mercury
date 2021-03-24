@@ -100,11 +100,13 @@ impl<
             hasher: Blake3::new(),
         };
 
+        let conductor_config = config_rs.conductor.clone();
+
         let sce = Self {
             config: config_rs,
             database: db,
             smt: Arc::new(Mutex::new(smt)),
-            scheduler: Arc::new(Mutex::new(Scheduler::new())),
+            scheduler: Arc::new(Mutex::new(Scheduler::new(&conductor_config))),
             lockbox: Lockbox::new(lockbox_url),
         };
 
