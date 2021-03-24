@@ -2,7 +2,7 @@
 //!
 //! Struct definitions used in State entity protocols
 
-use crate::state_chain::{State, StateChainSig};
+use crate::state_chain::{State, StateChainSig, StateChain};
 use crate::Root;
 use bitcoin::{OutPoint, Transaction, TxIn, TxOut};
 use curv::{cryptographic_primitives::proofs::sigma_dlog::DLogProof, BigInt, FE, GE, PK};
@@ -256,12 +256,52 @@ impl StateChainDataAPI {
     }
 }
 
-/// /info/transfer-batch return struct
+/// Transfer batch return struct with set of statcoin IDs
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct TransferBatchDataAPI {
     #[schemars(with = "UuidDef")]
     pub state_chains: HashSet<Uuid>,
     pub finalized: bool,
+}
+
+/// Struct containing proof key and authentication signature 
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+#[schemars(example = "Self::example")]
+pub struct RecoveryRequest {
+    pub key: String,
+    pub sig: String,
+}
+
+impl RecoveryRequest {
+    pub fn example() -> Self{
+        Self{
+            key: "02a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe".to_string(),
+            sig: "30440220457cf52873ae5854859a7d48b39cb57eba880ea4011806e5058da7619f4c0fab02206303326f06bbebf7170b679ba787c856dec4b6462109bf66e1cb8dc087be7ebf01".to_string(),
+        }
+    }
+}
+
+/// Struct with recovery information for specified proof key
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+#[schemars(example = "Self::example")]
+pub struct RecoveryDataMsg {
+    #[schemars(with = "UuidDef")]
+    pub shared_key_id: Uuid,
+    #[schemars(with = "UuidDef")]
+    pub statechain_id: Uuid,
+    pub chain: StateChain,
+    pub tx_hex: String,
+}
+
+impl RecoveryDataMsg {
+    pub fn example() -> Self{
+        Self{
+            shared_key_id: Uuid::new_v4(),
+            statechain_id: Uuid::new_v4(),
+            chain: StateChain::example(),
+            tx_hex: "02000000000101ca878085da49c33eb9816c10e4056424e5e062689ea547ea91bb3aa840a3c5fb0000000000ffffffff02307500000000000016001412cc36c9533290c02f0c78f992df6e6ddfe50c8c0064f50500000000160014658fd2dc72e58168f3656fb632d63be54f80fbe4024730440220457cf52873ae5854859a7d48b39cb57eba880ea4011806e5058da7619f4c0fab02206303326f06bbebf7170b679ba787c856dec4b6462109bf66e1cb8dc087be7ebf012102a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe00000000".to_string(),
+        }
+    }
 }
 
 // /info/statechain post struct
@@ -281,6 +321,7 @@ pub struct PKDef(Vec<u8>);
 /// by Server before co-signing is performed for validation of tx.
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct PrepareSignTxMsg {
+    #[schemars(example = "Self::example")]
     /// The shared key ID
     #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
@@ -317,18 +358,18 @@ impl Default for PrepareSignTxMsg {
     }
 }
 
-//impl PrepareSignTxMsg {
-//    pub fn example() -> Self{
-//        Self{
-//            shared_key_id: Uuid::new_v4(),
-//            protocol: Protocol::Deposit,
-//            tx_hex: "02000000011333183ddf384da83ed49296136c70d206ad2b19331bf25d390e69b222165e370000000000feffffff0200e1f5050000000017a914a860f76561c85551594c18eecceffaee8c4822d787F0C1A4350000000017a914d8b6fcc85a383261df05423ddf068a8987bf0287878c000000".to_string(),
-//            input_addrs: vec![PK::from_slice(&[3, 203, 250, 103, 44, 175, 45, 118, 114, 227, 88, 79, 151, 147, 57, 93, 64, 179, 159, 123, 212, 118, 151, 210, 3, 231, 97, 50, 111, 56, 152, 9, 218]).unwrap()], // pub keys being spent from
-//            input_amounts: vec![100000],
-//            proof_key: Some("02a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe".to_string()),
-//        }
-//    }
-//}
+impl PrepareSignTxMsg {
+    pub fn example() -> Self{
+        Self{
+            shared_key_id: Uuid::new_v4(),
+            protocol: Protocol::Deposit,
+            tx_hex: "02000000011333183ddf384da83ed49296136c70d206ad2b19331bf25d390e69b222165e370000000000feffffff0200e1f5050000000017a914a860f76561c85551594c18eecceffaee8c4822d787F0C1A4350000000017a914d8b6fcc85a383261df05423ddf068a8987bf0287878c000000".to_string(),
+            input_addrs: Vec::<PK>::default(),
+            input_amounts: vec![100000],
+            proof_key: Some("02a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe".to_string()),
+        }
+    }
+}
 
 // schema information structs for openAPI/swagger
 #[derive(JsonSchema)]

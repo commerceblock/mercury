@@ -128,3 +128,12 @@ subcommands:
                   required: true
                   value_name: ID
                   help: State Chain ID
+        - recover-statecoin:
+            about: Recover statcoin data with the public key share
+            version: "1.0"
+            args:
+              - pk:
+                  short: p
+                  required: true
+                  value_name: Pubkey
+                  help: Public key share
