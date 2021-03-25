@@ -38,7 +38,6 @@ use rocket_okapi::JsonSchema;
 use schemars;
 use bitcoin::secp256k1::Signature;
 use chrono::{NaiveDateTime, Utc, Duration};
-use config::Config;
 
 static DEFAULT_TIMEOUT: u64 = 100;
 
@@ -214,19 +213,31 @@ impl Scheduler {
         statechain_id: &Uuid,
         amount: u64,
         swap_size: u64,
-    ) {
+    ) -> Result<()> {
+        self.reset_poll_utxo_timeout(statechain_id);
+        //Only register if id not already in swap map
+        let in_swap = self.swap_id_map.get(&statechain_id);
+        if (!in_swap.is_none()) { 
+            return Err(SEError::SwapError(format!("Statecoin in swap: {:?}", in_swap.unwrap())));
+        };
         //If there was an amout already registered for this state chain id then
         //remove it from the inverse table before updating
-        self.statechain_amount_map
-            .insert(statechain_id.to_owned(), amount);
-        self.statechain_swap_size_map
-            .insert(statechain_id.to_owned(), swap_size);
+        if (!self.statechain_amount_map.contains(&statechain_id,&amount)) {
+            self.statechain_amount_map
+                .insert(statechain_id.to_owned(), amount);
+            self.statechain_swap_size_map
+                .insert(statechain_id.to_owned(), swap_size);
 
-        let group = SwapGroup { amount: amount, size: swap_size};
+            let group = SwapGroup { amount: amount, size: swap_size};
+            let count = self.group_info_map.entry(group).or_insert(0);
+            *count += 1;
 
-        let count = self.group_info_map.entry(group).or_insert(0);
-        *count += 1;
-        self.reset_poll_utxo_timeout(statechain_id);
+            //metrics
+            REG_SWAP_UTXOS.with_label_values(&[&swap_size.clone().to_string(),&amount.clone().to_string()]).inc();
+        } else {
+            return Err(SEError::SwapError(format!("Statecoin already registered: {}", statechain_id)));
+        }
+        Ok(())
     }
 
     pub fn get_statechain_ids_by_amount(&self, amount: &u64) -> Vec<Uuid> {
@@ -277,14 +288,17 @@ impl Scheduler {
 
     //Remove the "registered" statechain info that exists before a swap group has been formed
     pub fn remove_statechain_info(&mut self, statechain_id: &Uuid) {
-        let swap_size_vec = self.statechain_swap_size_map.get(statechain_id);
-        for swap_size in swap_size_vec{
-            self.statechain_swap_size_map.remove(statechain_id, &swap_size);
+        let swap_size = self.statechain_swap_size_map.get(statechain_id);
+        self.statechain_swap_size_map.remove(statechain_id, &swap_size[0]);
+        let amount = self.statechain_amount_map.get(statechain_id);
+        if (self.statechain_amount_map.contains(&statechain_id,&amount[0])) {
+            let group = SwapGroup { amount: amount[0], size: swap_size[0]};
+            let count = self.group_info_map.entry(group).or_insert(0);
+            if count > &mut 0 {
+                *count -= 1;
+            }
         }
-        let amount_vec = self.statechain_amount_map.get(statechain_id);
-        for amount in amount_vec{
-            self.statechain_amount_map.remove(statechain_id, &amount);
-        }
+        self.statechain_amount_map.remove(statechain_id, &amount[0]);
         self.poll_timeout_map.remove(statechain_id);
     }
 
@@ -380,7 +394,6 @@ impl Scheduler {
                         assert!(self.statechain_amount_map.delete(&id).len() == 1);
 
                         let group = SwapGroup { amount: amount, size: swap_size};
-
                         let count = self.group_info_map.entry(group).or_insert(0);
                         if count > &mut 0 {
                             *count -= 1;
@@ -643,12 +656,10 @@ impl Conductor for SCE {
         let sc_amount = self.database.get_statechain_amount(*key_id)?;
         let amount: u64 = sc_amount.amount as u64;
         let mut guard = self.scheduler.lock()?;
-        let _ = guard.register_amount_swap_size(key_id, amount, *swap_size);
-
-        //increment swap histogram
-        REG_SWAP_UTXOS.with_label_values(&[&swap_size.clone().to_string(),&amount.clone().to_string()]).inc();
-
-        Ok(())
+        let _res = match guard.register_amount_swap_size(key_id, amount, *swap_size) {
+            Ok(_res) => return Ok(()),
+            Err(err) => return Err(err),
+        };
     }
 
     fn get_group_info(&self) -> Result<HashMap<SwapGroup,u64>> {
