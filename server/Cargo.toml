@@ -94,3 +94,5 @@ path = "../shared"
 mockdb = []
 mockbitcoinrpc = []
 
+[patch.crates-io]
+rust-gmp-kzen = { version = "0.5.0", features = ["serde_support"], git = "https://github.com/KZen-networks/rust-gmp" }
