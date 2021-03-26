@@ -282,8 +282,14 @@ pub fn do_swap(
 
     let _ = transfer::transfer_sender(&mut wallet, statechain_id, receiver_addr)?;
 
+    let mut commitment_data = statechain_id.to_string();
+    let mut sorted_sc_ids = info.swap_token.statechain_ids.clone();
+    sorted_sc_ids.sort();
+    for id in sorted_sc_ids {
+        commitment_data.push_str(&id.to_string());
+    }
 
-    let (commit, _nonce) = commitment::make_commitment(&statechain_id.to_string());
+    let (commit, _nonce) = commitment::make_commitment(&commitment_data);
 
     let batch_id = &swap_id;
 

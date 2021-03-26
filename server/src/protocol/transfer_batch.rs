@@ -148,9 +148,18 @@ impl BatchTransfer for SCE {
             return Err(SEError::Generic(String::from("Transfer Batch still live.")));
         }
 
+        let mut commitment_data = statechain_id.to_string();
+        let mut sc_vec = tbd.state_chains.into_iter().collect::<Vec<uuid::Uuid>>();
+        sc_vec.sort();
+        for sc in sc_vec {
+            commitment_data.push_str(&sc.to_string());
+        }
+
+        debug!("TRANSFER_REVEAL_NONCE: commitment data: {}", commitment_data);
+
         verify_commitment(
             &transfer_reveal_nonce.hash,
-            &statechain_id.to_string(),
+            &commitment_data,
             &transfer_reveal_nonce.nonce,
         )?;
 
@@ -425,7 +434,9 @@ mod tests {
         });
         let mut state_chains = HashSet::new();
         state_chains.insert(statechain_id);
-        transfer_batch_data.state_chains = state_chains;
+        transfer_batch_data.state_chains = state_chains.clone();
+        let mut state_chains_sorted = state_chains.into_iter().collect::<Vec<uuid::Uuid>>();
+        state_chains_sorted.sort();
         // Batch completed successfully - no need to reveal nonce.
         transfer_batch_data.finalized = true;
         db.expect_get_transfer_batch_data()
@@ -478,7 +489,12 @@ mod tests {
 
         let sc_entity = test_sc_entity(db);
 
-        let (commitment, nonce) = make_commitment(&statechain_id.to_string());
+        let mut commitment_data = statechain_id.to_string();
+        for sc in state_chains_sorted {
+            commitment_data.push_str(&sc.to_string());
+        }
+
+        let (commitment, nonce) = make_commitment(&commitment_data);
         let transfer_reveal_nonce = TransferRevealNonce {
             batch_id,
             hash: commitment,

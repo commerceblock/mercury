@@ -40,6 +40,7 @@ mod tests {
     fn test_make_commitment() {
         let data = String::from("12345");
         let (comm, nonce) = make_commitment(&data);
+        println!("commitment: {:?}, nonce: {:?}", comm, nonce);
         assert!(verify_commitment(&comm, &data, &nonce).is_ok());
     }
 }

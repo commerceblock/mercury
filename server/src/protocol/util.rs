@@ -533,12 +533,12 @@ impl SCE {
 
         self.database.update_locked_until(
             &statechain_id,
-            &get_locked_until(self.config.punishment_duration as i64)?,
+            &get_locked_until(self.config.conductor.punishment_duration as i64)?,
         )?;
 
         info!(
             "PUNISHMENT: State Chain ID: {} locked for {}s.",
-            statechain_id, self.config.punishment_duration
+            statechain_id, self.config.conductor.punishment_duration
         );
         Ok(())
     }
