@@ -370,6 +370,72 @@ mod tests {
         assert!(err.is_err());
     }
 
+    fn test_batch_withdraw() {
+        time_test!();
+        let _handle = start_server();
+        let mut wallet = gen_wallet();
+
+        let n_inputs = 3;
+        
+        let mut shared_key_id = vec![];
+        let mut statechain_id = vec![];
+
+        for _ in 0..n_inputs {
+            let deposit_resp = run_deposit(&mut wallet, &10000);
+            shared_key_id.push(deposit_resp.0);
+            statechain_id.push(deposit_resp.1);
+            
+            assert!(wallet.get_shared_key(shared_key_id.back()).unwrap().unspent);
+            assert!(
+                wallet
+                .get_shared_key_by_statechain_id(statechain_id.back())
+                .unwrap()
+                .unspent
+            );
+        }
+
+        let wrong_scid_vec = vec![Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
+        // Try withdraw wrong key
+        assert!(state_entity::withdraw::batch_withdraw(&mut wallet, &wrong_scid_vec.is_err()));
+
+        // Check withdraw method completes without Err
+        run_batch_withdraw(&mut wallet, statechain_id);
+
+        // Check marked spent in wallet
+        for (sk_id, sc_id) in (shared_key_id, statechain_id) {
+            assert!(!wallet.get_shared_key(sk_id).unwrap().unspent);
+                
+            // Check state chain is updated
+            let state_chain =
+                state_entity::api::get_statechain(&wallet.client_shim, sc_id).unwrap();
+            assert_eq!(state_chain.chain.len(), 2);
+
+            // Check chain data is address
+            assert!(state_chain
+                .chain
+                .last()
+                .unwrap()
+                .data
+                .contains(&String::from("bcrt")));
+            // Check purpose of state chain signature
+            assert_eq!(
+                state_chain
+                    .chain
+                    .get(0)
+                    .unwrap()
+                    .next_state
+                    .clone()
+                    .unwrap()
+                    .purpose,
+                String::from("WITHDRAW")
+            );
+
+            // Try again after funds already withdrawn
+            let err = state_entity::withdraw::withdraw(&mut wallet, sk_id);
+            assert!(err.is_err());
+        }
+    }
+
     #[test]
     #[serial]
     /// Test wallet load from json correctly when shared key present.
