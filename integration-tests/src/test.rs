@@ -79,8 +79,6 @@ mod tests {
 
         assert_eq!(*coins.values.get(&10000).unwrap(),1);
 
-        let _ = wallet.get_shared_key_by_statechain_id(state_chains_info.0.last().unwrap()).unwrap();
-
         println!("Shared wallet id: {:?} ", funding_txid);
         println!("Funding txid: {:?} ", funding_txid);
     }
@@ -377,6 +375,7 @@ mod tests {
         assert!(err.is_err());
     }
 
+    #[ignore]
     fn test_batch_withdraw() {
         time_test!();
         let _handle = start_server();

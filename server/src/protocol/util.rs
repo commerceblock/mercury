@@ -299,12 +299,7 @@ impl Utilities for SCE {
                     }
         
 
-                tx_withdraw_verify(
-                    &prepare_sign_msg,
-                    &self.config.fee_address,
-                    &withdraw_fee,
-                )?;
-
+          
         
                     let statechain_id = self.database.get_statechain_id(user_id)?;
                     let tx_backup = self.database.get_backup_transaction(statechain_id)?;
@@ -340,7 +335,12 @@ impl Utilities for SCE {
                     )?;
                 }
 
-                
+                tx_withdraw_verify(
+                    &prepare_sign_msg,
+                    &self.config.fee_address,
+                    &withdraw_fee,
+                )?;
+
 
                 info!(
                         "WITHDRAW: Withdraw tx ready for signing. User ID: {}.",

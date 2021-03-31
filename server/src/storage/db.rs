@@ -720,6 +720,7 @@ impl Database for PGDatabase {
     }
 
     fn update_withdraw_sc_sig(&self, user_id: &Uuid, sig: StateChainSig) -> Result<()> {
+        println!("update_withdraw_sc_sig: {}", user_id);
         self.update(
             user_id,
             Table::UserSession,
@@ -749,6 +750,7 @@ impl Database for PGDatabase {
         sig_hash: Hash,
         tx: Transaction,
     ) -> Result<()> {
+        println!("update_withdraw_tx_sighash: {}", user_id);
         self.update(
             user_id,
             Table::UserSession,
