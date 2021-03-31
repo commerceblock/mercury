@@ -31,9 +31,10 @@ use curv::PK;
 use itertools::Zip;
 
 /// Withdraw coins from state entity. Returns signed withdraw transaction, statechain_id and withdrawn amount.
-pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid) -> Result<(String, Vec::<Uuid>, u64)> {
+pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid) -> Result<(String, Uuid, u64)> {
     let vec_scid = vec![*statechain_id];
-    batch_withdraw(wallet, &vec_scid)
+    let resp = batch_withdraw(wallet, &vec_scid)?;
+    Ok((resp.0, resp.1[0], resp.2))
 }
 
 
@@ -53,11 +54,10 @@ pub fn batch_withdraw(wallet: &mut Wallet, statechain_id: &Vec::<Uuid>) ->
     let mut total_amount: u64 = 0;
 
     for scid in statechain_id {
+        println!("getting shared key for statechain id: {}", scid);
         let shared_key = wallet.get_shared_key_by_statechain_id(scid)?;
         shared_key_ids.push(shared_key.id);
         input_addrs.push(shared_key.share.public.q.get_element());
-
-    
 
         // Sign state chain
         let statechain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, scid)?;
@@ -91,8 +91,8 @@ pub fn batch_withdraw(wallet: &mut Wallet, statechain_id: &Vec::<Uuid>) ->
         &wallet.client_shim,
         &format!("withdraw/init"),
         &WithdrawMsg1 {
-            shared_key_ids,
-            statechain_sigs,
+            shared_key_ids: shared_key_ids.clone(),
+            statechain_sigs: statechain_sigs.clone(),
         },
     )?;
 
@@ -122,16 +122,16 @@ pub fn batch_withdraw(wallet: &mut Wallet, statechain_id: &Vec::<Uuid>) ->
                 &wallet.client_shim,
                 &format!("/withdraw/confirm"),
                 &WithdrawMsg2 {
-                shared_key_id: shared_key_ids,
-                address: rec_se_address.to_string(),
-            },
+                    shared_key_ids: shared_key_ids.clone(),
+                    address: rec_se_address.to_string(),
+                },
         )?;
 
 
-    for shared_key_id in shared_key_ids {
+    //for shared_key_id in shared_key_ids {
         // co-sign withdraw tx
         let tx_w_prepare_sign_msg = PrepareSignTxMsg {
-            shared_key_id: shared_key_id.to_owned(),
+            shared_key_ids: shared_key_ids.clone(),
             protocol: Protocol::Withdraw,
             tx_hex: transaction_serialise(&tx_withdraw_unsigned),
             input_addrs,
@@ -139,15 +139,15 @@ pub fn batch_withdraw(wallet: &mut Wallet, statechain_id: &Vec::<Uuid>) ->
             proof_key: None,
         };
         cosign_tx_input(wallet, &tx_w_prepare_sign_msg)?;
-    }
+    //}
         
-    let tx_withdraw_signed = tx_withdraw_unsigned.clone();
+    let mut tx_withdraw_signed = tx_withdraw_unsigned.clone();
 
     //for (witness, input, shared_key_id) in 
     //    itertools::Zip::new((&witnesses, &mut tx_withdraw_signed.input, &shared_key_ids))        
     for (i, witness) in witnesses.iter().enumerate()
     {
-        tx_withdraw_signed.input[i].witness = *witness;
+        tx_withdraw_signed.input[i].witness = witness.to_owned();
         // Mark funds as withdrawn in wallet
         {
             let mut shared_key = wallet.get_shared_key_mut(&shared_key_ids[i])?;

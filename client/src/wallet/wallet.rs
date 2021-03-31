@@ -459,8 +459,11 @@ impl Wallet {
     pub fn get_shared_key_by_statechain_id(&self, statechain_id: &Uuid) -> Result<&SharedKey> {
         for shared in &self.shared_keys {
             if shared.statechain_id == Some(statechain_id.to_owned()) {
+                println!("found statechain_id");
                 if shared.unspent == true {
                     return Ok(shared);
+                } else {
+                    println!("statechain is spent");
                 }
             }
         }

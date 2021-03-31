@@ -99,7 +99,11 @@ pub fn transfer_sender(
     prepare_sign_msg.tx_hex = transaction_serialise(&tx);
 
     // Sign new back up tx
-    let new_backup_witness = cosign_tx_input(wallet, &prepare_sign_msg)?;
+    let new_backup_witness = {
+        let tmp = cosign_tx_input(wallet, &prepare_sign_msg)?;
+        if tmp.len() != 1 {return Err(CError::Generic(String::from("expected one tx input witness")));}
+        tmp[0].to_owned()
+    };
 
     let mut tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
     // Update back up tx with new witness
@@ -295,7 +299,7 @@ pub fn transfer_receiver(
 
     // Update tx_backup_psm shared_key_id with new one
     let mut tx_backup_psm = transfer_msg3.tx_backup_psm.clone();
-    tx_backup_psm.shared_key_id = transfer_msg5.new_shared_key_id.clone();
+    tx_backup_psm.shared_key_ids[0] = transfer_msg5.new_shared_key_id.clone();
 
     // Data to update wallet with transfer. Should only be applied after StateEntity has finalized.
     let finalize_data = TransferFinalizeData {

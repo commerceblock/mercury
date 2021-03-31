@@ -105,7 +105,7 @@ impl Withdraw for SCE {
         // Mark UserSession as authorised for withdrawal
 
         self.database
-            .update_withdraw_sc_sig(&user_id, *statechain_sig)?;
+            .update_withdraw_sc_sig(&user_id, statechain_sig.clone())?;
 
         info!(
             "WITHDRAW: Authorised. Shared Key ID: {}. State Chain: {}",
@@ -119,66 +119,66 @@ impl Withdraw for SCE {
     fn withdraw_confirm(&self, withdraw_msg2: WithdrawMsg2) -> Result<Vec<Vec<Vec<u8>>>> {
         let mut result = Vec::<Vec::<Vec::<u8>>>::new();
         
-        for user_id in withdraw_msg2.shared_key_id {
+        for (i, user_id) in withdraw_msg2.shared_key_ids.iter().enumerate() {
 
-        info!("WITHDRAW: Confirm. Shared Key ID: {}", user_id.to_string());
+            info!("WITHDRAW: Confirm. Shared Key ID: {}", user_id.to_string());
 
-        // Get withdraw data - Checking that withdraw tx and statechain signature exists
-        let wcd = self.database.get_withdraw_confirm_data(user_id)?;
+            // Get withdraw data - Checking that withdraw tx and statechain signature exists
+            let wcd = self.database.get_withdraw_confirm_data(user_id.to_owned())?;
 
-        // Ensure withdraw tx has been signed. i,e, that prepare-sign-tx has been completed.
-        if wcd.tx_withdraw.input[0].witness.len() == 0 {
-            return Err(SEError::Generic(String::from(
-                "Signed Back up transaction not found.",
-            )));
-        }
+            // Ensure withdraw tx has been signed. i,e, that prepare-sign-tx has been completed.
+            if wcd.tx_withdraw.input[i].witness.len() == 0 {
+                return Err(SEError::Generic(String::from(
+                   "Signed Back up transaction not found.",
+                )));
+            }
 
-        // Get statechain and update with final StateChainSig
-        let mut state_chain: StateChain = self.database.get_statechain(wcd.statechain_id)?;
+            // Get statechain and update with final StateChainSig
+            let mut state_chain: StateChain = self.database.get_statechain(wcd.statechain_id)?;
 
-        state_chain.add(wcd.withdraw_sc_sig.to_owned())?;
+            state_chain.add(wcd.withdraw_sc_sig.to_owned())?;
 
-        self.database
-            .update_statechain_amount(&wcd.statechain_id, state_chain, 0)?;
+            self.database
+                .update_statechain_amount(&wcd.statechain_id, state_chain, 0)?;
 
-        // Remove statechain_id from user session to signal end of session
-        self.database.remove_statechain_id(&user_id)?;
+            // Remove statechain_id from user session to signal end of session
+            self.database.remove_statechain_id(&user_id)?;
 
-        //increment withdrawals metric
-        WITHDRAWALS_COUNT.inc();
+            //increment withdrawals metric
+            WITHDRAWALS_COUNT.inc();
 
-        // Update sparse merkle tree
-        let (prev_root, new_root) = self.update_smt(
-            &wcd.tx_withdraw
-                .input
-                .get(0)
-                .unwrap()
-                .previous_output
-                .txid
-                .to_string(),
-            &withdraw_msg2.address,
-        )?;
+            // Update sparse merkle tree
+            let (prev_root, new_root) = self.update_smt(
+                &wcd.tx_withdraw
+                    .input
+                    .get(0)
+                    .unwrap()
+                    .previous_output
+                    .txid
+                    .to_string(),
+                &withdraw_msg2.address,
+            )?;
 
-        //remove backup tx from the backup db
-        self.database.remove_backup_tx(&wcd.statechain_id)?;
+            //remove backup tx from the backup db
+            self.database.remove_backup_tx(&wcd.statechain_id)?;
 
-        info!(
-            "WITHDRAW: Address included in sparse merkle tree. State Chain ID: {}",
-            wcd.statechain_id
-        );
-        debug!(
-            "WITHDRAW: State Chain ID: {}. New root: {:?}. Previous root: {:?}.",
-            wcd.statechain_id, &new_root, &prev_root
-        );
+            info!(
+                "WITHDRAW: Address included in sparse merkle tree. State Chain ID: {}",
+                wcd.statechain_id
+            );
+            debug!(
+                "WITHDRAW: State Chain ID: {}. New root: {:?}. Previous root: {:?}.",
+                wcd.statechain_id, &new_root, &prev_root
+            );
 
-        info!(
-            "WITHDRAW: Complete. Shared Key ID: {}. State Chain: {}",
-            user_id.to_string(),
-            wcd.statechain_id
-        );
+            info!(
+                "WITHDRAW: Complete. Shared Key ID: {}. State Chain: {}",
+                user_id.to_string(),
+                wcd.statechain_id
+            );
 
-        result.push(wcd.tx_withdraw.input[0].clone().witness);
-    };
+            result.push(wcd.tx_withdraw.input[0].clone().witness);
+        };
 
         Ok(result)
     }
@@ -299,7 +299,7 @@ mod tests {
         let withdraw_msg_1 = serde_json::from_str::<WithdrawMsg1>(WITHDRAW_MSG_1).unwrap();
         let shared_key_ids = withdraw_msg_1.shared_key_ids;
         let withdraw_msg_2 = WithdrawMsg2 {
-            shared_key_ids,
+            shared_key_ids: shared_key_ids.clone(),
             address: "bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8".to_string(),
         };
         let statechain_id = Uuid::from_str(STATE_CHAIN_ID).unwrap();

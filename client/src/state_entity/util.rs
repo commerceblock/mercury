@@ -26,7 +26,9 @@ use std::convert::TryInto;
 pub fn cosign_tx_input(
     wallet: &mut Wallet,
     prepare_sign_msg: &PrepareSignTxMsg,
-) -> Result<Vec<Vec<u8>>> {
+) -> Result<Vec<Vec<Vec<u8>>>> {
+
+    println!("prepare sign...");
     // message 1 - send tx data for validation.
     requests::postb(
         &wallet.client_shim,
@@ -34,30 +36,40 @@ pub fn cosign_tx_input(
         prepare_sign_msg,
     )?;
 
+    println!("deserialise...");
     let tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
 
-    // get sighash as message to be signed
-    let sig_hash = get_sighash(
-        &tx,
-        &0,
-        &prepare_sign_msg.input_addrs[0],
-        &prepare_sign_msg.input_amounts[0],
-        &wallet.network,
-    );
+    let mut witnesses = vec![];
 
-    let shared_key = wallet.get_shared_key(&prepare_sign_msg.shared_key_id)?;
-    let mk = &shared_key.share;
+    for (i, shared_key_id) in prepare_sign_msg.shared_key_ids.iter().enumerate(){
 
-    // co-sign transaction
-    let witness = ecdsa::sign(
-        &wallet.client_shim,
-        BigInt::from_hex(&hex::encode(&sig_hash[..])),
-        &mk,
-        prepare_sign_msg.protocol,
-        &shared_key.id,
-    )?;
+        println!("get sighash...");
+        // get sighash as message to be signed
+        let sig_hash = get_sighash(
+            &tx,
+            &0,
+            &prepare_sign_msg.input_addrs[i],
+            &prepare_sign_msg.input_amounts[i],
+            &wallet.network,
+        );
 
-    Ok(witness)
+        let shared_key = wallet.get_shared_key(&shared_key_id)?;
+        let mk = &shared_key.share;
+
+        println!("sign...");
+         // co-sign transaction
+        let witness = ecdsa::sign(
+            &wallet.client_shim,
+            BigInt::from_hex(&hex::encode(&sig_hash[..])),
+            &mk,
+            prepare_sign_msg.protocol,
+            &shared_key.id,
+        )?;
+
+        witnesses.push(witness);
+    }
+
+    Ok(witnesses)
 }
 
 pub fn verify_statechain_smt(

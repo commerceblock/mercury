@@ -2,7 +2,7 @@
 //!
 //! Struct definitions used in State entity protocols
 
-use crate::state_chain::{State, StateChainSig};
+use crate::state_chain::{State, StateChainSig, StateChain};
 use crate::Root;
 use bitcoin::{OutPoint, Transaction, TxIn, TxOut};
 use curv::{cryptographic_primitives::proofs::sigma_dlog::DLogProof, BigInt, FE, GE, PK};
@@ -10,10 +10,13 @@ use kms::ecdsa::two_party::{party1,party2};
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one,party_two};
 
 use bitcoin::{secp256k1::PublicKey, Address};
-use std::{collections::HashSet, fmt};
+use std::{collections::{HashSet, HashMap}, fmt};
 use uuid::Uuid;
 use rocket_okapi::JsonSchema;
 use schemars;
+use serde::{Serialize, Serializer, Deserialize, Deserializer};
+use serde::de::{self, Visitor, Unexpected};
+use regex::Regex;
 
 use crate::ecies;
 use crate::{util::transaction_serialise, ecies::{Encryptable, SelfEncryptable, WalletDecryptable}};
@@ -124,6 +127,86 @@ impl fmt::Display for StateEntityFeeInfoAPI {
     }
 }
 
+/// Swap group status data
+#[derive(JsonSchema, Debug, Hash, Eq, PartialEq, Clone)]
+#[schemars(example = "Self::example")]
+pub struct SwapGroup {
+    pub amount: u64,
+    pub size: u64,
+}
+
+impl SwapGroup {
+    pub fn new(amount: u64, size: u64) -> SwapGroup {
+        SwapGroup {amount, size}
+    }
+    
+    pub fn example() -> Self{
+        Self{
+            amount: 1000000,
+            size: 5,
+        }
+    }
+}
+
+impl Serialize for SwapGroup {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+   {
+        serializer.serialize_str(&format!("{}:{}", self.amount, self.size))
+    }
+}
+    
+struct SwapGroupVisitor;
+
+impl<'de> Visitor<'de> for SwapGroupVisitor {
+    type Value = SwapGroup;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a colon-separated pair of u64 integers")
+    }
+
+    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        if let Some(nums) = Regex::new(r"(\d+):(\d+)").unwrap().captures_iter(s).next() {
+            if let Ok(amount) = u64::from_str(&nums[1]) { 
+                if let Ok(size) = u64::from_str(&nums[2]) {
+                    Ok(SwapGroup::new(amount, size))
+                } else {
+                    Err(de::Error::invalid_value(Unexpected::Str(s), &self))
+                }
+            } else {
+                Err(de::Error::invalid_value(Unexpected::Str(s), &self))
+            }
+        } else {
+            Err(de::Error::invalid_value(Unexpected::Str(s), &self))
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for SwapGroup {
+    fn deserialize<D>(deserializer: D) -> Result<SwapGroup, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+    deserializer.deserialize_string(SwapGroupVisitor)
+    }
+}
+
+/// List of current statecoin amounts and the number of each 
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct CoinValueInfo {
+    pub values: HashMap<u64,u64>,
+}
+
+impl CoinValueInfo {
+    pub fn new() -> Self {
+        Self { values: HashMap::<u64,u64>::new() }
+    }
+}
+
 // schema dummy struct for outpoint
 /// Bitcoin UTXO Outpoint
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -181,6 +264,46 @@ pub struct TransferBatchDataAPI {
     pub finalized: bool,
 }
 
+/// Struct containing proof key and authentication signature 
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+#[schemars(example = "Self::example")]
+pub struct RecoveryRequest {
+    pub key: String,
+    pub sig: String,
+}
+
+impl RecoveryRequest {
+    pub fn example() -> Self{
+        Self{
+            key: "02a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe".to_string(),
+            sig: "30440220457cf52873ae5854859a7d48b39cb57eba880ea4011806e5058da7619f4c0fab02206303326f06bbebf7170b679ba787c856dec4b6462109bf66e1cb8dc087be7ebf01".to_string(),
+        }
+    }
+}
+
+/// Struct with recovery information for specified proof key
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+#[schemars(example = "Self::example")]
+pub struct RecoveryDataMsg {
+    #[schemars(with = "UuidDef")]
+    pub shared_key_id: Uuid,
+    #[schemars(with = "UuidDef")]
+    pub statechain_id: Uuid,
+    pub chain: StateChain,
+    pub tx_hex: String,
+}
+
+impl RecoveryDataMsg {
+    pub fn example() -> Self{
+        Self{
+            shared_key_id: Uuid::new_v4(),
+            statechain_id: Uuid::new_v4(),
+            chain: StateChain::example(),
+            tx_hex: "02000000000101ca878085da49c33eb9816c10e4056424e5e062689ea547ea91bb3aa840a3c5fb0000000000ffffffff02307500000000000016001412cc36c9533290c02f0c78f992df6e6ddfe50c8c0064f50500000000160014658fd2dc72e58168f3656fb632d63be54f80fbe4024730440220457cf52873ae5854859a7d48b39cb57eba880ea4011806e5058da7619f4c0fab02206303326f06bbebf7170b679ba787c856dec4b6462109bf66e1cb8dc087be7ebf012102a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe00000000".to_string(),
+        }
+    }
+}
+
 // /info/statechain post struct
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct SmtProofMsgAPI {
@@ -200,7 +323,7 @@ pub struct PKDef(Vec<u8>);
 pub struct PrepareSignTxMsg {
     /// The shared key ID
     #[schemars(with = "UuidDef")]
-    pub shared_key_id: Uuid,
+    pub shared_key_ids: Vec::<Uuid>,
     /// Purpose: "TRANSFER", "TRANSFER-BATCH" or "WITHDRAW"
     pub protocol: Protocol,
     /// Hex encoding of the unsigned transaction
@@ -224,7 +347,7 @@ impl Default for PrepareSignTxMsg {
         };
 
         Self {
-            shared_key_id: Uuid::default(),
+            shared_key_ids: Vec::<Uuid>::default(),
             protocol: Protocol::Transfer,
             tx_hex: transaction_serialise(&default_tx),
             input_addrs: Vec::<PK>::default(),
@@ -234,18 +357,18 @@ impl Default for PrepareSignTxMsg {
     }
 }
 
-//impl PrepareSignTxMsg {
-//    pub fn example() -> Self{
-//        Self{
-//            shared_key_id: Uuid::new_v4(),
-//            protocol: Protocol::Deposit,
-//            tx_hex: "02000000011333183ddf384da83ed49296136c70d206ad2b19331bf25d390e69b222165e370000000000feffffff0200e1f5050000000017a914a860f76561c85551594c18eecceffaee8c4822d787F0C1A4350000000017a914d8b6fcc85a383261df05423ddf068a8987bf0287878c000000".to_string(),
-//            input_addrs: vec![PK::from_slice(&[3, 203, 250, 103, 44, 175, 45, 118, 114, 227, 88, 79, 151, 147, 57, 93, 64, 179, 159, 123, 212, 118, 151, 210, 3, 231, 97, 50, 111, 56, 152, 9, 218]).unwrap()], // pub keys being spent from
-//            input_amounts: vec![100000],
-//            proof_key: Some("02a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe".to_string()),
-//        }
-//    }
-//}
+impl PrepareSignTxMsg {
+    pub fn example() -> Self{
+        Self{
+            shared_key_ids: vec![Uuid::new_v4()],
+            protocol: Protocol::Deposit,
+            tx_hex: "02000000011333183ddf384da83ed49296136c70d206ad2b19331bf25d390e69b222165e370000000000feffffff0200e1f5050000000017a914a860f76561c85551594c18eecceffaee8c4822d787F0C1A4350000000017a914d8b6fcc85a383261df05423ddf068a8987bf0287878c000000".to_string(),
+            input_addrs: Vec::<PK>::default(),
+            input_amounts: vec![100000],
+            proof_key: Some("02a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe".to_string()),
+        }
+    }
+}
 
 // schema information structs for openAPI/swagger
 #[derive(JsonSchema)]

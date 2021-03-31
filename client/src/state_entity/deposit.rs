@@ -39,7 +39,7 @@ pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<UserID> {
 
 /// Deposit coins into state entity. Returns shared_key_id, statechain_id, funding txid,
 /// signed backup tx, back up transacion data and proof_key
-pub fn deposit(
+pub fn  deposit(
     wallet: &mut Wallet,
     amount: &u64,
 ) -> Result<(Uuid, Uuid, String, Transaction, PrepareSignTxMsg, PublicKey)> {
@@ -62,6 +62,8 @@ pub fn deposit(
     // Generate proof key
     let proof_key = wallet.se_proof_keys.get_new_key()?;
 
+    println!("init session...");
+
     // Init. session - Receive shared wallet ID
     let shared_key_id: UserID = session_init(wallet, &proof_key.to_string())?;
 
@@ -74,6 +76,7 @@ pub fn deposit(
         bitcoin::Address::p2wpkh(&to_bitcoin_public_key(pk), wallet.get_bitcoin_network())?;
     let change_addr = wallet.keys.get_new_address()?.to_string();
     let change_amount = amounts.iter().sum::<u64>() - amount - deposit_fee - FEE;
+    println!("tx funding build...");
     let tx_0 = tx_funding_build(
         &inputs,
         &p_addr.to_string(),
@@ -84,6 +87,7 @@ pub fn deposit(
         &change_amount,
     )?;
 
+    println!("sign tx...");
     let tx_funding_signed = wallet.sign_tx(
         &tx_0,
         &(0..inputs.len()).collect(), // inputs to sign are all inputs is this case
@@ -102,12 +106,13 @@ pub fn deposit(
 
     // Make unsigned backup tx
     let backup_receive_addr = wallet.se_backup_keys.get_new_address()?;
+    println!("tx_backup_build...");
     let tx_backup_unsigned =
         tx_backup_build(&tx_funding_signed.txid(), &backup_receive_addr, &amount, &init_locktime, &withdraw_fee, &se_fee_info.address)?;
 
     // Co-sign tx backup tx
     let tx_backup_psm = PrepareSignTxMsg {
-        shared_key_id: shared_key_id.id,
+        shared_key_ids: vec![shared_key_id.id],
         protocol: Protocol::Deposit,
         tx_hex: transaction_serialise(&tx_backup_unsigned),
         input_addrs: vec![pk],
@@ -115,21 +120,29 @@ pub fn deposit(
         proof_key: Some(proof_key.to_string()),
     };
 
-
-    let witness = cosign_tx_input(wallet, &tx_backup_psm)?;
+    println!("cosign_tx_input...");
+    let witness = {
+        let tmp = cosign_tx_input(wallet, &tx_backup_psm)?;
+        if tmp.len() != 1 {
+            return Err(CError::Generic(String::from("expected 1 witness from cosign_tx_input")));
+        } else {
+            tmp[0].to_owned()
+        }
+    };
 
     // Add witness to back up tx
     let mut tx_backup_signed = tx_backup_unsigned.clone();
     tx_backup_signed.input[0].witness = witness;
-
     // TODO: check signature is valid?
 
+    println!("boradcast transaction...");
     // Broadcast funding transcation
     let funding_txid = wallet
         .electrumx_client
         .instance
         .broadcast_transaction(hex::encode(consensus::serialize(&tx_funding_signed)))?;
 
+    println!("confirm deposit...");
     // Wait for server confirmation of funding tx and receive new StateChain's id
     let statechain_id: StatechainID = requests::postb(
         &wallet.client_shim,
@@ -138,7 +151,11 @@ pub fn deposit(
             shared_key_id: shared_key_id.id,
         },
     )?;
-
+    println!("confirmed deposit for statechain id: {:?} ...", statechain_id);
+    //println!("getting shared key for statechain id: {:?}", statechain_id);
+    //let _ = wallet.get_shared_key_by_statechain_id(&statechain_id.id)?; 
+    //println!("got shared key.");
+    
     // Verify proof key inclusion in SE sparse merkle tree
     let root = get_smt_root(&wallet.client_shim)?.unwrap();
     let proof = get_smt_proof(&wallet.client_shim, &root, &funding_txid)?;

@@ -51,7 +51,9 @@ mod tests {
     fn test_deposit() {
         time_test!();
         let _handle = start_server();
+        println!("gen wallet with deposit...");
         let wallet = gen_wallet_with_deposit(10000);
+        println!("...finished gen wallet with deposit.");
         //handle.join().expect("The thread being joined has panicked");
         let state_chains_info = wallet.get_state_chains_info().unwrap();
         let (_, funding_txid, proof_key, _, _) = wallet
@@ -76,6 +78,8 @@ mod tests {
         let coins = state_entity::api::get_coins_info(&wallet.client_shim).unwrap();
 
         assert_eq!(*coins.values.get(&10000).unwrap(),1);
+
+        let _ = wallet.get_shared_key_by_statechain_id(state_chains_info.0.last().unwrap()).unwrap();
 
         println!("Shared wallet id: {:?} ", funding_txid);
         println!("Funding txid: {:?} ", funding_txid);
@@ -331,11 +335,14 @@ mod tests {
                 .unspent
         );
 
+        println!("run error withdraw...");
         // Try withdraw wrong key
         assert!(state_entity::withdraw::withdraw(&mut wallet, &Uuid::new_v4()).is_err());
 
+        println!("run withdraw - statechain id: {} ...", statechain_id);
         // Check withdraw method completes without Err
         run_withdraw(&mut wallet, statechain_id);
+        println!("...finished run withdraw");
 
         // Check marked spent in wallet
         assert!(!wallet.get_shared_key(shared_key_id).unwrap().unspent);
@@ -385,10 +392,10 @@ mod tests {
             shared_key_id.push(deposit_resp.0);
             statechain_id.push(deposit_resp.1);
             
-            assert!(wallet.get_shared_key(shared_key_id.back()).unwrap().unspent);
+            assert!(wallet.get_shared_key(shared_key_id.last().unwrap()).unwrap().unspent);
             assert!(
                 wallet
-                .get_shared_key_by_statechain_id(statechain_id.back())
+                .get_shared_key_by_statechain_id(statechain_id.last().unwrap())
                 .unwrap()
                 .unspent
             );
@@ -396,13 +403,14 @@ mod tests {
 
         let wrong_scid_vec = vec![Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
         // Try withdraw wrong key
-        assert!(state_entity::withdraw::batch_withdraw(&mut wallet, &wrong_scid_vec.is_err()));
+        assert!(state_entity::withdraw::batch_withdraw(&mut wallet, &wrong_scid_vec).is_err());
 
         // Check withdraw method completes without Err
-        run_batch_withdraw(&mut wallet, statechain_id);
+        run_batch_withdraw(&mut wallet, &statechain_id);
 
         // Check marked spent in wallet
-        for (sk_id, sc_id) in (shared_key_id, statechain_id) {
+        for (i, sk_id) in shared_key_id.iter().enumerate(){
+            let sc_id = &statechain_id[i];
             assert!(!wallet.get_shared_key(sk_id).unwrap().unspent);
                 
             // Check state chain is updated
