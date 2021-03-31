@@ -131,7 +131,7 @@ pub fn batch_withdraw(wallet: &mut Wallet, statechain_id: &Vec::<Uuid>) ->
     //for shared_key_id in shared_key_ids {
         // co-sign withdraw tx
         let tx_w_prepare_sign_msg = PrepareSignTxMsg {
-            shared_key_ids: shared_key_ids.clone(),
+            shared_key_id: shared_key_ids[0].clone(),
             protocol: Protocol::Withdraw,
             tx_hex: transaction_serialise(&tx_withdraw_unsigned),
             input_addrs,

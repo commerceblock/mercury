@@ -221,14 +221,15 @@ impl Utilities for SCE {
         // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data        
         let mut amount = 0;
         
-        for (i, user_id)  in prepare_sign_msg.shared_key_ids.iter().enumerate() {
+        let user_id =prepare_sign_msg.shared_key_id;
+        for input_amount in &prepare_sign_msg.input_amounts{
             self.check_user_auth(&user_id)?;
-            amount += prepare_sign_msg.input_amounts[i];
+            amount += input_amount;
 
             if prepare_sign_msg.protocol == Protocol::Withdraw {
                 println!("check withdraw sc sig for {}", user_id);
                 // Verify withdrawal has been authorised via presense of withdraw_sc_sig
-                if let Err(_) = self.database.has_withdraw_sc_sig(*user_id) {
+                if let Err(_) = self.database.has_withdraw_sc_sig(user_id) {
                     return Err(SEError::Generic(String::from(
                         "Withdraw has not been authorised. /withdraw/init must be called first.",
                     )));
@@ -249,9 +250,9 @@ impl Utilities for SCE {
                     &withdraw_fee,
                 )?;
 
-                for (i, user_id)  in prepare_sign_msg.shared_key_ids.iter().enumerate() {
-                    let statechain_id = self.database.get_statechain_id(*user_id)?;
-                    let tx_backup = self.database.get_backup_transaction(statechain_id)?;
+                let user_id = prepare_sign_msg.shared_key_id;
+                let statechain_id = self.database.get_statechain_id(user_id)?;
+                let tx_backup = self.database.get_backup_transaction(statechain_id)?;
 
                     // Check funding txid UTXO info
                     let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
@@ -268,20 +269,22 @@ impl Utilities for SCE {
                         )));
                     }
 
-                    // Update UserSession with withdraw tx info
-                    let sig_hash = get_sighash(
-                        &tx,
-                        &0,
-                        &prepare_sign_msg.input_addrs[i],
-                        &prepare_sign_msg.input_amounts[i],
-                        &self.config.network,
-                    );
+                    for (i, input_addr) in prepare_sign_msg.input_addrs.iter().enumerate(){
+                        // Update UserSession with withdraw tx info
+                        let sig_hash = get_sighash(
+                            &tx,
+                            &0,
+                            &input_addr,
+                            &prepare_sign_msg.input_amounts[i],
+                            &self.config.network,
+                        );
 
-                    self.database.update_withdraw_tx_sighash(
-                        &user_id,
-                        sig_hash,
-                        tx.clone(),
-                    )?;
+                        self.database.update_withdraw_tx_sighash(
+                            &user_id,
+                            sig_hash,
+                            tx.clone(),
+                        )?;
+                    }
 
                     info!(
                         "WITHDRAW: Withdraw tx ready for signing. User ID: {:?}.",
@@ -289,12 +292,12 @@ impl Utilities for SCE {
                     );
         
                      // Verify withdrawal has been authorised via presense of withdraw_sc_sig
-                    if let Err(_) = self.database.has_withdraw_sc_sig(*user_id) {
+                    if let Err(_) = self.database.has_withdraw_sc_sig(user_id) {
                         return Err(SEError::Generic(String::from(
                             "Withdraw has not been authorised. /withdraw/init must be called first.",
                         )));
                     }
-                }
+        
 
                 tx_withdraw_verify(
                     &prepare_sign_msg,
@@ -302,8 +305,8 @@ impl Utilities for SCE {
                     &withdraw_fee,
                 )?;
 
-                for (i, user_id)  in prepare_sign_msg.shared_key_ids.iter().enumerate(){
-                    let statechain_id = self.database.get_statechain_id(*user_id)?;
+        
+                    let statechain_id = self.database.get_statechain_id(user_id)?;
                     let tx_backup = self.database.get_backup_transaction(statechain_id)?;
 
                     // Check funding txid UTXO info
@@ -320,11 +323,12 @@ impl Utilities for SCE {
                         )));
                     }
 
+                for (i,input_addr) in prepare_sign_msg.input_addrs.iter().enumerate(){
                     // Update UserSession with withdraw tx info
                     let sig_hash = get_sighash(
                         &tx,
                         &0,
-                        &prepare_sign_msg.input_addrs[i],
+                        &input_addr,
                         &prepare_sign_msg.input_amounts[i],
                         &self.config.network,
                     );
@@ -334,13 +338,13 @@ impl Utilities for SCE {
                         sig_hash,
                         tx.clone(),
                     )?;
-
-                    
                 }
 
+                
+
                 info!(
-                        "WITHDRAW: Withdraw tx ready for signing. User IDs: {:?}.",
-                        prepare_sign_msg.shared_key_ids
+                        "WITHDRAW: Withdraw tx ready for signing. User ID: {}.",
+                        prepare_sign_msg.shared_key_id
                 );
             }
             _ => {
@@ -372,7 +376,7 @@ impl Utilities for SCE {
                     &withdraw_fee,
                 )?;
 
-                let user_id = prepare_sign_msg.shared_key_ids[0];
+                let user_id = prepare_sign_msg.shared_key_id;
 
                 //for transfer (not deposit)
                 if prepare_sign_msg.protocol == Protocol::Transfer {

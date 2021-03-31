@@ -41,23 +41,26 @@ pub fn cosign_tx_input(
 
     let mut witnesses = vec![];
 
-    for (i, shared_key_id) in prepare_sign_msg.shared_key_ids.iter().enumerate(){
+    let shared_key_id = prepare_sign_msg.shared_key_id;
 
-        println!("get sighash...");
+    println!("get sighash...");
+        
+    
+    for(i, input_addr) in prepare_sign_msg.input_addrs.iter().enumerate(){
         // get sighash as message to be signed
         let sig_hash = get_sighash(
             &tx,
             &0,
-            &prepare_sign_msg.input_addrs[i],
+            &input_addr,
             &prepare_sign_msg.input_amounts[i],
             &wallet.network,
         );
-
+        
         let shared_key = wallet.get_shared_key(&shared_key_id)?;
         let mk = &shared_key.share;
 
         println!("sign...");
-         // co-sign transaction
+        // co-sign transaction
         let witness = ecdsa::sign(
             &wallet.client_shim,
             BigInt::from_hex(&hex::encode(&sig_hash[..])),
@@ -65,8 +68,7 @@ pub fn cosign_tx_input(
             prepare_sign_msg.protocol,
             &shared_key.id,
         )?;
-
-        witnesses.push(witness);
+        witnesses.push(witness)
     }
 
     Ok(witnesses)
