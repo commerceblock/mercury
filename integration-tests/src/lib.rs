@@ -186,7 +186,6 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
     let _ = wallet.keys.get_new_address();
     let _ = wallet.keys.get_new_address();
 
-    println!("running deposit...");
     run_deposit(&mut wallet, &amount);
 
     wallet

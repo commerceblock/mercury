@@ -51,9 +51,7 @@ mod tests {
     fn test_deposit() {
         time_test!();
         let _handle = start_server();
-        println!("gen wallet with deposit...");
         let wallet = gen_wallet_with_deposit(10000);
-        println!("...finished gen wallet with deposit.");
         //handle.join().expect("The thread being joined has panicked");
         let state_chains_info = wallet.get_state_chains_info().unwrap();
         let (_, funding_txid, proof_key, _, _) = wallet
@@ -333,15 +331,12 @@ mod tests {
                 .unspent
         );
 
-        println!("run error withdraw...");
         // Try withdraw wrong key
         assert!(state_entity::withdraw::withdraw(&mut wallet, &Uuid::new_v4()).is_err());
 
-        println!("run withdraw - statechain id: {} ...", statechain_id);
         // Check withdraw method completes without Err
         run_withdraw(&mut wallet, statechain_id);
-        println!("...finished run withdraw");
-
+        
         // Check marked spent in wallet
         assert!(!wallet.get_shared_key(shared_key_id).unwrap().unspent);
 

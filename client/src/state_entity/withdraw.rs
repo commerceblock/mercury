@@ -95,16 +95,7 @@ pub fn batch_withdraw(wallet: &mut Wallet, statechain_id: &Vec<Uuid>) -> Result<
         &rec_se_address,
         &se_fee_info,
     )?;
-    /*
-    let tx_withdraw_unsigned = tx_withdraw_build(
-        &sc_info.utxo.txid,
-        &rec_se_address,
-        &(sc_info.amount + se_fee_info.deposit),
-        &withdraw_fee,
-        &se_fee_info.address,
-    )?;
-    */
-
+    
     let mut input_amounts = vec![];
     for info in sc_infos {
         input_amounts.push(info.amount);
