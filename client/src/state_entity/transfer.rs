@@ -99,7 +99,11 @@ pub fn transfer_sender(
     prepare_sign_msg.tx_hex = transaction_serialise(&tx);
 
     // Sign new back up tx
-    let new_backup_witness = cosign_tx_input(wallet, &prepare_sign_msg)?;
+    let new_backup_witness = {
+        let tmp = cosign_tx_input(wallet, &prepare_sign_msg)?;
+        if tmp.len() != 1 {return Err(CError::Generic(String::from("expected one tx input witness")));}
+        tmp[0].to_owned()
+    };
 
     let mut tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
     // Update back up tx with new witness

@@ -26,7 +26,7 @@ use std::convert::TryInto;
 pub fn cosign_tx_input(
     wallet: &mut Wallet,
     prepare_sign_msg: &PrepareSignTxMsg,
-) -> Result<Vec<Vec<u8>>> {
+) -> Result<Vec<Vec<Vec<u8>>>> {
     // message 1 - send tx data for validation.
     requests::postb(
         &wallet.client_shim,
@@ -57,7 +57,7 @@ pub fn cosign_tx_input(
         &shared_key.id,
     )?;
 
-    Ok(witness)
+    Ok(vec![witness])
 }
 
 pub fn verify_statechain_smt(

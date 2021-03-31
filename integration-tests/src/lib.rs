@@ -219,7 +219,16 @@ pub fn run_withdraw(wallet: &mut Wallet, statechain_id: &Uuid) -> (String, Uuid,
     let start = Instant::now();
     let resp = state_entity::withdraw::withdraw(wallet, &statechain_id).unwrap();
     println!("(Withdraw Took: {})", TimeFormat(start.elapsed()));
+    
+    resp
+}
 
+/// Run withdraw of shared key IDs given
+pub fn run_batch_withdraw(wallet: &mut Wallet, statechain_ids: &Vec::<Uuid>) -> (String, Vec::<Uuid>, u64) {
+    let start = Instant::now();
+    let resp = state_entity::withdraw::batch_withdraw(wallet, statechain_ids).unwrap();
+    println!("(Withdraw Took: {})", TimeFormat(start.elapsed()));
+    
     resp
 }
 

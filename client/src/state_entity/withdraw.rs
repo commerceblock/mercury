@@ -30,6 +30,14 @@ use uuid::Uuid;
 
 /// Withdraw coins from state entity. Returns signed withdraw transaction, statechain_id and withdrawn amount.
 pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid) -> Result<(String, Uuid, u64)> {
+    let vec_scid = vec![*statechain_id];
+    let resp = batch_withdraw(wallet, &vec_scid)?;
+    Ok((resp.0, resp.1[0], resp.2))
+}
+
+/// Withdraw coins from state entity. Returns signed withdraw transaction, statechain_id and withdrawn amount.
+pub fn batch_withdraw(wallet: &mut Wallet, statechain_id: &Vec<Uuid>) -> Result<(String, Vec<Uuid>, u64)> {
+    let statechain_id = &statechain_id[0];
     // first get required shared key data
     let shared_key_id;
     let pk;
@@ -66,8 +74,8 @@ pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid) -> Result<(String, Uu
         &wallet.client_shim,
         &format!("withdraw/init"),
         &WithdrawMsg1 {
-            shared_key_id: shared_key_id.clone(),
-            statechain_sig,
+            shared_key_ids: vec![shared_key_id.clone()],
+            statechain_sigs: vec![statechain_sig],
         },
     )?;
 
@@ -79,14 +87,19 @@ pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid) -> Result<(String, Uu
     //calculate SE fee amount from rate
     let withdraw_fee = (sc_info.amount * se_fee_info.withdraw) / 10000 as u64;
 
+    let sc_infos = vec![sc_info];
+
     // Construct withdraw tx
     let tx_withdraw_unsigned = tx_withdraw_build(
-        &sc_info.utxo.txid,
+        &sc_infos,
         &rec_se_address,
-        &(sc_info.amount + se_fee_info.deposit),
-        &withdraw_fee,
-        &se_fee_info.address,
+        &se_fee_info,
     )?;
+    
+    let mut input_amounts = vec![];
+    for info in sc_infos {
+        input_amounts.push(info.amount);
+    }
 
     // co-sign withdraw tx
     let tx_w_prepare_sign_msg = PrepareSignTxMsg {
@@ -94,22 +107,22 @@ pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid) -> Result<(String, Uu
         protocol: Protocol::Withdraw,
         tx_hex: transaction_serialise(&tx_withdraw_unsigned),
         input_addrs: vec![pk],
-        input_amounts: vec![sc_info.amount],
+        input_amounts,
         proof_key: None,
     };
     cosign_tx_input(wallet, &tx_w_prepare_sign_msg)?;
-
-    let witness: Vec<Vec<u8>> = requests::postb(
+    
+    let witness: Vec<Vec<Vec<u8>>> = requests::postb(
         &wallet.client_shim,
         &format!("/withdraw/confirm"),
         &WithdrawMsg2 {
-            shared_key_id: shared_key_id.to_owned(),
+            shared_key_ids: vec![shared_key_id.to_owned()],
             address: rec_se_address.to_string(),
         },
     )?;
-
+    
     let mut tx_withdraw_signed = tx_withdraw_unsigned.clone();
-    tx_withdraw_signed.input[0].witness = witness;
+    tx_withdraw_signed.input[0].witness = witness[0].clone();
 
     // Mark funds as withdrawn in wallet
     {
@@ -126,7 +139,7 @@ pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid) -> Result<(String, Uu
 
     Ok((
         withdraw_txid,
-        statechain_id.clone(),
+        vec![statechain_id.clone()],
         statechain_data.amount - se_fee_info.withdraw,
     ))
 }

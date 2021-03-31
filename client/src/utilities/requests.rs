@@ -64,7 +64,7 @@ where
     };
 
     info!("(req {}, took: {})", path, TimeFormat(start.elapsed()));
-    Ok(serde_json::from_str(value.as_str()).unwrap())
+    Ok(serde_json::from_str(value.as_str()).expect(&format!("failed to parse: {}", value.as_str())))
 }
 
 pub fn get<V>(client_shim: &ClientShim, path: &str) -> Result<V>
