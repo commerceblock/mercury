@@ -370,7 +370,7 @@ mod tests {
         assert!(err.is_err());
     }
 
-    #[ignore]
+    #[test]
     fn test_batch_withdraw() {
         time_test!();
         let _handle = start_server();
@@ -405,7 +405,7 @@ mod tests {
         // Check marked spent in wallet
         for (i, sk_id) in shared_key_id.iter().enumerate(){
             let sc_id = &statechain_id[i];
-            assert!(!wallet.get_shared_key(sk_id).unwrap().unspent);
+            assert!(!wallet.get_shared_key(sk_id).unwrap().unspent, format!("key number {} is unspent", i));
                 
             // Check state chain is updated
             let state_chain =

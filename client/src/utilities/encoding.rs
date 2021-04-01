@@ -85,7 +85,7 @@ pub fn decode_message(message: String, network: &String) -> Result<TransferMsg3>
     let tx_backup_addr = Some(Address::p2wpkh(&decoded_struct.proof_key.clone(), network.parse::<Network>().unwrap())?);
 
 	let transfer_msg3 = TransferMsg3 {
-	    shared_key_id: decoded_struct.tx_backup_psm.shared_key_id,
+	    shared_key_id: decoded_struct.tx_backup_psm.shared_key_ids[0],
 	    t1: decoded_struct.t1.clone(),
 	    statechain_sig: StateChainSig {
 		    purpose: "TRANSFER".to_string(),

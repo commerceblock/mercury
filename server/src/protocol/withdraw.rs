@@ -85,8 +85,10 @@ impl Withdraw for SCE {
     }
 
     fn withdraw_init(&self, withdraw_msg1: WithdrawMsg1) -> Result<()> {
-//        for (user_id, statechain_sig) in  
-            //(withdraw_msg1.shared_key_ids, withdraw_msg1.statechain_sigs)
+        if (withdraw_msg1.statechain_sigs.len() != withdraw_msg1.shared_key_ids.len()){
+            return Err(SEError::Generic("incorrect number of statechain signatures in withdraw/init request".to_string()));
+        }
+       
         for (user_id, statechain_sig) in 
             withdraw_msg1.shared_key_ids.iter().zip(withdraw_msg1.statechain_sigs.iter())
         {
@@ -102,15 +104,15 @@ impl Withdraw for SCE {
                 Some(*user_id),
             )?;
 
-        // Mark UserSession as authorised for withdrawal
+            // Mark UserSession as authorised for withdrawal
 
-        self.database
-            .update_withdraw_sc_sig(&user_id, statechain_sig.clone())?;
+            self.database
+                .update_withdraw_sc_sig(&user_id, statechain_sig.clone())?;
 
-        info!(
-            "WITHDRAW: Authorised. Shared Key ID: {}. State Chain: {}",
-            user_id, statechain_id
-        );
+            info!(
+                "WITHDRAW: Authorised. Shared Key ID: {}. State Chain: {}",
+                user_id, statechain_id
+            );
         }
 
         Ok(())
@@ -128,9 +130,9 @@ impl Withdraw for SCE {
             let wcd = self.database.get_withdraw_confirm_data(user_id.to_owned())?;
 
             // Ensure withdraw tx has been signed. i,e, that prepare-sign-tx has been completed.
-            if wcd.tx_withdraw.input[i].witness.len() == 0 {
-                return Err(SEError::Generic(String::from(
-                   "Signed Back up transaction not found.",
+            if wcd.tx_withdraw.input[0].witness.len() == 0 {
+                return Err(SEError::Generic(format!(
+                   "Signed Back up transaction not found for userid: {}, {}",i, user_id
                 )));
             }
 

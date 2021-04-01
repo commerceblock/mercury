@@ -323,7 +323,7 @@ pub struct PKDef(Vec<u8>);
 pub struct PrepareSignTxMsg {
     /// The shared key ID
     #[schemars(with = "UuidDef")]
-    pub shared_key_id: Uuid,
+    pub shared_key_ids: Vec<Uuid>,
     /// Purpose: "TRANSFER", "TRANSFER-BATCH" or "WITHDRAW"
     pub protocol: Protocol,
     /// Hex encoding of the unsigned transaction
@@ -347,7 +347,7 @@ impl Default for PrepareSignTxMsg {
         };
 
         Self {
-            shared_key_id: Uuid::default(),
+            shared_key_ids: Vec::<Uuid>::default(),
             protocol: Protocol::Transfer,
 
         tx_hex: transaction_serialise(&default_tx),
@@ -359,63 +359,6 @@ impl Default for PrepareSignTxMsg {
 }
 
 impl PrepareSignTxMsg {
-    pub fn example() -> Self{
-        Self{
-            shared_key_id: Uuid::new_v4(),
-            protocol: Protocol::Deposit,
-            tx_hex: "02000000011333183ddf384da83ed49296136c70d206ad2b19331bf25d390e69b222165e370000000000feffffff0200e1f5050000000017a914a860f76561c85551594c18eecceffaee8c4822d787F0C1A4350000000017a914d8b6fcc85a383261df05423ddf068a8987bf0287878c000000".to_string(),
-            input_addrs: Vec::<PK>::default(),
-            input_amounts: vec![100000],
-            proof_key: Some("02a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe".to_string()),
-        }
-    }
-}
-
-/// Struct contains data necessary to caluculate backup tx's input sighash('s). This is required
-/// by Server before co-signing is performed for validation of tx.
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
-pub struct PrepareSignTxMsgBatch {
-    /// The shared key ID
-    #[schemars(with = "UuidDef")]
-    pub shared_key_ids: Vec::<Uuid>,
-    /// Purpose: "TRANSFER", "TRANSFER-BATCH" or "WITHDRAW"
-    pub protocol: Protocol,
-    /// Hex encoding of the unsigned transaction
-    pub tx_hex: String,
-    /// Vector of the transaction input public keys
-    #[schemars(with = "PKDef")]
-    pub input_addrs: Vec<PK>, // pub keys being spent from
-    /// Vector of input amounts
-    pub input_amounts: Vec<u64>,
-    /// Proof public key
-    pub proof_key: Option<String>,
-}
-
-impl Default for PrepareSignTxMsgBatch {
-    fn default() -> Self {
-        let default_tx = Transaction {
-            version: i32::default(),
-            lock_time: u32::default(),
-            input: Vec::<TxIn>::default(),
-            output: Vec::<TxOut>::default(),
-        };
-
-        Self {
-            shared_key_ids: Vec::<Uuid>::default(),
-            protocol: Protocol::Transfer,
-
-
-
-
-        tx_hex: transaction_serialise(&default_tx),
-            input_addrs: Vec::<PK>::default(),
-            input_amounts: Vec::<u64>::default(),
-            proof_key: None,
-        }
-    }
-}
-
-impl PrepareSignTxMsgBatch {
     pub fn example() -> Self{
         Self{
             shared_key_ids: vec![Uuid::new_v4()],
