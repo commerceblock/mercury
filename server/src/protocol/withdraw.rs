@@ -126,7 +126,6 @@ impl Withdraw for SCE {
             info!("WITHDRAW: Confirm. Shared Key ID: {}", user_id.to_string());
 
             // Get withdraw data - Checking that withdraw tx and statechain signature exists
-            println!("WITHDRAW: getting withdraw confirm data");
             let wcd = self.database.get_withdraw_confirm_data(user_id.to_owned())?;
 
             // Ensure withdraw tx has been signed. i,e, that prepare-sign-tx has been completed.
@@ -137,7 +136,6 @@ impl Withdraw for SCE {
             }
 
             // Get statechain and update with final StateChainSig
-            println!("WITHDRAW: getting statechain");
             let mut state_chain: StateChain = self.database.get_statechain(wcd.statechain_id)?;
 
             state_chain.add(wcd.withdraw_sc_sig.to_owned())?;

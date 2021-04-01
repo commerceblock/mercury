@@ -227,7 +227,6 @@ impl Utilities for SCE {
             amount += input_amount;
 
             if prepare_sign_msg.protocol == Protocol::Withdraw {
-                println!("check withdraw sc sig for {}: {}", i, user_id);
                 // Verify withdrawal has been authorised via presense of withdraw_sc_sig
                 if let Err(_) = self.database.has_withdraw_sc_sig(*user_id) {
                     return Err(SEError::Generic(String::from(
