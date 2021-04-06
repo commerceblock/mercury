@@ -14,6 +14,7 @@ use daemon_engine::{JsonCodec, UnixConnection, UnixServer};
 use serde::{Deserialize, Serialize};
 use tokio::prelude::*;
 use tokio::{run, spawn};
+use electrumx_client::response::GetBalanceResponse;
 
 use rand::Rng;
 use state_entity::api::{get_statechain, get_recovery_data, get_swaps_group_info, get_coins_info};
@@ -41,6 +42,7 @@ pub enum DaemonRequest {
     Deposit(u64),
     Withdraw(Uuid),
     TransferSender(Uuid, String),
+    TransferAny(String),
     TransferReceiver(String),
     Swap(Uuid, u64, bool),
 }
@@ -247,6 +249,26 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                         r.send(DaemonResponse::value_to_deamon_response(
                             encoded_message,
                         ))
+                    }
+                    DaemonRequest::TransferAny(receiver_addr) => {
+                        debug!("Daemon: TransferAny");
+                        // get list of statecoins
+                        let encoded_message: String;
+                        let (_, statechain_ids, _, _): (Vec<Uuid>, Vec<Uuid>, Vec<GetBalanceResponse>, Vec<u32>) = wallet.get_state_chains_info().unwrap();
+                        if statechain_ids.len() > 0 {                        
+                            let sce_address = encoding::decode_address(receiver_addr,&network).unwrap();
+                            let transfer_sender_resp = state_entity::transfer::transfer_sender(
+                                &mut wallet,
+                                &statechain_ids[0],
+                                sce_address,
+                            );
+                            encoded_message = encoding::encode_message(transfer_sender_resp.unwrap()).unwrap();
+                            wallet.save();
+                        } else {
+                            encoded_message = "No statecoins available".to_string();
+                        }
+                        r.send(DaemonResponse::value_to_deamon_response(
+                                Ok(encoded_message)))
                     }
                     DaemonRequest::TransferReceiver(transfer_msg_bech32) => {
                         debug!("Daemon: TransferReceiver");

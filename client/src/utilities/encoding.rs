@@ -3,13 +3,13 @@
 //! Bech32 encoding for statecoin addresses and messages
 
 use bech32::{self, FromBase32, ToBase32};
-use shared_lib::structs::{SCEAddress,TransferMsg3,FESer,PrepareSignTxMsg};
+use shared_lib::structs::{SCEAddress,TransferMsg3,FESer,PrepareSignTxMsg, Protocol};
 use shared_lib::state_chain::StateChainSig;
 use bitcoin::secp256k1;
-use bitcoin::{Address, Network, PublicKey};
+use bitcoin::{Address, Network};
 use crate::wallet::wallet::to_bitcoin_public_key;
 use uuid::Uuid;
-use rmp_serde;
+use hex;
 
 use super::super::Result;
 use crate::error::CError;
@@ -42,29 +42,32 @@ pub fn decode_address(bech32_address: String, network: &String) -> Result<SCEAdd
     Ok(SCEAddress { tx_backup_addr, proof_key })
 }
 
-// compact struct for serialising the transfer message
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct CompactTransfer {
-    pub t1: FESer, // t1 = o1x1
-    pub proof_key: PublicKey,
-    pub sig: String,
-    pub statechain_id: Uuid,
-    pub tx_backup_psm: PrepareSignTxMsg,
-}
-
 // Encode a mercury transaction message in bech32 format
 pub fn encode_message(message: TransferMsg3) -> Result<String> {
 
-	let compact = CompactTransfer {
-		t1: message.t1,
-		proof_key: to_bitcoin_public_key(message.rec_se_addr.proof_key.clone()),
-		sig: message.statechain_sig.sig.clone(),
-		statechain_id: message.statechain_id.clone(),
-		tx_backup_psm: message.tx_backup_psm.clone(),
-	};
+	let mut sig_bytes = hex::decode(message.statechain_sig.sig.clone()).unwrap();
+	let mut tx_bytes = hex::decode(message.tx_backup_psm.clone().tx_hex).unwrap();
 
-	let encoded_msg = rmp_serde::to_vec(&compact).unwrap();
-	let bech32_encoded = bech32::encode("mm",encoded_msg.to_base32()).unwrap();
+	// compact messgae serialisation to byte vector
+	let mut ser_bytes = Vec::new();
+	//bytes 0..129 encrypted t1
+	ser_bytes.append(&mut message.t1.secret_bytes.clone());
+	//bytes 129..162 (33 bytes) compressed proof key
+	ser_bytes.append(&mut message.rec_se_addr.proof_key.clone().serialize().to_vec());
+	//bytes 162..178 (16 bytes) statechain_id
+	ser_bytes.append(&mut hex::decode(message.statechain_id.clone().simple().to_string()).unwrap());
+	//bytes 178..194 (16 bytes) shared_key_id
+	ser_bytes.append(&mut hex::decode(message.tx_backup_psm.shared_key_id.clone().simple().to_string()).unwrap());
+	//byte 194 is statechain signature length (variable)
+	ser_bytes.push(sig_bytes.len() as u8);
+	//byte 195..sig_len is statechain signature
+	ser_bytes.append(&mut sig_bytes);
+	//byte sig_len is backup tx length (variable)
+	ser_bytes.push(tx_bytes.len() as u8);
+	//remaining bytes backup tx
+	ser_bytes.append(&mut tx_bytes);
+
+	let bech32_encoded = bech32::encode("mm",ser_bytes.to_base32()).unwrap();
 
 	Ok(bech32_encoded)
 }
@@ -80,23 +83,51 @@ pub fn decode_message(message: String, network: &String) -> Result<TransferMsg3>
 	    )));
 	}
 
+	// compact messgae deserialisation to byte vectors
 	let decoded_bytes = Vec::<u8>::from_base32(&decoded_msg).unwrap();
-	let decoded_struct: CompactTransfer = rmp_serde::from_read_ref(&decoded_bytes[..]).unwrap();
-    let tx_backup_addr = Some(Address::p2wpkh(&decoded_struct.proof_key.clone(), network.parse::<Network>().unwrap())?);
+	//bytes 0..129 encrypted t1
+	let t1_bytes = &decoded_bytes[0..129];
+	//bytes 129..162 (33 bytes) compressed proof key
+	let proof_key_bytes = &decoded_bytes[129..162];
+	//bytes 162..178 (16 bytes) statechain_id
+	let statechain_id_bytes = &decoded_bytes[162..178];
+	//bytes 178..194 (16 bytes) shared_key_id
+	let shared_key_id_bytes = &decoded_bytes[178..194];
+	//byte 194 is statechain signature length (variable)
+	let sig_len = (decoded_bytes[194] as usize) + 195;
+	//byte 195..sig_len is statechain signature
+	let sig_bytes = &decoded_bytes[195..sig_len];
+	//byte sig_len is backup tx length (variable)
+	let tx_len = (decoded_bytes[sig_len] as usize) + sig_len.clone() + 1;
+	//remaining bytes backup tx
+	let tx_bytes = &decoded_bytes[(sig_len+1)..tx_len];
 
+	let proof_key = secp256k1::PublicKey::from_slice(&proof_key_bytes.clone()).unwrap();
+    let tx_backup_addr = Some(Address::p2wpkh(&to_bitcoin_public_key(proof_key), network.parse::<Network>().unwrap())?);
+
+	let mut tx_backup_psm = PrepareSignTxMsg::default();
+	tx_backup_psm.tx_hex = hex::encode(tx_bytes);
+	tx_backup_psm.shared_key_id = Uuid::from_bytes(&shared_key_id_bytes.clone()).unwrap();
+	tx_backup_psm.proof_key = Some(hex::encode(proof_key_bytes.clone()));
+	tx_backup_psm.protocol = Protocol::Transfer;
+
+	let mut t1 = FESer::new_random();
+	t1.secret_bytes = t1_bytes.clone().to_vec();
+
+	// recreate transfer message 3
 	let transfer_msg3 = TransferMsg3 {
-	    shared_key_id: decoded_struct.tx_backup_psm.shared_key_id,
-	    t1: decoded_struct.t1.clone(),
+	    shared_key_id: Uuid::from_bytes(&shared_key_id_bytes.clone()).unwrap(),
+	    t1: t1,
 	    statechain_sig: StateChainSig {
 		    purpose: "TRANSFER".to_string(),
-		    data: decoded_struct.proof_key.clone().to_string(),
-		    sig: decoded_struct.sig,
+		    data: hex::encode(proof_key_bytes.clone()),
+		    sig: hex::encode(sig_bytes),
 	    },
-	    statechain_id: decoded_struct.statechain_id,
-	    tx_backup_psm: decoded_struct.tx_backup_psm,
+	    statechain_id: Uuid::from_bytes(&statechain_id_bytes.clone()).unwrap(),
+	    tx_backup_psm: tx_backup_psm,
 	    rec_se_addr: SCEAddress {
 	    	tx_backup_addr,
-	    	proof_key: decoded_struct.proof_key.key
+	    	proof_key: proof_key,
 	    },
 	};
 
@@ -128,8 +159,8 @@ mod tests {
 
     #[test]
     fn test_message_encoding() {
-		let mmessage: String = "mm1jkgacqypqnxv6022d0x2mn88yqt965jsenfue77vhrx22n7vchxd3nxzenwpj3kvmmxwudxv7rxf6dwv545ve9wvn8xgfnywenjue0kv5hxwyxthejy4w6xvktxfen9fvmxgrn8uejcveuznej28jckv6txt79ckw0xfc3m3ejhuetwvkrxfln9qghxv22paenhuerp0en0vescag3cveepx2s4uelmvej0uexgy830ve73rejuppnycdlxtynjeeng4tn8dt4guej7vclxf66p7p8xt9nyjpp4z9n8qy0xwfn9pv0x2yaecen0uetxv7vuugggzsn9mxqv5t8nq8dfy9krq9w3dzjudn7ers7pqfq58hcewkqx6lfndnrpnxq6rgvpjxgcrxd35xuurswr9x5mrjdfjvf3rzdtpv5ukgdfkxesnxdnpxesnzvmrvfjrzwfcx5cxzvm9xqckxwfnv5urzctzxqenvd348q6r2cf3vgcryv3sx5urzvfhxqcnzd35xuunje3exa3kvwphx4jr2et9v93nwdekvdskydpsxvenzwfkvyurjwf3xcuxgwpnxvexywphvfnrxdeexdnrvekeysukvepnx93kxc3dv5mxxvfdxsunsced8qcxyefdv5uxgwtyv4jkxdmrxuuedkfyvfjkxvpexqurvttxvc6kztf5xc6ngtfe8q6x2tf5vgcrwv3jvvcxgcn9v6qsrsx6qxqrqv3sxqcrqvpsxqcrqvfsxy6x2vm9xd3rxdtrxvukzcenxq6kzctpxdjxxvekx33nwveh8pnxxetpvcekxep3xg6rzvp3v56xvv3nxsmrwvnpx5ck2de5vvcnwep3xqcrqvpsxqcrqvpsvenxvenxvenxvvp3x9nxzefsxycrqvpsxqcrqvpsxqcnvvpsxy6r2vt9x5mkyv3e8ymrydtpxp3nxde4x4nrzwpsx5cxxd3cx3snvctyvejxxdf5vvcnqv358qenqdp4xqeryvfsxpjx2d3cxsukgctpxvmrge34x43xgcnxvccn2cfjxser2vryv9jrxvpcxycnqenzvc6kxvejv5cryv348yengwtrvyerxce5x9jnzefhxqeryvp3v4nxxet9xc6njvrxv93nxd3cx5ur2vfhxfsnjctrxvcnywp3xq6n2efnx5unqefexsmnscnp8y6ngdfsxpjngwtrvs6nzcn9xqcnyvp3xgcnqv3e8yexzvrrv56rqe3cxajrjcnxxvenxerzvfnrvvrzxuervc34xqerxenrxycxxv3cxvurzdeevgmrvce4xumkxc3cxsekye3jxv6n2cf4xqurqvpsxzgugggrgldx4rkp3dhjmzzt99dt00spzc7a9z64tv29utexp96mqc0rc6yernsqqxeq0k2zxqenycnzvyenvdenvfsk2cmx8p3xywtpvgukzdmy8psn2d35xqmr2wf4xver2epkv93nzwrrvg6rycmrvgukvdeevvekgdehx5crzwrpxs32wk57".to_string();
-		let transfer_msg_3 =
+		let mmessage: String = "mm1qnxn6jnt4hnjq9ja2fgd87ac548utkxzmsv5dhhwxncf6dd9dz2enpywukl2tcsew7y4w69jnj5kdq0ukrc989revtft79ckwwwywud04kcflgz9c55rmmuv9l0vx82ywrjzv4ptlakflxgy83005gaczzvxlvjwt8g4tm2a289u08tg8cym9ysgdg3wqgly5936yaecm7k0xwgzsn9mxqv5t8nq8dfy9krq9w3dzjudn7ers7pqfq58hcewkqx6lfnfl5cue0nvzjvvszlw3kw7a378n0kqjzr07kjx2jvyujc8ytqdhm6xxpzqygpkg7ygu4549wc446w4v63k56sne0ges59ruqwf86q6kqmxtpz6rvpzqkq3wqgkg7vljl8cwh27atrhdj45qvced2yez6xcxv4c00ehj0m0cqpqqqqqqqqszn378v6u8xkrqk428hpkf3eh3l8270x3ysgpunergee228n5c973qqqqqqqqllllllcpr7hqzqqqqqqqq9sqz3g727efjcj6psm4tuvq2rrgff4dlhz5cypysvz9qgssphngf8d2xe84t0dl79dzgfgd45cgzy8m7hpjuq39jdyu5g7yrc08qgspal8wvkg04smgtpgh92dvxy5pq40rty8fg796j4zspeyu65d7qyspyypfj2svus8c0kdlxv7mhastwf44qgluzrpg8qtekek9wl9cgwljx4d9pqqqq8dlnyg".to_string();
+        let transfer_msg_3 =
             serde_json::from_str::<TransferMsg3>(&TRANSFER_MSG_3.to_string()).unwrap();
 
         let b32enc = encode_message(transfer_msg_3).unwrap();

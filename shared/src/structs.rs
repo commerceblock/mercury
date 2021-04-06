@@ -63,7 +63,7 @@ pub struct SwapID {
 //Secret key is stored as raw bytes
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
 pub struct FESer {
-    secret_bytes: Vec<u8>,
+    pub secret_bytes: Vec<u8>,
 }
 
 impl FESer {

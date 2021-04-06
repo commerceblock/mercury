@@ -65,6 +65,15 @@ subcommands:
                   required: true
                   value_name: message
                   help: Transfer message from sender
+        - transfer-any:
+            about: Transfer any Statecoin - Send
+            version: "1.0"
+            args:
+              - addr:
+                  short: a
+                  required: true
+                  value_name: Recipient Address
+                  help: State Entity Address for recipient
         - swap:
             about: Perform Swap
             version: "1.0"
