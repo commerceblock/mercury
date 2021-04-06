@@ -62,6 +62,7 @@ pub fn deposit(
     // Generate proof key
     let proof_key = wallet.se_proof_keys.get_new_key()?;
 
+    
     // Init. session - Receive shared wallet ID
     let shared_key_id: UserID = session_init(wallet, &proof_key.to_string())?;
 
@@ -74,6 +75,7 @@ pub fn deposit(
         bitcoin::Address::p2wpkh(&to_bitcoin_public_key(pk), wallet.get_bitcoin_network())?;
     let change_addr = wallet.keys.get_new_address()?.to_string();
     let change_amount = amounts.iter().sum::<u64>() - amount - deposit_fee - FEE;
+    
     let tx_0 = tx_funding_build(
         &inputs,
         &p_addr.to_string(),
@@ -84,6 +86,7 @@ pub fn deposit(
         &change_amount,
     )?;
 
+    
     let tx_funding_signed = wallet.sign_tx(
         &tx_0,
         &(0..inputs.len()).collect(), // inputs to sign are all inputs is this case
@@ -102,6 +105,7 @@ pub fn deposit(
 
     // Make unsigned backup tx
     let backup_receive_addr = wallet.se_backup_keys.get_new_address()?;
+    
     let tx_backup_unsigned =
         tx_backup_build(&tx_funding_signed.txid(), &backup_receive_addr, &amount, &init_locktime, &withdraw_fee, &se_fee_info.address)?;
 
@@ -115,13 +119,18 @@ pub fn deposit(
         proof_key: Some(proof_key.to_string()),
     };
 
-
-    let witness = cosign_tx_input(wallet, &tx_backup_psm)?;
+    let witness = {
+        let tmp = cosign_tx_input(wallet, &tx_backup_psm)?;
+        if tmp.len() != 1 {
+            return Err(CError::Generic(String::from("expected 1 witness from cosign_tx_input")));
+        } else {
+            tmp[0].to_owned()
+        }
+    };
 
     // Add witness to back up tx
     let mut tx_backup_signed = tx_backup_unsigned.clone();
     tx_backup_signed.input[0].witness = witness;
-
     // TODO: check signature is valid?
 
     // Broadcast funding transcation
@@ -138,7 +147,7 @@ pub fn deposit(
             shared_key_id: shared_key_id.id,
         },
     )?;
-
+    
     // Verify proof key inclusion in SE sparse merkle tree
     let root = get_smt_root(&wallet.client_shim)?.unwrap();
     let proof = get_smt_proof(&wallet.client_shim, &root, &funding_txid)?;

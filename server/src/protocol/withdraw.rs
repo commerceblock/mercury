@@ -47,7 +47,7 @@ pub trait Withdraw {
     ///     - Ensure withdraw tx has been signed
     ///     - Update UserSession, StateChain and Sparse merkle tree
     ///     - Return withdraw tx signature
-    fn withdraw_confirm(&self, withdraw_msg2: WithdrawMsg2) -> Result<Vec<Vec<u8>>>;
+    fn withdraw_confirm(&self, withdraw_msg2: WithdrawMsg2) -> Result<Vec<Vec<Vec<u8>>>>;
 }
 
 impl Withdraw for SCE {
@@ -85,91 +85,104 @@ impl Withdraw for SCE {
     }
 
     fn withdraw_init(&self, withdraw_msg1: WithdrawMsg1) -> Result<()> {
-        let user_id = withdraw_msg1.shared_key_id;
-        self.check_user_auth(&user_id)?;
+//        for (user_id, statechain_sig) in  
+            //(withdraw_msg1.shared_key_ids, withdraw_msg1.statechain_sigs)
+        for (user_id, statechain_sig) in 
+            withdraw_msg1.shared_key_ids.iter().zip(withdraw_msg1.statechain_sigs.iter())
+        {
+            self.check_user_auth(&user_id)?;
 
-        info!("WITHDRAW: Init. Shared Key ID: {}", user_id);
+            info!("WITHDRAW: Init. Shared Key ID: {}", user_id);
 
-        let statechain_id = self.database.get_statechain_id(user_id)?;
+            let statechain_id = self.database.get_statechain_id(*user_id)?;
 
-        self.verify_statechain_sig(
-            &statechain_id,
-            &withdraw_msg1.statechain_sig,
-            Some(user_id),
-        )?;
+            self.verify_statechain_sig(
+                &statechain_id,
+                &statechain_sig,
+                Some(*user_id),
+            )?;
 
         // Mark UserSession as authorised for withdrawal
 
         self.database
-            .update_withdraw_sc_sig(&user_id, withdraw_msg1.statechain_sig)?;
+            .update_withdraw_sc_sig(&user_id, statechain_sig.clone())?;
 
         info!(
             "WITHDRAW: Authorised. Shared Key ID: {}. State Chain: {}",
             user_id, statechain_id
         );
+        }
 
         Ok(())
     }
 
-    fn withdraw_confirm(&self, withdraw_msg2: WithdrawMsg2) -> Result<Vec<Vec<u8>>> {
-        let user_id = withdraw_msg2.shared_key_id;
-        info!("WITHDRAW: Confirm. Shared Key ID: {}", user_id.to_string());
+    fn withdraw_confirm(&self, withdraw_msg2: WithdrawMsg2) -> Result<Vec<Vec<Vec<u8>>>> {
+        let mut result = Vec::<Vec::<Vec::<u8>>>::new();
+        
+        for (i, user_id) in withdraw_msg2.shared_key_ids.iter().enumerate() {
 
-        // Get withdraw data - Checking that withdraw tx and statechain signature exists
-        let wcd = self.database.get_withdraw_confirm_data(user_id)?;
+            info!("WITHDRAW: Confirm. Shared Key ID: {}", user_id.to_string());
 
-        // Ensure withdraw tx has been signed. i,e, that prepare-sign-tx has been completed.
-        if wcd.tx_withdraw.input[0].witness.len() == 0 {
-            return Err(SEError::Generic(String::from(
-                "Signed Back up transaction not found.",
-            )));
-        }
+            // Get withdraw data - Checking that withdraw tx and statechain signature exists
+            println!("WITHDRAW: getting withdraw confirm data");
+            let wcd = self.database.get_withdraw_confirm_data(user_id.to_owned())?;
 
-        // Get statechain and update with final StateChainSig
-        let mut state_chain: StateChain = self.database.get_statechain(wcd.statechain_id)?;
+            // Ensure withdraw tx has been signed. i,e, that prepare-sign-tx has been completed.
+            if wcd.tx_withdraw.input[i].witness.len() == 0 {
+                return Err(SEError::Generic(String::from(
+                   "Signed Back up transaction not found.",
+                )));
+            }
 
-        state_chain.add(wcd.withdraw_sc_sig.to_owned())?;
+            // Get statechain and update with final StateChainSig
+            println!("WITHDRAW: getting statechain");
+            let mut state_chain: StateChain = self.database.get_statechain(wcd.statechain_id)?;
 
-        self.database
-            .update_statechain_amount(&wcd.statechain_id, state_chain, 0)?;
+            state_chain.add(wcd.withdraw_sc_sig.to_owned())?;
 
-        // Remove statechain_id from user session to signal end of session
-        self.database.remove_statechain_id(&user_id)?;
+            self.database
+                .update_statechain_amount(&wcd.statechain_id, state_chain, 0)?;
 
-        //increment withdrawals metric
-        WITHDRAWALS_COUNT.inc();
+            // Remove statechain_id from user session to signal end of session
+            self.database.remove_statechain_id(&user_id)?;
 
-        // Update sparse merkle tree
-        let (prev_root, new_root) = self.update_smt(
-            &wcd.tx_withdraw
-                .input
-                .get(0)
-                .unwrap()
-                .previous_output
-                .txid
-                .to_string(),
-            &withdraw_msg2.address,
-        )?;
+            //increment withdrawals metric
+            WITHDRAWALS_COUNT.inc();
 
-        //remove backup tx from the backup db
-        self.database.remove_backup_tx(&wcd.statechain_id)?;
+            // Update sparse merkle tree
+            let (prev_root, new_root) = self.update_smt(
+                &wcd.tx_withdraw
+                    .input
+                    .get(0)
+                    .unwrap()
+                    .previous_output
+                    .txid
+                    .to_string(),
+                &withdraw_msg2.address,
+            )?;
 
-        info!(
-            "WITHDRAW: Address included in sparse merkle tree. State Chain ID: {}",
-            wcd.statechain_id
-        );
-        debug!(
-            "WITHDRAW: State Chain ID: {}. New root: {:?}. Previous root: {:?}.",
-            wcd.statechain_id, &new_root, &prev_root
-        );
+            //remove backup tx from the backup db
+            self.database.remove_backup_tx(&wcd.statechain_id)?;
 
-        info!(
-            "WITHDRAW: Complete. Shared Key ID: {}. State Chain: {}",
-            user_id.to_string(),
-            wcd.statechain_id
-        );
+            info!(
+                "WITHDRAW: Address included in sparse merkle tree. State Chain ID: {}",
+                wcd.statechain_id
+            );
+            debug!(
+                "WITHDRAW: State Chain ID: {}. New root: {:?}. Previous root: {:?}.",
+                wcd.statechain_id, &new_root, &prev_root
+            );
 
-        Ok(wcd.tx_withdraw.input[0].clone().witness)
+            info!(
+                "WITHDRAW: Complete. Shared Key ID: {}. State Chain: {}",
+                user_id.to_string(),
+                wcd.statechain_id
+            );
+
+            result.push(wcd.tx_withdraw.input[0].clone().witness);
+        };
+
+        Ok(result)
     }
 }
 
@@ -189,7 +202,7 @@ pub fn withdraw_init(sc_entity: State<SCE>, withdraw_msg1: Json<WithdrawMsg1>) -
 pub fn withdraw_confirm(
     sc_entity: State<SCE>,
     withdraw_msg2: Json<WithdrawMsg2>,
-) -> Result<Json<Vec<Vec<u8>>>> {
+) -> Result<Json<Vec<Vec<Vec<u8>>>>> {
     match sc_entity.withdraw_confirm(withdraw_msg2.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -214,7 +227,7 @@ mod tests {
     use uuid::Uuid;
 
     // Data from a run of transfer protocol.
-    static WITHDRAW_MSG_1: &str = "{\"shared_key_id\":\"ad8cb891-ce91-447d-9192-bd105f3de602\",\"statechain_sig\":{\"purpose\":\"WITHDRAW\",\"data\":\"bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8\",\"sig\":\"304402201abaa7f64b50e8a75ca840a2be6317b501e3b5b5abd057465c165c9b872799f4022000d8e36734857237cab323c7244dd5249295b51905b43bf4e93396b58317d872\"}}";
+    static WITHDRAW_MSG_1: &str = "{\"shared_key_ids\":[\"ad8cb891-ce91-447d-9192-bd105f3de602\"],\"statechain_sigs\":[{\"purpose\":\"WITHDRAW\",\"data\":\"bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8\",\"sig\":\"304402201abaa7f64b50e8a75ca840a2be6317b501e3b5b5abd057465c165c9b872799f4022000d8e36734857237cab323c7244dd5249295b51905b43bf4e93396b58317d872\"}]}";
     static STATE_CHAIN_ID: &str = "2b41ff74-510d-4fe7-90a6-714a26a137da";
     static STATE_CHAIN: &str = "{\"chain\":[{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}]}";
     static STATE_CHAIN_SIG: &str = "{\"purpose\":\"WITHDRAW\",\"data\":\"bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8\",\"sig\":\"304402201abaa7f64b50e8a75ca840a2be6317b501e3b5b5abd057465c165c9b872799f4022000d8e36734857237cab323c7244dd5249295b51905b43bf4e93396b58317d872\"}";
@@ -222,7 +235,7 @@ mod tests {
     #[test]
     fn itegration_test_withdraw_init() {
         let withdraw_msg_1 = serde_json::from_str::<WithdrawMsg1>(WITHDRAW_MSG_1).unwrap();
-        let shared_key_id = withdraw_msg_1.shared_key_id;
+        let shared_key_id = withdraw_msg_1.shared_key_ids[0];
         let statechain_id = Uuid::from_str(STATE_CHAIN_ID).unwrap();
 
         let mut db = MockDatabase::new();
@@ -266,7 +279,7 @@ mod tests {
 
         // user does not own State Chain
         let mut msg_1_wrong_shared_key = withdraw_msg_1.clone();
-        msg_1_wrong_shared_key.shared_key_id = statechain_id;
+        msg_1_wrong_shared_key.shared_key_ids[0] = statechain_id;
         match sc_entity.withdraw_init(msg_1_wrong_shared_key.clone()) {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("DB Error: No data for identifier.")),
@@ -286,9 +299,9 @@ mod tests {
     #[test]
     fn itegration_test_withdraw_confirm() {
         let withdraw_msg_1 = serde_json::from_str::<WithdrawMsg1>(WITHDRAW_MSG_1).unwrap();
-        let shared_key_id = withdraw_msg_1.shared_key_id;
+        let shared_key_ids = withdraw_msg_1.shared_key_ids;
         let withdraw_msg_2 = WithdrawMsg2 {
-            shared_key_id,
+            shared_key_ids: shared_key_ids.clone(),
             address: "bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8".to_string(),
         };
         let statechain_id = Uuid::from_str(STATE_CHAIN_ID).unwrap();
@@ -296,7 +309,7 @@ mod tests {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth()
-            .returning(move |_| Ok(shared_key_id));
+            .returning(move |_| Ok(shared_key_ids[0]));
         db.expect_get_withdraw_confirm_data()
             .times(1)
             .returning(move |_| {

@@ -4,7 +4,7 @@
 
 use super::Result;
 use crate::error::SharedLibError;
-use crate::structs::PrepareSignTxMsg;
+use crate::structs::{PrepareSignTxMsg, StateChainDataAPI, StateEntityFeeInfoAPI};
 #[cfg(test)]
 use crate::Verifiable;
 
@@ -203,41 +203,64 @@ pub fn tx_backup_build(
 /// Build withdraw tx spending funding tx to:
 ///     - amount-fee to receive address, and
 ///     - amount 'fee' to State Entity fee address 'fee_addr'
-pub fn tx_withdraw_build(
+
+/*pub fn tx_withdraw_build(
     funding_txid: &Txid,
     rec_se_address: &Address,
     amount: &u64,
     fee: &u64,
     fee_addr: &String,
 ) -> Result<Transaction> {
-    if *fee + FEE >= *amount {
+*/
+
+pub fn tx_withdraw_build(
+    sc_infos: &Vec::<StateChainDataAPI>,
+    rec_se_address: &Address,
+    se_fee_info: &StateEntityFeeInfoAPI
+) -> Result<Transaction> {
+    let mut txins = Vec::<TxIn>::new();
+
+    let amount = {
+        let mut total = 0;
+        for info in sc_infos {
+            total += info.amount;
+
+            let txin = TxIn {
+                previous_output: OutPoint {
+                    txid: info.utxo.txid,
+                    vout: 0,
+                },
+                sequence: 0xFFFFFFFF,
+                witness: Vec::new(),
+                script_sig: bitcoin::Script::default(),
+            };
+            
+            txins.push(txin);
+        };
+        total + se_fee_info.deposit
+    };
+
+    let fee = (amount*se_fee_info.withdraw) / 10000 as u64;
+
+    if fee + FEE >= amount {
         return Err(SharedLibError::FormatError(String::from(
             "Not enough value to cover fees.",
         )));
     }
 
-    let txin = TxIn {
-        previous_output: OutPoint {
-            txid: *funding_txid,
-            vout: 0,
-        },
-        sequence: 0xFFFFFFFF,
-        witness: Vec::new(),
-        script_sig: bitcoin::Script::default(),
-    };
 
     let tx_0 = Transaction {
         version: 2,
         lock_time: 0,
-        input: vec![txin.clone()],
+        input: txins,
         output: vec![
             TxOut {
                 script_pubkey: rec_se_address.script_pubkey(),
-                value: amount - *fee - FEE,
+                value: amount - fee - FEE,
             },
             TxOut {
-                script_pubkey: Address::from_str(fee_addr)?.script_pubkey(),
-                value: *fee,
+                script_pubkey: Address::from_str(&se_fee_info.address)?.script_pubkey(),
+                value: fee,
             },
         ],
     };

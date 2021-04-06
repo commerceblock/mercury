@@ -461,7 +461,7 @@ impl Wallet {
             if shared.statechain_id == Some(statechain_id.to_owned()) {
                 if shared.unspent == true {
                     return Ok(shared);
-                }
+                } 
             }
         }
         // If not found return shared key marked as spent.

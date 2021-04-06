@@ -431,7 +431,7 @@ mock! {
         fn withdraw_confirm(
             &self,
             withdraw_msg2: WithdrawMsg2,
-        ) -> withdraw::Result<Vec<Vec<u8>>>;
+        ) -> withdraw::Result<Vec<Vec<Vec<u8>>>>;
     }
     trait Storage{
         fn update_smt(&self, funding_txid: &String, proof_key: &String)
