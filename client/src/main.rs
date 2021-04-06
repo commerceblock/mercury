@@ -197,6 +197,20 @@ fn main() {
                     finalized_data.tx_backup_psm.tx_hex
                 );
             }
+        } else if matches.is_present("transfer-any") {
+            if let Some(matches) = matches.subcommand_matches("transfer-any") {
+                let receiver_addr: String = matches.value_of("addr").unwrap().to_string();
+                let transfer_msg: String = match query_wallet_daemon(
+                    DaemonRequest::TransferAny(receiver_addr),
+                )
+                .unwrap()
+                {
+                    DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::None => panic!("None value returned."),
+                };
+                println!("{}",transfer_msg);
+            }
         } else if matches.is_present("swap") {
             if let Some(matches) = matches.subcommand_matches("swap") {
                 let statechain_id =
