@@ -236,9 +236,10 @@ impl Utilities for SCE {
                 }
             }
         }
+
+
         // calculate SE fee amount from rate
         let withdraw_fee = (amount * self.config.fee_withdraw) / 10000 as u64;
-
         let tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;    
 
         // Which protocol are we signing for?
@@ -254,71 +255,22 @@ impl Utilities for SCE {
                 let statechain_id = self.database.get_statechain_id(user_id)?;
                 let tx_backup = self.database.get_backup_transaction(statechain_id)?;
 
-                    // Check funding txid UTXO info
-                    let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
-                    if tx
-                        .input
-                        .get(0)
-                        .unwrap()
-                        .previous_output
-                        .to_owned().clone()
-                        != tx_backup_input
-                    {
-                        return Err(SEError::Generic(String::from(
-                            "Incorrect withdraw transacton input.",
-                        )));
-                    }
+                // Check funding txid UTXO info
+                let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
+                if tx
+                    .input
+                    .get(0)
+                    .unwrap()
+                    .previous_output
+                    .to_owned().clone()
+                    != tx_backup_input
+                {
+                    return Err(SEError::Generic(String::from(
+                        "Incorrect withdraw transacton input.",
+                    )));
+                }
 
-                    for (i, input_addr) in prepare_sign_msg.input_addrs.iter().enumerate(){
-                        // Update UserSession with withdraw tx info
-                        let sig_hash = get_sighash(
-                            &tx,
-                            &0,
-                            &input_addr,
-                            &prepare_sign_msg.input_amounts[i],
-                            &self.config.network,
-                        );
-
-                        self.database.update_withdraw_tx_sighash(
-                            &user_id,
-                            sig_hash,
-                            tx.clone(),
-                        )?;
-                    }
-
-                    info!(
-                        "WITHDRAW: Withdraw tx ready for signing. User ID: {:?}.",
-                        user_id
-                    );
-        
-                     // Verify withdrawal has been authorised via presense of withdraw_sc_sig
-                    if let Err(_) = self.database.has_withdraw_sc_sig(user_id) {
-                        return Err(SEError::Generic(String::from(
-                            "Withdraw has not been authorised. /withdraw/init must be called first.",
-                        )));
-                    }
-        
-
-          
-        
-                    let statechain_id = self.database.get_statechain_id(user_id)?;
-                    let tx_backup = self.database.get_backup_transaction(statechain_id)?;
-
-                    // Check funding txid UTXO info
-                    let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
-                    if tx
-                        .input
-                        .get(0)
-                        .unwrap()
-                        .previous_output
-                        != tx_backup_input
-                    {
-                        return Err(SEError::Generic(String::from(
-                            "Incorrect withdraw transacton input.",
-                        )));
-                    }
-
-                for (i,input_addr) in prepare_sign_msg.input_addrs.iter().enumerate(){
+                for (i, input_addr) in prepare_sign_msg.input_addrs.iter().enumerate(){
                     // Update UserSession with withdraw tx info
                     let sig_hash = get_sighash(
                         &tx,
@@ -333,6 +285,18 @@ impl Utilities for SCE {
                         sig_hash,
                         tx.clone(),
                     )?;
+                }
+
+                info!(
+                    "WITHDRAW: Withdraw tx ready for signing. User ID: {:?}.",
+                    user_id
+                );
+    
+                 // Verify withdrawal has been authorised via presense of withdraw_sc_sig
+                if let Err(_) = self.database.has_withdraw_sc_sig(user_id) {
+                    return Err(SEError::Generic(String::from(
+                        "Withdraw has not been authorised. /withdraw/init must be called first.",
+                    )));
                 }
 
                 tx_withdraw_verify(
@@ -356,7 +320,7 @@ impl Utilities for SCE {
                 }
 
                 // Verify that there is a single input
-                if prepare_sign_msg.input_addrs.len() != 1 {
+                if tx.input.len() != 1 {
                     return Err(SEError::Generic(String::from(
                         "Expected a single input address for transfer.",
                     )));
@@ -370,6 +334,7 @@ impl Utilities for SCE {
                 }
 
                 //check withdrawal fee is correctly set
+
                 tx_withdraw_verify(
                     &prepare_sign_msg,
                     &self.config.fee_address,
