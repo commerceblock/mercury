@@ -105,6 +105,7 @@ pub fn tx_withdraw_verify(
             "Incorrect State Entity fee address.",
         )));
     }
+
     if tx.output[1].value != fee_withdraw.to_owned() {
         return Err(SharedLibError::FormatError(String::from(
             "Incorrect State Entity fee.",
