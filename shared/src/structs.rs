@@ -2,7 +2,7 @@
 //!
 //! Struct definitions used in State entity protocols
 
-use crate::state_chain::{State, StateChainSig, StateChain};
+use crate::state_chain::{State, StateChainSig};
 use crate::Root;
 use bitcoin::{OutPoint, Transaction, TxIn, TxOut};
 use curv::{cryptographic_primitives::proofs::sigma_dlog::DLogProof, BigInt, FE, GE, PK};
@@ -88,8 +88,8 @@ impl FESer {
 }
 
 /// Statechain entity operating information
-/// This struct is returned containing information on operating requirements 
-/// of the statechain entity which must be conformed with in the protocol. 
+/// This struct is returned containing information on operating requirements
+/// of the statechain entity which must be conformed with in the protocol.
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 #[schemars(example = "Self::example")]
 pub struct StateEntityFeeInfoAPI {
@@ -139,7 +139,7 @@ impl SwapGroup {
     pub fn new(amount: u64, size: u64) -> SwapGroup {
         SwapGroup {amount, size}
     }
-    
+
     pub fn example() -> Self{
         Self{
             amount: 1000000,
@@ -156,7 +156,7 @@ impl Serialize for SwapGroup {
         serializer.serialize_str(&format!("{}:{}", self.amount, self.size))
     }
 }
-    
+
 struct SwapGroupVisitor;
 
 impl<'de> Visitor<'de> for SwapGroupVisitor {
@@ -171,7 +171,7 @@ impl<'de> Visitor<'de> for SwapGroupVisitor {
         E: de::Error,
     {
         if let Some(nums) = Regex::new(r"(\d+):(\d+)").unwrap().captures_iter(s).next() {
-            if let Ok(amount) = u64::from_str(&nums[1]) { 
+            if let Ok(amount) = u64::from_str(&nums[1]) {
                 if let Ok(size) = u64::from_str(&nums[2]) {
                     Ok(SwapGroup::new(amount, size))
                 } else {
@@ -195,7 +195,7 @@ impl<'de> Deserialize<'de> for SwapGroup {
     }
 }
 
-/// List of current statecoin amounts and the number of each 
+/// List of current statecoin amounts and the number of each
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct CoinValueInfo {
     pub values: HashMap<u64,u64>,
@@ -230,7 +230,7 @@ impl OutPointDef{
 
 // /info/statechain return struct
 /// Statechain data
-/// This struct is returned containing the statechain of the specified statechain ID 
+/// This struct is returned containing the statechain of the specified statechain ID
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 #[schemars(example = "Self::example")]
 pub struct StateChainDataAPI {
@@ -264,7 +264,7 @@ pub struct TransferBatchDataAPI {
     pub finalized: bool,
 }
 
-/// Struct containing proof key and authentication signature 
+/// Struct containing proof key and authentication signature
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 #[schemars(example = "Self::example")]
 pub struct RecoveryRequest {
@@ -289,7 +289,7 @@ pub struct RecoveryDataMsg {
     pub shared_key_id: Uuid,
     #[schemars(with = "UuidDef")]
     pub statechain_id: Uuid,
-    pub chain: StateChain,
+    pub statechain_data: StateChainDataAPI,
     pub tx_hex: String,
 }
 
@@ -298,7 +298,7 @@ impl RecoveryDataMsg {
         Self{
             shared_key_id: Uuid::new_v4(),
             statechain_id: Uuid::new_v4(),
-            chain: StateChain::example(),
+            statechain_data: StateChainDataAPI::example(),
             tx_hex: "02000000000101ca878085da49c33eb9816c10e4056424e5e062689ea547ea91bb3aa840a3c5fb0000000000ffffffff02307500000000000016001412cc36c9533290c02f0c78f992df6e6ddfe50c8c0064f50500000000160014658fd2dc72e58168f3656fb632d63be54f80fbe4024730440220457cf52873ae5854859a7d48b39cb57eba880ea4011806e5058da7619f4c0fab02206303326f06bbebf7170b679ba787c856dec4b6462109bf66e1cb8dc087be7ebf012102a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe00000000".to_string(),
         }
     }

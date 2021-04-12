@@ -217,7 +217,7 @@ impl Scheduler {
         self.reset_poll_utxo_timeout(statechain_id);
         //Only register if id not already in swap map
         let in_swap = self.swap_id_map.get(&statechain_id);
-        if (!in_swap.is_none()) { 
+        if (!in_swap.is_none()) {
             return Err(SEError::SwapError(format!("Statecoin in swap: {:?}", in_swap.unwrap())));
         };
         //If there was an amout already registered for this state chain id then
@@ -336,7 +336,7 @@ impl Scheduler {
                         self.remove_statechain_info(id);
                         false
                     }
-                } 
+                }
             });
             let mut n_remaining = sc_id_vec.len();
 
@@ -777,12 +777,12 @@ impl Conductor for SCE {
                         "swap_second_message: swap_ids do not match.".to_string(),
                     ));
                 }
-            }, 
+            },
             Err(err) => return Err(SEError::SwapError(
                 format!("BlindedSpendTokenMessage - invalid swap id: {}", err)
             )),
         };
-        
+
         let swap_id = &swap_msg2.swap_id;
         let mut guard = self.scheduler.lock()?;
         let swap_info = match guard.get_swap_info(&swap_id) {
@@ -880,7 +880,7 @@ impl Conductor for SCE {
             Ok(nonce) => Some(nonce),
             Err(err) => return Err(SEError::SwapError(format!("invalid nonce: {}", err)))
         };
-        
+
         let claimed_nonce_sce_addrs_vec = sce_address_bisetmap.rev_get(&claimed_nonce);
         let claimed_nonce_assignments_num = claimed_nonce_sce_addrs_vec.len();
         if claimed_nonce_assignments_num > 1 {
@@ -937,15 +937,15 @@ pub fn get_blinded_spend_signature(
     bst_msg: Json<BSTMsg>,
 ) -> Result<Json<BlindedSpendSignature>> {
     let bst_msg = bst_msg.into_inner();
-    let swap_uuid = &Uuid::from_str(&bst_msg.swap_id)?; 
-    let statechain_uuid = &Uuid::from_str(&bst_msg.statechain_id)?; 
+    let swap_uuid = &Uuid::from_str(&bst_msg.swap_id)?;
+    let statechain_uuid = &Uuid::from_str(&bst_msg.statechain_id)?;
     sc_entity
         .get_blinded_spend_signature(swap_uuid, statechain_uuid)
         .map(|x| Json(x))
 }
 
 #[openapi]
-/// # Phase 0 of coinswap: Notify conductor of desire to take part in a swap with signature to prove ownership of statecoin. 
+/// # Phase 0 of coinswap: Notify conductor of desire to take part in a swap with signature to prove ownership of statecoin.
 #[post("/swap/register-utxo", format = "json", data = "<register_utxo_msg>")]
 pub fn register_utxo(
     sc_entity: State<SCE>,
@@ -1064,7 +1064,7 @@ mod tests {
         let utxo_timeout: u32 = 6;
         let now: NaiveDateTime = Utc::now().naive_utc();
         let t = now + chrono::Duration::seconds(utxo_timeout as i64);
-        
+
 
         let statechain_swap_size_map = BisetMap::new();
         let statechain_amount_map = BisetMap::new();

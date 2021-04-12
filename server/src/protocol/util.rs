@@ -218,9 +218,9 @@ impl Utilities for SCE {
     // }
 
     fn prepare_sign_tx(&self, prepare_sign_msg: PrepareSignTxMsg) -> Result<()> {
-        // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data        
+        // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data
         let mut amount = 0;
-        
+
         let user_id =prepare_sign_msg.shared_key_id;
         for input_amount in &prepare_sign_msg.input_amounts{
             self.check_user_auth(&user_id)?;
@@ -240,7 +240,7 @@ impl Utilities for SCE {
 
         // calculate SE fee amount from rate
         let withdraw_fee = (amount * self.config.fee_withdraw) / 10000 as u64;
-        let tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;    
+        let tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
 
         // Which protocol are we signing for?
         match prepare_sign_msg.protocol {
@@ -291,7 +291,7 @@ impl Utilities for SCE {
                     "WITHDRAW: Withdraw tx ready for signing. User ID: {:?}.",
                     user_id
                 );
-    
+
                  // Verify withdrawal has been authorised via presense of withdraw_sc_sig
                 if let Err(_) = self.database.has_withdraw_sc_sig(user_id) {
                     return Err(SEError::Generic(String::from(
@@ -390,11 +390,11 @@ impl Utilities for SCE {
                 Ok(res) => res,
                 Err(_) => continue
             };
-            let state_chain = self.database.get_statechain(statechain_id)?;
+            let statechain_data = self.get_statechain_data_api(statechain_id)?;
             recovery_data.push(RecoveryDataMsg {
                 shared_key_id: user_id,
-                statechain_id: statechain_id,
-                chain: state_chain,
+                statechain_id,
+                statechain_data,
                 tx_hex: transaction_serialise(&tx),
             })
         }
@@ -983,7 +983,7 @@ pub mod mocks {
 pub mod tests {
     use super::*;
     use crate::shared_lib::mainstay;
-    use crate::MockDatabase;
+    use crate::{structs::StateChainAmount, MockDatabase};
     use monotree::database::{Database as monotreeDatabase, MemoryDB};
     use std::convert::TryInto;
     use std::str::FromStr;
@@ -1119,11 +1119,11 @@ pub mod tests {
         let tx_backup = serde_json::from_str::<Transaction>(
                             &BACKUP_TX_SIGNED.to_string(),
                         ).unwrap();
-        let statechain = serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap();
+        let statechain_data = StateChainDataAPI::example();
 
         let recovery_data = RecoveryDataMsg {
-            chain: statechain,
             shared_key_id: user_id,
+            statechain_data,
             statechain_id,
             tx_hex: transaction_serialise(&tx_backup),
         };
@@ -1139,9 +1139,18 @@ pub mod tests {
                 &BACKUP_TX_SIGNED.to_string(),
             ).unwrap()))
         });
-        db.expect_get_statechain().returning(move |_| {
-            Ok(serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap())
+        db.expect_get_statechain_amount().returning(move |_| {
+            Ok(StateChainAmount {
+                chain: serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap(),
+                amount: 10000,
+            })
         });
+        db.expect_get_backup_transaction().returning(move |_| {
+            Ok(serde_json::from_str::<Transaction>(
+                &BACKUP_TX_SIGNED.to_string(),
+            ).unwrap())
+        });
+
         let sc_entity = test_sc_entity(db);
 
         // get_recovery invalid public key
