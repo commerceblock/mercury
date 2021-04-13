@@ -309,12 +309,6 @@ fn main() {
                 }
                 println!("\nStateChain ID {}", recovery_info[0].statechain_id);
                 println!("\nShared key ID {}", recovery_info[0].shared_key_id);
-                println!("\nStateChain amount: {}", recovery_info[0].statechain_data.amount);
-                println!("\nStateChain locktime: {}", recovery_info[0].statechain_data.locktime);
-                println!("\nStateChain: ");
-                for state in recovery_info[0].statechain_data.chain.clone() {
-                    println!("\t{:?}", state);
-                }
                 println!("\nBackup tx: {} \n", recovery_info[0].tx_hex);
             }
         } else if matches.is_present("coins-info") {

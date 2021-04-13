@@ -4,7 +4,7 @@
 //! utility functions.
 
 pub use super::super::Result;
-use super::transfer_batch::{transfer_batch_is_ended, BatchTransfer};
+use super::{ecdsa::MasterKey1, transfer_batch::{transfer_batch_is_ended, BatchTransfer}};
 extern crate shared_lib;
 use shared_lib::{
     mainstay::Attestable,
@@ -386,16 +386,27 @@ impl Utilities for SCE {
     fn get_recovery_data(&self, recovery_requests: Vec<RecoveryRequest>) -> Result<Vec<RecoveryDataMsg>> {
         let mut recovery_data = vec!();
         for recovery_request in recovery_requests {
-            let (user_id, statechain_id, tx) = match self.database.get_recovery_data(recovery_request.key) {
+            let (shared_key_id, statechain_id, tx) = match self.database.get_recovery_data(recovery_request.key.clone()) {
                 Ok(res) => res,
                 Err(_) => continue
             };
-            let statechain_data = self.get_statechain_data_api(statechain_id)?;
+
+            // If withdrawn err will be thrown.
+            let amount = match self.get_statechain_data_api(statechain_id) {
+                Ok(statechain_data) => statechain_data.amount,
+                Err(_) => 0
+            };
+
+            let master_key: MasterKey1 = serde_json::from_str(&self.database.get_ecdsa_master(shared_key_id)?.unwrap()).unwrap();
+            let public = serde_json::to_string(&master_key.public).unwrap();
+
             recovery_data.push(RecoveryDataMsg {
-                shared_key_id: user_id,
+                shared_key_id,
                 statechain_id,
-                statechain_data,
+                amount,
                 tx_hex: transaction_serialise(&tx),
+                proof_key: recovery_request.key,
+                shared_key_data: public
             })
         }
         return Ok(recovery_data);
@@ -1119,13 +1130,15 @@ pub mod tests {
         let tx_backup = serde_json::from_str::<Transaction>(
                             &BACKUP_TX_SIGNED.to_string(),
                         ).unwrap();
-        let statechain_data = StateChainDataAPI::example();
+        let amount = 1000;
 
         let recovery_data = RecoveryDataMsg {
             shared_key_id: user_id,
-            statechain_data,
             statechain_id,
+            amount,
             tx_hex: transaction_serialise(&tx_backup),
+            proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
+            shared_key_data: "".to_string(),
         };
 
         let mut db = MockDatabase::new();
