@@ -131,7 +131,7 @@ impl Withdraw for SCE {
             // Ensure withdraw tx has been signed. i,e, that prepare-sign-tx has been completed.
             if wcd.tx_withdraw.input[0].witness.len() == 0 {
                 return Err(SEError::Generic(format!(
-                   "Signed Back up transaction not found for userid: {}, {}",i, user_id
+                   "Signed Back up transaction not found for userid: {}, {} in tx_withdraw",i, user_id
                 )));
             }
 
@@ -181,6 +181,8 @@ impl Withdraw for SCE {
 
             result.push(wcd.tx_withdraw.input[0].clone().witness);
         };
+
+        info!("WITHDRAW: Confirm result: {:?}", result);
 
         Ok(result)
     }
