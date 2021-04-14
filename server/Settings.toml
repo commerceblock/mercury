@@ -3,7 +3,7 @@ lockbox = ""
 network = "testnet"
 required_confirmation = 0
 testing_mode = false
-# log_file = "log/output.log" # Comment out for stdout
+log_file = "log/output.log" # Comment out for stdout
 lockheight_init = 1000
 lh_decrement = 10
 
