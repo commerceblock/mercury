@@ -391,10 +391,10 @@ impl Utilities for SCE {
                 Err(_) => continue
             };
 
-            // If withdrawn err will be thrown.
+            // If withdrawn err will be thrown. Return nothing in this case
             let amount = match self.get_statechain_data_api(statechain_id) {
                 Ok(statechain_data) => statechain_data.amount,
-                Err(_) => 0
+                Err(_) => continue
             };
 
             let master_key: MasterKey1 = serde_json::from_str(&self.database.get_ecdsa_master(shared_key_id)?.unwrap()).unwrap();
