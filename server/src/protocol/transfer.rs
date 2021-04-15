@@ -187,7 +187,7 @@ impl Transfer for SCE {
             };
             let path: &str = "ecdsa/keyupdate/first";
             let ku_receive: KUReceiveMsg = post_lb(&self.lockbox, path, &ku_send)?;
-            s2 = FE::zero();
+            s2 = FE::new_random();
             s2_pub = ku_receive.s2_pub;
         }
         else {
