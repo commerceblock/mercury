@@ -197,6 +197,20 @@ fn main() {
                     finalized_data.tx_backup_psm.tx_hex
                 );
             }
+        } else if matches.is_present("transfer-any") {
+            if let Some(matches) = matches.subcommand_matches("transfer-any") {
+                let receiver_addr: String = matches.value_of("addr").unwrap().to_string();
+                let transfer_msg: String = match query_wallet_daemon(
+                    DaemonRequest::TransferAny(receiver_addr),
+                )
+                .unwrap()
+                {
+                    DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::None => panic!("None value returned."),
+                };
+                println!("{}",transfer_msg);
+            }
         } else if matches.is_present("swap") {
             if let Some(matches) = matches.subcommand_matches("swap") {
                 let statechain_id =
@@ -295,10 +309,6 @@ fn main() {
                 }
                 println!("\nStateChain ID {}", recovery_info[0].statechain_id);
                 println!("\nShared key ID {}", recovery_info[0].shared_key_id);
-                println!("\nStateChain: ");
-                for state in recovery_info[0].chain.chain.clone() {
-                    println!("\t{:?}", state);
-                }
                 println!("\nBackup tx: {} \n", recovery_info[0].tx_hex);
             }
         } else if matches.is_present("coins-info") {

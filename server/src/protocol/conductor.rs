@@ -75,6 +75,7 @@ pub trait Conductor {
     ///     - Alert Conductor of desire to take part in a swap. Provide StateChainSig to prove
     ///         ownership of StateChain
     fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> Result<()>;
+    fn deregister_utxo(&self, statechain_id: &Uuid) -> Result<()>;
 
     // Phase 1: Conductor waits until there is a large enough pool of registered UTXOs of the same size, when
     // such a pool is found Conductor generates a SwapToken and marks each UTXO as "in phase 1 of swap with id: x".
@@ -217,7 +218,7 @@ impl Scheduler {
         self.reset_poll_utxo_timeout(statechain_id);
         //Only register if id not already in swap map
         let in_swap = self.swap_id_map.get(&statechain_id);
-        if (!in_swap.is_none()) { 
+        if (!in_swap.is_none()) {
             return Err(SEError::SwapError(format!("Statecoin in swap: {:?}", in_swap.unwrap())));
         };
         //If there was an amout already registered for this state chain id then
@@ -289,6 +290,7 @@ impl Scheduler {
     //Remove the "registered" statechain info that exists before a swap group has been formed
     pub fn remove_statechain_info(&mut self, statechain_id: &Uuid) {
         let swap_size = self.statechain_swap_size_map.get(statechain_id);
+        if (swap_size.len()==0) { return }
         self.statechain_swap_size_map.remove(statechain_id, &swap_size[0]);
         let amount = self.statechain_amount_map.get(statechain_id);
         if (self.statechain_amount_map.contains(&statechain_id,&amount[0])) {
@@ -336,7 +338,7 @@ impl Scheduler {
                         self.remove_statechain_info(id);
                         false
                     }
-                } 
+                }
             });
             let mut n_remaining = sc_id_vec.len();
 
@@ -662,6 +664,12 @@ impl Conductor for SCE {
         };
     }
 
+    fn deregister_utxo(&self, statechain_id: &Uuid) -> Result<()> {
+        let mut guard = self.scheduler.lock()?;
+        guard.remove_statechain_info(statechain_id);
+        Ok(())
+    }
+
     fn get_group_info(&self) -> Result<HashMap<SwapGroup,u64>> {
         let guard = self.scheduler.lock()?;
         Ok(guard.group_info_map.clone())
@@ -777,12 +785,12 @@ impl Conductor for SCE {
                         "swap_second_message: swap_ids do not match.".to_string(),
                     ));
                 }
-            }, 
+            },
             Err(err) => return Err(SEError::SwapError(
                 format!("BlindedSpendTokenMessage - invalid swap id: {}", err)
             )),
         };
-        
+
         let swap_id = &swap_msg2.swap_id;
         let mut guard = self.scheduler.lock()?;
         let swap_info = match guard.get_swap_info(&swap_id) {
@@ -880,7 +888,7 @@ impl Conductor for SCE {
             Ok(nonce) => Some(nonce),
             Err(err) => return Err(SEError::SwapError(format!("invalid nonce: {}", err)))
         };
-        
+
         let claimed_nonce_sce_addrs_vec = sce_address_bisetmap.rev_get(&claimed_nonce);
         let claimed_nonce_assignments_num = claimed_nonce_sce_addrs_vec.len();
         if claimed_nonce_assignments_num > 1 {
@@ -937,15 +945,15 @@ pub fn get_blinded_spend_signature(
     bst_msg: Json<BSTMsg>,
 ) -> Result<Json<BlindedSpendSignature>> {
     let bst_msg = bst_msg.into_inner();
-    let swap_uuid = &Uuid::from_str(&bst_msg.swap_id)?; 
-    let statechain_uuid = &Uuid::from_str(&bst_msg.statechain_id)?; 
+    let swap_uuid = &Uuid::from_str(&bst_msg.swap_id)?;
+    let statechain_uuid = &Uuid::from_str(&bst_msg.statechain_id)?;
     sc_entity
         .get_blinded_spend_signature(swap_uuid, statechain_uuid)
         .map(|x| Json(x))
 }
 
 #[openapi]
-/// # Phase 0 of coinswap: Notify conductor of desire to take part in a swap with signature to prove ownership of statecoin. 
+/// # Phase 0 of coinswap: Notify conductor of desire to take part in a swap with signature to prove ownership of statecoin.
 #[post("/swap/register-utxo", format = "json", data = "<register_utxo_msg>")]
 pub fn register_utxo(
     sc_entity: State<SCE>,
@@ -956,6 +964,21 @@ pub fn register_utxo(
         Err(e) => return Err(e),
     }
 }
+
+#[openapi]
+/// Remove coin from awaiting in swap pool
+#[post("/swap/deregister-utxo", format = "json", data = "<statechain_id>")]
+pub fn deregister_utxo(
+    sc_entity: State<SCE>,
+    statechain_id: Json<StatechainID>,
+) -> Result<Json<()>> {
+    match sc_entity.deregister_utxo(&statechain_id.id) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+
 
 #[openapi]
 /// # Phase 1 of coinswap: Participants sign SwapToken and provide a statechain address and e_prime for blind spend token.
@@ -1064,7 +1087,7 @@ mod tests {
         let utxo_timeout: u32 = 6;
         let now: NaiveDateTime = Utc::now().naive_utc();
         let t = now + chrono::Duration::seconds(utxo_timeout as i64);
-        
+
 
         let statechain_swap_size_map = BisetMap::new();
         let statechain_amount_map = BisetMap::new();

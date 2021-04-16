@@ -5,6 +5,7 @@
 use floating_duration::TimeFormat;
 use serde;
 use std::time::Instant;
+use reqwest;
 
 use crate::server::Lockbox;
 use super::super::Result;
@@ -25,9 +26,10 @@ where
 {
     std::thread::sleep(std::time::Duration::from_millis(100));
     let start = Instant::now();
+    let client = reqwest::blocking::Client::new();
 
     // catch reqwest errors
-    let value = match lockbox.client.post(&format!("{}/{}", lockbox.endpoint, path)).json(&body).send() 
+    let value = match client.post(&format!("{}/{}", lockbox.endpoint, path)).json(&body).send() 
     {
         Ok(v) => {
             //Reject responses that are too long
@@ -54,4 +56,3 @@ where
     info!("Lockbox request {}, took: {})", path, TimeFormat(start.elapsed()));
     Ok(serde_json::from_str(value.as_str()).unwrap())
 }
-

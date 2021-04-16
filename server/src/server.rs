@@ -251,6 +251,7 @@ pub fn get_server<
                     conductor::get_swap_info,
                     conductor::get_blinded_spend_signature,
                     conductor::register_utxo,
+                    conductor::deregister_utxo,
                     conductor::swap_first_message,
                     conductor::swap_second_message,
                     conductor::get_group_info,
@@ -360,6 +361,7 @@ mock! {
         fn poll_swap(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapStatus>>;
         fn get_swap_info(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapInfo>>;
         fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> conductor::Result<()>;
+        fn deregister_utxo(&self, statechain_id: &Uuid) -> conductor::Result<()>;
         fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> conductor::Result<()>;
         fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> conductor::Result<SCEAddress>;
         fn get_group_info(&self) -> conductor::Result<HashMap<SwapGroup,u64>>;

@@ -337,7 +337,7 @@ pub struct TransferFinalizeData {
 /// transfers completion in the batch transfer case.
 pub fn transfer_receiver_finalize(
     wallet: &mut Wallet,
-    finalize_data: TransferFinalizeData,
+    mut finalize_data: TransferFinalizeData,
 ) -> Result<()> {
     // Make shared key with new private share
     wallet.gen_shared_key_fixed_secret_key(
@@ -346,14 +346,12 @@ pub fn transfer_receiver_finalize(
         &finalize_data.statechain_data.amount,
     )?;
 
+    // shared pk
+    let pk = wallet.get_shared_key(&finalize_data.new_shared_key_id)?.share.public.q.get_element();
+
     // Check shared key master public key == private share * SE public share
     if (finalize_data.s2_pub * finalize_data.o2).get_element()
-        != wallet
-            .get_shared_key(&finalize_data.new_shared_key_id)?
-            .share
-            .public
-            .q
-            .get_element()
+        != pk
     {
         return Err(CError::StateEntityError(String::from(
             "Transfer failed. Incorrect master public key generated.",
@@ -372,6 +370,11 @@ pub fn transfer_receiver_finalize(
         &rec_proof_key,
         &proof
     ));
+
+    let amount = finalize_data.statechain_data.amount.clone();
+
+    finalize_data.tx_backup_psm.input_addrs = vec![pk];
+    finalize_data.tx_backup_psm.input_amounts = vec![amount];
 
     // Add state chain id, proof key and SMT inclusion proofs to local SharedKey data
     {

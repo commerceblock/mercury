@@ -94,9 +94,6 @@ pub fn batch_withdraw(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>) -> Result
         // Get state entity withdraw fee info
         
 
-        //calculate SE fee amount from rate
-        let withdraw_fee = (sc_info.amount * se_fee_info.withdraw) / 10000 as u64;
-
         total_amount += sc_info.amount;
         amounts.push(sc_info.amount.clone());
         sc_infos.push(sc_info);

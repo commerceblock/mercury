@@ -4,7 +4,7 @@
 //! utility functions.
 
 pub use super::super::Result;
-use super::transfer_batch::{transfer_batch_is_ended, BatchTransfer};
+use super::{ecdsa::MasterKey1, transfer_batch::{transfer_batch_is_ended, BatchTransfer}};
 extern crate shared_lib;
 use shared_lib::{
     mainstay::Attestable,
@@ -218,9 +218,9 @@ impl Utilities for SCE {
     // }
 
     fn prepare_sign_tx(&self, prepare_sign_msg: PrepareSignTxMsg) -> Result<()> {
-        // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data        
+        // Verify unsigned withdraw tx to ensure co-sign will be signing the correct data
         let mut amount = 0;
-        
+
         for (i, input_amount) in prepare_sign_msg.input_amounts.iter().enumerate(){
             let user_id = &prepare_sign_msg.shared_key_ids[i];
             self.check_user_auth(&user_id)?;
@@ -235,10 +235,11 @@ impl Utilities for SCE {
                 }
             }
         }
+
+
         // calculate SE fee amount from rate
         let withdraw_fee = (amount * self.config.fee_withdraw) / 10000 as u64;
-
-        let tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;    
+        let tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
 
         // Which protocol are we signing for?
         match prepare_sign_msg.protocol {
@@ -253,54 +254,53 @@ impl Utilities for SCE {
                     let statechain_id = self.database.get_statechain_id(*user_id)?;
                     let tx_backup = self.database.get_backup_transaction(statechain_id)?;
 
-                    // Check funding txid UTXO info
-                    let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
-                    if tx
-                        .input
+                // Check funding txid UTXO info
+                let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
+                if tx
+                    .input
                         .get(i)
-                        .unwrap()
-                        .previous_output
-                        .to_owned().clone()
-                        != tx_backup_input
-                    {
+                    .unwrap()
+                    .previous_output
+                    .to_owned().clone()
+                    != tx_backup_input
+                {
                         return Err(SEError::Generic(format!(
                             "Incorrect withdraw transacton input - input number {}", i
-                        )));
-                    }
+                    )));
+                }
                 }
 
                 for (i, input_addr) in prepare_sign_msg.input_addrs.iter().enumerate(){
                         let user_id = &prepare_sign_msg.shared_key_ids[i];
-                        // Update UserSession with withdraw tx info
-                        let sig_hash = get_sighash(
-                            &tx,
+                    // Update UserSession with withdraw tx info
+                    let sig_hash = get_sighash(
+                        &tx,
                             &i,
-                            &input_addr,
-                            &prepare_sign_msg.input_amounts[i],
-                            &self.config.network,
-                        );
+                        &input_addr,
+                        &prepare_sign_msg.input_amounts[i],
+                        &self.config.network,
+                    );
 
-                        self.database.update_withdraw_tx_sighash(
-                            &user_id,
-                            sig_hash,
-                            tx.clone(),
-                        )?;
+                    self.database.update_withdraw_tx_sighash(
+                        &user_id,
+                        sig_hash,
+                        tx.clone(),
+                    )?;
 
                         info!(
                             "WITHDRAW: Withdraw tx ready for signing. User ID: {:?}.",
                             user_id
                         );
-        
+
                         // Verify withdrawal has been authorised via presense of withdraw_sc_sig
                         if let Err(_) = self.database.has_withdraw_sc_sig(*user_id) {
                             return Err(SEError::Generic(String::from(
                                 "Withdraw has not been authorised. /withdraw/init must be called first.",
-                        )));
+                    )));
                         }
-        
+
                         let statechain_id = self.database.get_statechain_id(*user_id)?;
                         let tx_backup = self.database.get_backup_transaction(statechain_id)?;
-
                         // Check funding txid UTXO info
                         let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
                         if tx
@@ -314,16 +314,14 @@ impl Utilities for SCE {
                                 "Incorrect withdraw transacton input.",
                             )));
                         }
-
                         // Update UserSession with withdraw tx info
                    
-
                         self.database.update_withdraw_tx_sighash(
                             &user_id,
                             sig_hash,
                             tx.clone(),
                         )?;
-                }
+                    }
 
                 tx_withdraw_verify(
                     &prepare_sign_msg,
@@ -336,7 +334,7 @@ impl Utilities for SCE {
                     "WITHDRAW: Withdraw tx ready for signing. User IDs: {:?}.",
                     prepare_sign_msg.shared_key_ids
                 );
-            }
+            },
             _ => {
                 // Verify unsigned backup tx to ensure co-sign will be signing the correct data
                 if prepare_sign_msg.input_addrs.len() != prepare_sign_msg.input_amounts.len() {
@@ -346,7 +344,7 @@ impl Utilities for SCE {
                 }
 
                 // Verify that there is a single input
-                if prepare_sign_msg.input_addrs.len() != 1 {
+                if tx.input.len() != 1 {
                     return Err(SEError::Generic(String::from(
                         "Expected a single input address for transfer.",
                     )));
@@ -360,6 +358,7 @@ impl Utilities for SCE {
                 }
 
                 //check withdrawal fee is correctly set
+
                 tx_withdraw_verify(
                     &prepare_sign_msg,
                     &self.config.fee_address,
@@ -411,16 +410,27 @@ impl Utilities for SCE {
     fn get_recovery_data(&self, recovery_requests: Vec<RecoveryRequest>) -> Result<Vec<RecoveryDataMsg>> {
         let mut recovery_data = vec!();
         for recovery_request in recovery_requests {
-            let (user_id, statechain_id, tx) = match self.database.get_recovery_data(recovery_request.key) {
+            let (shared_key_id, statechain_id, tx) = match self.database.get_recovery_data(recovery_request.key.clone()) {
                 Ok(res) => res,
                 Err(_) => continue
             };
-            let state_chain = self.database.get_statechain(statechain_id)?;
+
+            // If withdrawn err will be thrown. Return nothing in this case
+            let amount = match self.get_statechain_data_api(statechain_id) {
+                Ok(statechain_data) => statechain_data.amount,
+                Err(_) => continue
+            };
+
+            let master_key: MasterKey1 = serde_json::from_str(&self.database.get_ecdsa_master(shared_key_id)?.unwrap()).unwrap();
+            let public = serde_json::to_string(&master_key.public).unwrap();
+
             recovery_data.push(RecoveryDataMsg {
-                shared_key_id: user_id,
-                statechain_id: statechain_id,
-                chain: state_chain,
+                shared_key_id,
+                statechain_id,
+                amount,
                 tx_hex: transaction_serialise(&tx),
+                proof_key: recovery_request.key,
+                shared_key_data: public
             })
         }
         return Ok(recovery_data);
@@ -1008,7 +1018,7 @@ pub mod mocks {
 pub mod tests {
     use super::*;
     use crate::shared_lib::mainstay;
-    use crate::MockDatabase;
+    use crate::{structs::StateChainAmount, MockDatabase};
     use monotree::database::{Database as monotreeDatabase, MemoryDB};
     use std::convert::TryInto;
     use std::str::FromStr;
@@ -1019,6 +1029,7 @@ pub mod tests {
     pub static BACKUP_TX_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,68,2,32,45,42,91,77,252,143,55,65,154,96,191,149,204,131,88,79,80,161,231,209,234,229,217,100,28,99,48,148,136,194,204,98,2,32,90,111,183,68,74,24,75,120,179,80,20,183,60,198,127,106,102,64,37,193,174,226,199,118,237,35,96,236,45,94,203,49,1],[2,242,131,110,175,215,21,123,219,179,199,144,85,14,163,42,19,197,97,249,41,130,243,139,15,17,51,185,147,228,100,122,213]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
     pub static STATE_CHAIN: &str = "{\"chain\":[{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}]}";
     pub static STATE_CHAIN_SIG: &str = "{ \"purpose\": \"TRANSFER\", \"data\": \"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\", \"sig\": \"3045022100abe02f0d1918aca36b634eb1af8a4e0714f3f699fb425de65cc661e538da3f2002200a538a22df665a95adb739ff6bb592b152dba5613602c453c58adf70858f05f6\"}";
+    pub static MASTER_KEY: &str = "{\"public\":{\"q\":{\"x\":\"f8308498a5b5996eb7c410fb7ada7f3524d604b45b247cc4d13e5a32c3763908\",\"y\":\"7e41091fd5ab1138d1a3cdf41b43c82a064839a6b82b251be2be70099b642d1a\"},\"p1\":{\"x\":\"701e7d08608e6065b8f19f7cd867bcd7c5c4a11290e51187210a66713349c76c\",\"y\":\"10f76cae4eac6727bec6ae239de37d806a4877bc418f9fadaad0fd379cb11e73\"},\"p2\":{\"x\":\"caff57b3e214231182b2ba729079422887527dec2c2be1af03eb9a28be046fbb\",\"y\":\"94d4d2624a6be1e5fccf22ea5d7d2294a65f86b23642e7107c5523bb383d2612\"},\"paillier_pub\":{\"n\":\"11489233870088042333010221250016305472224248130131837344400358635737478519468920848276451747026121985401781804607266395846806728547165860151830628936151241253052105217375620729553123605998218501591757218904947955026013349855548130232876481464163645763380508660165838175358408923868455078398162478065282146744074902115770410655628975593804546170315851709066735895285416399351986223748741323752676766246912115655411869835426209804163120117240537098699118426250380831687194901410283437954378683229249501222250355118886953166922692541953136499596437296944964919863277847025337779172484000271289374153321801582770169915217\"},\"c_key\":\"13acbe9791ae6136f0d3700bad8cbe723ed2676e33d9f080122283a3a5838e3418d9ae3f61cc5e3b033ec71979f339c87e2da410c46a3a6238e40fc403799b5b7855bf529c381bd80288f5002f62a460cc005ec71e85c7d0eda2133245a857fe414c8653f0248016545618e2d53f466e3808edfe15774fb32ffeafc98dc08dd9eaca2e5411ae22bd4dad358bffadb51e82d2f99404ff73db8c473a2483133863aeaf6ffccd455fe4ba0966f90e85ea02083962d15779215941396676d90a0ce99a09adaa064956f506ca40d18ba91a7f9826a2e82050fb3b569790b5642ac45e39d9dfb63f8c975c30090f9eceaca387129539eaebfcedc17d2e49f0bd029e3591ac30e3db26139368b1423cf058e2128978411518e87c2d3c106a91c16de80895ad7f928a9a40c6d5aac356bd2966b3bf98c77f616f04329caecc895d13d16d8193e9f0bfe866c86a2eee3b2b0beb95478d4c216e00f8a9712618599d176ad253e59e9e27743f1e61a710bb9a0ae989226900ef809acb17e11f9f068bdb35fd7a767560e912da3aa98cd9d529b3d993e360d73f19adf830599f71ca139f6e17014302dce8a40401276d3a7e3dda04ef4b344a7dc4cb94c106c346e389ab7e089b97aa1e3f1680d4b8eeb62d405ab3a4e827b93dd15074e1dfd74244a9b4857017818b63504399c98fc02d0b3af135a0d7ac4f9de9a7cd47fdbe40cb3a6185b6\"},\"private\":{\"x1\":\"7d40223e23d9be8a484f02c193f6d637ee920d22107bcc271315ecd7cf7bd417\",\"paillier_priv\":{\"p\":\"95968611635960852961029982396007186819172638068010828329449274935568627735159638229570155217385550521772837802209343399026212621624237395184543248204625051917248015126148738583692391387724379315739614056981768639631978130165718525707250385364943792301344169291673198185105717525805446423420947171964258675871\",\"q\":\"119718662948572417380116608786988393154649208452700228802334036347214087888515999164811204446322560182519144489173108609786997536166347774811155976446122754875172588386796176207110943485933259100127115436979944772204093241941218507628108172049881866436113901845596310515366261414462580028675547493957305267727\"},\"c_key_randomness\":\"2cca6bbfb2f111aaa52b33bd3320cff512f23010822687156ed81f231403d0c2ded58514221d81cd8185bf584efd79534e55b78da3766a18175121d0df84c098c442553513cda8646a81e36cd3bd853381678d6cba7adeb2dffc425e6209bf0ccd2a824d78d1fe8ad388d999c626cd1d0bad6e312fbdd06f219de1e7379e1b8c1f1c8bd50bcfc8acad0692f5028252e18ffe60268ecea8cf35343895d9f78e406ea9301f3392d6b78ea87884a710d548cad991571abe8264653e63dc30c4276b7fcfeb9783bc7e7f88b2d573e3de2d6fe4d3809c50866b820402925621a7bcae34d87914db54455ce5ffd189e2d0bb9032913e4be221eae1a22e31d5803cbc07\"},\"chain_code\":\"0\"}";
 
     pub fn test_sc_entity(db: MockDatabase) -> SCE {
         let mut sc_entity = SCE::load(db, MemoryDB::new("")).unwrap();
@@ -1144,14 +1155,17 @@ pub mod tests {
         let tx_backup = serde_json::from_str::<Transaction>(
                             &BACKUP_TX_SIGNED.to_string(),
                         ).unwrap();
-        let statechain = serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap();
+        let amount = 1000;
 
         let recovery_data = RecoveryDataMsg {
-            chain: statechain,
             shared_key_id: user_id,
             statechain_id,
+            amount,
             tx_hex: transaction_serialise(&tx_backup),
+            proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
+            shared_key_data: "".to_string(),
         };
+
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
@@ -1164,9 +1178,21 @@ pub mod tests {
                 &BACKUP_TX_SIGNED.to_string(),
             ).unwrap()))
         });
-        db.expect_get_statechain().returning(move |_| {
-            Ok(serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap())
+        db.expect_get_statechain_amount().returning(move |_| {
+            Ok(StateChainAmount {
+                chain: serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap(),
+                amount: 10000,
+            })
         });
+        db.expect_get_backup_transaction().returning(move |_| {
+            Ok(serde_json::from_str::<Transaction>(
+                &BACKUP_TX_SIGNED.to_string(),
+            ).unwrap())
+        });
+        db.expect_get_ecdsa_master().returning(move |_| {
+            Ok(Some(MASTER_KEY.to_string()))
+        });
+
         let sc_entity = test_sc_entity(db);
 
         // get_recovery invalid public key

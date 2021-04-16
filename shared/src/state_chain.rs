@@ -143,9 +143,9 @@ impl State {
 pub struct StateChainSig {
     /// Purpose: "TRANSFER", "TRANSFER-BATCH" or "WITHDRAW"
     pub purpose: String, // "TRANSFER", "TRANSFER-BATCH" or "WITHDRAW"
-    /// The new owner proof public key (if transfer) or address (if withdrawal)    
+    /// The new owner proof public key (if transfer) or address (if withdrawal)
     pub data: String,    // proof key, state chain id or address
-    /// Current owner signature (DER encoded). 
+    /// Current owner signature (DER encoded).
     pub sig: String,
 }
 
