@@ -32,7 +32,7 @@ merkletree = "0.21.0"
 arrayvec = "0.5.1"
 chrono = { version = "0.4", features = ["serde"] }
 log = "0.4"
-ecies = "0.1.4"
+ecies = { git = "https://github.com/commerceblock/rs.git", branch = "rust-crypto" }
 error-chain="0.12.4"
 tor-stream = "0.2.0"
 bitcoincore-rpc = "0.12.0"
