@@ -140,9 +140,6 @@ impl Ecdsa for SCE {
                 &key_gen_msg2.dlog_proof,
             );
 
-            println!("{:?}", serde_json::to_string(&party_one_private));
-
-
             db.update_keygen_second_msg(
                 &user_id,
                 party2_public,
