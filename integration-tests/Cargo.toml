@@ -23,7 +23,7 @@ mockito = "0.27.0"
 
 [dependencies.curv]
 git = "https://github.com/commerceblock/curv"
-tag = "v0.2.7"
+tag = "v0.2.8"
 features =  ["ec_secp256k1"]
 
 [dependencies.monotree]
