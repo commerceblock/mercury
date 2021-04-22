@@ -299,7 +299,7 @@ pub fn transfer_receiver(
 
     // Update tx_backup_psm shared_key_id with new one
     let mut tx_backup_psm = transfer_msg3.tx_backup_psm.clone();
-    tx_backup_psm.shared_key_id = transfer_msg5.new_shared_key_id.clone();
+    tx_backup_psm.shared_key_ids = vec![transfer_msg5.new_shared_key_id.clone()];
 
     // Data to update wallet with transfer. Should only be applied after StateEntity has finalized.
     let finalize_data = TransferFinalizeData {
