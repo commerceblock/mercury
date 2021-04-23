@@ -111,7 +111,7 @@ pub fn deposit(
 
     // Co-sign tx backup tx
     let tx_backup_psm = PrepareSignTxMsg {
-        shared_key_id: shared_key_id.id,
+        shared_key_ids: vec![shared_key_id.id],
         protocol: Protocol::Deposit,
         tx_hex: transaction_serialise(&tx_backup_unsigned),
         input_addrs: vec![pk],

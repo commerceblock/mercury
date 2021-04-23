@@ -44,6 +44,11 @@ pub fn decode_address(bech32_address: String, network: &String) -> Result<SCEAdd
 
 // Encode a mercury transaction message in bech32 format
 pub fn encode_message(message: TransferMsg3) -> Result<String> {
+	if message.tx_backup_psm.shared_key_ids.len() != 1 {
+		return Err(CError::Generic(String::from(
+	        "Cannot encode transfer message - length of PrepareSignTxMsg != 1",
+	    )));
+	}
 
 	let mut sig_bytes = hex::decode(message.statechain_sig.sig.clone()).unwrap();
 	let mut tx_bytes = hex::decode(message.tx_backup_psm.clone().tx_hex).unwrap();
@@ -57,7 +62,7 @@ pub fn encode_message(message: TransferMsg3) -> Result<String> {
 	//bytes 162..178 (16 bytes) statechain_id
 	ser_bytes.append(&mut hex::decode(message.statechain_id.clone().simple().to_string()).unwrap());
 	//bytes 178..194 (16 bytes) shared_key_id
-	ser_bytes.append(&mut hex::decode(message.tx_backup_psm.shared_key_id.clone().simple().to_string()).unwrap());
+	ser_bytes.append(&mut hex::decode(message.tx_backup_psm.shared_key_ids[0].clone().simple().to_string()).unwrap());
 	//byte 194 is statechain signature length (variable)
 	ser_bytes.push(sig_bytes.len() as u8);
 	//byte 195..sig_len is statechain signature
@@ -107,7 +112,7 @@ pub fn decode_message(message: String, network: &String) -> Result<TransferMsg3>
 
 	let mut tx_backup_psm = PrepareSignTxMsg::default();
 	tx_backup_psm.tx_hex = hex::encode(tx_bytes);
-	tx_backup_psm.shared_key_id = Uuid::from_bytes(&shared_key_id_bytes.clone()).unwrap();
+	tx_backup_psm.shared_key_ids = vec![Uuid::from_bytes(&shared_key_id_bytes.clone()).unwrap()];
 	tx_backup_psm.proof_key = Some(hex::encode(proof_key_bytes.clone()));
 	tx_backup_psm.protocol = Protocol::Transfer;
 
