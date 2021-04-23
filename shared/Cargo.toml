@@ -32,7 +32,7 @@ merkletree = "0.21.0"
 arrayvec = "0.5.1"
 chrono = { version = "0.4", features = ["serde"] }
 log = "0.4"
-ecies = "0.1.4"
+ecies = { git = "https://github.com/commerceblock/rs.git", branch = "rust-crypto" }
 error-chain="0.12.4"
 tor-stream = "0.2.0"
 bitcoincore-rpc = "0.12.0"
@@ -47,17 +47,17 @@ mockito = "0.27.0"
 
 [dependencies.curv]
 git = "https://github.com/commerceblock/curv"
-tag = "v0.2.7"
+tag = "v0.2.8"
 features =  ["ec_secp256k1"]
 
 [dependencies.kms]
 git = "https://github.com/commerceblock/kms-secp256k1"
-tag = "v0.1.3"
+tag = "v0.1.14"
 default-features = false
 
 [dependencies.multi-party-ecdsa]
 git = "https://github.com/commerceblock/multi-party-ecdsa"
-tag = "v0.3.7"
+tag = "v0.3.12"
 
 [dependencies.monotree]
 git = "https://github.com/commerceblock/monotree"

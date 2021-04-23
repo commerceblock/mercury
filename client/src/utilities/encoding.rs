@@ -91,17 +91,17 @@ pub fn decode_message(message: String, network: &String) -> Result<TransferMsg3>
 	// compact messgae deserialisation to byte vectors
 	let decoded_bytes = Vec::<u8>::from_base32(&decoded_msg).unwrap();
 	//bytes 0..129 encrypted t1
-	let t1_bytes = &decoded_bytes[0..129];
+	let t1_bytes = &decoded_bytes[0..125];
 	//bytes 129..162 (33 bytes) compressed proof key
-	let proof_key_bytes = &decoded_bytes[129..162];
+	let proof_key_bytes = &decoded_bytes[125..158];
 	//bytes 162..178 (16 bytes) statechain_id
-	let statechain_id_bytes = &decoded_bytes[162..178];
+	let statechain_id_bytes = &decoded_bytes[158..174];
 	//bytes 178..194 (16 bytes) shared_key_id
-	let shared_key_id_bytes = &decoded_bytes[178..194];
+	let shared_key_id_bytes = &decoded_bytes[174..190];
 	//byte 194 is statechain signature length (variable)
-	let sig_len = (decoded_bytes[194] as usize) + 195;
+	let sig_len = (decoded_bytes[190] as usize) + 191;
 	//byte 195..sig_len is statechain signature
-	let sig_bytes = &decoded_bytes[195..sig_len];
+	let sig_bytes = &decoded_bytes[191..sig_len];
 	//byte sig_len is backup tx length (variable)
 	let tx_len = (decoded_bytes[sig_len] as usize) + sig_len.clone() + 1;
 	//remaining bytes backup tx
@@ -145,7 +145,7 @@ mod tests {
 
     use super::*;
 	static SCEADDR: &str = "{ \"tx_backup_addr\": \"bcrt1q28jhk2vkyksvxa2lrqzsc6z2dt0ac4xpvlhtj5\", \"proof_key\": \"0284cbb3019459e603b5242d8602ba2d14b8d9fb238782048287be32eb00dafa66\" }";
-	static TRANSFER_MSG_3: &str = "{ \"shared_key_id\": \"bec09086-ff5a-4654-984e-4b0722c0dbef\", \"t1\": { \"secret_bytes\": [4, 205, 61, 74, 107, 173, 231, 32, 22, 93, 82, 80, 211, 251, 184, 165, 79, 197, 216, 194, 220, 25, 70, 222, 238, 52, 240, 157, 53, 165, 104, 149, 153, 132, 142, 229, 190, 165, 226, 25, 119, 137, 87, 104, 178, 156, 169, 102, 129, 252, 176, 240, 83, 148, 121, 98, 210, 191, 23, 22, 115, 156, 71, 113, 175, 173, 176, 159, 160, 69, 197, 40, 61, 239, 140, 47, 222, 195, 29, 68, 112, 228, 38, 84, 43, 255, 108, 159, 153, 4, 60, 94, 250, 35, 184, 16, 152, 111, 178, 78, 89, 209, 85, 237, 93, 81, 203, 199, 157, 104, 62, 9, 178, 146, 8, 106, 34, 224, 35, 228, 161, 99, 162, 119, 56, 223, 172, 243, 57] }, \"statechain_sig\": { \"purpose\": \"TRANSFER\", \"data\": \"032bba3673baecf8bb9ab9a7d8a56406595325d6ac18cb42ccb9f79c3d775018a4\", \"sig\": \"304402203647888e56952bb15ae9d566a36a6a13cbd19850a3e01c93e81ab03665845a1b02205811701164799f97cf875d5eeac776cab4033196a899168d8332b87bf3793f6f\" }, \"statechain_id\": \"9fd31ccb-e6c1-498c-80be-e8d9deec7c79\", \"tx_backup_psm\": { \"shared_key_ids\": [\"bec09086-ff5a-4654-984e-4b0722c0dbef\"], \"protocol\": \"Transfer\", \"tx_hex\": \"020000000001014e3e3b35c39ac305aaa3dc364c7378fceaf3cd124101e4f234672a51e74c17d10000000000ffffffff011fae01000000000016001451e57b299625a0c3755f18050c684a6adfdc54c102483045022100de6849daa364f55bdbff15a24250dad308110fbf5c32e02259349ca23c41e1e702201efcee6590fac368585172a9ac31281055e3590e9478ba954500e49cd51be012012102992a0ce40f87d9bf333dbbf60b726b5023fc10c2838179b66c577cb843bf2355a5080000\", \"input_addrs\": [\"0347da6a8ec18b6f2d884b295ab7be01163dd28b555b145e2f260975b061e3c689\"], \"input_amounts\": [111111], \"proof_key\": \"032bba3673baecf8bb9ab9a7d8a56406595325d6ac18cb42ccb9f79c3d775018a4\" }, \"rec_se_addr\": { \"tx_backup_addr\": \"bcrt1q28jhk2vkyksvxa2lrqzsc6z2dt0ac4xpvlhtj5\", \"proof_key\": \"0284cbb3019459e603b5242d8602ba2d14b8d9fb238782048287be32eb00dafa66\" } }";
+	static TRANSFER_MSG_3: &str = "{ \"shared_key_id\": \"bec09086-ff5a-4654-984e-4b0722c0dbef\", \"t1\": { \"secret_bytes\": [4, 205, 61, 74, 107, 173, 231, 32, 22, 93, 82, 80, 211, 251, 184, 165, 79, 197, 216, 194, 220, 25, 70, 222, 238, 52, 240, 157, 53, 165, 104, 149, 153, 132, 142, 229, 190, 165, 226, 25, 119, 137, 87, 104, 178, 156, 169, 102, 129, 252, 176, 240, 83, 148, 121, 98, 210, 191, 23, 22, 115, 156, 71, 113, 175, 173, 176, 159, 160, 69, 197, 40, 61, 239, 140, 47, 222, 195, 29, 68, 112, 228, 38, 84, 43, 255, 108, 159, 153, 4, 60, 94, 250, 35, 184, 16, 152, 111, 178, 78, 89, 209, 85, 237, 93, 81, 203, 199, 157, 104, 62, 9, 178, 146, 8, 106, 34, 224, 35, 228, 161, 99, 162, 119, 56 ] }, \"statechain_sig\": { \"purpose\": \"TRANSFER\", \"data\": \"032bba3673baecf8bb9ab9a7d8a56406595325d6ac18cb42ccb9f79c3d775018a4\", \"sig\": \"304402203647888e56952bb15ae9d566a36a6a13cbd19850a3e01c93e81ab03665845a1b02205811701164799f97cf875d5eeac776cab4033196a899168d8332b87bf3793f6f\" }, \"statechain_id\": \"9fd31ccb-e6c1-498c-80be-e8d9deec7c79\", \"tx_backup_psm\": { \"shared_key_id\": \"bec09086-ff5a-4654-984e-4b0722c0dbef\", \"protocol\": \"Transfer\", \"tx_hex\": \"020000000001014e3e3b35c39ac305aaa3dc364c7378fceaf3cd124101e4f234672a51e74c17d10000000000ffffffff011fae01000000000016001451e57b299625a0c3755f18050c684a6adfdc54c102483045022100de6849daa364f55bdbff15a24250dad308110fbf5c32e02259349ca23c41e1e702201efcee6590fac368585172a9ac31281055e3590e9478ba954500e49cd51be012012102992a0ce40f87d9bf333dbbf60b726b5023fc10c2838179b66c577cb843bf2355a5080000\", \"input_addrs\": [\"0347da6a8ec18b6f2d884b295ab7be01163dd28b555b145e2f260975b061e3c689\"], \"input_amounts\": [111111], \"proof_key\": \"032bba3673baecf8bb9ab9a7d8a56406595325d6ac18cb42ccb9f79c3d775018a4\" }, \"rec_se_addr\": { \"tx_backup_addr\": \"bcrt1q28jhk2vkyksvxa2lrqzsc6z2dt0ac4xpvlhtj5\", \"proof_key\": \"0284cbb3019459e603b5242d8602ba2d14b8d9fb238782048287be32eb00dafa66\" } }";
 
     #[test]
     fn test_sc_address_encoding() {
@@ -164,14 +164,18 @@ mod tests {
 
     #[test]
     fn test_message_encoding() {
-		let mmessage: String = "mm1qnxn6jnt4hnjq9ja2fgd87ac548utkxzmsv5dhhwxncf6dd9dz2enpywukl2tcsew7y4w69jnj5kdq0ukrc989revtft79ckwwwywud04kcflgz9c55rmmuv9l0vx82ywrjzv4ptlakflxgy83005gaczzvxlvjwt8g4tm2a289u08tg8cym9ysgdg3wqgly5936yaecm7k0xwgzsn9mxqv5t8nq8dfy9krq9w3dzjudn7ers7pqfq58hcewkqx6lfnfl5cue0nvzjvvszlw3kw7a378n0kqjzr07kjx2jvyujc8ytqdhm6xxpzqygpkg7ygu4549wc446w4v63k56sne0ges59ruqwf86q6kqmxtpz6rvpzqkq3wqgkg7vljl8cwh27atrhdj45qvced2yez6xcxv4c00ehj0m0cqpqqqqqqqqszn378v6u8xkrqk428hpkf3eh3l8270x3ysgpunergee228n5c973qqqqqqqqllllllcpr7hqzqqqqqqqq9sqz3g727efjcj6psm4tuvq2rrgff4dlhz5cypysvz9qgssphngf8d2xe84t0dl79dzgfgd45cgzy8m7hpjuq39jdyu5g7yrc08qgspal8wvkg04smgtpgh92dvxy5pq40rty8fg796j4zspeyu65d7qyspyypfj2svus8c0kdlxv7mhastwf44qgluzrpg8qtekek9wl9cgwljx4d9pqqqq8dlnyg".to_string();
+		let mmessage: String = "mm1qnxn6jnt4hnjq9ja2fgd87ac548utkxzmsv5dhhwxncf6dd9dz2enpywukl2tcsew7y4w69jnj5kdq0ukrc989revtft79ckwwwywud04kcflgz9c55rmmuv9l0vx82ywrjzv4ptlakflxgy83005gaczzvxlvjwt8g4tm2a289u08tg8cym9ysgdg3wqgly5936yaecq2zvhvcpj3v7vqa4yskcvq46952t3k0mywrcypyzs7lr96cqmtaxd87nrn97ds2f3jqta6xemmk8c7d7czggdl66ge2fsnjtqu3vpkl0gccygq3qxerc3rjkj54mzkhf64n2x6n2z09arxzs50speylgr2crvevytgdsygzcz9cpzeren7tulp6atm4vwak2kspnr94gnytgmqejhpalx7fldlqqyqqqqqqqzq2w8cantsu6cvz64g7uxex8x78uateu6yjpq8j0ydr89fg7wnqh6yqqqqqqqrllllllqy06uqgqqqqqqqqkqq29retm9xtztgxrw403spgvdp9x4h7u2nqsyjpsg5pzzqx7dpya4gmy74dahlc45fp9pkknpqgsl06uxtszykf5nj3rcs0puupzq8huaejep7krdpv9zu4f4scjsyz4udvsa9rch2252q8ynn23hcqjqyss9xf2pnjqlp7ehuenmwlkpdexk5prlsgv9qup0xmxc4muhppm7g6455yqqqqjnskn8".to_string();
         let transfer_msg_3 =
             serde_json::from_str::<TransferMsg3>(&TRANSFER_MSG_3.to_string()).unwrap();
 
-        let b32enc = encode_message(transfer_msg_3).unwrap();
-
-        println!("{:?}", b32enc);
+        let b32enc = encode_message(transfer_msg_3.clone()).unwrap();
 
         assert_eq!(b32enc.to_string(),mmessage);
+
+        let decmsg = decode_message(b32enc, &"bitcoin".to_string()).unwrap();
+
+        assert_eq!(transfer_msg_3.shared_key_id,decmsg.shared_key_id);
+        assert_eq!(transfer_msg_3.t1,decmsg.t1);
+        assert_eq!(transfer_msg_3.statechain_id,decmsg.statechain_id);
     }
 }
