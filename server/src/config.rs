@@ -17,13 +17,16 @@ pub struct ConductorConfig {
     pub utxo_timeout: u32, 
     /// Length of punishment for unresponsivve/misbehaving batch-transfer utxo
     pub punishment_duration: u64,
+    /// Minimum relative locktime (to current block height) for utxo registration
+    pub locktimelimit: u64,
 }
 
 impl Default for ConductorConfig {
     fn default() -> Self {
         Self {
             utxo_timeout: 60,
-            punishment_duration: 360
+            punishment_duration: 360,
+            locktimelimit: 1000,
         }
     }
 }
