@@ -136,8 +136,6 @@ pub fn decode_message(message: String, network: &String) -> Result<TransferMsg3>
 	    },
 	};
 
-	println!("{:?}", transfer_msg3);
-
 	Ok(transfer_msg3)
 }
 

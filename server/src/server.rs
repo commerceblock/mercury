@@ -364,7 +364,7 @@ mock! {
         fn deregister_utxo(&self, statechain_id: &Uuid) -> conductor::Result<()>;
         fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> conductor::Result<()>;
         fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> conductor::Result<SCEAddress>;
-        fn get_group_info(&self) -> conductor::Result<SwapGroupInfo>;
+        fn get_group_info(&self) -> conductor::Result<HashMap<SwapGroup,u64>>;
         fn get_blinded_spend_signature(&self, swap_id: &Uuid, statechain_id: &Uuid) -> conductor::Result<BlindedSpendSignature>;
         fn get_address_from_blinded_spend_token(&self, bst: &BlindedSpendToken) -> conductor::Result<SCEAddress>;
     }

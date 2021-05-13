@@ -18,7 +18,7 @@ pub struct ConductorConfig {
     /// Length of punishment for unresponsivve/misbehaving batch-transfer utxo
     pub punishment_duration: u64,
     /// Minimum relative locktime (to current block height) for utxo registration
-    pub locktimelimit: u64,
+    pub locktimelimit: u32,
 }
 
 impl Default for ConductorConfig {

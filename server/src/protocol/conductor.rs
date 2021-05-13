@@ -60,20 +60,6 @@ cfg_if! {
     }
 }
 
-// Struct wrapper for Electrumx client instance
-pub struct ElectrumxBox {
-    pub instance: Box<dyn Electrumx>,
-}
-impl ElectrumxBox {
-    pub fn new(electrum_server: String) -> Result<Self> {
-        Ok(ElectrumxBox {
-            instance: Box::new(ElectrumxClient::new(electrum_server)?),
-        })
-    }
-}
-unsafe impl Send for ElectrumxBox {}
-unsafe impl Sync for ElectrumxBox {}
-
 /// Conductor protocol trait. Comments explain client and server side of swap protocol.
 #[automock]
 pub trait Conductor {
@@ -142,17 +128,13 @@ pub trait Conductor {
     // StateChain they own and should not take any responsibility for the failure.
 
     // Get map of values/sizes to registrations
-    fn get_group_info(&self) -> Result<SwapGroupInfo>;
+    fn get_group_info(&self) -> Result<HashMap<SwapGroup,u64>>;
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Scheduler {
-    // electrum client for current blockheight
-    electrumx_client: ElectrumxBox,
     //Timeout for poll utx
     utxo_timeout: u32,
-    //minimum relative locktime for utxo registration
-    locktimelimit: u32,
     //State chain id to requested swap size map
     statechain_swap_size_map: BisetMap<Uuid, u64>,
     //A map of state chain registereds for swap to amount
@@ -182,9 +164,7 @@ pub struct Scheduler {
 impl Scheduler {
     pub fn new(config: &ConductorConfig) -> Self {
         Self {
-            electrumx_client: ElectrumxBox::new(config.electrum_server.clone()),
             utxo_timeout: config.utxo_timeout.clone(),
-            locktimelimit: config.locktimelimit.clone(),
             statechain_swap_size_map: BisetMap::<Uuid, u64>::new(),
             statechain_amount_map: BisetMap::<Uuid, u64>::new(),
             group_info_map: HashMap::<SwapGroup, u64>::new(),
@@ -673,18 +653,25 @@ impl Conductor for SCE {
 
     fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> Result<()> {
 
+        let mut electrum: Box<dyn Electrumx> = Box::new(ElectrumxClient::new(self.config.electrum_server.clone()).unwrap());
+
         // get current blockheight
-        let chaintip = electrumx_client.instance.get_tip_header()?;
+        let chaintip = electrum.get_tip_header()?;
         debug!("Register UTXO: Got current best block height: {}", chaintip.height.to_string());
 
         // get current locktime from database
-        let current_tx_backup = self.database.get_backup_transaction(&register_utxo_msg.statechain_id)?;
+        let current_tx_backup = self.database.get_backup_transaction(register_utxo_msg.statechain_id)?;
 
-        if (current_tx_backup.lock_time as u32) < (chaintip.height as u32) + (self.locktimelimit as u32) {
+        if (current_tx_backup.lock_time as u32) < (chaintip.height as u32) + (self.config.conductor.locktimelimit as u32) {
             return Err(SEError::Generic(String::from(
                 "Locktime expiry below conductor limit.",
             )));
         }
+
+        // check that coin is unspent
+//        let list_unspent = electrum.get_list_unspent()?;
+
+
 
         // get current owner public key and check signature
         let sig = &register_utxo_msg.signature;
@@ -707,14 +694,9 @@ impl Conductor for SCE {
         Ok(())
     }
 
-    fn get_group_info(&self) -> Result<SwapGroupInfo> {
+    fn get_group_info(&self) -> Result<HashMap<SwapGroup,u64>> {
         let guard = self.scheduler.lock()?;
-
-        let group_info = SwapGroupInfo {
-            groups: guard.group_info_map.clone(),
-            locktimelimit: self.locktimelimit,
-        }
-        Ok(group_info)
+        Ok(guard.group_info_map.clone())
     }
 
     fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> Result<()> {
@@ -1050,7 +1032,7 @@ pub fn swap_second_message(
 #[get("/swap/groupinfo", format = "json")]
 pub fn get_group_info(
     sc_entity: State<SCE>,
-    ) -> Result<Json<(SwapGroupInfo)>> {
+    ) -> Result<Json<(HashMap<SwapGroup,u64>)>> {
     match sc_entity.get_group_info() {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),

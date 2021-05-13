@@ -157,23 +157,6 @@ impl Serialize for SwapGroup {
     }
 }
 
-/// Swap av ailability info
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Hash, Eq, PartialEq, Clone)]
-#[schemars(example = "Self::example")]
-pub struct SwapGroupInfo {
-    pub groups: HashMap<SwapGroup,u64>,
-    pub locktimelimit: u64,
-}
-
-impl SwapGroupInfo {
-    pub fn example() -> Self{
-        Self{
-            groups: HashMap::new(),
-            locktimelimit: 1000,
-        }
-    }
-}
-
 struct SwapGroupVisitor;
 
 impl<'de> Visitor<'de> for SwapGroupVisitor {
