@@ -161,6 +161,12 @@ pub fn transfer_get_msg(wallet: &mut Wallet, statechain_id: &Uuid) -> Result<Tra
     )
 }
 
+// Get the transfer message 3
+// created by the sender and stored in the SE database
+pub fn transfer_get_msg_addr(wallet: &mut Wallet, receive_addr: &str) -> Result<TransferMsg3> {
+    requests::get(&wallet.client_shim, &format!("transfer/get_msg_addr{}", receive_addr))
+}
+
 /// Receiver side of Transfer protocol.
 pub fn transfer_receiver(
     wallet: &mut Wallet,

@@ -176,6 +176,7 @@ pub trait Database {
     ) -> Result<()>;
     fn update_transfer_msg(&self, statechain_id: &Uuid, msg: &TransferMsg3) -> Result<()>;
     fn get_transfer_msg(&self, statechain_id: &Uuid) -> Result<TransferMsg3>;
+    fn get_transfer_msg_addr(&self, receive_addr: &str) -> Result<TransferMsg3>;
     fn create_transfer_batch_data(
         &self,
         batch_id: &Uuid,
