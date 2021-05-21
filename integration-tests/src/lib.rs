@@ -250,9 +250,9 @@ pub fn run_transfer(
     )
     .unwrap();
 
-    let transfer_msg = state_entity::transfer_get_msg_addr(&mut wallets[receiver_index],&tranfer_sender_resp.statechain_sig.data);
+    let transfer_msg = state_entity::transfer::transfer_get_msg_addr(&mut wallets[receiver_index],&tranfer_sender_resp.statechain_sig.data);
 
-    assert_eq!(transfer_sender_resp,transfer_msg);
+    assert_eq!(tranfer_sender_resp,transfer_msg.unwrap());
 
     let tfd = state_entity::transfer::transfer_receiver(
         &mut wallets[receiver_index],
