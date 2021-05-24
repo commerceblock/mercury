@@ -496,6 +496,12 @@ impl Database for MemoryDB {
     ) -> crate::Result<shared_lib::structs::TransferMsg3> {
         unimplemented!()
     }
+    fn get_transfer_msg_addr(
+        &self,
+        _receive_addr: &str,
+    ) -> crate::Result<shared_lib::structs::TransferMsg3> {
+        unimplemented!()
+    }
     fn create_transfer_batch_data(
         &self,
         _batch_id: &uuid::Uuid,

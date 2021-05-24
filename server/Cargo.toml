@@ -19,8 +19,8 @@ name = "server_exec"
 path = "src/main.rs"
 
 [dependencies]
-rocket = { version = "0.4.5", features = ["tls"] }
-rocket_contrib = { version = "0.4.5", default-features = false,features = ["json","postgres_pool"] }
+rocket = { version = "0.4.8", features = ["tls"] }
+rocket_contrib = { version = "0.4.8", default-features = false,features = ["json","postgres_pool"] }
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
