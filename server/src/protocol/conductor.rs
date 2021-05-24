@@ -1140,7 +1140,7 @@ mod tests {
         assert_eq!(scheduler.time_out_map.len(), 2);
 
         //Regsiter a new request for the amount 5, but require 6 to be in the swap
-        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 6);
+        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 6).unwrap();
         //Not enough participants to create swap
         scheduler.update_swap_info().unwrap();
         assert_eq!(scheduler.swap_id_map.len(), 7);
@@ -1156,17 +1156,17 @@ mod tests {
         assert_eq!(scheduler.statechain_amount_map.len(),0);
 
         //Replace the timed out requests
-        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 5);
-        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 5);
-        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 5);
-        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 5);
-        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 6);
+        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 5).unwrap();
+        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 5).unwrap();
+        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 5).unwrap();
+        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 5).unwrap();
+        scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 6).unwrap();
         scheduler.update_swap_info().unwrap();
         assert_eq!(scheduler.statechain_amount_map.len(),5);
 
         //Regsiter a new request for the amount 5, but require 6 to be in the swap
         let sc_id = Uuid::new_v4();
-        scheduler.register_amount_swap_size(&sc_id, 5, 6);
+        scheduler.register_amount_swap_size(&sc_id, 5, 6).unwrap();
         //Now there are enough participants: new swap created
         scheduler.update_swap_info().unwrap();
         assert_eq!(scheduler.swap_id_map.len(), 13);
@@ -1312,7 +1312,7 @@ mod tests {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(
                 e.to_string().contains("signature failed verification"),
-                e.to_string()
+                "{}", e.to_string()
             ),
         }
         // Valid signature for proof key
@@ -1418,7 +1418,7 @@ mod tests {
             Err(e) => assert!(
                 e.to_string()
                     .contains("Swap Error: swap token signature does not sign for token"),
-                e.to_string()
+                "{}", e.to_string()
             ),
         }
 
@@ -1429,7 +1429,7 @@ mod tests {
             Err(e) => assert!(
                 e.to_string()
                     .contains("Swap Error: swap token signature does not sign for token"),
-                e.to_string()
+                "{}", e.to_string()
             ),
         }
 
@@ -1441,7 +1441,7 @@ mod tests {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(
                 e.to_string().contains("Swap Error: no swap with id"),
-                e.to_string()
+                "{}", e.to_string()
             ),
         }
 
@@ -1473,7 +1473,7 @@ mod tests {
             // Valid inputs
             match sc_entity.swap_first_message(&swap_msg_1) {
                 Ok(_) => assert!(true),
-                Err(e) => assert!(false, e.to_string()),
+                Err(e) => assert!(false, "{}", e.to_string()),
             };
         }
         //Scheduler updates swap info to move swap to phase 2
@@ -1592,7 +1592,7 @@ mod tests {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(
                 e.to_string().contains("Failed to deserialize message."),
-                e.to_string()
+                "{}", e.to_string()
             ),
         }
         // Blind token invalid message swapid
@@ -1611,7 +1611,7 @@ mod tests {
             Err(e) => assert!(
                 e.to_string()
                     .contains("Blind Spent Token signature verification failed."),
-                e.to_string()
+                "{}", e.to_string()
             ),
         }
         // Connection made through clear net
@@ -1692,7 +1692,7 @@ mod tests {
             Err(e) => assert!(
                 e.to_string()
                     .contains("All SCEAddresses have been claimed."),
-                e.to_string()
+                "{}", e.to_string()
             ),
         }
 

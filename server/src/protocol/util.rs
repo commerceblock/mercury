@@ -1078,7 +1078,7 @@ pub mod tests {
         let _root1_id = match sc_entity.update_root(&root1) {
             Ok(id) => id,
             Err(e) => {
-                assert!(false, e.to_string());
+                assert!(false, "{}", e.to_string());
                 0
             }
         };
