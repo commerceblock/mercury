@@ -79,6 +79,9 @@ pub trait Transfer {
 
     /// API: Get the transfer message 3 set by update_transfer_msg
     fn transfer_get_msg(&self, statechain_id: Uuid) -> Result<TransferMsg3>;
+
+    /// API: Get the transfer message 3 set by update_transfer_msg from the receiver address
+    fn transfer_get_msg_addr(&self, receive_addr: String) -> Result<TransferMsg3>;
 }
 
 impl Transfer for SCE {
@@ -114,6 +117,9 @@ impl Transfer for SCE {
                 user_id
             )));
         }
+
+        // verify statechain sig
+        // TODO
 
         // Generate x1
         let x1: FE = ECScalar::new_random();
@@ -386,6 +392,11 @@ impl Transfer for SCE {
     fn transfer_get_msg(&self, statechain_id: Uuid) -> Result<TransferMsg3> {
         self.database.get_transfer_msg(&statechain_id)
     }
+
+    /// API: Get the transfer message 3 set by update_transfer_msg from the receiver address
+    fn transfer_get_msg_addr(&self, receive_addr: String) -> Result<TransferMsg3> {
+        self.database.get_transfer_msg_addr(&receive_addr)
+    }
 }
 
 #[openapi]
@@ -448,6 +459,19 @@ pub fn transfer_get_msg(
     statechain_id: Json<StatechainID>,
 ) -> Result<Json<TransferMsg3>> {
     match sc_entity.transfer_get_msg(statechain_id.id) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Get stored transfer message (TransferMsg3)
+#[get("/transfer/get_msg_addr/<receive_addr>", format = "json")]
+pub fn transfer_get_msg_addr(
+    sc_entity: State<SCE>,
+    receive_addr: String,
+) -> Result<Json<TransferMsg3>> {
+    match sc_entity.transfer_get_msg_addr(receive_addr) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }

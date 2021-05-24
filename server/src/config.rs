@@ -139,7 +139,7 @@ impl Default for Config {
             electrum_server: String::from("127.0.0.1:60401"),
             lockbox: String::from(""),
             network: String::from("regtest"),
-            testing_mode: true,
+            testing_mode: false,
             lockheight_init: 10000,
             lh_decrement: 100,
             required_confirmation: 3,

@@ -300,6 +300,7 @@ impl PGDatabase {
                 statechainsig varchar,
                 x1 varchar,
                 transfermsg varchar,
+                proofkey varchar,
                 PRIMARY KEY (id)
             );",
                 Table::Transfer.to_string(),
@@ -1179,11 +1180,15 @@ impl Database for PGDatabase {
     }
 
     fn update_transfer_msg(&self, statechain_id: &Uuid, msg: &TransferMsg3) -> Result<()> {
+        let proof_key = msg.statechain_sig.data.clone();
         self.update(
             statechain_id,
             Table::Transfer,
-            vec![Column::TransferMsg],
-            vec![&Self::ser(msg.to_owned())?],
+            vec![Column::TransferMsg, Column::ProofKey],
+            vec![
+                &Self::ser(msg.to_owned())?,
+                &proof_key.to_owned(),
+            ],
         )
     }
 
@@ -1194,6 +1199,21 @@ impl Database for PGDatabase {
             vec![Column::TransferMsg],
         )?;
         Self::deser(msg)
+    }
+
+    fn get_transfer_msg_addr(&self, receive_addr: &str) -> Result<TransferMsg3> {
+        let dbr = self.database_r()?;
+        let statement =
+            dbr.prepare(&format!("SELECT * FROM {} WHERE proofkey = $1", Table::Transfer.to_string(),))?;
+        let rows = statement.query(&[&receive_addr])?;
+        if rows.is_empty() {
+            return Err(SEError::DBError(NoDataForID, String::from("Proof key")));
+        };
+        let row = rows.get(0);
+
+        let msg: TransferMsg3 = Self::deser(row.get("transfermsg"))?;
+
+        Ok(msg)
     }
 
     fn create_transfer_batch_data(

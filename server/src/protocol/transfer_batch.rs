@@ -403,7 +403,7 @@ mod tests {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e
                 .to_string()
-                .contains("Error: secp: signature failed verification"), e.to_string()),
+                .contains("Error: secp: signature failed verification"), "{}", e.to_string()),
         }
     }
 

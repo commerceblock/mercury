@@ -241,6 +241,7 @@ pub fn get_server<
                     transfer::transfer_receiver,
                     transfer::transfer_update_msg,
                     transfer::transfer_get_msg,
+                    transfer::transfer_get_msg_addr,
                     transfer::transfer_get_pubkey,
                     transfer_batch::transfer_batch_init,
                     transfer_batch::transfer_reveal_nonce,
@@ -388,6 +389,7 @@ mock! {
         ) -> transfer::Result<()>;
         fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> transfer::Result<()>;
         fn transfer_get_msg(&self, statechain_id: Uuid) -> transfer::Result<TransferMsg3>;
+        fn transfer_get_msg_addr(&self, receive_addr: String) -> transfer::Result<TransferMsg3>;
     }
     trait BatchTransfer {
         fn transfer_batch_init(
