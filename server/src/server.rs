@@ -389,7 +389,7 @@ mock! {
         ) -> transfer::Result<()>;
         fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> transfer::Result<()>;
         fn transfer_get_msg(&self, statechain_id: Uuid) -> transfer::Result<TransferMsg3>;
-        fn transfer_get_msg_addr(&self, receive_addr: String) -> transfer::Result<TransferMsg3>;
+        fn transfer_get_msg_addr(&self, receive_addr: String) -> transfer::Result<Vec<TransferMsg3>>;
     }
     trait BatchTransfer {
         fn transfer_batch_init(

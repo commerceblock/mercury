@@ -32,6 +32,7 @@ use rocket_contrib::json::Json;
 use std::str::FromStr;
 use uuid::Uuid;
 use bitcoin::OutPoint;
+use bitcoin::Transaction;
 
 const MAX_LOCKTIME: u32 = 500000000; // bitcoin tx nlocktime cutoff
 
@@ -410,28 +411,29 @@ impl Utilities for SCE {
     fn get_recovery_data(&self, recovery_requests: Vec<RecoveryRequest>) -> Result<Vec<RecoveryDataMsg>> {
         let mut recovery_data = vec!();
         for recovery_request in recovery_requests {
-            let (shared_key_id, statechain_id, tx) = match self.database.get_recovery_data(recovery_request.key.clone()) {
+            let rec_vec: Vec<(Uuid, Uuid, Transaction)> = match self.database.get_recovery_data(recovery_request.key.clone()) {
                 Ok(res) => res,
                 Err(_) => continue
             };
+            for statecoin in rec_vec {
+                // If withdrawn err will be thrown. Return nothing in this case
+                let amount = match self.get_statechain_data_api(statecoin.1) {
+                    Ok(statechain_data) => statechain_data.amount,
+                    Err(_) => continue
+                };
 
-            // If withdrawn err will be thrown. Return nothing in this case
-            let amount = match self.get_statechain_data_api(statechain_id) {
-                Ok(statechain_data) => statechain_data.amount,
-                Err(_) => continue
-            };
+                let master_key: MasterKey1 = serde_json::from_str(&self.database.get_ecdsa_master(statecoin.0)?.unwrap()).unwrap();
+                let public = serde_json::to_string(&master_key.public).unwrap();
 
-            let master_key: MasterKey1 = serde_json::from_str(&self.database.get_ecdsa_master(shared_key_id)?.unwrap()).unwrap();
-            let public = serde_json::to_string(&master_key.public).unwrap();
-
-            recovery_data.push(RecoveryDataMsg {
-                shared_key_id,
-                statechain_id,
-                amount,
-                tx_hex: transaction_serialise(&tx),
-                proof_key: recovery_request.key,
-                shared_key_data: public
-            })
+                recovery_data.push(RecoveryDataMsg {
+                    shared_key_id: statecoin.0,
+                    statechain_id: statecoin.1,
+                    amount,
+                    tx_hex: transaction_serialise(&statecoin.2),
+                    proof_key: recovery_request.key.clone(),
+                    shared_key_data: public
+                })
+            }
         }
         return Ok(recovery_data);
     }
@@ -1174,9 +1176,9 @@ pub mod tests {
             if key.len() == 0 {
                 return Err(SEError::Generic("error".to_string()));
             }
-            Ok((user_id,statechain_id,serde_json::from_str::<Transaction>(
+            Ok(vec![(user_id,statechain_id,serde_json::from_str::<Transaction>(
                 &BACKUP_TX_SIGNED.to_string(),
-            ).unwrap()))
+            ).unwrap())])
         });
         db.expect_get_statechain_amount().returning(move |_| {
             Ok(StateChainAmount {
