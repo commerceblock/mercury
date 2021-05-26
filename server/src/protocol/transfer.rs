@@ -81,7 +81,7 @@ pub trait Transfer {
     fn transfer_get_msg(&self, statechain_id: Uuid) -> Result<TransferMsg3>;
 
     /// API: Get the transfer message 3 set by update_transfer_msg from the receiver address
-    fn transfer_get_msg_addr(&self, receive_addr: String) -> Result<TransferMsg3>;
+    fn transfer_get_msg_addr(&self, receive_addr: String) -> Result<Vec<TransferMsg3>>;
 }
 
 impl Transfer for SCE {
@@ -394,7 +394,7 @@ impl Transfer for SCE {
     }
 
     /// API: Get the transfer message 3 set by update_transfer_msg from the receiver address
-    fn transfer_get_msg_addr(&self, receive_addr: String) -> Result<TransferMsg3> {
+    fn transfer_get_msg_addr(&self, receive_addr: String) -> Result<Vec<TransferMsg3>> {
         self.database.get_transfer_msg_addr(&receive_addr)
     }
 }
@@ -470,7 +470,7 @@ pub fn transfer_get_msg(
 pub fn transfer_get_msg_addr(
     sc_entity: State<SCE>,
     receive_addr: String,
-) -> Result<Json<TransferMsg3>> {
+) -> Result<Json<Vec<TransferMsg3>>> {
     match sc_entity.transfer_get_msg_addr(receive_addr) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),

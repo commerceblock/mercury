@@ -252,7 +252,7 @@ pub fn run_transfer(
 
     let transfer_msg = state_entity::transfer::transfer_get_msg_addr(&mut wallets[receiver_index],&tranfer_sender_resp.statechain_sig.data);
 
-    assert_eq!(tranfer_sender_resp,transfer_msg.unwrap());
+    assert_eq!(tranfer_sender_resp,transfer_msg.unwrap()[0]);
 
     let tfd = state_entity::transfer::transfer_receiver(
         &mut wallets[receiver_index],
@@ -386,7 +386,7 @@ pub fn run_batch_transfer(
             assert_eq!(v.finalized, true);
             assert_eq!(v.state_chains.len(), transfer_finalized_datas.len());
         },
-        Err(e) => assert!(false, format!("Error: {}",e)),
+        Err(e) => assert!(false, "Error: {}",e),
     }
 
     (
