@@ -499,7 +499,7 @@ impl Database for MemoryDB {
     fn get_transfer_msg_addr(
         &self,
         _receive_addr: &str,
-    ) -> crate::Result<shared_lib::structs::TransferMsg3> {
+    ) -> crate::Result<Vec<shared_lib::structs::TransferMsg3>> {
         unimplemented!()
     }
     fn create_transfer_batch_data(
@@ -627,7 +627,7 @@ impl Database for MemoryDB {
     fn get_recovery_data(
         &self, 
         _proofkey: String,
-    ) -> crate::Result<(uuid::Uuid,uuid::Uuid,bitcoin::Transaction)> {
+    ) -> crate::Result<Vec<(uuid::Uuid,uuid::Uuid,bitcoin::Transaction)>> {
         unimplemented!()
     }
     fn create_user_session(

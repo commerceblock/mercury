@@ -1201,19 +1201,17 @@ impl Database for PGDatabase {
         Self::deser(msg)
     }
 
-    fn get_transfer_msg_addr(&self, receive_addr: &str) -> Result<TransferMsg3> {
+    fn get_transfer_msg_addr(&self, receive_addr: &str) -> Result<Vec<TransferMsg3>> {
         let dbr = self.database_r()?;
         let statement =
             dbr.prepare(&format!("SELECT * FROM {} WHERE proofkey = $1", Table::Transfer.to_string(),))?;
         let rows = statement.query(&[&receive_addr])?;
-        if rows.is_empty() {
-            return Err(SEError::DBError(NoDataForID, String::from("Proof key")));
-        };
-        let row = rows.get(0);
-
-        let msg: TransferMsg3 = Self::deser(row.get("transfermsg"))?;
-
-        Ok(msg)
+        let mut msg_vec = vec![];
+        for row in &rows {
+            let msg: TransferMsg3 = Self::deser(row.get("transfermsg"))?;     
+            msg_vec.push(msg);       
+        }
+        Ok(msg_vec)
     }
 
     fn create_transfer_batch_data(
@@ -1505,7 +1503,7 @@ impl Database for PGDatabase {
     }
 
     // find statecoin and user information from supplied proof key to enable wallet recovery
-    fn get_recovery_data(&self, proofkey: String) -> Result<(Uuid,Uuid,Transaction)> {
+    fn get_recovery_data(&self, proofkey: String) -> Result<Vec<(Uuid,Uuid,Transaction)>> {
         let dbr = self.database_r()?;
         let statement =
             dbr.prepare(&format!("SELECT * FROM {} WHERE proofkey = $1", Table::UserSession.to_string(),))?;
@@ -1513,13 +1511,15 @@ impl Database for PGDatabase {
         if rows.is_empty() {
             return Err(SEError::DBError(NoDataForID, String::from("Proof key")));
         };
-        let row = rows.get(0);
+        let mut rc_vec = vec![];
+        for row in &rows {
+            let tx_backup: Transaction = Self::deser(row.get("txbackup"))?;
+            let user_id: Uuid = row.get("id");
+            let statechain_id: Uuid = row.get("statechainid");
+            rc_vec.push((user_id,statechain_id,tx_backup))
+        }
 
-        let tx_backup: Transaction = Self::deser(row.get("txbackup"))?;
-        let user_id: Uuid = row.get("id");
-        let statechain_id: Uuid = row.get("statechainid");
-
-        Ok((user_id,statechain_id,tx_backup))
+        Ok(rc_vec)
     }
 
     // Create DB entry for newly generated ID signalling that user has passed some
