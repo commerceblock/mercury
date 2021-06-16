@@ -54,5 +54,12 @@ where
     };
 
     info!("Lockbox request {}, took: {})", path, TimeFormat(start.elapsed()));
-    Ok(serde_json::from_str(value.as_str()).unwrap())
+
+//    let deserialised = match serde_json::from_str(value.as_str()) 
+//    {
+//        Ok(v) => v;
+//        Err(e) => return Err(SEError::from(e)),
+//    };
+
+    Ok(serde_json::from_str(value.as_str()).expect(&format!("failed to parse: {}", value.as_str())))
 }
