@@ -13,6 +13,7 @@ mod tests {
     use curv::elliptic::curves::traits::ECScalar;
     use curv::FE;
     use self::time_test::time_test;
+    use shared_lib::util::transaction_deserialise;
 
     #[test]
     #[serial]
@@ -131,6 +132,114 @@ mod tests {
             .unwrap();
 
         let new_shared_key_id = run_transfer(&mut wallets, 0, 1, &receiver_addr, &statechain_id);
+
+        // check shared keys have the same master public key
+        assert_eq!(
+            wallets[0]
+                .get_shared_key(shared_key_id)
+                .unwrap()
+                .share
+                .public
+                .q,
+            wallets[1]
+                .get_shared_key(&new_shared_key_id)
+                .unwrap()
+                .share
+                .public
+                .q
+        );
+
+        // check shared key is marked spent in sender and unspent in receiver
+        assert!(!wallets[0].get_shared_key(shared_key_id).unwrap().unspent);
+        assert!(
+            wallets[1]
+                .get_shared_key(&new_shared_key_id)
+                .unwrap()
+                .unspent
+        );
+
+        // check state chain is updated
+        let state_chain =
+            state_entity::api::get_statechain(&wallets[0].client_shim, &statechain_id).unwrap();
+        assert_eq!(state_chain.chain.len(), 2);
+        assert_eq!(
+            state_chain.chain.last().unwrap().data.to_string(),
+            receiver_addr.proof_key.to_string()
+        );
+
+        // Get SMT inclusion proof and verify
+        let root = state_entity::api::get_smt_root(&wallets[1].client_shim)
+            .unwrap()
+            .unwrap();
+        let proof = state_entity::api::get_smt_proof(&wallets[1].client_shim, &root, &funding_txid)
+            .unwrap();
+        // Ensure wallet's shared key is updated with proof info
+        let shared_key = wallets[1].get_shared_key(&new_shared_key_id).unwrap();
+        assert_eq!(shared_key.smt_proof.clone().unwrap().root, root);
+        assert_eq!(shared_key.smt_proof.clone().unwrap().proof, proof);
+        assert_eq!(
+            shared_key.proof_key.clone().unwrap(),
+            receiver_addr.proof_key.to_string()
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_transfer_decrement() {
+        time_test!();
+        let _handle = start_server();
+        let mut wallets = vec![];
+        wallets.push(gen_wallet_with_deposit(10000)); // sender
+        wallets.push(gen_wallet()); // receiver
+
+        let fee_info = state_entity::api::get_statechain_fee_info(&wallets[0].client_shim).unwrap();
+
+        println!("{:?}", fee_info);
+
+        // Get state chain owned by wallet
+        let state_chains_info = wallets[0].get_state_chains_info().unwrap();
+        let shared_key_id = state_chains_info.0.last().unwrap();
+        let (statechain_id, funding_txid, _, _, _) =
+            wallets[0].get_shared_key_info(shared_key_id).unwrap();
+
+        let receiver_addr = wallets[1]
+            .get_new_state_entity_address()
+            .unwrap();
+
+        let init_locktime = state_chains_info.3.last().unwrap();
+
+        // do transfer sender
+        let tranfer_sender_resp = state_entity::transfer::transfer_sender(
+            &mut wallets[0],
+            &statechain_id,
+            receiver_addr.clone(),
+        )
+        .unwrap();
+
+        let backup_tx = transaction_deserialise(&tranfer_sender_resp.tx_backup_psm.tx_hex).unwrap();
+
+        assert_eq!(backup_tx.lock_time, init_locktime - fee_info.interval);
+
+        // do transfer sender again on the same coin
+        // do transfer sender
+        let mut tranfer_sender_resp_2 = state_entity::transfer::transfer_sender(
+            &mut wallets[0],
+            &statechain_id,
+            receiver_addr.clone(),
+        )
+        .unwrap();
+
+        let new_backup_tx = transaction_deserialise(&tranfer_sender_resp_2.tx_backup_psm.tx_hex).unwrap();
+
+        assert_eq!(new_backup_tx.lock_time, backup_tx.lock_time - fee_info.interval);
+
+        let tfd = state_entity::transfer::transfer_receiver(
+            &mut wallets[1],
+            &mut tranfer_sender_resp_2,
+            &None,
+        )
+        .unwrap();
+        let new_shared_key_id = tfd.new_shared_key_id;
 
         // check shared keys have the same master public key
         assert_eq!(

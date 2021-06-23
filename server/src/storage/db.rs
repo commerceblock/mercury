@@ -1167,7 +1167,9 @@ impl Database for PGDatabase {
         x1: &FE,
     ) -> Result<()> {
         // Create Transfer table entry
-        self.insert(&statechain_id, Table::Transfer)?;
+        if(!self.transfer_is_completed(statechain_id.clone())) {
+            self.insert(&statechain_id, Table::Transfer)?;
+        }
         self.update(
             statechain_id,
             Table::Transfer,
