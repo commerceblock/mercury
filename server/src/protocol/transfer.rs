@@ -100,13 +100,6 @@ impl Transfer for SCE {
         // Check that the funding transaction has the required number of confirmations
         self.verify_tx_confirmed(&tx_backup.input[0].previous_output.txid.to_string())?;
 
-        // Check if transfer has already been completed (but not finalized)
-        if self.database.transfer_is_completed(statechain_id) {
-            return Err(SEError::Generic(String::from(
-                "Transfer already completed. Waiting for finalize.",
-            )));
-        }
-
         // Check if state chain is owned by user and not locked
         let sco = self.database.get_statechain_owner(statechain_id)?;
 

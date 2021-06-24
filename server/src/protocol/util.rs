@@ -372,13 +372,16 @@ impl Utilities for SCE {
                 if prepare_sign_msg.protocol == Protocol::Transfer {
                     //verify transfer locktime is correct
                     let statechain_id = self.database.get_statechain_id(user_id)?;
-                    let current_tx_backup = self.database.get_backup_transaction(statechain_id)?;
+                    let current_tx_backup = self.database.get_backup_transaction(statechain_id.clone())?;
 
                     if (current_tx_backup.lock_time as u32) != (tx.lock_time as u32) + (self.config.lh_decrement as u32) {
                         return Err(SEError::Generic(String::from(
                             "Backup tx locktime not correctly decremented.",
                         )));
                     }
+                    // add unsigned transaction to backup store
+                    // (this ensures that incompleted swaps also decrement the required locktime)
+                    self.database.update_backup_tx(&statechain_id, tx.clone())?;
 
                 }
 

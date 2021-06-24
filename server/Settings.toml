@@ -15,7 +15,7 @@ fee_withdraw = 300
 # Swap parameters
 punishment_duration = "3600" # 1 hour
 utxo_timeout = "60"
-batch_lifetime = "3600" # 1 hour
+batch_lifetime = "600" # 1 hour
 
 #Mainstay config
 mainstay_config = ""
