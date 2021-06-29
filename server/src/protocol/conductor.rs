@@ -661,49 +661,55 @@ impl Conductor for SCE {
     fn poll_swap(&self, swap_id: &Uuid) -> Result<Option<SwapStatus>> {
         let mut guard = self.scheduler.lock()?;
         let status = guard.get_swap_status(swap_id);
-        match guard.reset_swap_timeout(swap_id, false){
-            true => (),
-            false => return Err(SEError::SwapError(format!("swap timed out: {}", swap_id))),
-        };
-        // If in the batch transfer phase, poll the status of the transfer
-        match status {
-            Some(v) => match v {
-                SwapStatus::Phase3 => {
-                    let signatures = match guard.tb_sig_map.get(&swap_id).cloned() {
-                        Some(s) => Vec::from_iter(s),
-                        None => {
-                            return Err(SEError::SwapError(
-                                "batch transfer signatures not found".to_string(),
-                            ))
+                // If in the batch transfer phase, poll the status of the transfer
+                match status {
+                    Some(v) => {
+                        match guard.reset_swap_timeout(swap_id, false){
+                            true => (),
+                            false => return Err(SEError::SwapError(format!("swap timed out: {}", swap_id))),
+                        };
+                    
+                        match v {
+                            SwapStatus::Phase3 => {
+                                let signatures = match guard.tb_sig_map.get(&swap_id).cloned() {
+                                    Some(s) => Vec::from_iter(s),
+                                    None => {
+                                        return Err(SEError::SwapError(
+                                            "batch transfer signatures not found".to_string(),
+                                        ))
+                                    }
+                                };
+                                let msg = TransferBatchInitMsg {
+                                    id: swap_id.to_owned(),
+                                    signatures,
+                                };
+                                self.transfer_batch_init(msg)?;
+                                let _ = guard.transfer_started(swap_id)?;
+                                Ok(status)
+                            }
+                            SwapStatus::Phase4 => match self.get_transfer_batch_status(swap_id.to_owned()) {
+                                Ok(res) => {
+                                    if res.finalized {
+                                        let _ = guard.transfer_ended(swap_id)?;
+                                    }   
+                                    Ok(status)
+                                }
+                                Err(e) => match e {
+                                    SEError::TransferBatchEnded(_) => {
+                                        let _ = guard.transfer_ended(swap_id)?;
+                                        Ok(status)
+                                    }
+                                    _ => Ok(status),
+                                },
+                            },
+                            SwapStatus::End => Ok(status),
+                            _ => Ok(status),
                         }
-                    };
-                    let msg = TransferBatchInitMsg {
-                        id: swap_id.to_owned(),
-                        signatures,
-                    };
-                    self.transfer_batch_init(msg)?;
-                    let _ = guard.transfer_started(swap_id)?;
-                }
-                SwapStatus::Phase4 => match self.get_transfer_batch_status(swap_id.to_owned()) {
-                    Ok(res) => {
-                        if res.finalized {
-                            let _ = guard.transfer_ended(swap_id)?;
-                        }
-                    }
-                    Err(e) => match e {
-                        SEError::TransferBatchEnded(_) => {
-                            let _ = guard.transfer_ended(swap_id)?;
-                        }
-                        _ => (),
                     },
-                },
-                SwapStatus::End => (),
-                _ => (),
-            },
-            None => (),
-        }
-        Ok(status)
+                    None =>  Ok(status)
+                }
     }
+
     fn get_swap_info(&self, swap_id: &Uuid) -> Result<Option<SwapInfo>> {
         let _ = self.poll_swap(swap_id)?;
         let guard = self.scheduler.lock()?;
@@ -1109,7 +1115,7 @@ mod tests {
         let swap_token = SwapToken {
             id: Uuid::from_str("637203c9-37ab-46f9-abda-0678c891b2d3").unwrap(),
             amount: 1,
-            time_out: DEFAULT_TIMEOUT,
+            time_out: 100,
             statechain_ids: vec![Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap()],
         };
         let proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap(); // Proof key priv part
@@ -1308,7 +1314,7 @@ mod tests {
 
         match sc_entity.poll_swap(&swap_id_doesnt_exist) {
             Ok(None) => assert!(true),
-            _ => assert!(false, "Expected failure."),
+            _ => assert!(false, "Expected Ok(None)"),
         }
 
         assert_eq!(
