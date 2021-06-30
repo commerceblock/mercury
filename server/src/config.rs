@@ -12,6 +12,8 @@ use std::str::FromStr;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConductorConfig {
+    //Time in seconds that a swap must be completed by once the group has been formed
+    pub group_timeout: u32,
     //Time in seconds that a UTXO registered for a swap must be polled for 
     //in order to remain in a swap group
     pub utxo_timeout: u32, 
@@ -22,6 +24,7 @@ pub struct ConductorConfig {
 impl Default for ConductorConfig {
     fn default() -> Self {
         Self {
+            group_timeout: 600,
             utxo_timeout: 60,
             punishment_duration: 360
         }
@@ -231,6 +234,14 @@ impl Config {
         }
         if let Ok(v) = env::var("MERC_ROCKET_PORT") {
             let _ = conf_rs.set("rocket.port", v)?;
+        }
+
+        if let Ok(v) = env::var("MERC_UTXO_TIMEOUT") {
+            let _ = conf_rs.set("conductor.utxo_timeout", v)?;
+        }
+
+        if let Ok(v) = env::var("MERC_GROUP_TIMEOUT") {
+            let _ = conf_rs.set("conductor.group_timeout", v)?;
         }
 
         // Type checks

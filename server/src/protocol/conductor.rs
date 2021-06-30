@@ -39,10 +39,6 @@ use schemars;
 use bitcoin::secp256k1::Signature;
 use chrono::{NaiveDateTime, Utc, Duration};
 
-#[cfg(test)]
-static DEFAULT_TIMEOUT: u64 = 8;
-#[cfg(not(test))]
-static DEFAULT_TIMEOUT: u64 = 600;
 
 #[derive(JsonSchema)]
 #[schemars(remote = "Uuid")]
@@ -136,6 +132,8 @@ pub trait Conductor {
 pub struct Scheduler {
     //Timeout for poll utx
     utxo_timeout: u32,
+    //Timeout for swap group to complete
+    group_timeout: u32,
     //State chain id to requested swap size map
     statechain_swap_size_map: BisetMap<Uuid, u64>,
     //A map of state chain registereds for swap to amount
@@ -168,6 +166,10 @@ impl Scheduler {
     pub fn new(config: &ConductorConfig) -> Self {
         Self {
             utxo_timeout: config.utxo_timeout.clone(),
+            #[cfg(not(test))]
+            group_timeout: config.group_timeout.clone(),
+            #[cfg(test)]
+            group_timeout: 8,
             statechain_swap_size_map: BisetMap::<Uuid, u64>::new(),
             statechain_amount_map: BisetMap::<Uuid, u64>::new(),
             group_info_map: HashMap::<SwapGroup, u64>::new(),
@@ -216,7 +218,7 @@ impl Scheduler {
 
     pub fn reset_swap_timeout(&mut self, swap_id: &Uuid, init: bool) -> bool{
         let now: NaiveDateTime = Utc::now().naive_utc();
-        let t = now + Duration::seconds(DEFAULT_TIMEOUT as i64);
+        let t = now + Duration::seconds(self.group_timeout as i64);
         match self.swap_timeout_map.insert(*swap_id, t){
             Some(t_prev) => {
                 if t_prev <= now {
@@ -415,7 +417,7 @@ impl Scheduler {
                     let swap_token = SwapToken {
                         id: swap_id.clone(),
                         amount,
-                        time_out: DEFAULT_TIMEOUT,
+                        time_out: self.group_timeout as u64,
                         statechain_ids: ids_for_swap.clone(),
                     };
 
@@ -1088,6 +1090,7 @@ pub fn get_group_info(
 #[allow(dead_code)]
 #[cfg(test)]
 mod tests {
+    const GROUP_TIMEOUT: u64=8;
     use super::*;
     use crate::protocol::util::tests::test_sc_entity;
     use crate::structs::{StateChainAmount, StateChainOwner};
@@ -1155,10 +1158,10 @@ mod tests {
     //get a scheduler preset with requests
     fn get_scheduler(swap_size_amounts: Vec<(u64, u64)>) -> Scheduler {
         let utxo_timeout: u32 = 6;
-        let swap_timeout: u32 = 8;
+        let group_timeout: u32 = 8;
         let now: NaiveDateTime = Utc::now().naive_utc();
         let t = now + chrono::Duration::seconds(utxo_timeout as i64);
-        let t_swap = now + chrono::Duration::seconds(swap_timeout as i64);
+        let t_swap = now + chrono::Duration::seconds(group_timeout as i64);
 
 
         let statechain_swap_size_map = BisetMap::new();
@@ -1176,6 +1179,7 @@ mod tests {
 
         Scheduler {
             utxo_timeout,
+            group_timeout,
             statechain_swap_size_map,
             statechain_amount_map,
             group_info_map: HashMap::<SwapGroup,u64>::new(),
@@ -1257,7 +1261,7 @@ mod tests {
         assert_eq!(swap_info.status, SwapStatus::Phase1, "expected phase1");
         assert_eq!(swap_info.swap_token.amount, 5, "expected amount 5");
         assert_eq!(
-            swap_info.swap_token.time_out, DEFAULT_TIMEOUT,
+            swap_info.swap_token.time_out, GROUP_TIMEOUT,
             "expected default timeout"
         );
         let mut id_set = HashSet::new();
@@ -1334,7 +1338,7 @@ mod tests {
             Ok(Some(swap_info)) => {
                 assert_eq!(swap_info.status, SwapStatus::Phase1);
                 assert_eq!(swap_info.swap_token.id, swap_id_valid);
-                assert!(swap_info.swap_token.time_out == DEFAULT_TIMEOUT);
+                assert!(swap_info.swap_token.time_out == GROUP_TIMEOUT);
                 assert!(swap_info.swap_token.statechain_ids.len() == 3);
             }
             _ => assert!(false, "Expected Ok(Some(swap_info))."),
@@ -1998,7 +2002,7 @@ mod tests {
                     swap_token: SwapToken {
                         id: swap_id,
                         amount: 1,
-                        time_out: DEFAULT_TIMEOUT,
+                        time_out: GROUP_TIMEOUT,
                         statechain_ids: vec![statechain_id, statechain_id],
                     },
                     bst_sender_data: BSTSenderData::setup(),
@@ -2015,7 +2019,7 @@ mod tests {
                     swap_token: SwapToken {
                         id: swap_id,
                         amount: 1,
-                        time_out: DEFAULT_TIMEOUT,
+                        time_out: GROUP_TIMEOUT,
                         statechain_ids: vec![statechain_id, statechain_id],
                     },
                     bst_sender_data: BSTSenderData::setup(),
@@ -2031,7 +2035,7 @@ mod tests {
                     swap_token: SwapToken {
                         id: swap_id,
                         amount: 1,
-                        time_out: DEFAULT_TIMEOUT,
+                        time_out: GROUP_TIMEOUT,
                         statechain_ids: vec![statechain_id, statechain_id],
                     },
                     bst_sender_data: BSTSenderData::setup(),
