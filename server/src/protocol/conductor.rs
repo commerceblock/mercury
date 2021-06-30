@@ -39,6 +39,9 @@ use schemars;
 use bitcoin::secp256k1::Signature;
 use chrono::{NaiveDateTime, Utc, Duration};
 
+#[cfg(test)]
+static DEFAULT_TIMEOUT: u64 = 8;
+#[cfg(not(test))]
 static DEFAULT_TIMEOUT: u64 = 600;
 
 #[derive(JsonSchema)]
@@ -661,53 +664,44 @@ impl Conductor for SCE {
     fn poll_swap(&self, swap_id: &Uuid) -> Result<Option<SwapStatus>> {
         let mut guard = self.scheduler.lock()?;
         let status = guard.get_swap_status(swap_id);
-                // If in the batch transfer phase, poll the status of the transfer
-                match status {
-                    Some(v) => {
-                        match guard.reset_swap_timeout(swap_id, false){
-                            true => (),
-                            false => return Err(SEError::SwapError(format!("swap timed out: {}", swap_id))),
-                        };
-                    
-                        match v {
-                            SwapStatus::Phase3 => {
-                                let signatures = match guard.tb_sig_map.get(&swap_id).cloned() {
-                                    Some(s) => Vec::from_iter(s),
-                                    None => {
-                                        return Err(SEError::SwapError(
-                                            "batch transfer signatures not found".to_string(),
-                                        ))
-                                    }
-                                };
-                                let msg = TransferBatchInitMsg {
-                                    id: swap_id.to_owned(),
-                                    signatures,
-                                };
-                                self.transfer_batch_init(msg)?;
-                                let _ = guard.transfer_started(swap_id)?;
-                                Ok(status)
-                            }
-                            SwapStatus::Phase4 => match self.get_transfer_batch_status(swap_id.to_owned()) {
-                                Ok(res) => {
-                                    if res.finalized {
-                                        let _ = guard.transfer_ended(swap_id)?;
-                                    }   
-                                    Ok(status)
-                                }
-                                Err(e) => match e {
-                                    SEError::TransferBatchEnded(_) => {
-                                        let _ = guard.transfer_ended(swap_id)?;
-                                        Ok(status)
-                                    }
-                                    _ => Ok(status),
-                                },
-                            },
-                            SwapStatus::End => Ok(status),
-                            _ => Ok(status),
+        // If in the batch transfer phase, poll the status of the transfer
+        match status {
+            Some(v) => match v {
+                SwapStatus::Phase3 => {
+                    let signatures = match guard.tb_sig_map.get(&swap_id).cloned() {
+                        Some(s) => Vec::from_iter(s),
+                        None => {
+                            return Err(SEError::SwapError(
+                                "batch transfer signatures not found".to_string(),
+                            ))
                         }
-                    },
-                    None =>  Ok(status)
+                    };
+                    let msg = TransferBatchInitMsg {
+                        id: swap_id.to_owned(),
+                        signatures,
+                    };
+                    self.transfer_batch_init(msg)?;
+                    let _ = guard.transfer_started(swap_id)?;
                 }
+                SwapStatus::Phase4 => match self.get_transfer_batch_status(swap_id.to_owned()) {
+                    Ok(res) => {
+                        if res.finalized {
+                            let _ = guard.transfer_ended(swap_id)?;
+                        }
+                    }
+                    Err(e) => match e {
+                        SEError::TransferBatchEnded(_) => {
+                            let _ = guard.transfer_ended(swap_id)?;
+                        }
+                        _ => (),
+                    },
+                },
+                SwapStatus::End => (),
+                _ => (),
+            },
+            None => (),
+        }
+        Ok(status)
     }
 
     fn get_swap_info(&self, swap_id: &Uuid) -> Result<Option<SwapInfo>> {
@@ -1161,8 +1155,10 @@ mod tests {
     //get a scheduler preset with requests
     fn get_scheduler(swap_size_amounts: Vec<(u64, u64)>) -> Scheduler {
         let utxo_timeout: u32 = 6;
+        let swap_timeout: u32 = 8;
         let now: NaiveDateTime = Utc::now().naive_utc();
         let t = now + chrono::Duration::seconds(utxo_timeout as i64);
+        let t_swap = now + chrono::Duration::seconds(swap_timeout as i64);
 
 
         let statechain_swap_size_map = BisetMap::new();
@@ -1175,6 +1171,7 @@ mod tests {
             statechain_swap_size_map.insert(id, swap_size);
             statechain_amount_map.insert(id, amount);
             poll_timeout_map.insert(id,t);
+            swap_timeout_map.insert(id,t_swap);
         }
 
         Scheduler {
@@ -1272,6 +1269,17 @@ mod tests {
             6,
             "expected 6 unique state chain ids in the swap token"
         );
+
+        //Wait for swaps to time out
+        thread::sleep(Duration::from_secs(9));
+
+        scheduler.update_swap_info().unwrap();
+
+        let swap_info = scheduler
+            .get_swap_info(&swap_id);
+            
+        assert!(swap_info.is_none(), "expected swap_info to be None ater swap timeout")
+
     }
 
     #[test]
