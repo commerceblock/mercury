@@ -27,7 +27,7 @@ use mockall::predicate::*;
 use mockall::*;
 use rocket::State;
 use rocket_contrib::json::Json;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, LinkedList};
 use std::iter::FromIterator;
 use std::str::FromStr;
 #[cfg(test)]
@@ -39,7 +39,6 @@ use schemars;
 use bitcoin::secp256k1::Signature;
 use chrono::{NaiveDateTime, Utc, Duration};
 
-static DEFAULT_TIMEOUT: u64 = 100;
 
 #[derive(JsonSchema)]
 #[schemars(remote = "Uuid")]
@@ -133,6 +132,8 @@ pub trait Conductor {
 pub struct Scheduler {
     //Timeout for poll utx
     utxo_timeout: u32,
+    //Timeout for swap group to complete
+    group_timeout: u32,
     //State chain id to requested swap size map
     statechain_swap_size_map: BisetMap<Uuid, u64>,
     //A map of state chain registereds for swap to amount
@@ -149,6 +150,8 @@ pub struct Scheduler {
     time_out_map: BisetMap<Uuid, u64>,
     //A map of state chain id to poll_utxo timeout
     poll_timeout_map: HashMap<Uuid, NaiveDateTime>,
+    //A map of state swap id to swap timeout
+    swap_timeout_map: HashMap<Uuid, NaiveDateTime>,
     //map of swap_id to output addresses and claimed_nonces
     out_addr_map: HashMap<Uuid, BisetMap<SCEAddress, Option<Uuid>>>,
     //map of swap_id to map of state chain id to bst_e_prime values
@@ -163,6 +166,10 @@ impl Scheduler {
     pub fn new(config: &ConductorConfig) -> Self {
         Self {
             utxo_timeout: config.utxo_timeout.clone(),
+            #[cfg(not(test))]
+            group_timeout: config.group_timeout.clone(),
+            #[cfg(test)]
+            group_timeout: 8,
             statechain_swap_size_map: BisetMap::<Uuid, u64>::new(),
             statechain_amount_map: BisetMap::<Uuid, u64>::new(),
             group_info_map: HashMap::<SwapGroup, u64>::new(),
@@ -171,6 +178,7 @@ impl Scheduler {
             status_map: BisetMap::<Uuid, SwapStatus>::new(),
             time_out_map: BisetMap::<Uuid, u64>::new(),
             poll_timeout_map: HashMap::<Uuid, NaiveDateTime>::new(),
+            swap_timeout_map: HashMap::<Uuid, NaiveDateTime>::new(),
             out_addr_map: HashMap::new(),
             bst_e_prime_map: HashMap::new(),
             bst_sig_map: HashMap::new(),
@@ -182,18 +190,17 @@ impl Scheduler {
         self.swap_id_map.get(statechain_id).cloned()
     }
 
-
     pub fn reset_poll_utxo_timeout(&mut self, statechain_id: &Uuid) -> bool{
         let now: NaiveDateTime = Utc::now().naive_utc();
         let t = now + Duration::seconds(self.utxo_timeout as i64);
         match self.poll_timeout_map.insert(*statechain_id, t){
             Some(t_prev) => {
                 if t_prev <= now {
-                    self.poll_timeout_map.remove(statechain_id);
-                    false
-                } else {
-                    true
-                }
+                        self.poll_timeout_map.remove(statechain_id);
+                        false
+                    } else {
+                        true
+                    }
             },
             None => true
         }
@@ -202,6 +209,39 @@ impl Scheduler {
     pub fn get_poll_utxo_timeout(&self, statechain_id: &Uuid) -> Option<bool> {
         let now: NaiveDateTime = Utc::now().naive_utc();
         match self.poll_timeout_map.get(statechain_id){
+            Some(t) => {
+                Some(&now < t)
+            },
+            None => None
+        }
+    }
+
+    pub fn reset_swap_timeout(&mut self, swap_id: &Uuid, init: bool) -> bool{
+        let now: NaiveDateTime = Utc::now().naive_utc();
+        let t = now + Duration::seconds(self.group_timeout as i64);
+        match self.swap_timeout_map.insert(*swap_id, t){
+            Some(t_prev) => {
+                if t_prev <= now {
+                        self.swap_timeout_map.remove(swap_id);
+                        false
+                    } else {
+                        true
+                    }
+            },
+            None => {
+                if init {
+                    true
+                } else {
+                    self.swap_timeout_map.remove(swap_id);
+                    false
+                }
+            },
+        }
+    }
+
+    pub fn get_swap_timeout(swap_timeout_map: &HashMap<Uuid, NaiveDateTime>, swap_id: &Uuid) -> Option<bool> {
+        let now: NaiveDateTime = Utc::now().naive_utc();
+        match swap_timeout_map.get(swap_id){
             Some(t) => {
                 Some(&now < t)
             },
@@ -281,6 +321,7 @@ impl Scheduler {
                     .insert(swap_id.to_owned(), i.swap_token.time_out);
                 self.bst_e_prime_map.remove(swap_id);
                 self.bst_sig_map.remove(swap_id);
+                self.swap_timeout_map.remove(swap_id);
                 Some(i)
             }
             None => None,
@@ -376,7 +417,7 @@ impl Scheduler {
                     let swap_token = SwapToken {
                         id: swap_id.clone(),
                         amount,
-                        time_out: DEFAULT_TIMEOUT,
+                        time_out: self.group_timeout as u64,
                         statechain_ids: ids_for_swap.clone(),
                     };
 
@@ -385,6 +426,8 @@ impl Scheduler {
                         swap_token,
                         bst_sender_data: BSTSenderData::setup(),
                     };
+                    //Initialize the swap timeout
+                    self.reset_swap_timeout(&swap_id, true);
                     //Add the swap info to the map of swap infos
                     self.insert_swap_info(&si);
                     //Remove the ids from the request lists
@@ -414,53 +457,81 @@ impl Scheduler {
         }
     }
 
+    /*
+    pub fn update_swap_timeouts(&mut self) -> Result<()> {
+        let remove_list: LinkedList<Uuid> = LinkedList::new();
+        for (swap_id, swap_info) in self.swap_info_map.iter_mut() {
+            match self.get_swap_timeout(&swap_info.swap_token.id) {
+                Some(true) => (),
+                _ => {
+                    remove_list.push_back(swap_info.swap_token.id);
+                    continue;
+                }
+        };
+    }
+*/
+
     //Update the swap info based on the results of user first/second messages
     pub fn update_swaps(&mut self) -> Result<()> {
+        let mut remove_list: LinkedList<Uuid> = LinkedList::new();
         for (swap_id, swap_info) in self.swap_info_map.iter_mut() {
-            match swap_info.status {
-                //Phase 1 - check if all state chain addresses have been received, if so:
-                //    - Generate a Blind Spend Tokens for each participant
-                //    - Move swap to phase 2
-                SwapStatus::Phase1 => {
-                    let out_addr_map: &BisetMap<SCEAddress, Option<Uuid>> =
-                        match self.out_addr_map.get(&swap_id) {
-                            Some(out_addr_map) => out_addr_map,
-                            None => return Ok(()), // BisetMap not yet created means no participants have completed swap_msg_1 yet
-                        };
-                    if (swap_info.swap_token.statechain_ids.len() == out_addr_map.len()) {
-                        //All output addresses received.
-                        //Generate a list of blinded spend tokens and proceed to phase 2.
-                        let swap_id = swap_info.swap_token.id;
-                        let scid_bst_map = generate_blind_spend_signatures(
-                            &swap_info,
-                            self.bst_e_prime_map.get(&swap_id),
-                        )?;
-                        self.bst_sig_map.insert(swap_id, scid_bst_map);
-                        swap_info.status = SwapStatus::Phase2;
-                        info!("SCHEDULER: Swap ID: {} moved on to Phase2", swap_id);
+                match Self::get_swap_timeout(&self.swap_timeout_map, &swap_info.swap_token.id) {
+                    Some(true) => (),
+                    _ => {
+                        remove_list.push_back(swap_info.swap_token.id);
+                        continue;
                     }
-                }
-                SwapStatus::Phase2 => {
-                    //Phase 2 - Return BST and SCEAddresses for corresponding valid signtures
-                    //Signature ok. Add the SCEAddress to the list.
-                    let sce_addr_list = match self.out_addr_map.get(swap_id) {
-                        Some(sce_addr_list) => sce_addr_list,
-                        None => {
-                            return Err(SEError::SwapError(
-                                "In phase 2 but no SCEAddress<->claimed_nonce map found"
-                                    .to_string(),
-                            ))
+                };
+
+                match swap_info.status {
+                        //Phase 1 - check if all state chain addresses have been received, if so:
+                        //    - Generate a Blind Spend Tokens for each participant
+                        //    - Move swap to phase 2
+                        SwapStatus::Phase1 => {
+                            let out_addr_map: &BisetMap<SCEAddress, Option<Uuid>> =
+                                match self.out_addr_map.get(&swap_id) {
+                                    Some(out_addr_map) => out_addr_map,
+                                    None => return Ok(()), // BisetMap not yet created means no participants have completed swap_msg_1 yet
+                                };
+                            if (swap_info.swap_token.statechain_ids.len() == out_addr_map.len()) {
+                                //All output addresses received.
+                                //Generate a list of blinded spend tokens and proceed to phase 2.
+                                let swap_id = swap_info.swap_token.id;
+                                let scid_bst_map = generate_blind_spend_signatures(
+                                    &swap_info,
+                                    self.bst_e_prime_map.get(&swap_id),
+                                )?;
+                                self.bst_sig_map.insert(swap_id, scid_bst_map);
+                                swap_info.status = SwapStatus::Phase2;
+                                info!("SCHEDULER: Swap ID: {} moved on to Phase2", swap_id);
+                            }
                         }
-                    };
-                    // Check if there are any unclaimed SCEAddresses
-                    if sce_addr_list.rev_get(&None).len() == 0 {
-                        swap_info.status = SwapStatus::Phase3;
-                    }
-                    info!("SCHEDULER: Swap ID: {} moved on to Phase3", swap_id);
-                }
-                _ => {}
-            };
+                        SwapStatus::Phase2 => {
+                            //Phase 2 - Return BST and SCEAddresses for corresponding valid signtures
+                            //Signature ok. Add the SCEAddress to the list.
+                            let sce_addr_list = match self.out_addr_map.get(swap_id) {
+                                Some(sce_addr_list) => sce_addr_list,
+                                None => {
+                                    return Err(SEError::SwapError(
+                                        "In phase 2 but no SCEAddress<->claimed_nonce map found"
+                                            .to_string(),
+                                    ))
+                                }
+                            };
+                            // Check if there are any unclaimed SCEAddresses
+                            if sce_addr_list.rev_get(&None).len() == 0 {
+                                swap_info.status = SwapStatus::Phase3;
+                            }
+                            info!("SCHEDULER: Swap ID: {} moved on to Phase3", swap_id);
+                        }
+                        _ => {}
+                };
+        };
+
+        for swap_id in remove_list.iter(){
+            self.remove_swap_info(swap_id);
         }
+        
         Ok(())
     }
 
@@ -634,6 +705,7 @@ impl Conductor for SCE {
         }
         Ok(status)
     }
+
     fn get_swap_info(&self, swap_id: &Uuid) -> Result<Option<SwapInfo>> {
         let _ = self.poll_swap(swap_id)?;
         let guard = self.scheduler.lock()?;
@@ -1018,6 +1090,7 @@ pub fn get_group_info(
 #[allow(dead_code)]
 #[cfg(test)]
 mod tests {
+    const GROUP_TIMEOUT: u64=8;
     use super::*;
     use crate::protocol::util::tests::test_sc_entity;
     use crate::structs::{StateChainAmount, StateChainOwner};
@@ -1039,7 +1112,7 @@ mod tests {
         let swap_token = SwapToken {
             id: Uuid::from_str("637203c9-37ab-46f9-abda-0678c891b2d3").unwrap(),
             amount: 1,
-            time_out: DEFAULT_TIMEOUT,
+            time_out: 100,
             statechain_ids: vec![Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap()],
         };
         let proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap(); // Proof key priv part
@@ -1085,23 +1158,28 @@ mod tests {
     //get a scheduler preset with requests
     fn get_scheduler(swap_size_amounts: Vec<(u64, u64)>) -> Scheduler {
         let utxo_timeout: u32 = 6;
+        let group_timeout: u32 = 8;
         let now: NaiveDateTime = Utc::now().naive_utc();
         let t = now + chrono::Duration::seconds(utxo_timeout as i64);
+        let t_swap = now + chrono::Duration::seconds(group_timeout as i64);
 
 
         let statechain_swap_size_map = BisetMap::new();
         let statechain_amount_map = BisetMap::new();
         let mut poll_timeout_map = HashMap::<Uuid, NaiveDateTime>::new();
+        let mut swap_timeout_map = HashMap::<Uuid, NaiveDateTime>::new();
 
         for (swap_size, amount) in swap_size_amounts {
             let id = Uuid::new_v4();
             statechain_swap_size_map.insert(id, swap_size);
             statechain_amount_map.insert(id, amount);
             poll_timeout_map.insert(id,t);
+            swap_timeout_map.insert(id,t_swap);
         }
 
         Scheduler {
             utxo_timeout,
+            group_timeout,
             statechain_swap_size_map,
             statechain_amount_map,
             group_info_map: HashMap::<SwapGroup,u64>::new(),
@@ -1110,6 +1188,7 @@ mod tests {
             status_map: BisetMap::<Uuid, SwapStatus>::new(),
             time_out_map: BisetMap::<Uuid, u64>::new(),
             poll_timeout_map,
+            swap_timeout_map,
             out_addr_map: HashMap::new(),
             bst_e_prime_map: HashMap::new(),
             bst_sig_map: HashMap::new(),
@@ -1182,7 +1261,7 @@ mod tests {
         assert_eq!(swap_info.status, SwapStatus::Phase1, "expected phase1");
         assert_eq!(swap_info.swap_token.amount, 5, "expected amount 5");
         assert_eq!(
-            swap_info.swap_token.time_out, DEFAULT_TIMEOUT,
+            swap_info.swap_token.time_out, GROUP_TIMEOUT,
             "expected default timeout"
         );
         let mut id_set = HashSet::new();
@@ -1194,6 +1273,17 @@ mod tests {
             6,
             "expected 6 unique state chain ids in the swap token"
         );
+
+        //Wait for swaps to time out
+        thread::sleep(Duration::from_secs(9));
+
+        scheduler.update_swap_info().unwrap();
+
+        let swap_info = scheduler
+            .get_swap_info(&swap_id);
+            
+        assert!(swap_info.is_none(), "expected swap_info to be None ater swap timeout")
+
     }
 
     #[test]
@@ -1236,7 +1326,7 @@ mod tests {
 
         match sc_entity.poll_swap(&swap_id_doesnt_exist) {
             Ok(None) => assert!(true),
-            _ => assert!(false, "Expected failure."),
+            _ => assert!(false, "Expected Ok(None)"),
         }
 
         assert_eq!(
@@ -1248,7 +1338,7 @@ mod tests {
             Ok(Some(swap_info)) => {
                 assert_eq!(swap_info.status, SwapStatus::Phase1);
                 assert_eq!(swap_info.swap_token.id, swap_id_valid);
-                assert!(swap_info.swap_token.time_out == DEFAULT_TIMEOUT);
+                assert!(swap_info.swap_token.time_out == GROUP_TIMEOUT);
                 assert!(swap_info.swap_token.statechain_ids.len() == 3);
             }
             _ => assert!(false, "Expected Ok(Some(swap_info))."),
@@ -1912,7 +2002,7 @@ mod tests {
                     swap_token: SwapToken {
                         id: swap_id,
                         amount: 1,
-                        time_out: DEFAULT_TIMEOUT,
+                        time_out: GROUP_TIMEOUT,
                         statechain_ids: vec![statechain_id, statechain_id],
                     },
                     bst_sender_data: BSTSenderData::setup(),
@@ -1929,7 +2019,7 @@ mod tests {
                     swap_token: SwapToken {
                         id: swap_id,
                         amount: 1,
-                        time_out: DEFAULT_TIMEOUT,
+                        time_out: GROUP_TIMEOUT,
                         statechain_ids: vec![statechain_id, statechain_id],
                     },
                     bst_sender_data: BSTSenderData::setup(),
@@ -1945,7 +2035,7 @@ mod tests {
                     swap_token: SwapToken {
                         id: swap_id,
                         amount: 1,
-                        time_out: DEFAULT_TIMEOUT,
+                        time_out: GROUP_TIMEOUT,
                         statechain_ids: vec![statechain_id, statechain_id],
                     },
                     bst_sender_data: BSTSenderData::setup(),
