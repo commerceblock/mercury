@@ -49,28 +49,17 @@ where
             let text = v.text()?;
 
             text
-        }
-        Err(e) => return sortError(e),
+        },
+        Err(e) => return Err(handleError(e)),
     };
 
     info!("Lockbox request {}, took: {})", path, TimeFormat(start.elapsed()));
     Ok(serde_json::from_str(value.as_str()).unwrap())
 }
 
-
-fn sortError(Err e){
-    // check what e iss
-    info!(e);
-
-    // find lock_box url
-    let config_rs = Config::load()?;
-    let lockbox_url = config_rs.lockbox.clone();
-
-    // change the error codes here - find oout if error has msg property
-    if(e.msg === lockbox_url){
-        e.msg = "";
+fn handleError(e: reqwest::Error) -> SEError {
+    match e.status() {
+        Some(v) => SEError::LockboxError(format!("lockbox status code: {}", v)),
+        None => SEError::LockboxError(String::from("no status code")),
     }
-
-    // return e back
-    return  e;
 }
