@@ -48,6 +48,8 @@ pub enum SEError {
     TryAgain(String),
     /// Batch transfer timeout
     TransferBatchEnded(String),
+    /// Lockbox error
+    LockboxError(String),
 }
 
 impl From<String> for SEError {
@@ -158,6 +160,7 @@ impl fmt::Display for SEError {
             SEError::SwapError(ref e) => write!(f, "Swap Error: {}", e),
             SEError::TryAgain(ref e) => write!(f, "Error: try again: {}", e),
             SEError::TransferBatchEnded(ref e) => write!(f, "Error: Transfer batch ended. {}", e),
+            SEError::LockboxError(ref e) => write!(f, "Lockbox Error: {}", e),
         }
     }
 }

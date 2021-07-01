@@ -49,10 +49,17 @@ where
             let text = v.text()?;
 
             text
-        }
-        Err(e) => return Err(SEError::from(e)),
+        },
+        Err(e) => return Err(handle_error(e)),
     };
 
     info!("Lockbox request {}, took: {})", path, TimeFormat(start.elapsed()));
     Ok(serde_json::from_str(value.as_str()).unwrap())
+}
+
+fn handle_error(e: reqwest::Error) -> SEError {
+    match e.status() {
+        Some(v) => SEError::LockboxError(format!("lockbox status code: {}", v)),
+        None => SEError::LockboxError(String::from("no status code")),
+    }
 }
