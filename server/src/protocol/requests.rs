@@ -50,9 +50,23 @@ where
 
             text
         }
-        Err(e) => return Err(SEError::from(e)),
+        Err(e) => return sortError(e),
     };
 
     info!("Lockbox request {}, took: {})", path, TimeFormat(start.elapsed()));
     Ok(serde_json::from_str(value.as_str()).unwrap())
+}
+
+
+fn sortError(Err e){
+    // check what e iss
+    info!(e);
+
+    // change the error codes here!!
+    if(e.msg === lockbox_url){
+        e.msg = "";
+    }
+
+    // return e back
+    return  e;
 }
