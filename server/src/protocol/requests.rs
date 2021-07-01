@@ -62,7 +62,11 @@ fn sortError(Err e){
     // check what e iss
     info!(e);
 
-    // change the error codes here!!
+    // find lock_box url
+    let config_rs = Config::load()?;
+    let lockbox_url = config_rs.lockbox.clone();
+
+    // change the error codes here - find oout if error has msg property
     if(e.msg === lockbox_url){
         e.msg = "";
     }
