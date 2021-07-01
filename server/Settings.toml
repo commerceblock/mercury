@@ -1,20 +1,25 @@
 electrum_server = "127.0.0.1:60401"
 lockbox = ""
-network = "regtest"
+network = "testnet"
 required_confirmation = 0
 testing_mode = true
-lockheight_init = 1000
-lh_decrement = 10
+log_file = "log/output.log" # Comment out for stdout
+lockheight_init = 10000
+lh_decrement = 100
+
 # Fees
-fee_address = "bcrt1qy6jn9a2lgaumeedqxzq2s0497s5zr5645xmzuk"
+fee_address = "tb1qzvv6yfeg0navfkrxpqc0fjdsu9ey4qgqqsarq4"
 fee_deposit = 0
-fee_withdraw = 50
+fee_withdraw = 300
+
 # Swap parameters
 punishment_duration = "3600" # 1 hour
 utxo_timeout = "60"
-batch_lifetime = "3600" # 1 hour
+batch_lifetime = "600" # 1 hour
+
 #Mainstay config
 mainstay_config = ""
+
 #Watch config
 watch_only = false
 bitcoind = ""
