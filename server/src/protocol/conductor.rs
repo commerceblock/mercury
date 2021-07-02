@@ -190,9 +190,10 @@ impl Scheduler {
         self.swap_id_map.get(statechain_id).cloned()
     }
 
-    pub fn reset_poll_utxo_timeout(&mut self, statechain_id: &Uuid) -> bool{
+    pub fn reset_poll_utxo_timeout(&mut self, statechain_id: &Uuid, init: bool) -> bool{
         let now: NaiveDateTime = Utc::now().naive_utc();
         let t = now + Duration::seconds(self.utxo_timeout as i64);
+        if !init &! self.poll_timeout_map.contains_key(statechain_id) { return false; }
         match self.poll_timeout_map.insert(*statechain_id, t){
             Some(t_prev) => {
                 if t_prev <= now {
@@ -255,7 +256,7 @@ impl Scheduler {
         amount: u64,
         swap_size: u64,
     ) -> Result<()> {
-        self.reset_poll_utxo_timeout(statechain_id);
+        self.reset_poll_utxo_timeout(statechain_id, true);
         //Only register if id not already in swap map
         let in_swap = self.swap_id_map.get(&statechain_id);
         if (!in_swap.is_none()) {
@@ -655,9 +656,9 @@ pub fn generate_blind_spend_signatures(
 impl Conductor for SCE {
     fn poll_utxo(&self, statechain_id: &Uuid) -> Result<SwapID> {
         let mut guard = self.scheduler.lock()?;
-        let result = match guard.reset_poll_utxo_timeout(statechain_id){
+        let result = match guard.reset_poll_utxo_timeout(statechain_id, false){
             true => Ok(SwapID { id: guard.get_swap_id(statechain_id) } ),
-            false => Err(SEError::SwapError(format!("statechain timed out: {}", statechain_id))),
+            false => Err(SEError::SwapError(format!("statechain timed out or has not been requested for swap: {}", statechain_id))),
         };
         drop(guard);
         result
@@ -1293,16 +1294,25 @@ mod tests {
         let mut sc_entity = test_sc_entity(db);
         sc_entity.scheduler = Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)])));
 
-        let uxto_waiting_for_swap = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let utxo_not_in_swap = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d4").unwrap();
+        let utxo_waiting_for_swap = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d3").unwrap();
 
         let mut guard = sc_entity.scheduler.lock().unwrap();
+        guard.reset_poll_utxo_timeout(&utxo_waiting_for_swap, true);
         guard.update_swap_info().unwrap();
         let utxo_invited_to_swap = guard.swap_id_map.iter().next().unwrap().0.to_owned();
         drop(guard);
         //let uxto_invited_to_swap = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
-        match sc_entity.poll_utxo(&uxto_waiting_for_swap) {
+        let errExpected = SEError::SwapError(format!("statechain timed out or has not been requested for swap: {}", utxo_not_in_swap));
+        match sc_entity.poll_utxo(&utxo_not_in_swap) {
+            Ok(v) => assert!(false, "Expected error: {} - got Ok({:?})", errExpected, v),
+            Err(e) => {
+                assert_eq!(e.to_string(), errExpected.to_string());
+            }
+        }
+        match sc_entity.poll_utxo(&utxo_waiting_for_swap) {
             Ok(no_swap_id) => assert!(no_swap_id.id.is_none()),
-            Err(_) => assert!(false, "Expected Ok(())."),
+            Err(e) => assert!(false, format!("Expected Ok(()), got {}", e)),
         }
         match sc_entity.poll_utxo(&utxo_invited_to_swap) {
             Ok(swap_id) => assert!(swap_id.id.is_some()),
