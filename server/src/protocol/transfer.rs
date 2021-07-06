@@ -177,7 +177,8 @@ impl Transfer for SCE {
 
         let s2: FE;
         let s2_pub: GE;
-        if self.lockbox.active {
+        match &self.lockbox {
+            Some(l) => {
             let ku_send = KUSendMsg {
                 user_id,
                 statechain_id,
@@ -186,11 +187,11 @@ impl Transfer for SCE {
                 o2_pub: transfer_msg4.o2_pub,
             };
             let path: &str = "ecdsa/keyupdate/first";
-            let ku_receive: KUReceiveMsg = post_lb(&self.lockbox, path, &ku_send)?;
+            let ku_receive: KUReceiveMsg = post_lb(&l, path, &ku_send)?;
             s2 = FE::new_random();
             s2_pub = ku_receive.s2_pub;
-        }
-        else {
+        },
+        None => {
             let kp = self.database.get_ecdsa_keypair(user_id)?;
 
             // let x1 = transfer_data.x1;
@@ -233,7 +234,7 @@ impl Transfer for SCE {
                     "Transfer protocol error: P1 != P2",
                 )));
             }
-        }
+        }}
 
         // Create user ID for new UserSession (receiver of transfer)
         let new_shared_key_id = Uuid::new_v4();
@@ -321,14 +322,17 @@ impl Transfer for SCE {
         )?;
 
         //lockbox finalise and delete key
-        if self.lockbox.active {
+        match &self.lockbox {
+            Some(l) => {
             let ku_send = KUFinalize {
                 statechain_id,
                 shared_key_id: new_user_id,
             };
             let path: &str = "ecdsa/keyupdate/second";
-            let _ku_receive: KUAttest = post_lb(&self.lockbox, path, &ku_send)?;
-        }
+            let _ku_receive: KUAttest = post_lb(&l, path, &ku_send)?;
+            },
+            None => ()
+        };
 
         let new_tx_backup_hex = transaction_deserialise(&finalized_data.new_tx_backup_hex)?;
 
@@ -807,8 +811,7 @@ mod tests {
         let mut sc_entity = test_sc_entity(db);
         let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
 
-        sc_entity.lockbox.active = true;
-        sc_entity.lockbox.endpoint = mockito::server_url();
+        sc_entity.lockbox.as_mut().map(|l| l.endpoint = mockito::server_url());
 
         // simulate lockbox secret operations
         let kp = ECDSAKeypair {

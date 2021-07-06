@@ -1,6 +1,6 @@
 use super::protocol::conductor::Scheduler;
 use super::protocol::*;
-use crate::config::Config;
+use crate::config::{Config, Mode};
 use crate::structs::StateChainOwner;
 use crate::Database;
 use shared_lib::{mainstay, state_chain::StateChainSig, swap_data::*};
@@ -31,6 +31,7 @@ use once_cell::sync::Lazy;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 use std::collections::HashMap;
+use crate::error::SEError;
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -56,19 +57,18 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 pub struct Lockbox {
     pub client: reqwest::blocking::Client,
     pub endpoint: String,
-    pub active: bool,
 }
 
 impl Lockbox {
-    pub fn new(endpoint: String) -> Lockbox {
+    pub fn new(endpoint: String) -> Result<Lockbox> {
         let client = reqwest::blocking::Client::new();
-        let active = endpoint.len() > 0;
-        let lb = Lockbox {
-            client,
-            endpoint,
-            active,
-        };
-        lb
+        match endpoint.len() > 0 {
+            true => Ok(Lockbox {
+                        client,
+                        endpoint,
+                    }),
+            false => Err(SEError::Generic(String::from("endpoint string passed to Lockbox::new has zero length")).into())
+        }
     }
 }
 
@@ -79,8 +79,8 @@ pub struct StateChainEntity<
     pub config: Config,
     pub database: T,
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
-    pub scheduler: Arc<Mutex<Scheduler>>,
-    pub lockbox: Lockbox,
+    pub scheduler: Option<Arc<Mutex<Scheduler>>>,
+    pub lockbox: Option<Lockbox>,
 }
 
 impl<
@@ -91,7 +91,6 @@ impl<
     pub fn load(mut db: T, mut db_smt: D) -> Result<StateChainEntity<T, D>> {
         // Get config as defaults, Settings.toml and env vars
         let config_rs = Config::load()?;
-        let lockbox_url = config_rs.lockbox.clone();
         db.set_connection_from_config(&config_rs)?;
         db_smt.set_connection_from_config(&config_rs)?;
 
@@ -102,15 +101,26 @@ impl<
 
         let conductor_config = config_rs.conductor.clone();
 
+        let (lockbox, scheduler) = match config_rs.mode {
+            Mode::Both => (Lockbox::new(config_rs.lockbox.clone()).ok(), Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config))))),
+            Mode::Conductor => (Lockbox::new(config_rs.lockbox.clone()).ok(), Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config))))),
+            Mode::Core => (None, None)
+        };
+        
+
         let sce = Self {
             config: config_rs,
             database: db,
             smt: Arc::new(Mutex::new(smt)),
-            scheduler: Arc::new(Mutex::new(Scheduler::new(&conductor_config))),
-            lockbox: Lockbox::new(lockbox_url),
+            scheduler,
+            lockbox,
         };
 
-        Self::start_conductor_thread(sce.scheduler.clone());
+        match &sce.scheduler {
+            Some(s) => {Self::start_conductor_thread(s.clone());},
+            None => ()
+        }
+        
         Ok(sce)
     }
 
