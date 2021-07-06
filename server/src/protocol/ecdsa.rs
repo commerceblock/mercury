@@ -111,7 +111,7 @@ impl Ecdsa for SCE {
 
             db.update_keygen_first_msg(&user_id, &key_gen_first_msg, comm_witness, ec_key_pair)?;
             kg_first_msg = key_gen_first_msg;
-        }}
+        }};
         Ok(KeyGenReply1 {user_id: user_id, msg: kg_first_msg } )
     }
 
@@ -379,9 +379,7 @@ pub mod tests {
         db.expect_get_user_auth().returning(move |_| Ok(user_id));
         db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
 
-        let mut sc_entity = test_sc_entity(db);
-
-        sc_entity.lockbox.as_mut().map(|l| l.endpoint = mockito::server_url());
+        let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()));
 
         let kg_first_msg = party_one::KeyGenFirstMsg { pk_commitment: BigInt::from(0), zk_pok_commitment: BigInt::from(1) };
 
@@ -458,9 +456,7 @@ pub mod tests {
         let sig_hash: sha256d::Hash = serde_json::from_str(&hexhash.to_string()).unwrap();
         db.expect_get_sighash().returning(move |_| Ok(sig_hash));
 
-        let mut sc_entity = test_sc_entity(db);
-
-        sc_entity.lockbox.as_mut().map(|l| l.endpoint = mockito::server_url());
+        let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()));
 
         let (eph_key_gen_first_message_party_two, _, _) =
             MasterKey2::sign_first_message();

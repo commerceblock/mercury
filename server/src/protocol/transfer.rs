@@ -567,7 +567,7 @@ mod tests {
         db.expect_create_transfer().returning(|_, _, _| Ok(()));
         db.expect_update_transfer_msg().returning(|_, _| Ok(()));
 
-        let sc_entity = test_sc_entity(db);
+        let sc_entity = test_sc_entity(db, None);
 
         // user does not own State Chain
         let mut msg_1_wrong_shared_key_id = transfer_msg_1.clone();
@@ -682,7 +682,7 @@ mod tests {
         db.expect_update_finalize_batch_data()
             .returning(|_, _| Ok(()));
 
-        let sc_entity = test_sc_entity(db);
+        let sc_entity = test_sc_entity(db, None);
         let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
 
         // Input data to transfer_receiver
@@ -808,7 +808,7 @@ mod tests {
         db.expect_update_finalize_batch_data()
             .returning(|_, _| Ok(()));
 
-        let mut sc_entity = test_sc_entity(db);
+        let mut sc_entity = test_sc_entity(db, None);
         let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
 
         sc_entity.lockbox.as_mut().map(|l| l.endpoint = mockito::server_url());

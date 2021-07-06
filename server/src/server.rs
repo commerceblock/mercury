@@ -88,9 +88,9 @@ impl<
         D: Database + MonotreeDatabase + Send + Sync + 'static,
     > StateChainEntity<T, D>
 {
-    pub fn load(mut db: T, mut db_smt: D) -> Result<StateChainEntity<T, D>> {
+    pub fn load(mut db: T, mut db_smt: D, config: Option<Config>) -> Result<StateChainEntity<T, D>> {
         // Get config as defaults, Settings.toml and env vars
-        let config_rs = Config::load()?;
+        let config_rs = config.unwrap_or(Config::load()?);
         db.set_connection_from_config(&config_rs)?;
         db_smt.set_connection_from_config(&config_rs)?;
 
@@ -100,11 +100,12 @@ impl<
         };
 
         let conductor_config = config_rs.conductor.clone();
-
+        
+        
         let (lockbox, scheduler) = match config_rs.mode {
             Mode::Both => (Lockbox::new(config_rs.lockbox.clone()).ok(), Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config))))),
-            Mode::Conductor => (Lockbox::new(config_rs.lockbox.clone()).ok(), Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config))))),
-            Mode::Core => (None, None)
+            Mode::Conductor => (None, Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config))))),
+            Mode::Core => (Lockbox::new(config_rs.lockbox.clone()).ok(), None)
         };
         
 
@@ -171,7 +172,7 @@ pub fn get_server<
     db: T,
     db_smt: D,
 ) -> Result<Rocket> {
-    let mut sc_entity = StateChainEntity::<T, D>::load(db, db_smt)?;
+    let mut sc_entity = StateChainEntity::<T, D>::load(db, db_smt,None)?;
 
     set_logging_config(&sc_entity.config.log_file);
 

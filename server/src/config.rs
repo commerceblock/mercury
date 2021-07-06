@@ -256,10 +256,6 @@ impl Config {
             let _ = conf_rs.set("conductor.group_timeout", v)?;
         }
 
-        if let Ok(v) = env::var("MERC_MODE") {
-            let _ = conf_rs.set("conductor.mode", v)?;
-        }
-
         // Type checks
         let fee_address = conf_rs.get_str("fee_address")?;
         if let Err(e) = bitcoin::Address::from_str(&fee_address) {
