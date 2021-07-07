@@ -41,7 +41,7 @@ pub fn swap_register_utxo(wallet: &Wallet, statechain_id: &Uuid, swap_size: &u64
     )?;
 
     requests::postb(
-        &wallet.client_shim,
+        &wallet.conductor_shim,
         &String::from("swap/register-utxo"),
         &RegisterUtxo {
             statechain_id: statechain_id.to_owned(),
@@ -99,7 +99,7 @@ pub fn swap_first_message(
     let my_bst_data = BSTRequestorData::setup(swap_info.bst_sender_data.get_r_prime(), &m)?;
 
     requests::postb(
-        &wallet.client_shim,
+        &wallet.conductor_shim,
         &String::from("swap/first"),
         &SwapMsg1 {
             swap_id: swap_token.id.to_owned(),
@@ -138,7 +138,7 @@ pub fn swap_second_message(
     let bst = my_bst_data.make_blind_spend_token(s);
 
     requests::postb(
-        &wallet.client_shim,
+        &wallet.conductor_shim,
         &String::from("swap/second"),
         &SwapMsg2 {
             swap_id: swap_id.to_owned(),
@@ -192,7 +192,7 @@ pub fn do_swap(
     swap_size: &u64,
     with_tor: bool,
 ) -> Result<SCEAddress> {
-    if with_tor & !wallet.client_shim.has_tor() {
+    if with_tor & (!wallet.client_shim.has_tor()  |! wallet.conductor_shim.has_tor()){
         return Err(CError::SwapError("tor not enabled".to_string()));
     }
 
@@ -201,7 +201,7 @@ pub fn do_swap(
     //Wait for swap to commence
 
     loop {
-        match swap_poll_utxo(&wallet.client_shim, &statechain_id)?.id {
+        match swap_poll_utxo(&wallet.conductor_shim, &statechain_id)?.id {
             Some(v) => {
                 swap_id = v;
                 break;
@@ -214,7 +214,7 @@ pub fn do_swap(
     let info: SwapInfo;
 
     loop {
-        match swap_info(&wallet.client_shim, &swap_id)? {
+        match swap_info(&wallet.conductor_shim, &swap_id)? {
             Some(v) => {
                 info = v;
                 break;
@@ -246,7 +246,7 @@ pub fn do_swap(
     //Wait until swap is in phase4 then transfer sender
 
     loop {
-        match swap_poll_swap(&wallet.client_shim, &swap_id)? {
+        match swap_poll_swap(&wallet.conductor_shim, &swap_id)? {
             Some(v) => match v {
                 SwapStatus::Phase2 => {
                     break;
@@ -258,17 +258,18 @@ pub fn do_swap(
         thread::sleep(time::Duration::from_secs(3));
     }
 
-    let bss = swap_get_blinded_spend_signature(&wallet.client_shim, &swap_id, &statechain_id)?;
+    let bss = swap_get_blinded_spend_signature(&wallet.conductor_shim, &swap_id, &statechain_id)?;
 
     if with_tor {
         wallet.client_shim.new_tor_id()?;
+        wallet.conductor_shim.new_tor_id()?;
     }
 
     let receiver_addr = swap_second_message(&wallet, &swap_id, &my_bst_data, &bss)?;
 
     //Wait until swap is in phase4 then transfer sender
     loop {
-        match swap_poll_swap(&wallet.client_shim, &swap_id)? {
+        match swap_poll_swap(&wallet.conductor_shim, &swap_id)? {
             Some(v) => match v {
                 SwapStatus::Phase4 => {
                     break;
@@ -303,7 +304,7 @@ pub fn do_swap(
 
     //Wait until swap is in phase End
     loop {
-        match swap_poll_swap(&wallet.client_shim, &swap_id)? {
+        match swap_poll_swap(&wallet.conductor_shim, &swap_id)? {
             Some(v) => match v {
                 SwapStatus::End => {
                     break;

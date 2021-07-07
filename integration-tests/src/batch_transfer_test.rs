@@ -484,7 +484,7 @@ mod tests {
     fn test_swap_seperate_conductor() {
         let merc_port: u16 = 8000;
         let conductor_port: u16 = 8001;
-        let _handle = start_server(Some(merc_port),None);
+        let _handle = start_server(Some(merc_port),Some(String::from("core")));
         let _conductor_handle = start_server(Some(conductor_port), Some(String::from("conductor")));
 
         let num_state_chains: u64 = 3;
@@ -519,8 +519,8 @@ mod tests {
             thread_handles.push(spawn(move || {
                 let mut wallet = wallet::wallet::Wallet::from_json(
                     wallet_ser,
-                    ClientShim::new("http://localhost:8000".to_string(), None, None),
-                    ClientShim::new("http://localhost:8000".to_string(), None, None),
+                    ClientShim::new(format!("http://localhost:{}",merc_port), None, None),
+                    ClientShim::new(format!("http://localhost:{}",conductor_port), None, None),
                 )?;
 
                         state_entity::conductor::do_swap(&mut wallet, &deposit, &num_state_chains, false)

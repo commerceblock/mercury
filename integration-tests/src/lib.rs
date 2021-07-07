@@ -110,12 +110,12 @@ impl SpawnServer for PGDatabase {
         // Set enviroment variable to testing_mode=true to override Settings.toml
         env::set_var("MERC_TESTING_MODE", "true");
         match port {
-            Some(p) => env::set_var("MERC_ROCKET_PORT", p.to_string()),
+            Some(p) => env::set_var("MERC_ROCKET_PORT", &p.to_string()[..]),
             None => ()
         };
 
         match mode {
-            Some(m) => env::set_var("MERC_MODE", m),
+            Some(m) => env::set_var("MERC_MODE", &m[..]),
             None => ()
         };
         

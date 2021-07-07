@@ -207,7 +207,7 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                     }
                     DaemonRequest::GetSwapGroups => {
                         debug!("Daemon: GetSwapGroups");
-                        let swap_groups_res = get_swaps_group_info(&wallet.client_shim);
+                        let swap_groups_res = get_swaps_group_info(&wallet.conductor_shim);
                         r.send(DaemonResponse::value_to_deamon_response(swap_groups_res))
                     }
                     DaemonRequest::GetCoinsInfo => {

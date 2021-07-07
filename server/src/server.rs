@@ -276,7 +276,6 @@ pub fn get_server<
     prometheus.registry().register(Box::new(REG_SWAP_UTXOS.clone())).unwrap();
 
     let rocket_config = get_rocket_config(&sc_entity.config);
-
     let bitcoind = sc_entity.config.bitcoind.clone();
 
     if sc_entity.config.watch_only {
