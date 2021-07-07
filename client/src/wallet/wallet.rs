@@ -661,17 +661,19 @@ mod tests {
     use super::*;
     extern crate shared_lib;
 
-    fn gen_wallet() -> Wallet {
-        gen_wallet_with_seed(&[0xcd; 32])
+    fn gen_wallet(conductor_port: Option<u16>) -> Wallet {
+        gen_wallet_with_seed(&[0xcd; 32], conductor_port)
     }
 
-    fn gen_wallet_with_seed(seed: &[u8]) -> Wallet {
+    fn gen_wallet_with_seed(seed: &[u8], conductor_port: Option<u16>) -> Wallet {
+        let cond_endpoint = format!("http://localhost:{}", conductor_port.unwrap_or(8000));
         // let electrum = ElectrumxClient::new("dummy").unwrap();
         let mut wallet = Wallet::new(
             &seed,
             &"regtest".to_string(),
             DEFAULT_TEST_WALLET_LOC,
             ClientShim::new("http://localhost:8000".to_string(), None, None),
+            ClientShim::new(cond_endpoint, None, None),
         );
         let _ = wallet.keys.get_new_address();
         let _ = wallet.keys.get_new_address();
@@ -682,7 +684,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_wallet_save_load() {
-        let wallet = gen_wallet();
+        let wallet = gen_wallet(None);
         wallet.save();
 
         let wallet_loaded = Wallet::load(DEFAULT_TEST_WALLET_LOC, ClientShim::new("http://localhost:8000".to_string(), None, None)).unwrap();
@@ -694,8 +696,8 @@ mod tests {
     #[serial]
     fn test_wallet_save_overwrite() {
         // Generate two identical wallets
-        let mut wallet1 = gen_wallet();
-        let wallet2 = gen_wallet();
+        let mut wallet1 = gen_wallet(None);
+        let wallet2 = gen_wallet(None);
         assert_eq!(wallet1.keys.last_derived_pos, wallet2.keys.last_derived_pos);
 
         // Make distinct
@@ -719,7 +721,7 @@ mod tests {
 
     #[test]
     fn test_to_and_from_json() {
-        let mut wallet = gen_wallet();
+        let mut wallet = gen_wallet(None);
 
         let addr1 = wallet.keys.get_new_address().unwrap();
         let addr2 = wallet.keys.get_new_address().unwrap();
@@ -868,7 +870,7 @@ mod tests {
 
     #[test]
     fn test_coin_selection_greedy() {
-        let mut wallet = gen_wallet();
+        let mut wallet = gen_wallet(None);
         let _ = wallet.keys.get_new_address();
 
         for amount in [10, 100, 10000000, 10000100].iter() {
@@ -910,7 +912,7 @@ mod tests {
             }
         }
 
-        let mut wallet = gen_wallet();
+        let mut wallet = gen_wallet(None);
         let pubk = wallet.se_proof_keys.get_new_key().unwrap();
 
         let mut my_struct = TestStruct {
