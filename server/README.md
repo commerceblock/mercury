@@ -13,7 +13,7 @@ Database connection information should be provided via the environment variables
 `MERC_DB_HOST_`, `MERC_DB_PORT_`, `MERC_DB_USER_`, `MERC_DB_PASS_`, `MERC_DB_DATABASE_` with suffix one of,
 `W` or `R`, where `W` is the database for writes and `R` the database for reads.
 
-The server can be run in one of 3 modes: "core", which runs the core server only, "conductor" which runs a swap conductor server only, or "both" which includes both of these functions in the same server. 
+The server can be run in one of 3 modes by selecting the `MERC_MODE` environment variable: "core", which runs the core server only, "conductor" which runs a swap conductor server only, or "both" which includes both of these functions in the same server. The default is "both".
 
 | Parameter | Type | Description |
 | ----------- | ----- | ----------- |
