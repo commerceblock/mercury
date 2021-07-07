@@ -20,7 +20,7 @@ use rocket_okapi::routes_with_openapi;
 use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 use rocket::{
     config::{Config as RocketConfig, Environment},
-    Request, Rocket,
+    Request, Rocket, Route
 };
 use rocket_prometheus::{
     prometheus::{opts, IntCounter, IntCounterVec},
@@ -162,6 +162,80 @@ fn get_docs() -> SwaggerUIConfig {
     }
 }
 
+fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
+    match mode {
+        Mode::Both => routes_with_openapi![
+            util::get_statechain,
+            util::get_smt_root,
+            util::get_smt_proof,
+            util::get_fees,
+            util::prepare_sign_tx,
+            util::get_recovery_data,
+            util::get_transfer_batch_status,
+            util::get_coin_info,
+            ecdsa::first_message,
+            ecdsa::second_message,
+            ecdsa::sign_first,
+            ecdsa::sign_second,
+            deposit::deposit_init,
+            deposit::deposit_confirm,
+            transfer::transfer_sender,
+            transfer::transfer_receiver,
+            transfer::transfer_update_msg,
+            transfer::transfer_get_msg,
+            transfer::transfer_get_msg_addr,
+            transfer::transfer_get_pubkey,
+            transfer_batch::transfer_batch_init,
+            transfer_batch::transfer_reveal_nonce,
+            withdraw::withdraw_init,
+            withdraw::withdraw_confirm,
+            conductor::poll_utxo,
+            conductor::poll_swap,
+            conductor::get_swap_info,
+            conductor::get_blinded_spend_signature,
+            conductor::register_utxo,
+            conductor::deregister_utxo,
+            conductor::swap_first_message,
+            conductor::swap_second_message,
+            conductor::get_group_info],
+        Mode::Core => routes_with_openapi![
+            util::get_statechain,
+            util::get_smt_root,
+            util::get_smt_proof,
+            util::get_fees,
+            util::prepare_sign_tx,
+            util::get_recovery_data,
+            util::get_transfer_batch_status,
+            util::get_coin_info,
+            ecdsa::first_message,
+            ecdsa::second_message,
+            ecdsa::sign_first,
+            ecdsa::sign_second,
+            deposit::deposit_init,
+            deposit::deposit_confirm,
+            transfer::transfer_sender,
+            transfer::transfer_receiver,
+            transfer::transfer_update_msg,
+            transfer::transfer_get_msg,
+            transfer::transfer_get_msg_addr,
+            transfer::transfer_get_pubkey,
+            transfer_batch::transfer_batch_init,
+            transfer_batch::transfer_reveal_nonce,
+            withdraw::withdraw_init,
+            withdraw::withdraw_confirm],
+        Mode::Conductor => routes_with_openapi![
+            conductor::poll_utxo,
+            conductor::poll_swap,
+            conductor::get_swap_info,
+            conductor::get_blinded_spend_signature,
+            conductor::register_utxo,
+            conductor::deregister_utxo,
+            conductor::swap_first_message,
+            conductor::swap_second_message,
+            conductor::get_group_info],
+    }
+}
+
 /// Start Rocket Server. mainstay_config parameter overrides Settings.toml and env var settings.
 /// If no db provided then use mock
 pub fn get_server<
@@ -222,6 +296,7 @@ pub fn get_server<
         if sc_entity.config.bitcoind.is_empty() == false {
             thread::spawn(|| watch_node(bitcoind));
         }
+        
         let rock = rocket::custom(rocket_config)
             .register(catchers![internal_error, not_found, bad_request])
             .attach(prometheus.clone())
@@ -233,41 +308,7 @@ pub fn get_server<
             )
             .mount(
                 "/",
-                routes_with_openapi![
-                    util::get_statechain,
-                    util::get_smt_root,
-                    util::get_smt_proof,
-                    util::get_fees,
-                    util::prepare_sign_tx,
-                    util::get_recovery_data,
-                    util::get_transfer_batch_status,
-                    util::get_coin_info,
-                    ecdsa::first_message,
-                    ecdsa::second_message,
-                    ecdsa::sign_first,
-                    ecdsa::sign_second,
-                    deposit::deposit_init,
-                    deposit::deposit_confirm,
-                    transfer::transfer_sender,
-                    transfer::transfer_receiver,
-                    transfer::transfer_update_msg,
-                    transfer::transfer_get_msg,
-                    transfer::transfer_get_msg_addr,
-                    transfer::transfer_get_pubkey,
-                    transfer_batch::transfer_batch_init,
-                    transfer_batch::transfer_reveal_nonce,
-                    withdraw::withdraw_init,
-                    withdraw::withdraw_confirm,
-                    conductor::poll_utxo,
-                    conductor::poll_swap,
-                    conductor::get_swap_info,
-                    conductor::get_blinded_spend_signature,
-                    conductor::register_utxo,
-                    conductor::deregister_utxo,
-                    conductor::swap_first_message,
-                    conductor::swap_second_message,
-                    conductor::get_group_info,
-                ],
+                get_routes(&sc_entity.config.mode),
             )
             .mount("/swagger", make_swagger_ui(&get_docs()))
             .mount("/metrics", prometheus)

@@ -14,7 +14,6 @@ use shared_lib::{
     util::{get_sighash, tx_withdraw_verify, transaction_deserialise, transaction_serialise},
     Root,
 };
-use crate::config::{Config, Mode};
 
 use shared_lib::structs::Protocol;
 

@@ -93,6 +93,7 @@ pub trait SpawnServer {
     fn spawn_server(
         self,
         mainstay_config: Option<mainstay::MainstayConfig>,
+        port: Option<u16>
     ) -> thread::JoinHandle<SpawnError>;
 }
 
@@ -102,10 +103,15 @@ impl SpawnServer for PGDatabase {
     fn spawn_server(
         self,
         mainstay_config: Option<mainstay::MainstayConfig>,
+        port: Option<u16>
     ) -> thread::JoinHandle<SpawnError> {
         // Set enviroment variable to testing_mode=true to override Settings.toml
         env::set_var("MERC_TESTING_MODE", "true");
-
+        match port {
+            Some(p) => env::set_var("MERC_ROCKET_PORT", p.to_string()),
+            None => ()
+        };
+        
         // Rocket server is blocking, so we spawn a new thread.
         let handle = thread::spawn(|| {
             match server::get_server::<Self, PGDatabase>(
@@ -132,6 +138,7 @@ impl SpawnServer for MockDatabase {
     fn spawn_server(
         self,
         mainstay_config: Option<mainstay::MainstayConfig>,
+        port: Option<u16>
     ) -> thread::JoinHandle<SpawnError> {
         // Set enviroment variable to testing_mode=true to override Settings.toml
         env::set_var("MERC_TESTING_MODE", "true");
@@ -168,6 +175,7 @@ fn gen_wallet_with_seed(seed: &[u8]) -> Wallet {
         &"regtest".to_string(),
         DEFAULT_TEST_WALLET_LOC,
         ClientShim::new("http://localhost:8000".to_string(), None, None),
+        ClientShim::new("http://localhost:8000".to_string(), None, None),
     );
     let _ = wallet.keys.get_new_address();
     let _ = wallet.keys.get_new_address();
@@ -180,6 +188,7 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
         &[0xcd; 32],
         &"regtest".to_string(),
         DEFAULT_TEST_WALLET_LOC,
+        ClientShim::new("http://localhost:8000".to_string(), None, None),
         ClientShim::new("http://localhost:8000".to_string(), None, None),
     );
 
@@ -434,6 +443,7 @@ pub fn batch_transfer_verify_amounts(
     }
 }
 
-pub fn start_server() -> thread::JoinHandle<SpawnError> {
-    PGDatabase::get_new().spawn_server(None)
+pub fn start_server(port: Option<u16>) -> thread::JoinHandle<SpawnError> {
+    PGDatabase::get_new().spawn_server(None, port)
 }
+

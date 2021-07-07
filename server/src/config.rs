@@ -241,7 +241,7 @@ impl Config {
         if let Ok(v) = env::var("MERC_ROCKET_KEEP_ALIVE") {
             let _ = conf_rs.set("rocket.keep_alive", v)?;
         }
-        if let Ok(v) = env::var("MERC_ROCKET_ADDERSS") {
+        if let Ok(v) = env::var("MERC_ROCKET_ADDRESS") {
             let _ = conf_rs.set("rocket.address", v)?;
         }
         if let Ok(v) = env::var("MERC_ROCKET_PORT") {

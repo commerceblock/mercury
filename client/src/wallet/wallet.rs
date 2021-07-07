@@ -61,6 +61,7 @@ pub struct Wallet {
     pub network: String,
     pub electrumx_client: ElectrumxBox, // Default MockElectrum
     pub client_shim: ClientShim,
+    pub conductor_shim: ClientShim,
     secp: Secp256k1<All>,
     wallet_data_loc: String,
 
@@ -74,7 +75,7 @@ pub struct Wallet {
     pub require_mainstay: bool,
 }
 impl Wallet {
-    pub fn new(seed: &[u8], network: &String, wallet_data_loc: &str, client_shim: ClientShim) -> Wallet {
+    pub fn new(seed: &[u8], network: &String, wallet_data_loc: &str, client_shim: ClientShim, conductor_shim: ClientShim) -> Wallet {
         let secp = Secp256k1::new();
         let master_priv_key =
             ExtendedPrivKey::new_master(network.parse::<Network>().unwrap(), seed).unwrap();
@@ -104,6 +105,7 @@ impl Wallet {
             network: network.to_string(),
             electrumx_client: ElectrumxBox::new_mock(),
             client_shim,
+            conductor_shim,
             secp,
             wallet_data_loc: wallet_data_loc.to_string(),
             master_priv_key,
@@ -171,7 +173,7 @@ impl Wallet {
     }
 
     /// load wallet from json
-    pub fn from_json(json: serde_json::Value, client_shim: ClientShim) -> Result<Self> {
+    pub fn from_json(json: serde_json::Value, client_shim: ClientShim, conductor_shim: ClientShim) -> Result<Self> {
         let secp = Secp256k1::new();
         let network = json["network"].as_str().unwrap().to_string();
 
@@ -213,6 +215,7 @@ impl Wallet {
             network,
             electrumx_client: ElectrumxBox::new_mock(),
             client_shim,
+            conductor_shim,
             secp,
             wallet_data_loc: json["wallet_data_loc"].as_str().unwrap().to_string(),
             master_priv_key,
@@ -285,7 +288,7 @@ impl Wallet {
     }
 
     /// load wallet from disk
-    pub fn load(wallet_data_loc: &str, client_shim: ClientShim) -> Result<Wallet> {
+    pub fn load(wallet_data_loc: &str, client_shim: ClientShim, conductor_shim: ClientShim) -> Result<Wallet> {
         let data = match fs::read_to_string(wallet_data_loc) {
             Ok(data) => data,
             Err(_) => return Err(CError::WalletError(WalletErrorType::WalletFileNotFound))
@@ -294,7 +297,7 @@ impl Wallet {
             Ok(data) => data,
             Err(_) => return Err(CError::WalletError(WalletErrorType::WalletFileInvalid))
         };
-        let wallet: Wallet = match Wallet::from_json(serde_json_data, client_shim) {
+        let wallet: Wallet = match Wallet::from_json(serde_json_data, client_shim, conductor_shim) {
             Ok(wallet) => wallet,
             Err(_) => return Err(CError::WalletError(WalletErrorType::WalletFileInvalid))
         };
