@@ -14,6 +14,7 @@ use shared_lib::{
     util::{get_sighash, tx_withdraw_verify, transaction_deserialise, transaction_serialise},
     Root,
 };
+pub use kms::ecdsa::two_party::Party1Public;
 
 use shared_lib::structs::Protocol;
 
@@ -410,7 +411,6 @@ impl Utilities for SCE {
         Ok(())
     }
 
-
     fn get_recovery_data(&self, recovery_requests: Vec<RecoveryRequest>) -> Result<Vec<RecoveryDataMsg>> {
         let mut recovery_data = vec!();
         for recovery_request in recovery_requests {
@@ -425,8 +425,8 @@ impl Utilities for SCE {
                     Err(_) => continue
                 };
 
-                let master_key: MasterKey1 = serde_json::from_str(&self.database.get_ecdsa_master(statecoin.0)?.unwrap()).unwrap();
-                let public = serde_json::to_string(&master_key.public).unwrap();
+                let master_key: Party1Public = serde_json::from_str(&self.database.get_public_master(statecoin.0)?.unwrap()).unwrap();
+                let public = serde_json::to_string(&master_key).unwrap();
 
                 recovery_data.push(RecoveryDataMsg {
                     shared_key_id: statecoin.0,

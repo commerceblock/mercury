@@ -14,7 +14,7 @@ use cfg_if::cfg_if;
 use curv::{
     arithmetic::traits::Converter,
     elliptic::curves::traits::ECPoint,
-    {BigInt, FE, GE},
+    {BigInt, FE, GE, PK},
 };
 pub use kms::ecdsa::two_party::*;
 pub use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
@@ -124,7 +124,7 @@ impl Ecdsa for SCE {
             kg_party_one_second_msg = kg_party_one_second_message;
         }
         else {
-            let user_id = key_gen_msg2.shared_key_id;
+            let user_id = key_gen_msg2.shared_key_id.clone();
 
             let party2_public: GE = key_gen_msg2.dlog_proof.pk.clone();
 
@@ -157,6 +157,19 @@ impl Ecdsa for SCE {
             .comm_witness
             .public_share
         )?;
+
+        let public_key_data = Party1Public {
+            q: key_gen_msg2.dlog_proof.pk.clone(),
+            p1: kg_party_one_second_msg
+                .ecdh_second_message
+                .comm_witness
+                .public_share.clone(),
+            p2: key_gen_msg2.dlog_proof.pk.clone(),
+            paillier_pub: kg_party_one_second_msg.ek.clone(),
+            c_key: kg_party_one_second_msg.c_key.clone(),
+        };
+
+        db.update_public_master(&key_gen_msg2.shared_key_id,public_key_data)?;
 
         Ok(KeyGenReply2 { msg: kg_party_one_second_msg } )
     }
@@ -298,6 +311,12 @@ impl Ecdsa for SCE {
                 );
             }
         };
+
+        let spk_vec = ws[1].clone();
+        let pk = PK::from_slice(&spk_vec)?;
+        let serialized_pk = PK::serialize_uncompressed(&pk);
+        let shared_pk = GE::from_bytes(&serialized_pk[1..]);
+        db.update_master_pubkey(user_id,shared_pk.unwrap())?;
 
         Ok(ws)
     }

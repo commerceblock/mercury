@@ -103,6 +103,8 @@ pub enum Column {
     S2,
     S1PubKey,
     WithdrawScSig,
+    MasterPublic,
+
 
     // StateChain
     // Id,
@@ -244,6 +246,7 @@ impl PGDatabase {
                 txwithdraw varchar,
                 proofkey varchar,
                 txbackup varchar,
+                masterpublic varchar,
                 PRIMARY KEY (id)
             );",
                 Table::UserSession.to_string(),
@@ -1264,6 +1267,32 @@ impl Database for PGDatabase {
     fn transfer_is_completed(&self, statechain_id: Uuid) -> bool {
         self.get_1::<Uuid>(statechain_id, Table::Transfer, vec![Column::Id])
             .is_ok()
+    }
+
+    fn get_public_master(&self, user_id: Uuid) -> Result<Option<String>> {
+        self.get_1::<Option<String>>(user_id, Table::UserSession, vec![Column::MasterPublic])
+    }
+
+    //kms::ecdsa::two_party::MasterKey1
+    fn update_public_master(&self, user_id: &Uuid, master_public: Party1Public) -> Result<()> {
+        self.update(
+            user_id,
+            Table::UserSession,
+            vec![Column::MasterPublic],
+            vec![&Self::ser(master_public)?],
+        )
+    }
+
+    fn update_master_pubkey(&self, user_id: Uuid, pubkey: GE) -> Result<()> {
+        let master_public_ser = self.get_1::<Option<String>>(user_id, Table::UserSession, vec![Column::MasterPublic])?;
+        let mut master_public: Party1Public = Self::deser(master_public_ser.unwrap())?;
+        master_public.q = pubkey.clone();
+        self.update(
+            &user_id,
+            Table::UserSession,
+            vec![Column::MasterPublic],
+            vec![&Self::ser(master_public)?],
+        )
     }
 
     fn get_ecdsa_master(&self, user_id: Uuid) -> Result<Option<String>> {
