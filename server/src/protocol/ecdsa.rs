@@ -70,15 +70,27 @@ impl Ecdsa for SCE {
         self.check_user_auth(&user_id)?;
 
         let kg_first_msg;
+        let db = &self.database;
         // call lockbox
         match &self.lockbox {
         Some(l) => {
+                let lockbox_url: String = match db.get_lockbox_url(&user_id)? {
+                    Some(l) => l,
+                    None => {
+                        match l.endpoint.select(&user_id){
+                            Some(l) => {
+                                db.update_lockbox_url(&user_id, &l)?;
+                                l.to_owned()
+                            },
+                            None => return Err(SEError::Generic(String::from("No active lockbox urls specified")))
+                        }
+                    }
+                };
                 let path: &str = "ecdsa/keygen/first";
-                let (_id, key_gen_first_msg): (Uuid, party_one::KeyGenFirstMsg) = post_lb(&l, path, &key_gen_msg1)?;
+                let (_id, key_gen_first_msg): (Uuid, party_one::KeyGenFirstMsg) = post_lb(&lockbox_url, path, &key_gen_msg1)?;
                 kg_first_msg = key_gen_first_msg;
         },
         None => {
-            let db = &self.database;
             // Create new entry in ecdsa table if key not already in table.
             match db.get_ecdsa_master(user_id) {
                 Ok(data) => match data {
@@ -118,16 +130,22 @@ impl Ecdsa for SCE {
     fn second_message(&self, key_gen_msg2: KeyGenMsg2) -> Result<KeyGenReply2> {
         let kg_party_one_second_msg: party1::KeyGenParty1Message2;
         let db = &self.database;
+        let user_id = key_gen_msg2.shared_key_id;
+
         // call lockbox
         match &self.lockbox {
         Some(l) => {
+            let lockbox_url: String = match db.get_lockbox_url(&user_id)? {
+                Some(l) => l,
+                None => return Err(SEError::Generic(format!("Lockbox url not found in database for user_id: {}", &user_id)))
+            };
+
             let path: &str = "ecdsa/keygen/second";
-            let kg_party_one_second_message: party1::KeyGenParty1Message2 = post_lb(&l, path, &key_gen_msg2)?;
+            let kg_party_one_second_message: party1::KeyGenParty1Message2 = post_lb(&lockbox_url, path, &key_gen_msg2)?;
             kg_party_one_second_msg = kg_party_one_second_message;
         },
         None => {
-            let user_id = key_gen_msg2.shared_key_id;
-
+           
             let party2_public: GE = key_gen_msg2.dlog_proof.pk.clone();
 
             let (comm_witness, ec_key_pair) = db.get_ecdsa_witness_keypair(user_id)?;
@@ -169,15 +187,21 @@ impl Ecdsa for SCE {
         self.check_user_auth(&user_id)?;
 
         let sign_party_one_first_msg: party_one::EphKeyGenFirstMsg;
+        let db = &self.database;
 
         match &self.lockbox {
         Some(l) => {
+            let lockbox_url: String = match db.get_lockbox_url(&user_id)? {
+                Some(l) => l,
+                None => return Err(SEError::Generic(format!("Lockbox url not found in database for user_id: {}", &user_id)))
+            };
+
             let path: &str = "ecdsa/sign/first";
-            let sign_party_one_first_message: party_one::EphKeyGenFirstMsg = post_lb(&l, path, &sign_msg1)?;
+            let sign_party_one_first_message: party_one::EphKeyGenFirstMsg = post_lb(&lockbox_url, path, &sign_msg1)?;
             sign_party_one_first_msg = sign_party_one_first_message;
         },
         None => {
-            let db = &self.database;
+           
 
             let (sign_party_one_first_message, eph_ec_key_pair_party1) :
                 //(multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::
@@ -228,8 +252,13 @@ impl Ecdsa for SCE {
 
         match &self.lockbox {
         Some(l) => {
+            let lockbox_url: String = match db.get_lockbox_url(&user_id)? {
+                Some(l) => l,
+                None => return Err(SEError::Generic(format!("Lockbox url not found in database for user_id: {}", &user_id)))
+            };
+
             let path: &str = "ecdsa/sign/second";
-            let witness: Vec<Vec<u8>> = post_lb(&l, path, &sign_msg2)?;
+            let witness: Vec<Vec<u8>> = post_lb(&lockbox_url, path, &sign_msg2)?;
             ws = witness;
         },
         None => {

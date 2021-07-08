@@ -7,19 +7,18 @@ use serde;
 use std::time::Instant;
 use reqwest;
 
-use crate::server::Lockbox;
 use super::super::Result;
 use crate::error::SEError;
 
-pub fn post_lb<T, V>(lockbox: &Lockbox, path: &str, body: T) -> Result<V>
+pub fn post_lb<T, V>(url: &str, path: &str, body: T) -> Result<V>
 where
     T: serde::ser::Serialize,
     V: serde::de::DeserializeOwned,
 {
-    _post_lb(lockbox, path, body)
+    _post_lb(url, path, body)
 }
 
-fn _post_lb<T, V>(lockbox: &Lockbox, path: &str, body: T) -> Result<V>
+fn _post_lb<T, V>(url: &str, path: &str, body: T) -> Result<V>
 where
     T: serde::ser::Serialize,
     V: serde::de::DeserializeOwned,
@@ -29,7 +28,7 @@ where
     let client = reqwest::blocking::Client::new();
 
     // catch reqwest errors
-    let value = match client.post(&format!("{}/{}", lockbox.endpoint, path)).json(&body).send() 
+    let value = match client.post(&format!("{}/{}", url, path)).json(&body).send() 
     {
         Ok(v) => {
             //Reject responses that are too long

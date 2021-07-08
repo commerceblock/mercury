@@ -333,6 +333,15 @@ impl Database for MemoryDB {
     fn update_s1_pubkey(&self, _user_id: &uuid::Uuid, _pubkey: &crate::GE) -> crate::Result<()> {
         unimplemented!()
     }
+    
+    fn get_lockbox_url(&self, user_id: &uuid::Uuid) -> crate::Result<Option<String>>{
+        unimplemented!()
+    }
+    
+    fn update_lockbox_url(&self, user_id: &uuid::Uuid, lockbox_url: &String)->crate::Result<()>{
+        unimplemented!()
+    }
+
     fn get_s1_pubkey(&self, _user_id: &uuid::Uuid) -> crate::Result<crate::GE> {
         unimplemented!()   
     }

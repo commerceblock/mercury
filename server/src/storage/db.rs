@@ -67,7 +67,7 @@ pub enum Table {
     TransferBatch,
     Root,
     BackupTxs,
-    Smt,
+    Smt
 }
 impl Table {
     pub fn to_string(&self) -> String {
@@ -103,8 +103,9 @@ pub enum Column {
     S2,
     S1PubKey,
     WithdrawScSig,
+    Lockbox,
 
-    // StateChain
+    // StateChain,
     // Id,
     Chain,
     Amount,
@@ -112,6 +113,7 @@ pub enum Column {
     OwnerId,
     TransferFinalizeData,
     TransferReady,
+    
 
     // BackupTxs
     //Id,
@@ -152,6 +154,7 @@ pub enum Column {
     Key,
     // Value
 }
+
 
 impl Column {
     pub fn to_string(&self) -> String {
@@ -244,6 +247,7 @@ impl PGDatabase {
                 txwithdraw varchar,
                 proofkey varchar,
                 txbackup varchar,
+                lockbox varchar,
                 PRIMARY KEY (id)
             );",
                 Table::UserSession.to_string(),
@@ -402,7 +406,7 @@ impl PGDatabase {
                 Table::TransferBatch.to_string(),
                 Table::Root.to_string(),
                 Table::BackupTxs.to_string(),
-                Table::Smt.to_string(),
+                Table::Smt.to_string()
             ),
             &[],
         )?;
@@ -736,6 +740,26 @@ impl Database for PGDatabase {
             vec![Column::S1PubKey],
             vec![&Self::ser(pubkey)?],
         )
+    }
+
+    fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<String>> {
+        match self.get_1::<String>(*user_id, Table::UserSession, vec![Column::Lockbox]){
+            Ok(r) => Ok(Some(r)),
+            Err(e) => match e {
+                SEError::DBError(ref error_type, ref _message) => match error_type {
+                    crate::error::DBErrorType::NoDataForID => Ok(None),
+                    _ => Err(e),
+                }
+                _ => Err(e), 
+            }
+        }
+    }
+
+    fn update_lockbox_url(&self, user_id: &Uuid, lockbox_url: &String)->Result<()>{
+        self.update(user_id,
+                    Table::UserSession,
+                    vec![Column::Lockbox],
+                    vec![lockbox_url])
     }
 
     fn get_s1_pubkey(&self, user_id: &Uuid) -> Result<GE> {

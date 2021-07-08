@@ -187,7 +187,12 @@ impl Transfer for SCE {
                 o2_pub: transfer_msg4.o2_pub,
             };
             let path: &str = "ecdsa/keyupdate/first";
-            let ku_receive: KUReceiveMsg = post_lb(&l, path, &ku_send)?;
+            let lockbox_url: String = match self.database.get_lockbox_url(&user_id)? {
+                Some(l) => l,
+                None => return Err(SEError::Generic(format!("Lockbox url not found in database for user_id: {}", &user_id)))
+            };
+
+            let ku_receive: KUReceiveMsg = post_lb(&lockbox_url, path, &ku_send)?;
             s2 = FE::new_random();
             s2_pub = ku_receive.s2_pub;
         },
@@ -307,6 +312,13 @@ impl Transfer for SCE {
 
         let new_user_id = finalized_data.new_shared_key_id;
 
+        let sco = self.database.get_statechain_owner(statechain_id)?;
+        let lockbox_url: String = match self.database.get_lockbox_url(&sco.owner_id)? {
+            Some(l) => l,
+            None => return Err(SEError::Generic(format!("Lockbox url not found in database for user_id: {}", &sco.owner_id)))
+        };
+        self.database.update_lockbox_url(&new_user_id, &lockbox_url)?;
+
         self.database.update_statechain_owner(
             &statechain_id,
             state_chain.clone(),
@@ -329,7 +341,7 @@ impl Transfer for SCE {
                 shared_key_id: new_user_id,
             };
             let path: &str = "ecdsa/keyupdate/second";
-            let _ku_receive: KUAttest = post_lb(&l, path, &ku_send)?;
+            let _ku_receive: KUAttest = post_lb(&lockbox_url, path, &ku_send)?;
             },
             None => ()
         };

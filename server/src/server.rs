@@ -32,6 +32,7 @@ use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 use std::collections::HashMap;
 use crate::error::SEError;
+use std::convert::TryInto;
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -54,21 +55,41 @@ pub static REG_SWAP_UTXOS: Lazy<IntCounterVec> = Lazy::new(|| {
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 #[derive(Debug, Clone)]
+pub struct Endpoints {
+    endpoints: Vec<String>
+}
+
+impl Endpoints {
+    pub fn from(endpoints: Vec<String>) -> Result<Self>{
+        for endpoint in &endpoints {
+            match endpoint.len() > 0 {
+                true => (),
+                false => return Err(SEError::Generic(String::from("endpoint string passed to Lockbox::new has zero length")).into())
+            };
+        }
+        Ok(Endpoints { endpoints })
+    }
+
+    /// Select a url from the list of active urls depending on the numerical value
+    /// of the statechain identifier.
+    pub fn select(&self, statechain_id: &Uuid) -> Option<&String> {
+        let scid_bytes = statechain_id.as_bytes();
+        let numerical= usize::from_be_bytes(scid_bytes[scid_bytes.len()-8..].try_into().unwrap());
+        self.endpoints.get(numerical %  self.endpoints.len())
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Lockbox {
     pub client: reqwest::blocking::Client,
-    pub endpoint: String,
+    pub endpoint: Endpoints,
 }
 
 impl Lockbox {
-    pub fn new(endpoint: String) -> Result<Lockbox> {
+    pub fn new(endpoints: Vec<String>) -> Result<Lockbox> {
+        let endpoint = Endpoints::from(endpoints)?;
         let client = reqwest::blocking::Client::new();
-        match endpoint.len() > 0 {
-            true => Ok(Lockbox {
-                        client,
-                        endpoint,
-                    }),
-            false => Err(SEError::Generic(String::from("endpoint string passed to Lockbox::new has zero length")).into())
-        }
+        Ok(Lockbox{client, endpoint})
     }
 }
 
