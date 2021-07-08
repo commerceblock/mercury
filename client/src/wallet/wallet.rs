@@ -687,7 +687,7 @@ mod tests {
         let wallet = gen_wallet(None);
         wallet.save();
 
-        let wallet_loaded = Wallet::load(DEFAULT_TEST_WALLET_LOC, ClientShim::new("http://localhost:8000".to_string(), None, None)).unwrap();
+        let wallet_loaded = Wallet::load(DEFAULT_TEST_WALLET_LOC, ClientShim::new("http://localhost:8000".to_string(),None, None), ClientShim::new("http://localhost:8000".to_string(), None, None)).unwrap();
 
         assert_eq!(wallet.to_json(), wallet_loaded.to_json());
     }
@@ -707,14 +707,14 @@ mod tests {
 
         wallet1.save();
         // Test loaded wallet is same as wallet 1
-        let loaded_wall = Wallet::load(DEFAULT_TEST_WALLET_LOC, ClientShim::new("http://localhost:8000".to_string(), None, None)).unwrap();
+        let loaded_wall = Wallet::load(DEFAULT_TEST_WALLET_LOC, ClientShim::new("http://localhost:8000".to_string(),None,None), ClientShim::new("http://localhost:8000".to_string(), None, None)).unwrap();
         assert_eq!(wallet1.keys.last_derived_pos, loaded_wall.keys.last_derived_pos);
         assert!(wallet2.keys.last_derived_pos != loaded_wall.keys.last_derived_pos);
 
         // Overwrite saved wallet with wallet2
         wallet2.save();
         // Test loaded wallet is same as wallet 2
-        let loaded_wall2 = Wallet::load(DEFAULT_TEST_WALLET_LOC, ClientShim::new("http://localhost:8000".to_string(), None, None)).unwrap();
+        let loaded_wall2 = Wallet::load(DEFAULT_TEST_WALLET_LOC, ClientShim::new("http://localhost:8000".to_string(),None,None), ClientShim::new("http://localhost:8000".to_string(), None, None)).unwrap();
         assert_eq!(wallet2.keys.last_derived_pos, loaded_wall2.keys.last_derived_pos);
         assert!(wallet1.keys.last_derived_pos != loaded_wall2.keys.last_derived_pos);
     }
@@ -739,7 +739,7 @@ mod tests {
 
         let wallet_rebuilt = super::Wallet::from_json(
             wallet_json,
-            ClientShim::new("http://localhost:8000".to_string(), None, None),
+            ClientShim::new("http://localhost:8000".to_string(),None,None), ClientShim::new("http://localhost:8000".to_string(), None, None),
         )
         .unwrap();
 
