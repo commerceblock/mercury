@@ -247,7 +247,7 @@ impl Utilities for SCE {
             Protocol::Withdraw => {
                 tx_withdraw_verify(
                     &prepare_sign_msg,
-                    &self.config.fee_address,
+                    &self.config.fee_address[0],
                     &withdraw_fee,
                 )?;
 
@@ -326,7 +326,7 @@ impl Utilities for SCE {
 
                 tx_withdraw_verify(
                     &prepare_sign_msg,
-                    &self.config.fee_address,
+                    &self.config.fee_address[0],
                     &withdraw_fee,
                 )?;
 
@@ -362,7 +362,7 @@ impl Utilities for SCE {
 
                 tx_withdraw_verify(
                     &prepare_sign_msg,
-                    &self.config.fee_address,
+                    &self.config.fee_address[0],
                     &withdraw_fee,
                 )?;
 

@@ -32,6 +32,8 @@ use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 use std::collections::HashMap;
 
+
+
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
     IntCounter::new("deposit_counter", "Total completed deposits")

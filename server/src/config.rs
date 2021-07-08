@@ -114,7 +114,7 @@ pub struct Config {
     /// Required confirmations for deposit
     pub required_confirmation: u32,
     /// Receive address for fee payments
-    pub fee_address: String,
+    pub fee_address: [String; 2],
     /// Despoit fee (basis points)
     pub fee_deposit: u64,
     /// Withdraw fee (basis points)
@@ -146,7 +146,7 @@ impl Default for Config {
             lockheight_init: 10000,
             lh_decrement: 100,
             required_confirmation: 3,
-            fee_address: String::from("bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x"),
+            fee_address: [String::from("bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x"), String::from("bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x")],
             fee_deposit: 40,
             fee_withdraw: 40,
             batch_lifetime: 3600,     // 1 hour

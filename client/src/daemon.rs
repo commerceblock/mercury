@@ -370,6 +370,8 @@ mod tests {
         let gen_addr_request = query_wallet_daemon(DaemonRequest::GenAddressBTC);
         assert!(gen_addr_request.is_ok());
         // Should generate 1st address of test wallet.
+
+        info!("Tesst");
         assert_eq!(gen_addr_request.unwrap(), DaemonResponse::Value(serde_json::to_string("tb1qghtup486tj8vgz2l5pkh8hqw8wzdudralnw74e").unwrap()));
     }
 }

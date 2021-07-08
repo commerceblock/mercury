@@ -81,7 +81,7 @@ pub fn deposit(
         &p_addr.to_string(),
         amount,
         &deposit_fee,
-        &se_fee_info.address,
+        &se_fee_info.address[0],
         &change_addr,
         &change_amount,
     )?;
@@ -107,7 +107,7 @@ pub fn deposit(
     let backup_receive_addr = wallet.se_backup_keys.get_new_address()?;
     
     let tx_backup_unsigned =
-        tx_backup_build(&tx_funding_signed.txid(), &backup_receive_addr, &amount, &init_locktime, &withdraw_fee, &se_fee_info.address)?;
+        tx_backup_build(&tx_funding_signed.txid(), &backup_receive_addr, &amount, &init_locktime, &withdraw_fee, &se_fee_info.address[0])?;
 
     // Co-sign tx backup tx
     let tx_backup_psm = PrepareSignTxMsg {
