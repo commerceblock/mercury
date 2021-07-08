@@ -633,7 +633,7 @@ mod tests {
         db.expect_update_keygen_second_msg()
             .returning(|_, _, _, _| Ok(()));
 
-        let _handle = db.spawn_server(Some(mainstay_config));
+        let _handle = db.spawn_server(Some(mainstay_config), None, None);
 
         let err = state_entity::api::get_statechain(&wallet.client_shim, &invalid_scid);
         assert!(err.is_err());

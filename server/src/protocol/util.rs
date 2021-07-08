@@ -33,6 +33,7 @@ use std::str::FromStr;
 use uuid::Uuid;
 use bitcoin::OutPoint;
 use bitcoin::Transaction;
+use crate::config::Config;
 
 
 const MAX_LOCKTIME: u32 = 500000000; // bitcoin tx nlocktime cutoff
