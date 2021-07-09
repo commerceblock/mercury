@@ -111,7 +111,9 @@ impl<
 {
     pub fn load(mut db: T, mut db_smt: D, config: Option<Config>) -> Result<StateChainEntity<T, D>> {
         // Get config as defaults, Settings.toml and env vars
+        dbg!("loading config");
         let config_rs = config.unwrap_or(Config::load()?);
+        dbg!("finished loading config");
         db.set_connection_from_config(&config_rs)?;
         db_smt.set_connection_from_config(&config_rs)?;
 
@@ -122,14 +124,16 @@ impl<
 
         let conductor_config = config_rs.conductor.clone();
         
-        
+        dbg!("getting lockbox");
+        dbg!("lockbox: {}", &config_rs.lockbox);
+        dbg!("conductor_config: {}", &conductor_config);
         let (lockbox, scheduler) = match config_rs.mode {
             Mode::Both => (Lockbox::new(config_rs.lockbox.clone()).ok(), Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config))))),
             Mode::Conductor => (None, Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config))))),
             Mode::Core => (Lockbox::new(config_rs.lockbox.clone()).ok(), None)
         };
         
-
+        dbg!("getting sce");
         let sce = Self {
             config: config_rs,
             database: db,
@@ -138,11 +142,12 @@ impl<
             lockbox,
         };
 
+        dbg!("start scheduler");
         match &sce.scheduler {
             Some(s) => {Self::start_conductor_thread(s.clone());},
             None => ()
         }
-        
+        dbg!("return sce");
         Ok(sce)
     }
 

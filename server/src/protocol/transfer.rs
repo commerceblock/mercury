@@ -315,8 +315,9 @@ impl Transfer for SCE {
         dbg!("getting statechain owner...");
         let sco = self.database.get_statechain_owner(statechain_id)?;
         dbg!("getting lockbox url...");
-        let lockbox_url: Option<String> = self.database.get_lockbox_url(&sco.owner_id)?;
-        
+        let lockbox_url: Option<String> = self.database.get_lockbox_url(&sco.owner_id).map_err(|e| {dbg!("{}",&e); e} )?;
+        dbg!("lockbox url", &lockbox_url);
+
         self.database.update_statechain_owner(
             &statechain_id,
             state_chain.clone(),
@@ -334,6 +335,7 @@ impl Transfer for SCE {
         //lockbox finalise and delete key
         match lockbox_url {
             Some(l) => {
+                dbg!("using lockbox", &l);
                 let ku_send = KUFinalize {
                     statechain_id,
                     shared_key_id: new_user_id,

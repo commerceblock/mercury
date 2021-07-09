@@ -67,7 +67,8 @@ pub enum Table {
     TransferBatch,
     Root,
     BackupTxs,
-    Smt
+    Smt,
+    Lockbox
 }
 impl Table {
     pub fn to_string(&self) -> String {
@@ -238,22 +239,15 @@ impl PGDatabase {
                 "
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
-                statechainid uuid,
-                authentication varchar,
-                s2 varchar,
-                s1pubkey varchar,
-                sighash varchar,
-                withdrawscsig varchar,
-                txwithdraw varchar,
-                proofkey varchar,
-                txbackup varchar,
                 lockbox varchar,
                 PRIMARY KEY (id)
             );",
-                Table::UserSession.to_string(),
+                Table::Lockbox.to_string(),
             ),
             &[],
         )?;
+
+
 
         self.database_w()?.execute(
             &format!(
@@ -398,7 +392,7 @@ impl PGDatabase {
         self.database_w()?.execute(
             &format!(
                 "
-            TRUNCATE {},{},{},{},{},{},{},{} RESTART IDENTITY;",
+            TRUNCATE {},{},{},{},{},{},{},{},{} RESTART IDENTITY;",
                 Table::UserSession.to_string(),
                 Table::Ecdsa.to_string(),
                 Table::StateChain.to_string(),
@@ -406,7 +400,8 @@ impl PGDatabase {
                 Table::TransferBatch.to_string(),
                 Table::Root.to_string(),
                 Table::BackupTxs.to_string(),
-                Table::Smt.to_string()
+                Table::Smt.to_string(),
+                Table::Lockbox.to_string(),
             ),
             &[],
         )?;
@@ -743,7 +738,7 @@ impl Database for PGDatabase {
     }
 
     fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<String>> {
-        match self.get_1::<String>(*user_id, Table::UserSession, vec![Column::Lockbox]){
+        match self.get_1::<String>(*user_id, Table::Lockbox, vec![Column::Lockbox]){
             Ok(r) => Ok(Some(r)),
             Err(e) => match e {
                 SEError::DBError(ref error_type, ref _message) => match error_type {
@@ -757,7 +752,7 @@ impl Database for PGDatabase {
 
     fn update_lockbox_url(&self, user_id: &Uuid, lockbox_url: &String)->Result<()>{
         self.update(user_id,
-                    Table::UserSession,
+                    Table::Lockbox,
                     vec![Column::Lockbox],
                     vec![lockbox_url])
     }

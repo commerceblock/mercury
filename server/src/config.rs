@@ -154,7 +154,7 @@ impl Default for Config {
             mode: Mode::Both,
             log_file: String::from(""),
             electrum_server: String::from("127.0.0.1:60401"),
-            lockbox: Vec::<String>::new(),
+            lockbox: vec![String::from("")],
             network: String::from("regtest"),
             testing_mode: false,
             lockheight_init: 10000,
@@ -263,7 +263,7 @@ impl Config {
         if let Err(e) = bitcoin::Address::from_str(&fee_address) {
             panic!("Invalid fee address: {}", e)
         };
-
+        dbg!("config loaded");
         Ok(conf_rs.try_into()?)
     }
 
