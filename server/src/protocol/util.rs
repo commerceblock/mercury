@@ -1025,7 +1025,7 @@ pub mod mocks {
 pub mod tests {
     use super::*;
     use crate::shared_lib::mainstay;
-    use crate::{structs::StateChainAmount, MockDatabase};
+    use crate::{structs::StateChainAmount, MockDatabase, server::Endpoints};
     use monotree::database::{Database as monotreeDatabase, MemoryDB};
     use std::convert::TryInto;
     use std::str::FromStr;
@@ -1042,7 +1042,7 @@ pub mod tests {
         let mut config = Config::load().unwrap();
         match lockbox_url {
             Some(v) => {
-                config.lockbox=v;
+                config.lockbox=vec![v];
             }, 
             None => ()
         };

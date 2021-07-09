@@ -36,8 +36,8 @@ where
                 Some(l) => {
                     if l > 1000000 {
                         info!("Lockbox POST value ignored because of size: {}", l);
-                        return Err(SEError::Generic(format!(
-                            "Lockbox POST value ignored because of size: {}",
+                        return Err(SEError::LockboxError(format!(
+                            "POST value ignored because of size: {}",
                             l
                         )));
                     }
@@ -53,7 +53,13 @@ where
     };
 
     info!("Lockbox request {}, took: {})", path, TimeFormat(start.elapsed()));
-    Ok(serde_json::from_str(value.as_str()).unwrap())
+
+    serde_json::from_str(value.as_str())
+        .map_err(|e| SEError::LockboxError(
+            format!("failed to deserialize response {} due to {}", 
+                &value.as_str(), e)
+            )
+        )
 }
 
 fn handle_error(e: reqwest::Error) -> SEError {

@@ -406,6 +406,7 @@ pub mod tests {
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_create_user_session().returning(|_, _, _| Ok(()));
         db.expect_get_user_auth().returning(move |_| Ok(user_id));
+        db.expect_get_lockbox_url().returning(|_| Ok(Some(mockito::server_url())));
         db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
 
         let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()));
@@ -477,6 +478,7 @@ pub mod tests {
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_create_user_session().returning(|_, _, _| Ok(()));
         db.expect_get_user_auth().returning(move |_| Ok(user_id));
+        db.expect_get_lockbox_url().returning(|_| Ok(Some(mockito::server_url())));
         db.expect_get_user_backup_tx().returning(move |_| Ok(tx_backup.clone()));
         db.expect_update_user_backup_tx().returning(|_, _| Ok(()));
         let hexhash = r#"
