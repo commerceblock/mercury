@@ -10,6 +10,15 @@ use shared_lib::mainstay::MainstayConfig;
 use std::env;
 use std::str::FromStr;
 
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "snake_case")] 
+pub enum Mode {
+    Both,
+    Core,
+    Conductor
+}
+
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConductorConfig {
     //Time in seconds that a swap must be completed by once the group has been formed
@@ -97,6 +106,8 @@ impl Default for RocketConfig {
 /// Config struct storing all StataChain Entity config
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
+    /// Mode: "core", "conductor" or "both"
+    pub mode: Mode, 
     /// Log file location. If not present print to stdout
     pub log_file: String,
     /// Electrum Server Address
@@ -138,6 +149,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Config {
         Config {
+            mode: Mode::Both,
             log_file: String::from(""),
             electrum_server: String::from("127.0.0.1:60401"),
             lockbox: String::from(""),
@@ -229,7 +241,7 @@ impl Config {
         if let Ok(v) = env::var("MERC_ROCKET_KEEP_ALIVE") {
             let _ = conf_rs.set("rocket.keep_alive", v)?;
         }
-        if let Ok(v) = env::var("MERC_ROCKET_ADDERSS") {
+        if let Ok(v) = env::var("MERC_ROCKET_ADDRESS") {
             let _ = conf_rs.set("rocket.address", v)?;
         }
         if let Ok(v) = env::var("MERC_ROCKET_PORT") {

@@ -19,8 +19,8 @@ mod tests {
     #[serial]
     fn test_gen_shared_key() {
         time_test!();
-        let _ = start_server();
-        let mut wallet = gen_wallet();
+        let _ = start_server(None, None);
+        let mut wallet = gen_wallet(None);
         let proof_key = wallet.se_proof_keys.get_new_key().unwrap();
         let init_res =
             client_lib::state_entity::deposit::session_init(&mut wallet, &proof_key.to_string());
@@ -33,7 +33,7 @@ mod tests {
     #[serial]
     fn test_failed_auth() {
         time_test!();
-        let _handle = start_server();
+        let _handle = start_server(None, None);
         let client_shim = ClientShim::new("http://localhost:8000".to_string(), None, None);
         let secret_key: FE = ECScalar::new_random();
         let invalid_key = Uuid::new_v4();
@@ -51,7 +51,7 @@ mod tests {
     #[serial]
     fn test_deposit() {
         time_test!();
-        let _handle = start_server();
+        let _handle = start_server(None, None);
         let wallet = gen_wallet_with_deposit(10000);
         //handle.join().expect("The thread being joined has panicked");
         let state_chains_info = wallet.get_state_chains_info().unwrap();
@@ -97,8 +97,8 @@ mod tests {
     #[serial]
     fn test_get_statechain() {
         time_test!();
-        let _handle = start_server();
-        let mut wallet = gen_wallet();
+        let _handle = start_server(None, None);
+        let mut wallet = gen_wallet(None);
 
         let err = state_entity::api::get_statechain(&wallet.client_shim, &Uuid::new_v4());
         assert!(err.is_err());
@@ -116,10 +116,10 @@ mod tests {
     #[serial]
     fn test_transfer() {
         time_test!();
-        let _handle = start_server();
+        let _handle = start_server(None, None);
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
-        wallets.push(gen_wallet()); // receiver
+        wallets.push(gen_wallet(None)); // receiver
 
         // Get state chain owned by wallet
         let state_chains_info = wallets[0].get_state_chains_info().unwrap();
@@ -187,10 +187,10 @@ mod tests {
     #[serial]
     fn test_transfer_decrement() {
         time_test!();
-        let _handle = start_server();
+        let _handle = start_server(None, None);
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
-        wallets.push(gen_wallet()); // receiver
+        wallets.push(gen_wallet(None)); // receiver
 
         let fee_info = state_entity::api::get_statechain_fee_info(&wallets[0].client_shim).unwrap();
 
@@ -295,11 +295,11 @@ mod tests {
     #[serial]
     fn test_double_transfer() {
         time_test!();
-        let _handle = start_server();
+        let _handle = start_server(None, None);
         let mut wallets = vec![];
         wallets.push(gen_wallet_with_deposit(10000)); // sender
-        wallets.push(gen_wallet()); // receiver1
-        wallets.push(gen_wallet()); // receiver2
+        wallets.push(gen_wallet(None)); // receiver1
+        wallets.push(gen_wallet(None)); // receiver2
 
         // Get state chain owned by wallets[0] info
         let state_chains_info = wallets[0].get_state_chains_info().unwrap();
@@ -425,8 +425,8 @@ mod tests {
     #[serial]
     fn test_withdraw() {
         time_test!();
-        let _handle = start_server();
-        let mut wallet = gen_wallet();
+        let _handle = start_server(None, None);
+        let mut wallet = gen_wallet(None);
 
         let deposit_resp = run_deposit(&mut wallet, &10000);
         let shared_key_id = &deposit_resp.0;
@@ -482,8 +482,8 @@ mod tests {
     #[test]
     fn test_batch_withdraw() {
         time_test!();
-        let _handle = start_server();
-        let mut wallet = gen_wallet();
+        let _handle = start_server(None, None);
+        let mut wallet = gen_wallet(None);
 
         let n_inputs = 3;
         
@@ -552,14 +552,15 @@ mod tests {
     /// Test wallet load from json correctly when shared key present.
     fn test_wallet_load_with_shared_key() {
         time_test!();
-        let _handle = start_server();
+        let _handle = start_server(None, None);
 
-        let mut wallet = gen_wallet();
+        let mut wallet = gen_wallet(None);
         run_deposit(&mut wallet, &10000);
 
         let wallet_json = wallet.to_json();
         let wallet_rebuilt = wallet::wallet::Wallet::from_json(
             wallet_json,
+            ClientShim::new("http://localhost:8000".to_string(), None, None),
             ClientShim::new("http://localhost:8000".to_string(), None, None),
         )
         .unwrap();
@@ -604,7 +605,7 @@ mod tests {
         let _m = mock("GET", "/ping").create();
         let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito_server_url);
         let mut db = MockDatabase::new();
-        let wallet = gen_wallet();
+        let wallet = gen_wallet(None);
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_reset().returning(|| Ok(()));
         let invalid_scid = Uuid::new_v4();
@@ -632,7 +633,7 @@ mod tests {
         db.expect_update_keygen_second_msg()
             .returning(|_, _, _, _| Ok(()));
 
-        let _handle = db.spawn_server(Some(mainstay_config));
+        let _handle = db.spawn_server(Some(mainstay_config), None, None);
 
         let err = state_entity::api::get_statechain(&wallet.client_shim, &invalid_scid);
         assert!(err.is_err());

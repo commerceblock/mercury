@@ -18,9 +18,9 @@ mod tests {
     #[test]
     #[serial]
     fn test_batch_sigs() {
-        let _handle = start_server();
+        let _handle = start_server(None, None);
 
-        let mut wallet = gen_wallet();
+        let mut wallet = gen_wallet(None);
         let num_state_chains = 3;
         // make deposits
         let mut statechain_ids = vec![];
@@ -118,7 +118,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_batch_transfer() {
-        let _handle = start_server();
+        let _handle = start_server(None, None);
 
         let num_state_chains = 3; // must be > 1
         let mut amounts = vec![];
@@ -130,7 +130,7 @@ mod tests {
         let mut wallets = vec![];
         let mut deposits = vec![];
         for i in 0..num_state_chains {
-            wallets.push(gen_wallet());
+            wallets.push(gen_wallet(None));
             for _ in 0..i {
                 // Gen keys so different wallets have different proof keys (since wallets have the same seed)
                 let _ = wallets[i].se_proof_keys.get_new_key();
@@ -236,7 +236,7 @@ mod tests {
     // #[test]
     #[allow(dead_code)]
     fn test_failure_batch_transfer() {
-        let _handle = start_server();
+        let _handle = start_server(None, None);
 
         let num_state_chains = 3; // must be > 2
         let mut amounts = vec![];
@@ -249,7 +249,7 @@ mod tests {
         let mut deposits = vec![];
         let mut participants = vec![];
         for i in 0..num_state_chains {
-            wallets.push(gen_wallet());
+            wallets.push(gen_wallet(None));
             for _ in 0..i {
                 // Gen keys so different wallets have different proof keys (since wallets have the same seed)
                 let _ = wallets[i].se_proof_keys.get_new_key();
@@ -428,7 +428,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_swap() {
-        let _handle = start_server();
+        let _handle = start_server(None, None);
 
         let num_state_chains: u64 = 3;
         let amount: u64 = 10000; // = u64::from_str(&format!("10000")).unwrap();
@@ -440,7 +440,7 @@ mod tests {
         let mut wallet_sers = vec![];
 
         for i in 0..num_state_chains as usize {
-            wallets.push(gen_wallet());
+            wallets.push(gen_wallet(None));
             for _ in 0..i {
                 // Gen keys so different wallets have different proof keys (since wallets have the same seed)
                 let _ = wallets[i].se_proof_keys.get_new_key();
@@ -463,6 +463,64 @@ mod tests {
                 let mut wallet = wallet::wallet::Wallet::from_json(
                     wallet_ser,
                     ClientShim::new("http://localhost:8000".to_string(), None, None),
+                    ClientShim::new("http://localhost:8000".to_string(), None, None),
+                )?;
+
+                        state_entity::conductor::do_swap(&mut wallet, &deposit, &num_state_chains, false)
+                })
+            )
+        }
+
+        let mut i = 0;
+        for handle in thread_handles {
+            handle.join().unwrap().unwrap();
+            i = i + 1;
+        }
+        println!("(Swaps Took: {})", TimeFormat(start.elapsed()));
+    }
+
+    #[test]
+    #[serial]
+    fn test_swap_seperate_conductor() {
+        let merc_port: u16 = 8000;
+        let conductor_port: u16 = 8001;
+        let _handle = start_server(Some(merc_port),Some(String::from("core")));
+        let _conductor_handle = start_server(Some(conductor_port), Some(String::from("conductor")));
+
+        let num_state_chains: u64 = 3;
+        let amount: u64 = 10000; // = u64::from_str(&format!("10000")).unwrap();
+
+        // Gen some wallets and deposit coins into SCE
+        let mut wallets = vec![];
+        let mut deposits = vec![];
+        let mut thread_handles = vec![];
+        let mut wallet_sers = vec![];
+
+        for i in 0..num_state_chains as usize {
+            wallets.push(gen_wallet(Some(conductor_port)));
+            for _ in 0..i {
+                // Gen keys so different wallets have different proof keys (since wallets have the same seed)
+                let _ = wallets[i].se_proof_keys.get_new_key();
+            }
+
+            deposits.push(run_deposit(&mut wallets[i], &amount));
+            let deposit = deposits.last().unwrap().clone();
+
+            let (_shared_key_ids, _wallet_sc_ids, _bals, _locktimes) = wallets.last().unwrap().
+                get_state_chains_info().unwrap();
+
+
+            wallet_sers.push((wallets.last().unwrap().to_json(),deposit.1));
+        }
+
+        println!("Starting swaps...");
+        let start = Instant::now();
+        for (wallet_ser, deposit) in wallet_sers{
+            thread_handles.push(spawn(move || {
+                let mut wallet = wallet::wallet::Wallet::from_json(
+                    wallet_ser,
+                    ClientShim::new(format!("http://localhost:{}",merc_port), None, None),
+                    ClientShim::new(format!("http://localhost:{}",conductor_port), None, None),
                 )?;
 
                         state_entity::conductor::do_swap(&mut wallet, &deposit, &num_state_chains, false)

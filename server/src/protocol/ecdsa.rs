@@ -71,12 +71,13 @@ impl Ecdsa for SCE {
 
         let kg_first_msg;
         // call lockbox
-        if self.lockbox.active {
-            let path: &str = "ecdsa/keygen/first";
-            let (_id, key_gen_first_msg): (Uuid, party_one::KeyGenFirstMsg) = post_lb(&self.lockbox, path, &key_gen_msg1)?;
-            kg_first_msg = key_gen_first_msg;
-        }
-        else {
+        match &self.lockbox {
+        Some(l) => {
+                let path: &str = "ecdsa/keygen/first";
+                let (_id, key_gen_first_msg): (Uuid, party_one::KeyGenFirstMsg) = post_lb(&l, path, &key_gen_msg1)?;
+                kg_first_msg = key_gen_first_msg;
+        },
+        None => {
             let db = &self.database;
             // Create new entry in ecdsa table if key not already in table.
             match db.get_ecdsa_master(user_id) {
@@ -110,7 +111,7 @@ impl Ecdsa for SCE {
 
             db.update_keygen_first_msg(&user_id, &key_gen_first_msg, comm_witness, ec_key_pair)?;
             kg_first_msg = key_gen_first_msg;
-        }
+        }};
         Ok(KeyGenReply1 {user_id: user_id, msg: kg_first_msg } )
     }
 
@@ -118,12 +119,13 @@ impl Ecdsa for SCE {
         let kg_party_one_second_msg: party1::KeyGenParty1Message2;
         let db = &self.database;
         // call lockbox
-        if self.lockbox.active {
+        match &self.lockbox {
+        Some(l) => {
             let path: &str = "ecdsa/keygen/second";
-            let kg_party_one_second_message: party1::KeyGenParty1Message2 = post_lb(&self.lockbox, path, &key_gen_msg2)?;
+            let kg_party_one_second_message: party1::KeyGenParty1Message2 = post_lb(&l, path, &key_gen_msg2)?;
             kg_party_one_second_msg = kg_party_one_second_message;
-        }
-        else {
+        },
+        None => {
             let user_id = key_gen_msg2.shared_key_id;
 
             let party2_public: GE = key_gen_msg2.dlog_proof.pk.clone();
@@ -149,7 +151,7 @@ impl Ecdsa for SCE {
 
             self.master_key(user_id)?;
             kg_party_one_second_msg = kg_party_one_second_message;
-        }
+        }}
 
         db.update_s1_pubkey(&key_gen_msg2.shared_key_id, 
             &kg_party_one_second_msg
@@ -168,12 +170,13 @@ impl Ecdsa for SCE {
 
         let sign_party_one_first_msg: party_one::EphKeyGenFirstMsg;
 
-        if self.lockbox.active {
+        match &self.lockbox {
+        Some(l) => {
             let path: &str = "ecdsa/sign/first";
-            let sign_party_one_first_message: party_one::EphKeyGenFirstMsg = post_lb(&self.lockbox, path, &sign_msg1)?;
+            let sign_party_one_first_message: party_one::EphKeyGenFirstMsg = post_lb(&l, path, &sign_msg1)?;
             sign_party_one_first_msg = sign_party_one_first_message;
-        }
-        else {
+        },
+        None => {
             let db = &self.database;
 
             let (sign_party_one_first_message, eph_ec_key_pair_party1) :
@@ -188,8 +191,7 @@ impl Ecdsa for SCE {
                 eph_ec_key_pair_party1,
             )?;
             sign_party_one_first_msg = sign_party_one_first_message;
-        }
-
+        }}
         Ok(SignReply1 { msg: sign_party_one_first_msg } )
     }
 
@@ -224,12 +226,13 @@ impl Ecdsa for SCE {
 
         let mut ws: Vec<Vec<u8>>;
 
-        if self.lockbox.active {
+        match &self.lockbox {
+        Some(l) => {
             let path: &str = "ecdsa/sign/second";
-            let witness: Vec<Vec<u8>> = post_lb(&self.lockbox, path, &sign_msg2)?;
+            let witness: Vec<Vec<u8>> = post_lb(&l, path, &sign_msg2)?;
             ws = witness;
-        }
-        else {
+        },
+        None => {
             // Get 2P-Ecdsa data
             let ssi: ECDSASignSecondInput = db.get_ecdsa_sign_second_input(user_id)?;
 
@@ -270,7 +273,7 @@ impl Ecdsa for SCE {
             let pk_vec = ssi.shared_key.public.q.get_element().serialize().to_vec();
             let witness = vec![sig_vec, pk_vec];
             ws = witness;
-        }
+        }}
 
         // Get transaction which is being signed.
         let mut tx: Transaction = match sign_msg2.sign_second_msg_request.protocol {
@@ -376,10 +379,7 @@ pub mod tests {
         db.expect_get_user_auth().returning(move |_| Ok(user_id));
         db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
 
-        let mut sc_entity = test_sc_entity(db);
-
-        sc_entity.lockbox.active = true;
-        sc_entity.lockbox.endpoint = mockito::server_url();
+        let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()));
 
         let kg_first_msg = party_one::KeyGenFirstMsg { pk_commitment: BigInt::from(0), zk_pok_commitment: BigInt::from(1) };
 
@@ -456,10 +456,7 @@ pub mod tests {
         let sig_hash: sha256d::Hash = serde_json::from_str(&hexhash.to_string()).unwrap();
         db.expect_get_sighash().returning(move |_| Ok(sig_hash));
 
-        let mut sc_entity = test_sc_entity(db);
-
-        sc_entity.lockbox.active = true;
-        sc_entity.lockbox.endpoint = mockito::server_url();
+        let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()));
 
         let (eph_key_gen_first_message_party_two, _, _) =
             MasterKey2::sign_first_message();
