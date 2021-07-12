@@ -33,6 +33,7 @@ use uuid::Uuid;
 use std::collections::HashMap;
 use crate::error::SEError;
 use std::convert::TryInto;
+use url::Url;
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -56,26 +57,22 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 #[derive(Debug, Clone)]
 pub struct Endpoints {
-    endpoints: Vec<String>
+    endpoints: Vec<Url>
 }
 
 impl Endpoints {
-    pub fn from(endpoints: Vec<String>) -> Result<Self>{
-        for endpoint in &endpoints {
-            match endpoint.len() > 0 {
-                true => (),
-                false => return Err(SEError::Generic(String::from("endpoint string passed to Lockbox::new has zero length")).into())
-            };
-        }
-        Ok(Endpoints { endpoints })
+    pub fn from(endpoints: Vec<Url>) -> Self {
+        Endpoints { endpoints }
     }
 
     /// Select a url from the list of active urls depending on the numerical value
     /// of the statechain identifier.
-    pub fn select(&self, statechain_id: &Uuid) -> Option<&String> {
+    pub fn select(&self, statechain_id: &Uuid) -> Option<&Url> {
+        let len = self.endpoints.len();
+        if len == 0 {return None}
         let scid_bytes = statechain_id.as_bytes();
-        let numerical= usize::from_be_bytes(scid_bytes[scid_bytes.len()-8..].try_into().unwrap());
-        self.endpoints.get(numerical %  self.endpoints.len())
+        let index = u128::from_be_bytes(*scid_bytes) % len as u128;
+        self.endpoints.get(index as usize)
     }
 }
 
@@ -86,8 +83,8 @@ pub struct Lockbox {
 }
 
 impl Lockbox {
-    pub fn new(endpoints: Vec<String>) -> Result<Lockbox> {
-        let endpoint = Endpoints::from(endpoints)?;
+    pub fn new(endpoints: Vec<Url>) -> Result<Lockbox> {
+        let endpoint = Endpoints::from(endpoints);
         let client = reqwest::blocking::Client::new();
         Ok(Lockbox{client, endpoint})
     }
@@ -111,9 +108,7 @@ impl<
 {
     pub fn load(mut db: T, mut db_smt: D, config: Option<Config>) -> Result<StateChainEntity<T, D>> {
         // Get config as defaults, Settings.toml and env vars
-        dbg!("loading config");
         let config_rs = config.unwrap_or(Config::load()?);
-        dbg!("finished loading config");
         db.set_connection_from_config(&config_rs)?;
         db_smt.set_connection_from_config(&config_rs)?;
 
@@ -123,17 +118,17 @@ impl<
         };
 
         let conductor_config = config_rs.conductor.clone();
-        
-        dbg!("getting lockbox");
-        dbg!("lockbox: {}", &config_rs.lockbox);
-        dbg!("conductor_config: {}", &conductor_config);
+
+        pub fn init_lb(conf: &Config) -> Option<Lockbox>{
+            conf.lockbox.as_ref().map(|l| Lockbox::new(l.to_vec()).unwrap())
+        }
+    
         let (lockbox, scheduler) = match config_rs.mode {
-            Mode::Both => (Lockbox::new(config_rs.lockbox.clone()).ok(), Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config))))),
+            Mode::Both => (init_lb(&config_rs), Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config))))),
             Mode::Conductor => (None, Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config))))),
-            Mode::Core => (Lockbox::new(config_rs.lockbox.clone()).ok(), None)
+            Mode::Core => (init_lb(&config_rs), None)
         };
         
-        dbg!("getting sce");
         let sce = Self {
             config: config_rs,
             database: db,
@@ -142,12 +137,11 @@ impl<
             lockbox,
         };
 
-        dbg!("start scheduler");
         match &sce.scheduler {
             Some(s) => {Self::start_conductor_thread(s.clone());},
             None => ()
         }
-        dbg!("return sce");
+
         Ok(sce)
     }
 
@@ -523,5 +517,31 @@ mock! {
         fn update_root(&self, root: &storage::Root) -> storage::Result<i64>;
         fn get_statechain_data_api(&self,statechain_id: Uuid) -> storage::Result<StateChainDataAPI>;
         fn get_statechain(&self, statechain_id: Uuid) -> storage::Result<storage::StateChain>;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_endpoints() {
+        let urls: Vec<Url> = vec![];
+        let eps = Endpoints::from(urls);
+        assert_eq!(eps.endpoints.len(), 0);
+        assert!(eps.select(&Uuid::default()).is_none());
+        let urls = vec![Url::parse("https://url1.net/").unwrap(), 
+                        Url::parse("https://url2.net/").unwrap(), 
+                        Url::parse("https://url3.net/").unwrap(), 
+                        Url::parse("https://url4.net/").unwrap(), 
+                        Url::parse("https://url5.net/").unwrap(), 
+                        Url::parse("https://url6.net/").unwrap()];
+        let eps: Endpoints = Endpoints::from(urls.clone());
+        for i in 0..100000 {
+            let id = Uuid::from_bytes(&(i as u128).to_be_bytes()).unwrap();
+            let url_selected = eps.select(&id).unwrap();
+            let index = ( i % urls.len() as u128 ) as usize;  
+            assert_eq!(url_selected, &urls[index])
+        }    
     }
 }

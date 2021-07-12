@@ -34,6 +34,7 @@ use rocket_okapi::JsonSchema;
 
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
+use url::Url;
 
 use monotree::database::MemCache;
 
@@ -737,9 +738,9 @@ impl Database for PGDatabase {
         )
     }
 
-    fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<String>> {
+    fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<Url>> {
         match self.get_1::<String>(*user_id, Table::Lockbox, vec![Column::Lockbox]){
-            Ok(r) => Ok(Some(r)),
+            Ok(r) => Ok(Some(Url::parse(&r)?)),
             Err(e) => match e {
                 SEError::DBError(ref error_type, ref _message) => match error_type {
                     crate::error::DBErrorType::NoDataForID => Ok(None),
@@ -750,11 +751,11 @@ impl Database for PGDatabase {
         }
     }
 
-    fn update_lockbox_url(&self, user_id: &Uuid, lockbox_url: &String)->Result<()>{
+    fn update_lockbox_url(&self, user_id: &Uuid, lockbox_url: &Url)->Result<()>{
         self.update(user_id,
                     Table::Lockbox,
                     vec![Column::Lockbox],
-                    vec![lockbox_url])
+                    vec![&String::from(lockbox_url.as_str())])
     }
 
     fn get_s1_pubkey(&self, user_id: &Uuid) -> Result<GE> {

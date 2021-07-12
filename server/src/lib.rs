@@ -22,6 +22,7 @@ extern crate jsonwebtoken as jwt;
 extern crate log4rs;
 extern crate rusoto_dynamodb;
 extern crate serde_dynamodb;
+extern crate url;
 
 extern crate curv;
 extern crate electrumx_client;
@@ -74,6 +75,7 @@ use rocket_contrib::databases::postgres;
 use shared_lib::{state_chain::*, structs::TransferMsg3, Root, structs::CoinValueInfo};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
+use url::Url;
 
 #[database("postgres_w")]
 pub struct DatabaseW(postgres::Connection);
@@ -112,8 +114,8 @@ pub trait Database {
     ) -> Result<()>;
     fn update_sighash(&self, user_id: &Uuid, sig_hash: Hash) -> Result<()>;
     fn update_s1_pubkey(&self, user_id: &Uuid, pubkey: &GE) -> Result<()>;
-    fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<String>>;
-    fn update_lockbox_url(&self, user_id: &Uuid, lockbox_url: &String)->Result<()>;
+    fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<Url>>;
+    fn update_lockbox_url(&self, user_id: &Uuid, lockbox_url: &Url)->Result<()>;
     fn get_s1_pubkey(&self, user_id: &Uuid) -> Result<GE>;
     fn update_user_backup_tx(&self, user_id: &Uuid, tx: Transaction) -> Result<()>;
     fn get_user_backup_tx(&self, user_id: Uuid) -> Result<Transaction>;

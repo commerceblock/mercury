@@ -29,6 +29,7 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use std::str::FromStr;
 use uuid::Uuid;
+use url::Url;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -177,7 +178,7 @@ impl Transfer for SCE {
 
         let s2: FE;
         let s2_pub: GE;
-        match &self.lockbox {
+        match &self.database.get_lockbox_url(&user_id)? {
             Some(l) => {
             let ku_send = KUSendMsg {
                 user_id,
@@ -187,12 +188,7 @@ impl Transfer for SCE {
                 o2_pub: transfer_msg4.o2_pub,
             };
             let path: &str = "ecdsa/keyupdate/first";
-            let lockbox_url: String = match self.database.get_lockbox_url(&user_id)? {
-                Some(l) => l,
-                None => return Err(SEError::Generic(format!("Lockbox url not found in database for user_id: {}", &user_id)))
-            };
-
-            let ku_receive: KUReceiveMsg = post_lb(&lockbox_url, path, &ku_send)?;
+            let ku_receive: KUReceiveMsg = post_lb(l, path, &ku_send)?;
             s2 = FE::new_random();
             s2_pub = ku_receive.s2_pub;
         },
@@ -312,11 +308,8 @@ impl Transfer for SCE {
 
         let new_user_id = finalized_data.new_shared_key_id;
 
-        dbg!("getting statechain owner...");
         let sco = self.database.get_statechain_owner(statechain_id)?;
-        dbg!("getting lockbox url...");
-        let lockbox_url: Option<String> = self.database.get_lockbox_url(&sco.owner_id).map_err(|e| {dbg!("{}",&e); e} )?;
-        dbg!("lockbox url", &lockbox_url);
+        let lockbox_url: Option<Url> = self.database.get_lockbox_url(&sco.owner_id).map_err(|e| {dbg!("{}",&e); e} )?;
 
         self.database.update_statechain_owner(
             &statechain_id,
@@ -805,7 +798,7 @@ mod tests {
                 chain: serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap(),
             })
         });
-        db.expect_get_lockbox_url().returning(|_| Ok(Some(mockito::server_url())));
+        db.expect_get_lockbox_url().returning(|_| Ok(Some(Url::parse(&mockito::server_url()).unwrap())));
         db.expect_update_lockbox_url().returning(|_,_|Ok(()));
         db.expect_update_statechain_owner()
             .returning(|_, _, _| Ok(()));
@@ -845,7 +838,7 @@ mod tests {
         let mut sc_entity = test_sc_entity(db, None);
         let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
 
-        sc_entity.lockbox.as_mut().map(|l| l.endpoint = Endpoints::from(vec![mockito::server_url()]).unwrap());
+        sc_entity.lockbox.as_mut().map(|l| l.endpoint = Endpoints::from(vec![Url::parse(&mockito::server_url()).unwrap()]));
 
         // simulate lockbox secret operations
         let kp = ECDSAKeypair {

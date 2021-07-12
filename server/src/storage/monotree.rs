@@ -6,6 +6,7 @@ use crate::PGDatabase;
 use monotree::database::{Database as MonotreeDatabase, MemCache, MemoryDB};
 use monotree::Errors;
 use std::collections::HashMap;
+use url::Url;
 
 pub type Result<T> = std::result::Result<T, Errors>;
 
@@ -334,11 +335,11 @@ impl Database for MemoryDB {
         unimplemented!()
     }
     
-    fn get_lockbox_url(&self, user_id: &uuid::Uuid) -> crate::Result<Option<String>>{
+    fn get_lockbox_url(&self, _user_id: &uuid::Uuid) -> crate::Result<Option<Url>>{
         unimplemented!()
     }
     
-    fn update_lockbox_url(&self, user_id: &uuid::Uuid, lockbox_url: &String)->crate::Result<()>{
+    fn update_lockbox_url(&self, _user_id: &uuid::Uuid, _lockbox_url: &Url)->crate::Result<()>{
         unimplemented!()
     }
 

@@ -11,6 +11,7 @@ use std::env;
 use std::str::FromStr;
 use std::vec::Vec;
 use uuid::Uuid;
+use url::Url;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")] 
@@ -115,7 +116,7 @@ pub struct Config {
     /// Electrum Server Address
     pub electrum_server: String,
     /// Active lockbox server addresses
-    pub lockbox: Vec<String>,
+    pub lockbox: Option<Vec<Url>>,
     /// Bitcoin network name (testnet, regtest, mainnet)
     pub network: String,
     /// Testing mode
@@ -154,7 +155,7 @@ impl Default for Config {
             mode: Mode::Both,
             log_file: String::from(""),
             electrum_server: String::from("127.0.0.1:60401"),
-            lockbox: vec![String::from("")],
+            lockbox: None,
             network: String::from("regtest"),
             testing_mode: false,
             lockheight_init: 10000,
@@ -263,7 +264,6 @@ impl Config {
         if let Err(e) = bitcoin::Address::from_str(&fee_address) {
             panic!("Invalid fee address: {}", e)
         };
-        dbg!("config loaded");
         Ok(conf_rs.try_into()?)
     }
 

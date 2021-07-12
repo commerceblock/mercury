@@ -23,6 +23,7 @@ use rocket_contrib::json::Json;
 use std::string::ToString;
 use uuid::Uuid;
 use rocket_okapi::openapi;
+use url::Url;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -71,23 +72,28 @@ impl Ecdsa for SCE {
 
         let kg_first_msg;
         let db = &self.database;
-        // call lockbox
-        match &self.lockbox {
-        Some(l) => {
-                let lockbox_url: String = match db.get_lockbox_url(&user_id)? {
-                    Some(l) => l,
-                    None => {
-                        match l.endpoint.select(&user_id){
-                            Some(l) => {
-                                db.update_lockbox_url(&user_id, &l)?;
-                                l.to_owned()
-                            },
-                            None => return Err(SEError::Generic(String::from("No active lockbox urls specified")))
-                        }
+
+        let lockbox_url: Option<Url> = match db.get_lockbox_url(&user_id)?{
+            Some(l) => Some(l),
+            None => match &self.lockbox {
+                Some(l) => {
+                    match l.endpoint.select(&user_id){
+                        Some(l) => {
+                            db.update_lockbox_url(&user_id, &l)?;
+                            Some(l.to_owned())
+                        },
+                        None => return Err(SEError::Generic(String::from("No active lockbox urls specified")))
                     }
-                };
+                },
+                None => None
+            }
+        };
+
+        // call lockbox
+        match &lockbox_url {
+        Some(l) => {
                 let path: &str = "ecdsa/keygen/first";
-                let (_id, key_gen_first_msg): (Uuid, party_one::KeyGenFirstMsg) = post_lb(&lockbox_url, path, &key_gen_msg1)?;
+                let (_id, key_gen_first_msg): (Uuid, party_one::KeyGenFirstMsg) = post_lb(l, path, &key_gen_msg1)?;
                 kg_first_msg = key_gen_first_msg;
         },
         None => {
@@ -135,7 +141,7 @@ impl Ecdsa for SCE {
         // call lockbox
         match &self.lockbox {
         Some(l) => {
-            let lockbox_url: String = match db.get_lockbox_url(&user_id)? {
+            let lockbox_url: Url = match db.get_lockbox_url(&user_id)? {
                 Some(l) => l,
                 None => return Err(SEError::Generic(format!("Lockbox url not found in database for user_id: {}", &user_id)))
             };
@@ -189,15 +195,12 @@ impl Ecdsa for SCE {
         let sign_party_one_first_msg: party_one::EphKeyGenFirstMsg;
         let db = &self.database;
 
-        match &self.lockbox {
-        Some(l) => {
-            let lockbox_url: String = match db.get_lockbox_url(&user_id)? {
-                Some(l) => l,
-                None => return Err(SEError::Generic(format!("Lockbox url not found in database for user_id: {}", &user_id)))
-            };
+     
 
+        match &db.get_lockbox_url(&user_id)? {
+        Some(l) => {
             let path: &str = "ecdsa/sign/first";
-            let sign_party_one_first_message: party_one::EphKeyGenFirstMsg = post_lb(&lockbox_url, path, &sign_msg1)?;
+            let sign_party_one_first_message: party_one::EphKeyGenFirstMsg = post_lb(&l, path, &sign_msg1)?;
             sign_party_one_first_msg = sign_party_one_first_message;
         },
         None => {
@@ -252,7 +255,7 @@ impl Ecdsa for SCE {
 
         match &self.lockbox {
         Some(l) => {
-            let lockbox_url: String = match db.get_lockbox_url(&user_id)? {
+            let lockbox_url: Url = match db.get_lockbox_url(&user_id)? {
                 Some(l) => l,
                 None => return Err(SEError::Generic(format!("Lockbox url not found in database for user_id: {}", &user_id)))
             };
@@ -406,10 +409,10 @@ pub mod tests {
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_create_user_session().returning(|_, _, _| Ok(()));
         db.expect_get_user_auth().returning(move |_| Ok(user_id));
-        db.expect_get_lockbox_url().returning(|_| Ok(Some(mockito::server_url())));
+        db.expect_get_lockbox_url().returning(|_| Ok(Some(Url::from_str(&mockito::server_url()).unwrap())));
         db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
 
-        let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()));
+        let mut sc_entity = test_sc_entity(db, Some(Url::parse(&mockito::server_url()).unwrap()));
 
         let kg_first_msg = party_one::KeyGenFirstMsg { pk_commitment: BigInt::from(0), zk_pok_commitment: BigInt::from(1) };
 
@@ -478,7 +481,7 @@ pub mod tests {
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_create_user_session().returning(|_, _, _| Ok(()));
         db.expect_get_user_auth().returning(move |_| Ok(user_id));
-        db.expect_get_lockbox_url().returning(|_| Ok(Some(mockito::server_url())));
+        db.expect_get_lockbox_url().returning(|_| Ok(Some(Url::parse(&mockito::server_url()).unwrap())));
         db.expect_get_user_backup_tx().returning(move |_| Ok(tx_backup.clone()));
         db.expect_update_user_backup_tx().returning(|_, _| Ok(()));
         let hexhash = r#"
@@ -487,7 +490,7 @@ pub mod tests {
         let sig_hash: sha256d::Hash = serde_json::from_str(&hexhash.to_string()).unwrap();
         db.expect_get_sighash().returning(move |_| Ok(sig_hash));
 
-        let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()));
+        let mut sc_entity = test_sc_entity(db, Some(Url::parse(&mockito::server_url()).unwrap()));
 
         let (eph_key_gen_first_message_party_two, _, _) =
             MasterKey2::sign_first_message();
