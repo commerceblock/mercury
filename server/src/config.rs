@@ -268,3 +268,20 @@ impl Config {
     }
 
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_deserialize_lockbox() {
+        let urls = Some(vec![Url::parse("https://url1.net/").unwrap(), 
+                        Url::parse("https://url2.net/").unwrap(), 
+                        Url::parse("https://url3.net/").unwrap()]);
+    
+        let urls_str = "[\"https://url1.net\", \"https://url2.net\", \"https://url3.net\"]";
+        let urls_deser: Option<Vec<Url>> = serde_json::from_str(urls_str).unwrap();
+        assert_eq!(urls, urls_deser);
+    }
+}
+
