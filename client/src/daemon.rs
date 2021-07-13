@@ -93,7 +93,6 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
         }
         let network: String = conf_rs.get("network").unwrap();
 
-        info!("Find daemon address...");
 
         let daemon_address: String = conf_rs.get("daemon_address").unwrap();
 
@@ -349,7 +348,6 @@ mod tests {
     #[test]
     #[serial]
     fn test_loading_wallet_from_file() {
-        info!("test_loading_wallet_from_file....");
         // Clear or create empty test_invalid_wallet_format_wallet.data file
         let _ = fs::write(DEFAULT_TEST_WALLET_LOC, "");
         match run_wallet_daemon(true) {
