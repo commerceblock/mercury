@@ -1544,10 +1544,14 @@ impl Database for PGDatabase {
         };
         let mut rc_vec = vec![];
         for row in &rows {
-            let tx_backup: Transaction = Self::deser(row.get("txbackup"))?;
-            let user_id: Uuid = row.get("id");
             let statechain_id: Uuid = row.get("statechainid");
-            rc_vec.push((user_id,statechain_id,tx_backup))
+            let user_id: Uuid = row.get("id");
+            let owner_id = self.get_1::<Uuid>(statechain_id, Table::StateChain, vec![Column::OwnerId])?;
+            if (owner_id == user_id) {
+                let tx_backup_str = self.get_1::<String>(statechain_id, Table::BackupTxs, vec![Column::TxBackup])?;
+                let tx_backup: Transaction = Self::deser(tx_backup_str)?;
+                rc_vec.push((user_id,statechain_id,tx_backup))
+            }
         }
 
         Ok(rc_vec)

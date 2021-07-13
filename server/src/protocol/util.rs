@@ -4,7 +4,7 @@
 //! utility functions.
 
 pub use super::super::Result;
-use super::{ecdsa::MasterKey1, transfer_batch::{transfer_batch_is_ended, BatchTransfer}};
+use super::{transfer_batch::{transfer_batch_is_ended, BatchTransfer}};
 extern crate shared_lib;
 use shared_lib::{
     mainstay::Attestable,
@@ -395,6 +395,10 @@ impl Utilities for SCE {
                 );
 
                 self.database.update_sighash(&user_id, sig_hash)?;
+
+                println!("{:?}", "psm");
+                println!("{:?}", tx);
+                println!("{:?}", transaction_serialise(&tx));
 
                 // Only in deposit case add backup tx to UserSession
                 if prepare_sign_msg.protocol == Protocol::Deposit {

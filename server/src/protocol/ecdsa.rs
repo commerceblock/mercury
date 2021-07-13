@@ -294,6 +294,12 @@ impl Ecdsa for SCE {
         // Add signature to tx
         tx.input[0].witness = ws.clone();
 
+        let spk_vec = ws[1].clone();
+        let pk = PK::from_slice(&spk_vec)?;
+        let serialized_pk = PK::serialize_uncompressed(&pk);
+        let shared_pk = GE::from_bytes(&serialized_pk[1..]);
+        db.update_master_pubkey(user_id,shared_pk.unwrap())?;
+
         match sign_msg2.sign_second_msg_request.protocol {
             Protocol::Withdraw => {
                 // Store signed withdraw tx in UserSession DB object
@@ -311,12 +317,6 @@ impl Ecdsa for SCE {
                 );
             }
         };
-
-        let spk_vec = ws[1].clone();
-        let pk = PK::from_slice(&spk_vec)?;
-        let serialized_pk = PK::serialize_uncompressed(&pk);
-        let shared_pk = GE::from_bytes(&serialized_pk[1..]);
-        db.update_master_pubkey(user_id,shared_pk.unwrap())?;
 
         Ok(ws)
     }
