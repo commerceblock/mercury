@@ -90,7 +90,7 @@ pub fn get_sighash(
 /// Check withdraw tx is valid
 pub fn tx_withdraw_verify(
     tx_psm: &PrepareSignTxMsg,
-    fee_address: &String,
+    fee_address: &[String; 2],
     fee_withdraw: &u64,
 ) -> Result<()> {
     if tx_psm.input_addrs.len() != tx_psm.input_amounts.len() {
@@ -98,9 +98,19 @@ pub fn tx_withdraw_verify(
             "Withdraw tx number of signing addresses != number of input amounts.",
         )));
     }
+    
     // Check fee info
     let tx = transaction_deserialise(&tx_psm.tx_hex)?;
-    if tx.output[1].script_pubkey != Address::from_str(fee_address)?.script_pubkey() {
+    let mut found = 0;
+    for i in 0..fee_address.len(){
+        // found a correct address
+        if tx.output[1].script_pubkey == Address::from_str(&fee_address[i])?.script_pubkey() {
+            found = 1;
+        }
+    }
+
+    // didn't find a correct address
+    if found == 0 {
         return Err(SharedLibError::FormatError(String::from(
             "Incorrect State Entity fee address.",
         )));
@@ -260,7 +270,7 @@ pub fn tx_withdraw_build(
                 value: amount - fee - FEE,
             },
             TxOut {
-                script_pubkey: Address::from_str(&se_fee_info.address)?.script_pubkey(),
+                script_pubkey: Address::from_str(&se_fee_info.address[0])?.script_pubkey(),
                 value: fee,
             },
         ],
