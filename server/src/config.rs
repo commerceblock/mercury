@@ -246,9 +246,12 @@ impl Config {
 
         // Type checks
         let fee_address = conf_rs.get_array("fee_address")?;
-        if let Err(e) = bitcoin::Address::from_str(&fee_address[0].to_string()) {
-            panic!("Invalid fee address: {}", e)
-        };
+        for i in 0..fee_address.len(){
+            // check addresses individually
+            if let Err(e) = bitcoin::Address::from_str(&fee_address[i].to_string()) {
+                panic!("Invalid fee address: {}", e)
+            };
+        }
 
         Ok(conf_rs.try_into()?)
     }
