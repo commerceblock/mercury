@@ -93,7 +93,6 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
         }
         let network: String = conf_rs.get("network").unwrap();
 
-
         let daemon_address: String = conf_rs.get("daemon_address").unwrap();
 
         let mut tor = Tor::from_config(&conf_rs);
