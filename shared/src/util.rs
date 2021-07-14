@@ -270,7 +270,7 @@ pub fn tx_withdraw_build(
                 value: amount - fee - FEE,
             },
             TxOut {
-                script_pubkey: Address::from_str(&se_fee_info.address[0])?.script_pubkey(),
+                script_pubkey: Address::from_str(&se_fee_info.address)?.script_pubkey(),
                 value: fee,
             },
         ],

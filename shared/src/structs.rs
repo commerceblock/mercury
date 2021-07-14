@@ -94,7 +94,7 @@ impl FESer {
 #[schemars(example = "Self::example")]
 pub struct StateEntityFeeInfoAPI {
     /// The Bitcoin address that the SE fee must be paid to
-    pub address: [String; 2], // Receive address for fee payments
+    pub address: String, // Receive address for fee payments
     /// The deposit fee, which is specified as a proportion of the deposit amount in basis points
     pub deposit: u64,    // basis points
     /// The withdrawal fee, which is specified as a proportion of the deposit amount in basis points
@@ -108,7 +108,7 @@ pub struct StateEntityFeeInfoAPI {
 impl StateEntityFeeInfoAPI{
     pub fn example() -> Self{
         Self{
-            address: ["bc1qzvv6yfeg0navfkrxpqc0fjdsu9ey4qgqqsarq4".to_string(), "bc1qzvv6yfeg0navfkrxpqc0fjdsu9ey4qgqqsarq4".to_string()],
+            address: "bc1qzvv6yfeg0navfkrxpqc0fjdsu9ey4qgqqsarq4".to_string(),
             deposit: 0,
             withdraw: 300,
             interval: 144,
@@ -121,7 +121,7 @@ impl fmt::Display for StateEntityFeeInfoAPI {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Fee address: {:?},\nDeposit fee rate: {}\nWithdrawal fee rate: {}\nLock interval: {}\nInitial lock: {}",
+            "Fee address: {},\nDeposit fee rate: {}\nWithdrawal fee rate: {}\nLock interval: {}\nInitial lock: {}",
             self.address, self.deposit, self.withdraw, self.interval, self.initlock
         )
     }
