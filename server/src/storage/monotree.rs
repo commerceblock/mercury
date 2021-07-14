@@ -524,6 +524,12 @@ impl Database for MemoryDB {
     fn get_public_master(&self, _user_id: uuid::Uuid) -> crate::Result<Option<String>> {
         unimplemented!()
     }
+    fn get_shared_pubkey(&self, _user_id: uuid::Uuid) -> crate::Result<Option<String>> {
+        unimplemented!()
+    }
+    fn get_statecoin_pubkey(&self, _statechain_id: uuid::Uuid) -> crate::Result<Option<String>> {
+        unimplemented!()
+    }
     fn get_ecdsa_master(&self, _user_id: uuid::Uuid) -> crate::Result<Option<String>> {
         unimplemented!()
     }
@@ -685,13 +691,20 @@ impl Database for MemoryDB {
     ) -> crate::Result<crate::structs::ECDSAMasterKeyInput> {
         unimplemented!()
     }
-    fn update_master_pubkey(
+    fn update_shared_pubkey(
         &self, 
         _user_id: uuid::Uuid, 
         _pubkey: curv::GE,
     ) -> crate::Result<()> {
         unimplemented!()
     }
+    fn set_shared_pubkey(
+        &self, 
+        _statechain_id: uuid::Uuid, 
+        _pubkey: &String,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }    
     fn update_public_master(
         &self,
         _user_id: &uuid::Uuid,

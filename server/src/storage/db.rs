@@ -114,6 +114,7 @@ pub enum Column {
     OwnerId,
     TransferFinalizeData,
     TransferReady,
+    SharedPublic,
 
     // BackupTxs
     //Id,
@@ -247,6 +248,7 @@ impl PGDatabase {
                 proofkey varchar,
                 txbackup varchar,
                 masterpublic varchar,
+                sharedpublic varchar,
                 PRIMARY KEY (id)
             );",
                 Table::UserSession.to_string(),
@@ -288,6 +290,7 @@ impl PGDatabase {
                 lockeduntil timestamp,
                 transferfinalizedata varchar,
                 transferready bool,
+                sharedpublic varchar,
                 PRIMARY KEY (id)
             );",
                 Table::StateChain.to_string(),
@@ -1273,7 +1276,6 @@ impl Database for PGDatabase {
         self.get_1::<Option<String>>(user_id, Table::UserSession, vec![Column::MasterPublic])
     }
 
-    //kms::ecdsa::two_party::MasterKey1
     fn update_public_master(&self, user_id: &Uuid, master_public: Party1Public) -> Result<()> {
         self.update(
             user_id,
@@ -1283,15 +1285,29 @@ impl Database for PGDatabase {
         )
     }
 
-    fn update_master_pubkey(&self, user_id: Uuid, pubkey: GE) -> Result<()> {
-        let master_public_ser = self.get_1::<Option<String>>(user_id, Table::UserSession, vec![Column::MasterPublic])?;
-        let mut master_public: Party1Public = Self::deser(master_public_ser.unwrap())?;
-        master_public.q = pubkey.clone();
+    fn get_statecoin_pubkey(&self, statechain_id: Uuid) -> Result<Option<String>> {
+        self.get_1::<Option<String>>(statechain_id, Table::StateChain, vec![Column::SharedPublic])
+    }
+
+    fn get_shared_pubkey(&self, user_id: Uuid) -> Result<Option<String>> {
+        self.get_1::<Option<String>>(user_id, Table::UserSession, vec![Column::SharedPublic])
+    }
+
+    fn update_shared_pubkey(&self, user_id: Uuid, pubkey: GE) -> Result<()> {
         self.update(
             &user_id,
             Table::UserSession,
-            vec![Column::MasterPublic],
-            vec![&Self::ser(master_public)?],
+            vec![Column::SharedPublic],
+            vec![&Self::ser(pubkey)?],
+        )
+    }
+
+    fn set_shared_pubkey(&self, statechain_id: Uuid, pubkey: &String) -> Result<()> {
+        self.update(
+            &statechain_id,
+            Table::StateChain,
+            vec![Column::SharedPublic],
+            vec![pubkey],
         )
     }
 

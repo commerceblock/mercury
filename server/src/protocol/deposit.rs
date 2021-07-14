@@ -114,6 +114,10 @@ impl Deposit for SCE {
         self.database
             .create_statechain(&statechain_id, &user_id, &state_chain, &amount)?;
 
+        // set the shared public key
+        let shared_pubkey = self.database.get_shared_pubkey(user_id.clone())?;
+        self.database.set_shared_pubkey(statechain_id.clone(), &shared_pubkey.ok_or(SEError::Generic(String::from("Shared pubkey missing")))?)?;
+
         // Insert into BackupTx table
         self.database
             .create_backup_transaction(&statechain_id, &tx_backup)?;

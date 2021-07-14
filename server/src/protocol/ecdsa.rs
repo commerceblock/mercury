@@ -294,11 +294,13 @@ impl Ecdsa for SCE {
         // Add signature to tx
         tx.input[0].witness = ws.clone();
 
-        let spk_vec = ws[1].clone();
-        let pk = PK::from_slice(&spk_vec)?;
-        let serialized_pk = PK::serialize_uncompressed(&pk);
-        let shared_pk = GE::from_bytes(&serialized_pk[1..]);
-        db.update_master_pubkey(user_id,shared_pk.unwrap())?;
+        if (sign_msg2.sign_second_msg_request.protocol == Protocol::Deposit) {
+            let spk_vec = ws[1].clone();
+            let pk = PK::from_slice(&spk_vec)?;
+            let serialized_pk = PK::serialize_uncompressed(&pk);
+            let shared_pk = GE::from_bytes(&serialized_pk[1..]);
+            db.update_shared_pubkey(user_id,shared_pk.unwrap())?;
+        }
 
         match sign_msg2.sign_second_msg_request.protocol {
             Protocol::Withdraw => {

@@ -250,7 +250,10 @@ pub trait Database {
     fn init(&self) -> Result<()>;
     fn get_ecdsa_master_key_input(&self, user_id: Uuid) -> Result<ECDSAMasterKeyInput>;
     fn update_public_master(&self, user_id: &Uuid, master_public: Party1Public) -> Result<()>;
-    fn update_master_pubkey(&self, user_id: Uuid, pubkey: GE) -> Result<()>;
+    fn update_shared_pubkey(&self, user_id: Uuid, pubkey: GE) -> Result<()>;
+    fn set_shared_pubkey(&self, statechain_id: Uuid, pubkey: &String) -> Result<()>;
+    fn get_shared_pubkey(&self, user_id: Uuid) -> Result<Option<String>>;
+    fn get_statecoin_pubkey(&self, statechain_id: Uuid) -> Result<Option<String>>;
     fn update_ecdsa_master(&self, user_id: &Uuid, master_key: MasterKey1) -> Result<()>;
     fn get_sighash(&self, user_id: Uuid) -> Result<sha256d::Hash>;
 }

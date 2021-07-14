@@ -34,6 +34,7 @@ use std::str::FromStr;
 use uuid::Uuid;
 use bitcoin::OutPoint;
 use bitcoin::Transaction;
+use curv::GE;
 
 const MAX_LOCKTIME: u32 = 500000000; // bitcoin tx nlocktime cutoff
 
@@ -396,10 +397,6 @@ impl Utilities for SCE {
 
                 self.database.update_sighash(&user_id, sig_hash)?;
 
-                println!("{:?}", "psm");
-                println!("{:?}", tx);
-                println!("{:?}", transaction_serialise(&tx));
-
                 // Only in deposit case add backup tx to UserSession
                 if prepare_sign_msg.protocol == Protocol::Deposit {
                     self.database
@@ -429,8 +426,10 @@ impl Utilities for SCE {
                     Err(_) => continue
                 };
 
-                let master_key: Party1Public = serde_json::from_str(&self.database.get_public_master(statecoin.0)?.unwrap()).unwrap();
-                let public = serde_json::to_string(&master_key).unwrap();
+                let mut master_key: Party1Public = serde_json::from_str(&self.database.get_public_master(statecoin.0)?.unwrap()).map_err(|e| e.to_string())?;
+                let shared_public: GE = serde_json::from_str(&self.database.get_statecoin_pubkey(statecoin.1)?.unwrap()).map_err(|e| e.to_string())?;
+                master_key.q = shared_public;
+                let public = serde_json::to_string(&master_key).map_err(|e| e.to_string())?;
 
                 recovery_data.push(RecoveryDataMsg {
                     shared_key_id: statecoin.0,
