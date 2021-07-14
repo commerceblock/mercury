@@ -114,6 +114,10 @@ impl Deposit for SCE {
         self.database
             .create_statechain(&statechain_id, &user_id, &state_chain, &amount)?;
 
+        // set the shared public key
+        let shared_pubkey = self.database.get_shared_pubkey(user_id.clone())?;
+        self.database.set_shared_pubkey(statechain_id.clone(), &shared_pubkey.ok_or(SEError::Generic(String::from("Shared pubkey missing")))?)?;
+
         // Insert into BackupTx table
         self.database
             .create_backup_transaction(&statechain_id, &tx_backup)?;
@@ -194,7 +198,7 @@ pub mod tests {
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_create_user_session().returning(|_, _, _| Ok(()));
 
-        let sc_entity = test_sc_entity(db);
+        let sc_entity = test_sc_entity(db, None);
 
         // Invalid proof key
         match sc_entity.deposit_init(DepositMsg1 {
@@ -250,8 +254,10 @@ pub mod tests {
         db.expect_create_backup_transaction()
             .returning(|_, _| Ok(()));
         db.expect_update_statechain_id().returning(|_, _| Ok(()));
+        db.expect_get_shared_pubkey().returning(|_| Ok(Some("".to_string())));
+        db.expect_set_shared_pubkey().returning(|_,_| Ok(()));
 
-        let sc_entity = test_sc_entity(db);
+        let sc_entity = test_sc_entity(db, None);
 
         // Backup tx not signed error
         match sc_entity.deposit_confirm(DepositMsg2 {

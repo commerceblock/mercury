@@ -57,6 +57,12 @@ impl From<String> for SEError {
         SEError::Generic(e)
     }
 }
+impl From<url::ParseError> for SEError {
+    fn from(e: url::ParseError) -> SEError {
+        SEError::Generic(e.to_string())
+    }
+}
+
 impl From<SharedLibError> for SEError {
     fn from(e: SharedLibError) -> SEError {
         SEError::SharedLibError(e.to_string())
