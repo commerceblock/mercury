@@ -95,7 +95,7 @@ pub trait Utilities {
 impl Utilities for SCE {
     fn get_fees(&self) -> Result<StateEntityFeeInfoAPI> {
         Ok(StateEntityFeeInfoAPI {
-            address: self.config.fee_address.clone(),
+            address: self.config.fee_address[0].clone(),
             deposit: self.config.fee_deposit,
             withdraw: self.config.fee_withdraw,
             interval: self.config.lh_decrement,
