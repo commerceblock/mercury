@@ -31,7 +31,7 @@ The server can be run in one of 3 modes by selecting the `MERC_MODE` environment
 | WATCH_ONLY | bool | If true, server watches blockheight for backup tx broadcast |
 | MODE       | String | Server mode: "conductor", "core" or "both". Default is "both" |
 | BITCOIND | String | RPC connection to bitcoind - username:password@host:port - empty string causes no connection or watch function |
-| LOCKBOX | String | URL of the secret key lockbox |
+| LOCKBOX | \[String\] | Array of URLs of the secret key lockbox |
 | DB_HOST | String | Database host name |
 | DB_PORT | String | Database port |
 | DB_USER | String | Database user name |

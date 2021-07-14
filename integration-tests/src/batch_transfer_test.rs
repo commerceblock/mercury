@@ -158,9 +158,11 @@ mod tests {
             shared_key_ids.push(deposit.0);
             statechain_ids.push(deposit.1);
         }
+        dbg!("doing run batch transfer...");
         let (batch_id, transfer_finalized_datas, commitments, nonces, transfer_sigs) =
             run_batch_transfer(&mut wallets, &swap_map, &funding_txids, &statechain_ids);
-
+        dbg!("finished run batch transfer.");
+        
         let mut sorted_statechain_ids = statechain_ids.clone();
         sorted_statechain_ids.sort();
         let sorted_id_str = {
@@ -188,6 +190,7 @@ mod tests {
         let receiver_addr = wallets[1]
             .get_new_state_entity_address()
             .expect("expected state chain entity address");
+        dbg!("do transfer sender...");
         match state_entity::transfer::transfer_sender(
             &mut wallets[0],
             &statechain_ids[0],
@@ -199,13 +202,16 @@ mod tests {
             _ => assert!(false),
         }
 
+        dbg!("get batch transfer status...");
         // Check transfers complete
         let status_api =
             state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id);
         assert!(status_api.expect("expected status 1").finalized);
 
         // Finalize transfers in wallets now that StateEntity has completed the transfers.
+        dbg!("finalize bach transfer...");
         finalize_batch_transfer(&mut wallets, &swap_map, transfer_finalized_datas);
+        dbg!("finished finalize bach transfer.");
 
         // Check amounts have correctly transferred
         batch_transfer_verify_amounts(&mut wallets, &amounts, &statechain_ids, &swap_map);

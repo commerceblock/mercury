@@ -401,7 +401,7 @@ pub fn run_batch_transfer(
 
     match status_api {
         Ok(v) => {
-            assert_eq!(v.finalized, true);
+            assert_eq!(v.finalized, true, "{:?}", &v);
             assert_eq!(v.state_chains.len(), transfer_finalized_datas.len());
         },
         Err(e) => assert!(false, "Error: {}",e),
@@ -424,6 +424,7 @@ pub fn finalize_batch_transfer(
     transfer_finalized_datas: Vec<TransferFinalizeData>,
 ) {
     for i in 0..swap_map.len() {
+        dbg!("transfer receiver finalize: ", i);
         let _ = state_entity::transfer::transfer_receiver_finalize(
             &mut wallets[swap_map[i].1],
             transfer_finalized_datas[swap_map[i].0].clone(),
