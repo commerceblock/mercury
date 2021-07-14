@@ -341,6 +341,7 @@ impl Scheduler {
             if count > &mut 0 {
                 *count -= 1;
             }
+            self.group_info_map.retain(|_, &mut v| v != 0);
         }
         self.statechain_amount_map.remove(statechain_id, &amount[0]);
         self.poll_timeout_map.remove(statechain_id);
@@ -444,6 +445,7 @@ impl Scheduler {
                         if count > &mut 0 {
                             *count -= 1;
                         }
+                        self.group_info_map.retain(|_, &mut v| v != 0);
                     }
                     info!("SCHEDULER: Created Swap ID: {}", swap_id);
                     debug!("SCHEDULER: Swap Info: {:?}", si);
