@@ -14,7 +14,7 @@ use cfg_if::cfg_if;
 use curv::{
     arithmetic::traits::Converter,
     elliptic::curves::traits::ECPoint,
-    {BigInt, FE, GE},
+    {BigInt, FE, GE, PK},
 };
 pub use kms::ecdsa::two_party::*;
 pub use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::*;
@@ -151,7 +151,6 @@ impl Ecdsa for SCE {
             kg_party_one_second_msg = kg_party_one_second_message;
         },
         None => {
-           
             let party2_public: GE = key_gen_msg2.dlog_proof.pk.clone();
 
             let (comm_witness, ec_key_pair) = db.get_ecdsa_witness_keypair(user_id)?;
@@ -183,6 +182,19 @@ impl Ecdsa for SCE {
             .comm_witness
             .public_share
         )?;
+
+        let public_key_data = Party1Public {
+            q: key_gen_msg2.dlog_proof.pk.clone(),
+            p1: kg_party_one_second_msg
+                .ecdh_second_message
+                .comm_witness
+                .public_share.clone(),
+            p2: key_gen_msg2.dlog_proof.pk.clone(),
+            paillier_pub: kg_party_one_second_msg.ek.clone(),
+            c_key: kg_party_one_second_msg.c_key.clone(),
+        };
+
+        db.update_public_master(&key_gen_msg2.shared_key_id,public_key_data)?;
 
         Ok(KeyGenReply2 { msg: kg_party_one_second_msg } )
     }
@@ -316,6 +328,14 @@ impl Ecdsa for SCE {
         // Add signature to tx
         tx.input[0].witness = ws.clone();
 
+        if (sign_msg2.sign_second_msg_request.protocol == Protocol::Deposit) {
+            let spk_vec = ws[1].clone();
+            let pk = PK::from_slice(&spk_vec)?;
+            let serialized_pk = PK::serialize_uncompressed(&pk);
+            let shared_pk = GE::from_bytes(&serialized_pk[1..]);
+            db.update_shared_pubkey(user_id,shared_pk.unwrap())?;
+        }
+
         match sign_msg2.sign_second_msg_request.protocol {
             Protocol::Withdraw => {
                 // Store signed withdraw tx in UserSession DB object
@@ -411,6 +431,7 @@ pub mod tests {
         db.expect_get_user_auth().returning(move |_| Ok(user_id));
         db.expect_get_lockbox_url().returning(|_| Ok(Some(Url::from_str(&mockito::server_url()).unwrap())));
         db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
+        db.expect_update_public_master().returning(|_,_| Ok(()));
 
         let mut sc_entity = test_sc_entity(db, Some(Url::parse(&mockito::server_url()).unwrap()));
 
@@ -489,6 +510,7 @@ pub mod tests {
             "#;
         let sig_hash: sha256d::Hash = serde_json::from_str(&hexhash.to_string()).unwrap();
         db.expect_get_sighash().returning(move |_| Ok(sig_hash));
+        db.expect_update_shared_pubkey().returning(|_,_| Ok(()));
 
         let mut sc_entity = test_sc_entity(db, Some(Url::parse(&mockito::server_url()).unwrap()));
 
