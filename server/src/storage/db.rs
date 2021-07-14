@@ -105,6 +105,7 @@ pub enum Column {
     S2,
     S1PubKey,
     WithdrawScSig,
+    MasterPublic,
     Lockbox,
 
     // StateChain,
@@ -115,7 +116,7 @@ pub enum Column {
     OwnerId,
     TransferFinalizeData,
     TransferReady,
-    
+    SharedPublic,
 
     // BackupTxs
     //Id,
@@ -240,6 +241,17 @@ impl PGDatabase {
                 "
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
+                statechainid uuid,
+                authentication varchar,
+                s2 varchar,
+                s1pubkey varchar,
+                sighash varchar,
+                withdrawscsig varchar,
+                txwithdraw varchar,
+                proofkey varchar,
+                txbackup varchar,
+                masterpublic varchar,
+                sharedpublic varchar,
                 lockbox varchar,
                 PRIMARY KEY (id)
             );",
@@ -284,6 +296,7 @@ impl PGDatabase {
                 lockeduntil timestamp,
                 transferfinalizedata varchar,
                 transferready bool,
+                sharedpublic varchar,
                 PRIMARY KEY (id)
             );",
                 Table::StateChain.to_string(),
@@ -1286,6 +1299,45 @@ impl Database for PGDatabase {
             .is_ok()
     }
 
+    fn get_public_master(&self, user_id: Uuid) -> Result<Option<String>> {
+        self.get_1::<Option<String>>(user_id, Table::UserSession, vec![Column::MasterPublic])
+    }
+
+    fn update_public_master(&self, user_id: &Uuid, master_public: Party1Public) -> Result<()> {
+        self.update(
+            user_id,
+            Table::UserSession,
+            vec![Column::MasterPublic],
+            vec![&Self::ser(master_public)?],
+        )
+    }
+
+    fn get_statecoin_pubkey(&self, statechain_id: Uuid) -> Result<Option<String>> {
+        self.get_1::<Option<String>>(statechain_id, Table::StateChain, vec![Column::SharedPublic])
+    }
+
+    fn get_shared_pubkey(&self, user_id: Uuid) -> Result<Option<String>> {
+        self.get_1::<Option<String>>(user_id, Table::UserSession, vec![Column::SharedPublic])
+    }
+
+    fn update_shared_pubkey(&self, user_id: Uuid, pubkey: GE) -> Result<()> {
+        self.update(
+            &user_id,
+            Table::UserSession,
+            vec![Column::SharedPublic],
+            vec![&Self::ser(pubkey)?],
+        )
+    }
+
+    fn set_shared_pubkey(&self, statechain_id: Uuid, pubkey: &String) -> Result<()> {
+        self.update(
+            &statechain_id,
+            Table::StateChain,
+            vec![Column::SharedPublic],
+            vec![pubkey],
+        )
+    }
+
     fn get_ecdsa_master(&self, user_id: Uuid) -> Result<Option<String>> {
         self.get_1::<Option<String>>(user_id, Table::Ecdsa, vec![Column::Party1MasterKey])
     }
@@ -1535,10 +1587,14 @@ impl Database for PGDatabase {
         };
         let mut rc_vec = vec![];
         for row in &rows {
-            let tx_backup: Transaction = Self::deser(row.get("txbackup"))?;
-            let user_id: Uuid = row.get("id");
             let statechain_id: Uuid = row.get("statechainid");
-            rc_vec.push((user_id,statechain_id,tx_backup))
+            let user_id: Uuid = row.get("id");
+            let owner_id = self.get_1::<Uuid>(statechain_id, Table::StateChain, vec![Column::OwnerId])?;
+            if (owner_id == user_id) {
+                let tx_backup_str = self.get_1::<String>(statechain_id, Table::BackupTxs, vec![Column::TxBackup])?;
+                let tx_backup: Transaction = Self::deser(tx_backup_str)?;
+                rc_vec.push((user_id,statechain_id,tx_backup))
+            }
         }
 
         Ok(rc_vec)
