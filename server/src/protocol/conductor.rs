@@ -1303,16 +1303,16 @@ mod tests {
         let utxo_invited_to_swap = guard.swap_id_map.iter().next().unwrap().0.to_owned();
         drop(guard);
         //let uxto_invited_to_swap = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
-        let errExpected = SEError::SwapError(format!("statechain timed out or has not been requested for swap: {}", utxo_not_in_swap));
+        let err_expected = SEError::SwapError(format!("statechain timed out or has not been requested for swap: {}", utxo_not_in_swap));
         match sc_entity.poll_utxo(&utxo_not_in_swap) {
-            Ok(v) => assert!(false, "Expected error: {} - got Ok({:?})", errExpected, v),
+            Ok(v) => assert!(false, "Expected error: {} - got Ok({:?})", err_expected, v),
             Err(e) => {
-                assert_eq!(e.to_string(), errExpected.to_string());
+                assert_eq!(e.to_string(), err_expected.to_string());
             }
         }
         match sc_entity.poll_utxo(&utxo_waiting_for_swap) {
             Ok(no_swap_id) => assert!(no_swap_id.id.is_none()),
-            Err(e) => assert!(false, format!("Expected Ok(()), got {}", e)),
+            Err(e) => assert!(false, "Expected Ok(()), got {}", e),
         }
         match sc_entity.poll_utxo(&utxo_invited_to_swap) {
             Ok(swap_id) => assert!(swap_id.id.is_some()),

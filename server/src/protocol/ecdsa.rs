@@ -396,6 +396,7 @@ pub mod tests {
         db.expect_create_user_session().returning(|_, _, _| Ok(()));
         db.expect_get_user_auth().returning(move |_| Ok(user_id));
         db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
+        db.expect_update_public_master().returning(|_,_| Ok(()));
 
         let mut sc_entity = test_sc_entity(db);
 
@@ -476,6 +477,7 @@ pub mod tests {
             "#;
         let sig_hash: sha256d::Hash = serde_json::from_str(&hexhash.to_string()).unwrap();
         db.expect_get_sighash().returning(move |_| Ok(sig_hash));
+        db.expect_update_shared_pubkey().returning(|_,_| Ok(()));
 
         let mut sc_entity = test_sc_entity(db);
 

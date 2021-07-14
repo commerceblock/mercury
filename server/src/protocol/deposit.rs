@@ -254,6 +254,8 @@ pub mod tests {
         db.expect_create_backup_transaction()
             .returning(|_, _| Ok(()));
         db.expect_update_statechain_id().returning(|_, _| Ok(()));
+        db.expect_get_shared_pubkey().returning(|_| Ok(Some("".to_string())));
+        db.expect_set_shared_pubkey().returning(|_,_| Ok(()));
 
         let sc_entity = test_sc_entity(db);
 
