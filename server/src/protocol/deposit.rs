@@ -198,7 +198,7 @@ pub mod tests {
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_create_user_session().returning(|_, _, _| Ok(()));
 
-        let sc_entity = test_sc_entity(db);
+        let sc_entity = test_sc_entity(db, None);
 
         // Invalid proof key
         match sc_entity.deposit_init(DepositMsg1 {
@@ -257,7 +257,7 @@ pub mod tests {
         db.expect_get_shared_pubkey().returning(|_| Ok(Some("".to_string())));
         db.expect_set_shared_pubkey().returning(|_,_| Ok(()));
 
-        let sc_entity = test_sc_entity(db);
+        let sc_entity = test_sc_entity(db, None);
 
         // Backup tx not signed error
         match sc_entity.deposit_confirm(DepositMsg2 {

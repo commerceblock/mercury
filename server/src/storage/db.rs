@@ -34,6 +34,7 @@ use rocket_okapi::JsonSchema;
 
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
+use url::Url;
 
 use monotree::database::MemCache;
 
@@ -68,6 +69,7 @@ pub enum Table {
     Root,
     BackupTxs,
     Smt,
+    Lockbox
 }
 impl Table {
     pub fn to_string(&self) -> String {
@@ -104,9 +106,9 @@ pub enum Column {
     S1PubKey,
     WithdrawScSig,
     MasterPublic,
+    Lockbox,
 
-
-    // StateChain
+    // StateChain,
     // Id,
     Chain,
     Amount,
@@ -155,6 +157,7 @@ pub enum Column {
     Key,
     // Value
 }
+
 
 impl Column {
     pub fn to_string(&self) -> String {
@@ -249,12 +252,15 @@ impl PGDatabase {
                 txbackup varchar,
                 masterpublic varchar,
                 sharedpublic varchar,
+                lockbox varchar,
                 PRIMARY KEY (id)
             );",
-                Table::UserSession.to_string(),
+                Table::Lockbox.to_string(),
             ),
             &[],
         )?;
+
+
 
         self.database_w()?.execute(
             &format!(
@@ -400,7 +406,7 @@ impl PGDatabase {
         self.database_w()?.execute(
             &format!(
                 "
-            TRUNCATE {},{},{},{},{},{},{},{} RESTART IDENTITY;",
+            TRUNCATE {},{},{},{},{},{},{},{},{} RESTART IDENTITY;",
                 Table::UserSession.to_string(),
                 Table::Ecdsa.to_string(),
                 Table::StateChain.to_string(),
@@ -409,6 +415,7 @@ impl PGDatabase {
                 Table::Root.to_string(),
                 Table::BackupTxs.to_string(),
                 Table::Smt.to_string(),
+                Table::Lockbox.to_string(),
             ),
             &[],
         )?;
@@ -742,6 +749,26 @@ impl Database for PGDatabase {
             vec![Column::S1PubKey],
             vec![&Self::ser(pubkey)?],
         )
+    }
+
+    fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<Url>> {
+        match self.get_1::<String>(*user_id, Table::Lockbox, vec![Column::Lockbox]){
+            Ok(r) => Ok(Some(Url::parse(&r)?)),
+            Err(e) => match e {
+                SEError::DBError(ref error_type, ref _message) => match error_type {
+                    crate::error::DBErrorType::NoDataForID => Ok(None),
+                    _ => Err(e),
+                }
+                _ => Err(e), 
+            }
+        }
+    }
+
+    fn update_lockbox_url(&self, user_id: &Uuid, lockbox_url: &Url)->Result<()>{
+        self.update(user_id,
+                    Table::Lockbox,
+                    vec![Column::Lockbox],
+                    vec![&String::from(lockbox_url.as_str())])
     }
 
     fn get_s1_pubkey(&self, user_id: &Uuid) -> Result<GE> {

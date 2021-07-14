@@ -93,6 +93,8 @@ pub trait SpawnServer {
     fn spawn_server(
         self,
         mainstay_config: Option<mainstay::MainstayConfig>,
+        port: Option<u16>,
+        mode: Option<String>
     ) -> thread::JoinHandle<SpawnError>;
 }
 
@@ -102,10 +104,21 @@ impl SpawnServer for PGDatabase {
     fn spawn_server(
         self,
         mainstay_config: Option<mainstay::MainstayConfig>,
+        port: Option<u16>,
+        mode: Option<String>
     ) -> thread::JoinHandle<SpawnError> {
         // Set enviroment variable to testing_mode=true to override Settings.toml
         env::set_var("MERC_TESTING_MODE", "true");
+        match port {
+            Some(p) => env::set_var("MERC_ROCKET_PORT", &p.to_string()[..]),
+            None => ()
+        };
 
+        match mode {
+            Some(m) => env::set_var("MERC_MODE", &m[..]),
+            None => ()
+        };
+        
         // Rocket server is blocking, so we spawn a new thread.
         let handle = thread::spawn(|| {
             match server::get_server::<Self, PGDatabase>(
@@ -132,6 +145,8 @@ impl SpawnServer for MockDatabase {
     fn spawn_server(
         self,
         mainstay_config: Option<mainstay::MainstayConfig>,
+        port: Option<u16>,
+        mode: Option<String>
     ) -> thread::JoinHandle<SpawnError> {
         // Set enviroment variable to testing_mode=true to override Settings.toml
         env::set_var("MERC_TESTING_MODE", "true");
@@ -155,19 +170,21 @@ impl SpawnServer for MockDatabase {
 
 /// Create a wallet with generic seed and generate some addresses
 #[cfg(test)]
-fn gen_wallet() -> Wallet {
-    gen_wallet_with_seed(&[0xcd; 32])
+fn gen_wallet(conductor_port: Option<u16>) -> Wallet {
+    gen_wallet_with_seed(&[0xcd; 32], conductor_port)
 }
 
 /// Create a wallet with a specified seed and generate some addresses
 #[cfg(test)]
-fn gen_wallet_with_seed(seed: &[u8]) -> Wallet {
+fn gen_wallet_with_seed(seed: &[u8], conductor_port: Option<u16>) -> Wallet {
     // let electrum = ElectrumxClient::new("dummy").unwrap();
+    let conductor_endpoint = format!("http://localhost:{}",conductor_port.unwrap_or(8000));
     let mut wallet = Wallet::new(
         &seed,
         &"regtest".to_string(),
         DEFAULT_TEST_WALLET_LOC,
         ClientShim::new("http://localhost:8000".to_string(), None, None),
+        ClientShim::new(conductor_endpoint, None, None),
     );
     let _ = wallet.keys.get_new_address();
     let _ = wallet.keys.get_new_address();
@@ -180,6 +197,7 @@ pub fn gen_wallet_with_deposit(amount: u64) -> Wallet {
         &[0xcd; 32],
         &"regtest".to_string(),
         DEFAULT_TEST_WALLET_LOC,
+        ClientShim::new("http://localhost:8000".to_string(), None, None),
         ClientShim::new("http://localhost:8000".to_string(), None, None),
     );
 
@@ -383,7 +401,7 @@ pub fn run_batch_transfer(
 
     match status_api {
         Ok(v) => {
-            assert_eq!(v.finalized, true);
+            assert_eq!(v.finalized, true, "{:?}", &v);
             assert_eq!(v.state_chains.len(), transfer_finalized_datas.len());
         },
         Err(e) => assert!(false, "Error: {}",e),
@@ -406,6 +424,7 @@ pub fn finalize_batch_transfer(
     transfer_finalized_datas: Vec<TransferFinalizeData>,
 ) {
     for i in 0..swap_map.len() {
+        dbg!("transfer receiver finalize: ", i);
         let _ = state_entity::transfer::transfer_receiver_finalize(
             &mut wallets[swap_map[i].1],
             transfer_finalized_datas[swap_map[i].0].clone(),
@@ -434,6 +453,7 @@ pub fn batch_transfer_verify_amounts(
     }
 }
 
-pub fn start_server() -> thread::JoinHandle<SpawnError> {
-    PGDatabase::get_new().spawn_server(None)
+pub fn start_server(port: Option<u16>, mode: Option<String>) -> thread::JoinHandle<SpawnError> {
+    PGDatabase::get_new().spawn_server(None, port, mode)
 }
+

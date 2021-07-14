@@ -86,6 +86,7 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
 
         let conf_rs = get_config().unwrap();
         let endpoint: String = conf_rs.get("endpoint").unwrap();
+        let conductor_endpoint: String = conf_rs.get("conductor_endpoint").unwrap();
         let electrum_server: String = conf_rs.get("electrum_server").unwrap();
         let mut testing_mode: bool = conf_rs.get("testing_mode").unwrap();
         if force_testing_mode {
@@ -106,7 +107,8 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
         };
         println!("config tor: {:?}", tor);
 
-        let client_shim = ClientShim::new(endpoint, None, tor);
+        let client_shim = ClientShim::new(endpoint, None, tor.clone());
+        let conductor_shim = ClientShim::new(conductor_endpoint, None, tor);
 
         let wallet_data_loc = if testing_mode {
             println!("Testing mode enabled.");
@@ -116,7 +118,7 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
         };
 
         // Try load wallet. If no wallet make new.
-        let mut wallet = match wallet::wallet::Wallet::load(wallet_data_loc, client_shim.clone()) {
+        let mut wallet = match wallet::wallet::Wallet::load(wallet_data_loc, client_shim.clone(), conductor_shim.clone()) {
             Ok(wallet) => wallet,
             Err(e) => match e {
                 CError::WalletError(ref error_type) => match error_type {
@@ -129,7 +131,7 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                             rand::thread_rng().gen() // Generate fresh seed
                         };
 
-                        let wallet = wallet::wallet::Wallet::new(&seed, &network, wallet_data_loc, client_shim);
+                        let wallet = wallet::wallet::Wallet::new(&seed, &network, wallet_data_loc, client_shim, conductor_shim);
                         wallet.save();
                         wallet
                     },
@@ -205,7 +207,7 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                     }
                     DaemonRequest::GetSwapGroups => {
                         debug!("Daemon: GetSwapGroups");
-                        let swap_groups_res = get_swaps_group_info(&wallet.client_shim);
+                        let swap_groups_res = get_swaps_group_info(&wallet.conductor_shim);
                         r.send(DaemonResponse::value_to_deamon_response(swap_groups_res))
                     }
                     DaemonRequest::GetCoinsInfo => {

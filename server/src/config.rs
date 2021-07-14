@@ -9,6 +9,18 @@ use serde::{Deserialize, Serialize};
 use shared_lib::mainstay::MainstayConfig;
 use std::env;
 use std::str::FromStr;
+use std::vec::Vec;
+use uuid::Uuid;
+use url::Url;
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "snake_case")] 
+pub enum Mode {
+    Both,
+    Core,
+    Conductor
+}
+
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConductorConfig {
@@ -97,12 +109,14 @@ impl Default for RocketConfig {
 /// Config struct storing all StataChain Entity config
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
+    /// Mode: "core", "conductor" or "both"
+    pub mode: Mode, 
     /// Log file location. If not present print to stdout
     pub log_file: String,
     /// Electrum Server Address
     pub electrum_server: String,
-    /// Lockbox server address
-    pub lockbox: String,
+    /// Active lockbox server addresses
+    pub lockbox: Option<Vec<Url>>,
     /// Bitcoin network name (testnet, regtest, mainnet)
     pub network: String,
     /// Testing mode
@@ -138,9 +152,10 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Config {
         Config {
+            mode: Mode::Both,
             log_file: String::from(""),
             electrum_server: String::from("127.0.0.1:60401"),
-            lockbox: String::from(""),
+            lockbox: None,
             network: String::from("regtest"),
             testing_mode: false,
             lockheight_init: 10000,
@@ -229,7 +244,7 @@ impl Config {
         if let Ok(v) = env::var("MERC_ROCKET_KEEP_ALIVE") {
             let _ = conf_rs.set("rocket.keep_alive", v)?;
         }
-        if let Ok(v) = env::var("MERC_ROCKET_ADDERSS") {
+        if let Ok(v) = env::var("MERC_ROCKET_ADDRESS") {
             let _ = conf_rs.set("rocket.address", v)?;
         }
         if let Ok(v) = env::var("MERC_ROCKET_PORT") {
@@ -249,7 +264,24 @@ impl Config {
         if let Err(e) = bitcoin::Address::from_str(&fee_address) {
             panic!("Invalid fee address: {}", e)
         };
-
         Ok(conf_rs.try_into()?)
     }
+
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_deserialize_lockbox() {
+        let urls = Some(vec![Url::parse("https://url1.net/").unwrap(), 
+                        Url::parse("https://url2.net/").unwrap(), 
+                        Url::parse("https://url3.net/").unwrap()]);
+    
+        let urls_str = "[\"https://url1.net\", \"https://url2.net\", \"https://url3.net\"]";
+        let urls_deser: Option<Vec<Url>> = serde_json::from_str(urls_str).unwrap();
+        assert_eq!(urls, urls_deser);
+    }
+}
+

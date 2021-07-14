@@ -64,6 +64,7 @@ pub mod tor {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     pub endpoint: String,
+    pub conductor_endpoint: String,
     pub electrum_server: String,
     pub testing_mode: bool,
     pub tor: Tor,
@@ -75,6 +76,7 @@ impl Config {
         let tor = Tor::from_config(&cfg);
         Ok(Config {
             endpoint: cfg.get("endpoint")?,
+            conductor_endpoint: cfg.get("conductor_endpoint")?,
             electrum_server: cfg.get("electrum_server")?,
             testing_mode: cfg.get("testing_mode")?,
             tor,
@@ -86,6 +88,7 @@ impl Default for Config {
     fn default() -> Config {
         Config {
             endpoint: "http://localhost:8000".to_string(),
+            conductor_endpoint: "http://localhost:8001".to_string(),
             electrum_server: "127.0.0.1:60401".to_string(),
             testing_mode: true,
             tor: Tor::default(),

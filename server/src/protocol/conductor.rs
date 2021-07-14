@@ -655,7 +655,7 @@ pub fn generate_blind_spend_signatures(
 
 impl Conductor for SCE {
     fn poll_utxo(&self, statechain_id: &Uuid) -> Result<SwapID> {
-        let mut guard = self.scheduler.lock()?;
+        let mut guard = self.scheduler.as_ref().expect("scheduler is None").lock()?;
         let result = match guard.reset_poll_utxo_timeout(statechain_id, false){
             true => Ok(SwapID { id: guard.get_swap_id(statechain_id) } ),
             false => Err(SEError::SwapError(format!("statechain timed out or has not been requested for swap: {}", statechain_id))),
@@ -665,7 +665,7 @@ impl Conductor for SCE {
     }
 
     fn poll_swap(&self, swap_id: &Uuid) -> Result<Option<SwapStatus>> {
-        let mut guard = self.scheduler.lock()?;
+        let mut guard = self.scheduler.as_ref().expect("scheduler is None").lock()?;
         let status = guard.get_swap_status(swap_id);
         // If in the batch transfer phase, poll the status of the transfer
         match status {
@@ -709,7 +709,7 @@ impl Conductor for SCE {
 
     fn get_swap_info(&self, swap_id: &Uuid) -> Result<Option<SwapInfo>> {
         let _ = self.poll_swap(swap_id)?;
-        let guard = self.scheduler.lock()?;
+        let guard = self.scheduler.as_ref().expect("scheduler is None").lock()?;
         Ok(guard.get_swap_info(swap_id))
     }
 
@@ -718,7 +718,7 @@ impl Conductor for SCE {
         swap_id: &Uuid,
         statechain_id: &Uuid,
     ) -> Result<BlindedSpendSignature> {
-        let guard = self.scheduler.lock()?;
+        let guard = self.scheduler.as_ref().expect("scheduler is None").lock()?;
         Ok(guard.get_blinded_spend_signature(swap_id, statechain_id)?)
     }
 
@@ -730,7 +730,7 @@ impl Conductor for SCE {
         let _ = self.verify_statechain_sig(key_id, sig, None)?;
         let sc_amount = self.database.get_statechain_amount(*key_id)?;
         let amount: u64 = sc_amount.amount as u64;
-        let mut guard = self.scheduler.lock()?;
+        let mut guard = self.scheduler.as_ref().expect("scheduler is None").lock()?;
         let _res = match guard.register_amount_swap_size(key_id, amount, *swap_size) {
             Ok(_res) => return Ok(()),
             Err(err) => return Err(err),
@@ -738,13 +738,13 @@ impl Conductor for SCE {
     }
 
     fn deregister_utxo(&self, statechain_id: &Uuid) -> Result<()> {
-        let mut guard = self.scheduler.lock()?;
+        let mut guard = self.scheduler.as_ref().expect("scheduler is None").lock()?;
         guard.remove_statechain_info(statechain_id);
         Ok(())
     }
 
     fn get_group_info(&self) -> Result<HashMap<SwapGroup,u64>> {
-        let guard = self.scheduler.lock()?;
+        let guard = self.scheduler.as_ref().expect("scheduler is None").lock()?;
         Ok(guard.group_info_map.clone())
     }
 
@@ -755,7 +755,7 @@ impl Conductor for SCE {
 
         //let proof_key = &swap_msg1.address.proof_key;
         //Find the correct swap token and verify
-        let mut guard = self.scheduler.lock()?;
+        let mut guard = self.scheduler.as_ref().expect("scheduler is None").lock()?;
         let swap_id = &swap_msg1.swap_id;
         match guard.get_swap_info(swap_id) {
             Some(i) => {
@@ -865,7 +865,7 @@ impl Conductor for SCE {
         };
 
         let swap_id = &swap_msg2.swap_id;
-        let mut guard = self.scheduler.lock()?;
+        let mut guard = self.scheduler.as_ref().expect("scheduler is None").lock()?;
         let swap_info = match guard.get_swap_info(&swap_id) {
             Some(i) => i,
             None => {
@@ -947,7 +947,7 @@ impl Conductor for SCE {
             Err(err) => return Err(SEError::SwapError(format!("invalid swap id: {}", err)))
         };
 
-        let mut guard = self.scheduler.lock()?;
+        let mut guard = self.scheduler.as_ref().expect("scheduler is None").lock()?;
         let sce_address_bisetmap =
             guard
                 .out_addr_map
@@ -1291,13 +1291,13 @@ mod tests {
     fn test_poll_utxo() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        let mut sc_entity = test_sc_entity(db);
-        sc_entity.scheduler = Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)])));
+        let mut sc_entity = test_sc_entity(db, None);
+        sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
 
         let utxo_not_in_swap = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d4").unwrap();
         let utxo_waiting_for_swap = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d3").unwrap();
 
-        let mut guard = sc_entity.scheduler.lock().unwrap();
+        let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         guard.reset_poll_utxo_timeout(&utxo_waiting_for_swap, true);
         guard.update_swap_info().unwrap();
         let utxo_invited_to_swap = guard.swap_id_map.iter().next().unwrap().0.to_owned();
@@ -1326,9 +1326,9 @@ mod tests {
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        let mut sc_entity = test_sc_entity(db);
-        sc_entity.scheduler = Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)])));
-        let mut guard = sc_entity.scheduler.lock().unwrap();
+        let mut sc_entity = test_sc_entity(db, None);
+        sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
+        let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         guard.update_swap_info().unwrap();
         //let swap_id_valid = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
         let swap_id_valid = guard.swap_id_map.iter().next().unwrap().1.to_owned();
@@ -1394,8 +1394,8 @@ mod tests {
         db.expect_get_statechain_amount()
             .returning(move |_| Ok(statechain_amount.clone()));
 
-        let mut sc_entity = test_sc_entity(db);
-        sc_entity.scheduler = Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)])));
+        let mut sc_entity = test_sc_entity(db, None);
+        sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
 
         // Try invalid signature for proof key
         let invalid_signature = StateChainSig::new(
@@ -1489,8 +1489,8 @@ mod tests {
                 .returning(move |_| Ok(statechain2.clone()));
         }
 
-        let mut sc_entity = test_sc_entity(db);
-        sc_entity.scheduler = Arc::new(Mutex::new(scheduler));
+        let mut sc_entity = test_sc_entity(db, None);
+        sc_entity.scheduler = Some(Arc::new(Mutex::new(scheduler)));
 
         let mut swap_token_no_sc = swap_token.clone();
         swap_token_no_sc.statechain_ids = Vec::new();
@@ -1577,7 +1577,7 @@ mod tests {
             };
         }
         //Scheduler updates swap info to move swap to phase 2
-        let mut guard = sc_entity.scheduler.lock().unwrap();
+        let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         guard.update_swap_info().unwrap();
         drop(guard);
         assert_eq!(
@@ -1586,7 +1586,7 @@ mod tests {
         );
 
         //There should be a blinded spend signature for each of the sce addresses
-        let guard = sc_entity.scheduler.lock().unwrap();
+        let guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         assert_eq!(
             guard.bst_sig_map.get(&swap_id).unwrap().len(),
             guard
@@ -1604,9 +1604,9 @@ mod tests {
     fn test_get_blinded_spend_token() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        let mut sc_entity = test_sc_entity(db);
-        sc_entity.scheduler = Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)])));
-        let mut guard = sc_entity.scheduler.lock().unwrap();
+        let mut sc_entity = test_sc_entity(db, None);
+        sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
+        let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         guard.update_swap_info().unwrap();
 
         let swap_id = guard.swap_id_map.iter().next().unwrap().1.to_owned();
@@ -1674,9 +1674,9 @@ mod tests {
     fn test_swap_second_message() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        let mut sc_entity = test_sc_entity(db);
-        sc_entity.scheduler = Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)])));
-        let mut guard = sc_entity.scheduler.lock().unwrap();
+        let mut sc_entity = test_sc_entity(db, None);
+        sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
+        let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         guard.update_swap_info().unwrap();
 
         let swap_id = guard.swap_id_map.iter().next().unwrap().1.to_owned();
@@ -1724,7 +1724,7 @@ mod tests {
         // }
 
         // Create a valid BlindSpentToken
-        let mut guard = sc_entity.scheduler.lock().unwrap();
+        let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         let mut swap_info = guard.get_swap_info(&swap_id).unwrap();
         swap_info.status = SwapStatus::Phase2;
         guard.swap_info_map.insert(swap_id, swap_info.clone());
@@ -1747,7 +1747,7 @@ mod tests {
         }
 
         // Add SCEAddress and check it gets claimed by this blinded_spend_token's nonce
-        let mut guard = sc_entity.scheduler.lock().unwrap();
+        let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         let sce_addr_biset_map = guard.out_addr_map.get_mut(&swap_id).unwrap();
         let sce_addr = SCEAddress {
             tx_backup_addr: Some(
@@ -1763,7 +1763,7 @@ mod tests {
 
         let _ = sc_entity.swap_second_message(&swap_msg_2);
 
-        let mut guard = sc_entity.scheduler.lock().unwrap();
+        let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         let sce_addr_biset_map = guard.out_addr_map.get_mut(&swap_id).unwrap();
         assert_eq!(sce_addr_biset_map.len(), 1);
         let nonce = Uuid::from_str(&serde_json::from_str::<BlindedSpentTokenMessage>(
@@ -1797,7 +1797,7 @@ mod tests {
         }
 
         // update swaps and check phase is updated
-        let mut guard = sc_entity.scheduler.lock().unwrap();
+        let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         let _ = guard.update_swap_info();
         let swap_info = guard.get_swap_info(&swap_id).unwrap();
         assert_eq!(swap_info.status, SwapStatus::Phase3);
@@ -1807,9 +1807,9 @@ mod tests {
     fn test_get_address_from_blinded_spend_token() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        let mut sc_entity = test_sc_entity(db);
-        sc_entity.scheduler = Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)])));
-        let mut guard = sc_entity.scheduler.lock().unwrap();
+        let mut sc_entity = test_sc_entity(db, None);
+        sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
+        let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         guard.update_swap_info().unwrap();
 
         let swap_id = guard.swap_id_map.iter().next().unwrap().1.to_owned();
@@ -1843,7 +1843,7 @@ mod tests {
         }
 
         // Add SCEAddress and check it gets claimed by this blinded_spend_token's nonce
-        let mut guard = sc_entity.scheduler.lock().unwrap();
+        let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         let sce_addr_biset_map = guard.out_addr_map.get_mut(&swap_id).unwrap();
         let sce_addr = SCEAddress {
             tx_backup_addr: Some(
