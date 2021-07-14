@@ -13,6 +13,8 @@ Database connection information should be provided via the environment variables
 `MERC_DB_HOST_`, `MERC_DB_PORT_`, `MERC_DB_USER_`, `MERC_DB_PASS_`, `MERC_DB_DATABASE_` with suffix one of,
 `W` or `R`, where `W` is the database for writes and `R` the database for reads.
 
+The server can be run in one of 3 modes by selecting the `MERC_MODE` environment variable: "core", which runs the core server only, "conductor" which runs a swap conductor server only, or "both" which includes both of these functions in the same server. The default is "both".
+
 | Parameter | Type | Description |
 | ----------- | ----- | ----------- |
 | ELECTRUM_SERVER | String | Network address of Electrum Server |
@@ -27,8 +29,9 @@ Database connection information should be provided via the environment variables
 | MS_SLOT | int | Mainstay slot |
 | MS_TOKEN | String | Mainstay token |
 | WATCH_ONLY | bool | If true, server watches blockheight for backup tx broadcast |
+| MODE       | String | Server mode: "conductor", "core" or "both". Default is "both" |
 | BITCOIND | String | RPC connection to bitcoind - username:password@host:port - empty string causes no connection or watch function |
-| LOCKBOX | String | URL of the secret key lockbox |
+| LOCKBOX | \[String\] | Array of URLs of the secret key lockbox |
 | DB_HOST | String | Database host name |
 | DB_PORT | String | Database port |
 | DB_USER | String | Database user name |

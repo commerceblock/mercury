@@ -6,6 +6,7 @@ use crate::PGDatabase;
 use monotree::database::{Database as MonotreeDatabase, MemCache, MemoryDB};
 use monotree::Errors;
 use std::collections::HashMap;
+use url::Url;
 
 pub type Result<T> = std::result::Result<T, Errors>;
 
@@ -206,6 +207,7 @@ pub mod tests {
 
     #[test]
     #[serial]
+    #[ignore]
     fn test_monotree_postgres_tree() {
         let mut tree = get_monotree_postgres_tree();
 
@@ -229,6 +231,7 @@ pub mod tests {
 
     #[test]
     #[serial]
+    #[ignore]
     fn test_batch_monotree_postgres_tree() {
         let mut tree = get_monotree_postgres_tree();
 
@@ -333,6 +336,15 @@ impl Database for MemoryDB {
     fn update_s1_pubkey(&self, _user_id: &uuid::Uuid, _pubkey: &crate::GE) -> crate::Result<()> {
         unimplemented!()
     }
+    
+    fn get_lockbox_url(&self, _user_id: &uuid::Uuid) -> crate::Result<Option<Url>>{
+        unimplemented!()
+    }
+    
+    fn update_lockbox_url(&self, _user_id: &uuid::Uuid, _lockbox_url: &Url)->crate::Result<()>{
+        unimplemented!()
+    }
+
     fn get_s1_pubkey(&self, _user_id: &uuid::Uuid) -> crate::Result<crate::GE> {
         unimplemented!()   
     }
@@ -521,6 +533,15 @@ impl Database for MemoryDB {
     fn transfer_is_completed(&self, _statechain_id: uuid::Uuid) -> bool {
         unimplemented!()
     }
+    fn get_public_master(&self, _user_id: uuid::Uuid) -> crate::Result<Option<String>> {
+        unimplemented!()
+    }
+    fn get_shared_pubkey(&self, _user_id: uuid::Uuid) -> crate::Result<Option<String>> {
+        unimplemented!()
+    }
+    fn get_statecoin_pubkey(&self, _statechain_id: uuid::Uuid) -> crate::Result<Option<String>> {
+        unimplemented!()
+    }
     fn get_ecdsa_master(&self, _user_id: uuid::Uuid) -> crate::Result<Option<String>> {
         unimplemented!()
     }
@@ -680,6 +701,27 @@ impl Database for MemoryDB {
         &self,
         _user_id: uuid::Uuid,
     ) -> crate::Result<crate::structs::ECDSAMasterKeyInput> {
+        unimplemented!()
+    }
+    fn update_shared_pubkey(
+        &self, 
+        _user_id: uuid::Uuid, 
+        _pubkey: curv::GE,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn set_shared_pubkey(
+        &self, 
+        _statechain_id: uuid::Uuid, 
+        _pubkey: &String,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }    
+    fn update_public_master(
+        &self,
+        _user_id: &uuid::Uuid,
+        _master_public: crate::protocol::ecdsa::Party1Public,
+    ) -> crate::Result<()> {
         unimplemented!()
     }
     fn update_ecdsa_master(

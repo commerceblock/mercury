@@ -1,6 +1,6 @@
 use super::protocol::conductor::Scheduler;
 use super::protocol::*;
-use crate::config::Config;
+use crate::config::{Config, Mode};
 use crate::structs::StateChainOwner;
 use crate::Database;
 use shared_lib::{mainstay, state_chain::StateChainSig, swap_data::*};
@@ -20,7 +20,7 @@ use rocket_okapi::routes_with_openapi;
 use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 use rocket::{
     config::{Config as RocketConfig, Environment},
-    Request, Rocket,
+    Request, Rocket, Route
 };
 use rocket_prometheus::{
     prometheus::{opts, IntCounter, IntCounterVec},
@@ -31,6 +31,9 @@ use once_cell::sync::Lazy;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 use std::collections::HashMap;
+use crate::error::SEError;
+use std::convert::TryInto;
+use url::Url;
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -53,22 +56,37 @@ pub static REG_SWAP_UTXOS: Lazy<IntCounterVec> = Lazy::new(|| {
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 #[derive(Debug, Clone)]
+pub struct Endpoints {
+    endpoints: Vec<Url>
+}
+
+impl Endpoints {
+    pub fn from(endpoints: Vec<Url>) -> Self {
+        Endpoints { endpoints }
+    }
+
+    /// Select a url from the list of active urls depending on the numerical value
+    /// of the statechain identifier.
+    pub fn select(&self, statechain_id: &Uuid) -> Option<&Url> {
+        let len = self.endpoints.len();
+        if len == 0 {return None}
+        let scid_bytes = statechain_id.as_bytes();
+        let index = u128::from_be_bytes(*scid_bytes) % len as u128;
+        self.endpoints.get(index as usize)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Lockbox {
     pub client: reqwest::blocking::Client,
-    pub endpoint: String,
-    pub active: bool,
+    pub endpoint: Endpoints,
 }
 
 impl Lockbox {
-    pub fn new(endpoint: String) -> Lockbox {
+    pub fn new(endpoints: Vec<Url>) -> Result<Lockbox> {
+        let endpoint = Endpoints::from(endpoints);
         let client = reqwest::blocking::Client::new();
-        let active = endpoint.len() > 0;
-        let lb = Lockbox {
-            client,
-            endpoint,
-            active,
-        };
-        lb
+        Ok(Lockbox{client, endpoint})
     }
 }
 
@@ -79,8 +97,8 @@ pub struct StateChainEntity<
     pub config: Config,
     pub database: T,
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
-    pub scheduler: Arc<Mutex<Scheduler>>,
-    pub lockbox: Lockbox,
+    pub scheduler: Option<Arc<Mutex<Scheduler>>>,
+    pub lockbox: Option<Lockbox>,
 }
 
 impl<
@@ -88,10 +106,9 @@ impl<
         D: Database + MonotreeDatabase + Send + Sync + 'static,
     > StateChainEntity<T, D>
 {
-    pub fn load(mut db: T, mut db_smt: D) -> Result<StateChainEntity<T, D>> {
+    pub fn load(mut db: T, mut db_smt: D, config: Option<Config>) -> Result<StateChainEntity<T, D>> {
         // Get config as defaults, Settings.toml and env vars
-        let config_rs = Config::load()?;
-        let lockbox_url = config_rs.lockbox.clone();
+        let config_rs = config.unwrap_or(Config::load()?);
         db.set_connection_from_config(&config_rs)?;
         db_smt.set_connection_from_config(&config_rs)?;
 
@@ -102,15 +119,29 @@ impl<
 
         let conductor_config = config_rs.conductor.clone();
 
+        pub fn init_lb(conf: &Config) -> Option<Lockbox>{
+            conf.lockbox.as_ref().map(|l| Lockbox::new(l.to_vec()).unwrap())
+        }
+    
+        let (lockbox, scheduler) = match config_rs.mode {
+            Mode::Both => (init_lb(&config_rs), Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config))))),
+            Mode::Conductor => (None, Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config))))),
+            Mode::Core => (init_lb(&config_rs), None)
+        };
+        
         let sce = Self {
             config: config_rs,
             database: db,
             smt: Arc::new(Mutex::new(smt)),
-            scheduler: Arc::new(Mutex::new(Scheduler::new(&conductor_config))),
-            lockbox: Lockbox::new(lockbox_url),
+            scheduler,
+            lockbox,
         };
 
-        Self::start_conductor_thread(sce.scheduler.clone());
+        match &sce.scheduler {
+            Some(s) => {Self::start_conductor_thread(s.clone());},
+            None => ()
+        }
+
         Ok(sce)
     }
 
@@ -151,6 +182,80 @@ fn get_docs() -> SwaggerUIConfig {
     }
 }
 
+fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
+    match mode {
+        Mode::Both => routes_with_openapi![
+            util::get_statechain,
+            util::get_smt_root,
+            util::get_smt_proof,
+            util::get_fees,
+            util::prepare_sign_tx,
+            util::get_recovery_data,
+            util::get_transfer_batch_status,
+            util::get_coin_info,
+            ecdsa::first_message,
+            ecdsa::second_message,
+            ecdsa::sign_first,
+            ecdsa::sign_second,
+            deposit::deposit_init,
+            deposit::deposit_confirm,
+            transfer::transfer_sender,
+            transfer::transfer_receiver,
+            transfer::transfer_update_msg,
+            transfer::transfer_get_msg,
+            transfer::transfer_get_msg_addr,
+            transfer::transfer_get_pubkey,
+            transfer_batch::transfer_batch_init,
+            transfer_batch::transfer_reveal_nonce,
+            withdraw::withdraw_init,
+            withdraw::withdraw_confirm,
+            conductor::poll_utxo,
+            conductor::poll_swap,
+            conductor::get_swap_info,
+            conductor::get_blinded_spend_signature,
+            conductor::register_utxo,
+            conductor::deregister_utxo,
+            conductor::swap_first_message,
+            conductor::swap_second_message,
+            conductor::get_group_info],
+        Mode::Core => routes_with_openapi![
+            util::get_statechain,
+            util::get_smt_root,
+            util::get_smt_proof,
+            util::get_fees,
+            util::prepare_sign_tx,
+            util::get_recovery_data,
+            util::get_transfer_batch_status,
+            util::get_coin_info,
+            ecdsa::first_message,
+            ecdsa::second_message,
+            ecdsa::sign_first,
+            ecdsa::sign_second,
+            deposit::deposit_init,
+            deposit::deposit_confirm,
+            transfer::transfer_sender,
+            transfer::transfer_receiver,
+            transfer::transfer_update_msg,
+            transfer::transfer_get_msg,
+            transfer::transfer_get_msg_addr,
+            transfer::transfer_get_pubkey,
+            transfer_batch::transfer_batch_init,
+            transfer_batch::transfer_reveal_nonce,
+            withdraw::withdraw_init,
+            withdraw::withdraw_confirm],
+        Mode::Conductor => routes_with_openapi![
+            conductor::poll_utxo,
+            conductor::poll_swap,
+            conductor::get_swap_info,
+            conductor::get_blinded_spend_signature,
+            conductor::register_utxo,
+            conductor::deregister_utxo,
+            conductor::swap_first_message,
+            conductor::swap_second_message,
+            conductor::get_group_info],
+    }
+}
+
 /// Start Rocket Server. mainstay_config parameter overrides Settings.toml and env var settings.
 /// If no db provided then use mock
 pub fn get_server<
@@ -161,7 +266,7 @@ pub fn get_server<
     db: T,
     db_smt: D,
 ) -> Result<Rocket> {
-    let mut sc_entity = StateChainEntity::<T, D>::load(db, db_smt)?;
+    let mut sc_entity = StateChainEntity::<T, D>::load(db, db_smt,None)?;
 
     set_logging_config(&sc_entity.config.log_file);
 
@@ -191,7 +296,6 @@ pub fn get_server<
     prometheus.registry().register(Box::new(REG_SWAP_UTXOS.clone())).unwrap();
 
     let rocket_config = get_rocket_config(&sc_entity.config);
-
     let bitcoind = sc_entity.config.bitcoind.clone();
 
     if sc_entity.config.watch_only {
@@ -211,6 +315,7 @@ pub fn get_server<
         if sc_entity.config.bitcoind.is_empty() == false {
             thread::spawn(|| watch_node(bitcoind));
         }
+        
         let rock = rocket::custom(rocket_config)
             .register(catchers![internal_error, not_found, bad_request])
             .attach(prometheus.clone())
@@ -222,41 +327,7 @@ pub fn get_server<
             )
             .mount(
                 "/",
-                routes_with_openapi![
-                    util::get_statechain,
-                    util::get_smt_root,
-                    util::get_smt_proof,
-                    util::get_fees,
-                    util::prepare_sign_tx,
-                    util::get_recovery_data,
-                    util::get_transfer_batch_status,
-                    util::get_coin_info,
-                    ecdsa::first_message,
-                    ecdsa::second_message,
-                    ecdsa::sign_first,
-                    ecdsa::sign_second,
-                    deposit::deposit_init,
-                    deposit::deposit_confirm,
-                    transfer::transfer_sender,
-                    transfer::transfer_receiver,
-                    transfer::transfer_update_msg,
-                    transfer::transfer_get_msg,
-                    transfer::transfer_get_msg_addr,
-                    transfer::transfer_get_pubkey,
-                    transfer_batch::transfer_batch_init,
-                    transfer_batch::transfer_reveal_nonce,
-                    withdraw::withdraw_init,
-                    withdraw::withdraw_confirm,
-                    conductor::poll_utxo,
-                    conductor::poll_swap,
-                    conductor::get_swap_info,
-                    conductor::get_blinded_spend_signature,
-                    conductor::register_utxo,
-                    conductor::deregister_utxo,
-                    conductor::swap_first_message,
-                    conductor::swap_second_message,
-                    conductor::get_group_info,
-                ],
+                get_routes(&sc_entity.config.mode),
             )
             .mount("/swagger", make_swagger_ui(&get_docs()))
             .mount("/metrics", prometheus)
@@ -446,5 +517,31 @@ mock! {
         fn update_root(&self, root: &storage::Root) -> storage::Result<i64>;
         fn get_statechain_data_api(&self,statechain_id: Uuid) -> storage::Result<StateChainDataAPI>;
         fn get_statechain(&self, statechain_id: Uuid) -> storage::Result<storage::StateChain>;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_endpoints() {
+        let urls: Vec<Url> = vec![];
+        let eps = Endpoints::from(urls);
+        assert_eq!(eps.endpoints.len(), 0);
+        assert!(eps.select(&Uuid::default()).is_none());
+        let urls = vec![Url::parse("https://url1.net/").unwrap(), 
+                        Url::parse("https://url2.net/").unwrap(), 
+                        Url::parse("https://url3.net/").unwrap(), 
+                        Url::parse("https://url4.net/").unwrap(), 
+                        Url::parse("https://url5.net/").unwrap(), 
+                        Url::parse("https://url6.net/").unwrap()];
+        let eps: Endpoints = Endpoints::from(urls.clone());
+        for i in 0..100000 {
+            let id = Uuid::from_bytes(&(i as u128).to_be_bytes()).unwrap();
+            let url_selected = eps.select(&id).unwrap();
+            let index = ( i % urls.len() as u128 ) as usize;  
+            assert_eq!(url_selected, &urls[index])
+        }    
     }
 }

@@ -34,6 +34,7 @@ use rocket_okapi::JsonSchema;
 
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
+use url::Url;
 
 use monotree::database::MemCache;
 
@@ -68,6 +69,7 @@ pub enum Table {
     Root,
     BackupTxs,
     Smt,
+    Lockbox
 }
 impl Table {
     pub fn to_string(&self) -> String {
@@ -103,8 +105,9 @@ pub enum Column {
     S2,
     S1PubKey,
     WithdrawScSig,
+    MasterPublic,
 
-    // StateChain
+    // StateChain,
     // Id,
     Chain,
     Amount,
@@ -112,6 +115,7 @@ pub enum Column {
     OwnerId,
     TransferFinalizeData,
     TransferReady,
+    SharedPublic,
 
     // BackupTxs
     //Id,
@@ -151,7 +155,9 @@ pub enum Column {
     // Smt
     Key,
     // Value
+    Lockbox,
 }
+
 
 impl Column {
     pub fn to_string(&self) -> String {
@@ -244,12 +250,30 @@ impl PGDatabase {
                 txwithdraw varchar,
                 proofkey varchar,
                 txbackup varchar,
+                masterpublic varchar,
+                sharedpublic varchar,
                 PRIMARY KEY (id)
             );",
                 Table::UserSession.to_string(),
             ),
             &[],
         )?;
+
+        self.database_w()?.execute(
+            &format!(
+                "
+            CREATE TABLE IF NOT EXISTS {} (
+                id uuid NOT NULL,
+                lockbox varchar,
+                PRIMARY KEY (id)
+            );",
+                Table::Lockbox.to_string(),
+            ),
+            &[],
+        )?;
+
+
+
 
         self.database_w()?.execute(
             &format!(
@@ -285,6 +309,7 @@ impl PGDatabase {
                 lockeduntil timestamp,
                 transferfinalizedata varchar,
                 transferready bool,
+                sharedpublic varchar,
                 PRIMARY KEY (id)
             );",
                 Table::StateChain.to_string(),
@@ -394,7 +419,7 @@ impl PGDatabase {
         self.database_w()?.execute(
             &format!(
                 "
-            TRUNCATE {},{},{},{},{},{},{},{} RESTART IDENTITY;",
+            TRUNCATE {},{},{},{},{},{},{},{},{} RESTART IDENTITY;",
                 Table::UserSession.to_string(),
                 Table::Ecdsa.to_string(),
                 Table::StateChain.to_string(),
@@ -403,6 +428,7 @@ impl PGDatabase {
                 Table::Root.to_string(),
                 Table::BackupTxs.to_string(),
                 Table::Smt.to_string(),
+                Table::Lockbox.to_string(),
             ),
             &[],
         )?;
@@ -736,6 +762,26 @@ impl Database for PGDatabase {
             vec![Column::S1PubKey],
             vec![&Self::ser(pubkey)?],
         )
+    }
+
+    fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<Url>> {
+        match self.get_1::<String>(*user_id, Table::Lockbox, vec![Column::Lockbox]){
+            Ok(r) => Ok(Some(Url::parse(&r)?)),
+            Err(e) => match e {
+                SEError::DBError(ref error_type, ref _message) => match error_type {
+                    crate::error::DBErrorType::NoDataForID => Ok(None),
+                    _ => Err(e),
+                }
+                _ => Err(e), 
+            }
+        }
+    }
+
+    fn update_lockbox_url(&self, user_id: &Uuid, lockbox_url: &Url)->Result<()>{
+        self.update(user_id,
+                    Table::Lockbox,
+                    vec![Column::Lockbox],
+                    vec![&String::from(lockbox_url.as_str())])
     }
 
     fn get_s1_pubkey(&self, user_id: &Uuid) -> Result<GE> {
@@ -1266,6 +1312,45 @@ impl Database for PGDatabase {
             .is_ok()
     }
 
+    fn get_public_master(&self, user_id: Uuid) -> Result<Option<String>> {
+        self.get_1::<Option<String>>(user_id, Table::UserSession, vec![Column::MasterPublic])
+    }
+
+    fn update_public_master(&self, user_id: &Uuid, master_public: Party1Public) -> Result<()> {
+        self.update(
+            user_id,
+            Table::UserSession,
+            vec![Column::MasterPublic],
+            vec![&Self::ser(master_public)?],
+        )
+    }
+
+    fn get_statecoin_pubkey(&self, statechain_id: Uuid) -> Result<Option<String>> {
+        self.get_1::<Option<String>>(statechain_id, Table::StateChain, vec![Column::SharedPublic])
+    }
+
+    fn get_shared_pubkey(&self, user_id: Uuid) -> Result<Option<String>> {
+        self.get_1::<Option<String>>(user_id, Table::UserSession, vec![Column::SharedPublic])
+    }
+
+    fn update_shared_pubkey(&self, user_id: Uuid, pubkey: GE) -> Result<()> {
+        self.update(
+            &user_id,
+            Table::UserSession,
+            vec![Column::SharedPublic],
+            vec![&Self::ser(pubkey)?],
+        )
+    }
+
+    fn set_shared_pubkey(&self, statechain_id: Uuid, pubkey: &String) -> Result<()> {
+        self.update(
+            &statechain_id,
+            Table::StateChain,
+            vec![Column::SharedPublic],
+            vec![pubkey],
+        )
+    }
+
     fn get_ecdsa_master(&self, user_id: Uuid) -> Result<Option<String>> {
         self.get_1::<Option<String>>(user_id, Table::Ecdsa, vec![Column::Party1MasterKey])
     }
@@ -1515,10 +1600,14 @@ impl Database for PGDatabase {
         };
         let mut rc_vec = vec![];
         for row in &rows {
-            let tx_backup: Transaction = Self::deser(row.get("txbackup"))?;
-            let user_id: Uuid = row.get("id");
             let statechain_id: Uuid = row.get("statechainid");
-            rc_vec.push((user_id,statechain_id,tx_backup))
+            let user_id: Uuid = row.get("id");
+            let owner_id = self.get_1::<Uuid>(statechain_id, Table::StateChain, vec![Column::OwnerId])?;
+            if (owner_id == user_id) {
+                let tx_backup_str = self.get_1::<String>(statechain_id, Table::BackupTxs, vec![Column::TxBackup])?;
+                let tx_backup: Transaction = Self::deser(tx_backup_str)?;
+                rc_vec.push((user_id,statechain_id,tx_backup))
+            }
         }
 
         Ok(rc_vec)

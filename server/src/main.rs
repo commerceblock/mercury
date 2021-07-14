@@ -9,6 +9,7 @@ fn main() {
         PGDatabase::get_new(),
         PGDatabase::get_new(),
     )
+    .map_err(|e| {dbg!(format!("error initializing server: {}", &e)); e})
     .unwrap()
     .launch();
 }
