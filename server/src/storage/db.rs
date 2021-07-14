@@ -106,7 +106,6 @@ pub enum Column {
     S1PubKey,
     WithdrawScSig,
     MasterPublic,
-    Lockbox,
 
     // StateChain,
     // Id,
@@ -156,6 +155,7 @@ pub enum Column {
     // Smt
     Key,
     // Value
+    Lockbox,
 }
 
 
@@ -252,6 +252,18 @@ impl PGDatabase {
                 txbackup varchar,
                 masterpublic varchar,
                 sharedpublic varchar,
+                PRIMARY KEY (id)
+            );",
+                Table::UserSession.to_string(),
+            ),
+            &[],
+        )?;
+
+        self.database_w()?.execute(
+            &format!(
+                "
+            CREATE TABLE IF NOT EXISTS {} (
+                id uuid NOT NULL,
                 lockbox varchar,
                 PRIMARY KEY (id)
             );",
@@ -259,6 +271,7 @@ impl PGDatabase {
             ),
             &[],
         )?;
+
 
 
 

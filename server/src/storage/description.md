@@ -16,6 +16,12 @@ User represents a user in a particular state chain session. The same client co-o
 | withdraw_sc_sig | StateChainSig | false    | Required for withdraw                   |
 | tx_withdraw     | Transaction   | false    | Withdraw tx data                        |
 
+### Lockbox
+A list of Lockbox URLs indexed by user ID.
+| Name           | Type                      | Required | Description                                                           |
+|----------------|---------------------------|----------|-----------------------------------------------------------------------|
+| user_id | String (UUID)             | true     | Primary Key                                                           |
+| lockbox          | Url                | true     |                                                                       |
 
 
 ### StateChain
@@ -117,6 +123,12 @@ CREATE TABLE "statechainentity"."usersession" (
     "txbackup" varchar,
     PRIMARY KEY ("id")
 );
+
+CREATE TABLE "statechainentity"."lockbox" (
+    "id" uuid NOT NULL,
+    "lockbox" varchar,
+    PRIMARY KEY ("id")
+);"
 
 CREATE TABLE "statechainentity"."ecdsa" (
     "id" uuid NOT NULL,
