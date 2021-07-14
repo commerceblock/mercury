@@ -105,7 +105,6 @@ pub enum Column {
     S2,
     S1PubKey,
     WithdrawScSig,
-    Lockbox,
 
     // StateChain,
     // Id,
@@ -155,6 +154,7 @@ pub enum Column {
     // Smt
     Key,
     // Value
+    Lockbox,
 }
 
 
@@ -235,6 +235,27 @@ impl PGDatabase {
         )?;
 
         // Create tables if they do not already exist
+        self.database_w()?.execute(
+            &format!(
+                "
+            CREATE TABLE IF NOT EXISTS {} (
+                id uuid NOT NULL,
+                statechainid uuid,
+                authentication varchar,
+                s2 varchar,
+                s1pubkey varchar,
+                sighash varchar,
+                withdrawscsig varchar,
+                txwithdraw varchar,
+                proofkey varchar,
+                txbackup varchar,
+                PRIMARY KEY (id)
+            );",
+                Table::UserSession.to_string(),
+            ),
+            &[],
+        )?;
+
         self.database_w()?.execute(
             &format!(
                 "
