@@ -768,14 +768,19 @@ impl Database for PGDatabase {
         match self.get_1::<String>(*user_id, Table::Lockbox, vec![Column::Lockbox]){
             Ok(r) => Ok(Some(Url::parse(&r)?)),
             Err(e) => match e {
-                SEError::DBError(ref error_type, ref _message) => match error_type {
-                    crate::error::DBErrorType::NoDataForID => Ok(None),
-                    _ => Err(e),
-                }
-                _ => Err(e), 
+                        SEError::DBError(ref error_type, ref _message) => match error_type {
+                            NoDataForID => Ok(None),
+                            _ => Err(e),
+                        },
+                        SEError::DBErrorWC(ref error_type, ref _message, ref _column) => match error_type {
+                            NoDataForID => Ok(None),
+                            _ => Err(e),
+                        },
+                    _   => Err(e),
             }
         }
     }
+    
 
     fn update_lockbox_url(&self, user_id: &Uuid, lockbox_url: &Url)->Result<()>{
         self.update(user_id,
@@ -1617,6 +1622,7 @@ impl Database for PGDatabase {
     // verification. For now use ID as 'password' to interact with state entity
     fn create_user_session(&self, user_id: &Uuid, auth: &String, proof_key: &String) -> Result<()> {
         self.insert(user_id, Table::UserSession)?;
+        self.insert(user_id, Table::Lockbox)?;
         self.update(
             user_id,
             Table::UserSession,
@@ -1633,6 +1639,7 @@ impl Database for PGDatabase {
         finalized_data: TransferFinalizeData,
     ) -> Result<()> {
         self.insert(new_user_id, Table::UserSession)?;
+        self.insert(new_user_id, Table::Lockbox)?;
         self.update(
             new_user_id,
             Table::UserSession,
