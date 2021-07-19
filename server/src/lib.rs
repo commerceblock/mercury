@@ -23,6 +23,7 @@ extern crate log4rs;
 extern crate rusoto_dynamodb;
 extern crate serde_dynamodb;
 extern crate url;
+extern crate rsa-vdf;
 
 extern crate curv;
 extern crate electrumx_client;

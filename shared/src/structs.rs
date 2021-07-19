@@ -17,6 +17,7 @@ use schemars;
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use serde::de::{self, Visitor, Unexpected};
 use regex::Regex;
+use rsa-vdf::{UnsolvedVDF,SetupForVDF,SolvedVDF};
 
 use crate::ecies;
 use crate::{util::transaction_serialise, ecies::{Encryptable, SelfEncryptable, WalletDecryptable}};
@@ -45,6 +46,7 @@ pub struct UuidDef(String);
 pub struct UserID {
     #[schemars(with = "UuidDef")]
     pub id: Uuid,
+    pub vdf_challenge: UnsolvedVDF,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
@@ -414,6 +416,7 @@ pub struct KeyGenMsg1 {
     #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
     pub protocol: Protocol,
+    pub vdf_solution: Option<SolvedVDF>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]

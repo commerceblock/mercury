@@ -18,6 +18,7 @@ use rocket_contrib::json::Json;
 use std::str::FromStr;
 use uuid::Uuid;
 use rocket_okapi::openapi;
+use rsa-vdf::
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -62,6 +63,19 @@ impl Deposit for SCE {
                 "Proof key not in correct format.",
             )));
         };
+
+        // generate vdf challenge
+
+
+
+
+
+
+
+
+        
+
+
 
         // Create DB entry for newly generated ID signalling that user has passed some
         // verification. For now use ID as 'password' to interact with state entity

@@ -106,6 +106,7 @@ pub enum Column {
     S1PubKey,
     WithdrawScSig,
     MasterPublic,
+    VDFChallenge,
 
     // StateChain,
     // Id,
@@ -252,6 +253,7 @@ impl PGDatabase {
                 txbackup varchar,
                 masterpublic varchar,
                 sharedpublic varchar,
+                vdfchallenge varchar,
                 PRIMARY KEY (id)
             );",
                 Table::UserSession.to_string(),
