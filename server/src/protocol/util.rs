@@ -247,7 +247,8 @@ impl Utilities for SCE {
         let withdraw_fee = (amount * self.config.fee_withdraw) / 10000 as u64;
         let tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
 
-        let fee_address_vec: Vec<&str> = self.config.fee_address.split(",").collect();
+        let fee_address_str = self.config.fee_address.replace(" ", "");
+        let fee_address_vec: Vec<&str> = fee_address_str.split(",").collect();
 
         // Which protocol are we signing for?
         match prepare_sign_msg.protocol {

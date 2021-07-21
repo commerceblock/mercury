@@ -261,7 +261,8 @@ impl Config {
 
         // Type checks
         let fee_address = conf_rs.get_str("fee_address")?;
-        let fee_address_vec: Vec<&str> = fee_address.split(",").collect();
+        let fee_address_str = fee_address.replace(" ", "");
+        let fee_address_vec: Vec<&str> = fee_address_str.split(",").collect();
         for i in 0..fee_address_vec.len(){
             // check addresses individually
             if let Err(e) = bitcoin::Address::from_str(&fee_address_vec[i].to_string()) {

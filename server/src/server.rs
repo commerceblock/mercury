@@ -126,7 +126,8 @@ impl<
                 Some(l) => l
             };
 
-            let lb_str_list: Vec<&str> = lb_config.split(",").collect();
+            let lb_str = lb_config.replace(" ", "");
+            let lb_str_list: Vec<&str> = lb_str.split(",").collect();
             let mut lb_list: Vec<Url> = vec![];
             for i in lb_str_list {
                 lb_list.push(Url::parse(i).unwrap())
