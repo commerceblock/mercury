@@ -7,7 +7,7 @@ lockheight_init = 10000
 lh_decrement = 100
 
 # Fees
-fee_address = ["tb1qzvv6yfeg0navfkrxpqc0fjdsu9ey4qgqqsarq4","tb1qzvv6yfeg0navfkrxpqc0fjdsu9ey4qgqqsarq4"]
+fee_address = "tb1qzvv6yfeg0navfkrxpqc0fjdsu9ey4qgqqsarq4,tb1qzvv6yfeg0navfkrxpqc0fjdsu9ey4qgqqsarq4"
 fee_deposit = 0
 fee_withdraw = 300
 
