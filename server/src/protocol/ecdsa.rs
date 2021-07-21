@@ -24,6 +24,7 @@ use std::string::ToString;
 use uuid::Uuid;
 use rocket_okapi::openapi;
 use url::Url;
+use rsa-vdf::{SetupForVDF,UnsolvedVDF,SolvedVDF};
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -69,9 +70,24 @@ impl Ecdsa for SCE {
     fn first_message(&self, key_gen_msg1: KeyGenMsg1) -> Result<KeyGenReply1> {
         let user_id = key_gen_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
+        let db = &self.database;
+        
+        // if deposit, verify VDF
+        if (key_gen_msg1.protocol == Protocol::Deposit {
+            let unsolved_vdf = db.get_vdf_challenge(&user_id);
+            let res = solved_vdf.verify(&unsolved_vdf);
+            if (!res.is_ok()) {
+                return Err(SEError::Generic(String::from("VDF solution not valid")))
+            }
+        // else check confirmed            
+        } else {
+            let statechain_id = db.get_statechain_id(user_id.clone())?;
+            if (!db.is_confirmed(&statechain_id)) {
+                return Err(SEError::Generic(String::from("Statecoin not confirmed")))
+            };
+        };
 
         let kg_first_msg;
-        let db = &self.database;
 
         let lockbox_url: Option<Url> = match db.get_lockbox_url(&user_id)?{
             Some(l) => Some(l),
