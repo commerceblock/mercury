@@ -90,7 +90,7 @@ pub fn get_sighash(
 /// Check withdraw tx is valid
 pub fn tx_withdraw_verify(
     tx_psm: &PrepareSignTxMsg,
-    fee_address: &[String; 2],
+    fee_address: &[&str],
     fee_withdraw: &u64,
 ) -> Result<()> {
     if tx_psm.input_addrs.len() != tx_psm.input_amounts.len() {
