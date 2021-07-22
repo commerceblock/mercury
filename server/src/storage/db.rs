@@ -715,7 +715,8 @@ impl Database for PGDatabase {
 
     fn reset(&self) -> Result<()> {
         // truncate all postgres tables
-        self.truncate_tables()
+        self.truncate_tables()?;
+        self.drop_tables()
     }
 
     fn get_coins_histogram(&self) -> Result<CoinValueInfo> {
