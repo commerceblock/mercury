@@ -120,7 +120,19 @@ impl<
         let conductor_config = config_rs.conductor.clone();
 
         pub fn init_lb(conf: &Config) -> Option<Lockbox>{
-            conf.lockbox.as_ref().map(|l| Lockbox::new(l.to_vec()).unwrap())
+
+            let lb_config = match &conf.lockbox {
+                None => return None,
+                Some(l) => l
+            };
+
+            let lb_str = lb_config.replace(" ", "");
+            let lb_str_list: Vec<&str> = lb_str.split(",").collect();
+            let mut lb_list: Vec<Url> = vec![];
+            for i in lb_str_list {
+                lb_list.push(Url::parse(i).unwrap())
+            }
+            Some(lb_list).map(|l| Lockbox::new(l.to_vec()).unwrap())
         }
     
         let (lockbox, scheduler) = match config_rs.mode {

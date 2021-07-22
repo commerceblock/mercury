@@ -456,7 +456,7 @@ pub mod tests {
         db.expect_update_public_master().returning(|_,_| Ok(()));
         db.expect_get_vdf_challenge().returning(move |_| Ok(challenge));
 
-        let mut sc_entity = test_sc_entity(db, Some(Url::parse(&mockito::server_url()).unwrap()));
+        let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()));
 
         let kg_first_msg = party_one::KeyGenFirstMsg { pk_commitment: BigInt::from(0), zk_pok_commitment: BigInt::from(1) };
 
@@ -537,7 +537,7 @@ pub mod tests {
         db.expect_get_sighash().returning(move |_| Ok(sig_hash));
         db.expect_update_shared_pubkey().returning(|_,_| Ok(()));
 
-        let mut sc_entity = test_sc_entity(db, Some(Url::parse(&mockito::server_url()).unwrap()));
+        let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()));
 
         let (eph_key_gen_first_message_party_two, _, _) =
             MasterKey2::sign_first_message();
