@@ -23,6 +23,7 @@ use crate::wallet::wallet::{to_bitcoin_public_key, Wallet};
 use bitcoin::{consensus, PublicKey, Transaction};
 use curv::elliptic::curves::traits::ECPoint;
 use uuid::Uuid;
+use vdf::{VDFParams, WesolowskiVDFParams, VDF};
 
 /// Message to server initiating state entity protocol.
 /// Shared wallet ID returned
@@ -62,12 +63,19 @@ pub fn deposit(
     // Generate proof key
     let proof_key = wallet.se_proof_keys.get_new_key()?;
 
-    
     // Init. session - Receive shared wallet ID
     let shared_key_id: UserID = session_init(wallet, &proof_key.to_string())?;
 
+    // generate solution for the VDF challenge
+    let challenge = match shared_key_id.vdf_challenge {
+        Some(c) => c,
+        None => return Err(CError::Generic(String::from("missing vdf challenge from server"))),
+    };
+    let vdf = WesolowskiVDFParams(2048 as u16).new();
+    let solution = &vdf.solve(&challenge, 5000).unwrap()[..];
+
     // 2P-ECDSA with state entity to create a Shared key
-    let shared_key = wallet.gen_shared_key(&shared_key_id.id, amount)?;
+    let shared_key = wallet.gen_shared_key(&shared_key_id.id, amount, solution.to_vec())?;
 
     // Create funding tx
     let pk = shared_key.share.public.q.get_element(); // co-owned key address to send funds to (P_addr)

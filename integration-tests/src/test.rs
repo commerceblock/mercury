@@ -7,6 +7,7 @@ mod tests {
     extern crate server_lib;
     extern crate shared_lib;
     extern crate time_test;
+    extern crate vdf;
 
     use shared_lib::structs::Protocol;
 
@@ -14,6 +15,7 @@ mod tests {
     use curv::FE;
     use self::time_test::time_test;
     use shared_lib::util::transaction_deserialise;
+    use self::vdf::{VDFParams, WesolowskiVDFParams, VDF};
 
     #[test]
     #[serial]
@@ -25,7 +27,16 @@ mod tests {
         let init_res =
             client_lib::state_entity::deposit::session_init(&mut wallet, &proof_key.to_string());
         assert!(init_res.is_ok());
-        let key_res = wallet.gen_shared_key(&init_res.unwrap().id, &1000);
+
+        // generate solution for the VDF challenge
+        let challenge = match init_res.clone().unwrap().vdf_challenge {
+            Some(c) => c,
+            None => return,
+        };
+        let vdf = WesolowskiVDFParams(2048 as u16).new();
+        let solution = &vdf.solve(&challenge, 5000).unwrap()[..];
+
+        let key_res = wallet.gen_shared_key(&init_res.unwrap().id, &1000, solution.to_vec());
         assert!(key_res.is_ok());
     }
 
@@ -43,6 +54,7 @@ mod tests {
             &secret_key,
             &1000,
             Protocol::Deposit,
+            vec![],
         );
         assert!(err.is_err());
     }

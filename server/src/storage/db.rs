@@ -35,7 +35,6 @@ use rocket_okapi::JsonSchema;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 use url::Url;
-use rsa-vdf::UnsolvedVDF;
 
 use monotree::database::MemCache;
 
@@ -1025,9 +1024,22 @@ impl Database for PGDatabase {
         self.get_1::<Uuid>(user_id, Table::UserSession, vec![Column::StateChainId])
     }
 
-    fn get_vdf_challenge(&self, user_id: Uuid) -> Result<UnsolvedVDF> {
-        let vdf_challenge_str = self.get_1::<Uuid>(user_id, Table::UserSession, vec![Column::VDFChallenge]);
-        let vdf_challenge: UnsolvedVDF = Self::deser(vdf_challenge_str)?;
+    fn is_confirmed(&self, statechain_id: &Uuid) -> Result<bool> {
+        self.get_1::<bool>(*statechain_id, Table::StateChain, vec![Column::Confirmed])
+    }
+
+    fn set_confirmed(&self, statechain_id: &Uuid) -> Result<()> {
+        self.update(
+            statechain_id,
+            Table::StateChain,
+            vec![Column::Confirmed],
+            vec![&true],
+        )
+    }    
+
+    fn get_vdf_challenge(&self, user_id: &Uuid) -> Result<[u8; 32]> {
+        let vdf_challenge_str = self.get_1::<String>(*user_id, Table::UserSession, vec![Column::VDFChallenge])?;
+        let vdf_challenge: [u8; 32] = Self::deser(vdf_challenge_str)?;
         Ok(vdf_challenge)
     }
 
@@ -1626,13 +1638,13 @@ impl Database for PGDatabase {
 
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
-    fn create_user_session(&self, user_id: &Uuid, auth: &String, proof_key: &String, unsolved_vdf: &UnsolvedVDF) -> Result<()> {
+    fn create_user_session(&self, user_id: &Uuid, auth: &String, proof_key: &String, challenge: &[u8; 32]) -> Result<()> {
         self.insert(user_id, Table::UserSession)?;
         self.update(
             user_id,
             Table::UserSession,
             vec![Column::Authentication, Column::ProofKey, Column::VDFChallenge],
-            vec![&auth.clone(), &proof_key.to_owned(), &Self::ser(unsolved_vdf.clone())?],
+            vec![&auth.clone(), &proof_key.to_owned(), &Self::ser(challenge.clone())?],
         )
     }
 

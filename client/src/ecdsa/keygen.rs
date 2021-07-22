@@ -16,13 +16,15 @@ pub fn get_master_key(
     secret_key: &FE,
     value: &u64,
     protocol: Protocol,
+    vdf_solution: Vec<u8>,
 ) -> Result<SharedKey> {
     let key_gen_reply_1: KeyGenReply1  = requests::postb(
         client_shim,
         &format!("{}/first", KG_PATH_PRE),
         KeyGenMsg1 {
             shared_key_id: *shared_key_id,
-            protocol,
+            protocol, 
+            vdf_solution: Some(vdf_solution)
         },
     )?;
 

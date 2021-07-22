@@ -389,6 +389,15 @@ impl Database for MemoryDB {
     fn get_statechain_id(&self, _user_id: uuid::Uuid) -> crate::Result<uuid::Uuid> {
         unimplemented!()
     }
+    fn is_confirmed(&self, _statechain_id: &uuid::Uuid) -> crate::Result<bool> {
+        unimplemented!()
+    }
+    fn set_confirmed(&self, _statechain_id: &uuid::Uuid) -> crate::Result<()> {
+        unimplemented!()
+    }      
+    fn get_vdf_challenge(&self, _user_id: &uuid::Uuid) -> crate::Result<[u8; 32]> {
+        unimplemented!()
+    }
     fn update_statechain_id(
         &self,
         _user_id: &uuid::Uuid,
@@ -656,6 +665,7 @@ impl Database for MemoryDB {
         _user_id: &uuid::Uuid,
         _auth: &String,
         _proof_key: &String,
+        _challenge: &[u8; 32],
     ) -> crate::Result<()> {
         unimplemented!()
     }

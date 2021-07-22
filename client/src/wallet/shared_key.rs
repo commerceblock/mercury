@@ -40,10 +40,11 @@ impl SharedKey {
         secret_key: &SecretKey,
         value: &u64,
         protocol: Protocol,
+        vdf_solution: Vec<u8>,
     ) -> Result<SharedKey> {
         let mut key_share_priv: FE = ECScalar::zero(); // convert to curv lib
         key_share_priv.set_element(*secret_key);
-        ecdsa::get_master_key(id, client_shim, &key_share_priv, value, protocol)
+        ecdsa::get_master_key(id, client_shim, &key_share_priv, value, protocol, vdf_solution)
     }
 
     pub fn add_proof_data(

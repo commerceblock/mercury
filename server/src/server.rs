@@ -34,8 +34,6 @@ use std::collections::HashMap;
 use crate::error::SEError;
 use std::convert::TryInto;
 use url::Url;
-use rsa-vdf::SetupForVDF;
-use curv::BigInt;
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -101,7 +99,6 @@ pub struct StateChainEntity<
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
     pub scheduler: Option<Arc<Mutex<Scheduler>>>,
     pub lockbox: Option<Lockbox>,
-    pub vdf: Option<SetupForVDF>,
 }
 
 impl<
@@ -131,11 +128,6 @@ impl<
             Mode::Conductor => (None, Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config))))),
             Mode::Core => (init_lb(&config_rs), None)
         };
-        
-        let vdf = SetupForVDF {
-            t: BigInt::from_hex(&config_rs.vdf_setup_t),
-            n: BigInt::from_hex(&config_rs.vdf_setup_n),
-        }
 
         let sce = Self {
             config: config_rs,
@@ -143,7 +135,6 @@ impl<
             smt: Arc::new(Mutex::new(smt)),
             scheduler,
             lockbox,
-            vdf,
         };
 
         match &sce.scheduler {

@@ -18,7 +18,6 @@ extern crate kms;
 extern crate monotree;
 extern crate multi_party_ecdsa;
 extern crate rocket_okapi;
-extern crate rsa-vdf;
 
 #[macro_use]
 extern crate serde_derive;
