@@ -288,6 +288,7 @@ pub fn get_server<
         info!("Server running in testing mode.");
         // reset dbs
         sc_entity.database.reset()?;
+        sc_entity.database.init()?;
     }
 
     match mainstay_config {
