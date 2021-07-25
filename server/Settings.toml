@@ -1,5 +1,5 @@
 electrum_server = "127.0.0.1:60401"
-network = "regtest"
+network = "testnet"
 required_confirmation = 0
 testing_mode = true
 lockheight_init = 1000
