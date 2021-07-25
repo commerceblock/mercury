@@ -628,7 +628,7 @@ mod tests {
             ))
         });
         db.expect_create_user_session()
-            .returning(|_user_id, _auth, _proof_key| Ok(()));
+            .returning(|_user_id, _auth, _proof_key, _challenge| Ok(()));
         db.expect_get_user_auth()
             .returning(|_user_id| Ok(Uuid::new_v4()));
         //Key generation not completed for this ID yet
