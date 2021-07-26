@@ -22,7 +22,7 @@ use std::str::FromStr;
 pub const RBF: u32 = 0xffffffff - 2;
 pub const DUSTLIMIT: u64 = 100;
 /// Temporary - fees should be calculated dynamically
-pub const FEE: u64 = 300;
+pub const FEE: u64 = 141;
 
 pub fn reverse_hex_str(hex_str: String) -> Result<String> {
     if hex_str.len() % 2 != 0 {
