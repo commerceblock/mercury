@@ -169,7 +169,7 @@ impl Default for Config {
             batch_lifetime: 3600,     // 1 hour
             watch_only: false,
             bitcoind: String::from(""),
-            difficulty: 3,
+            difficulty: 4,
             storage: StorageConfig::default(),
             mainstay: Some(MainstayConfig::default()),
             rocket: RocketConfig::default(),

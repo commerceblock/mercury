@@ -73,7 +73,7 @@ pub fn deposit(
         None => return Err(CError::Generic(String::from("missing pow challenge from server"))),
     };
 
-    let difficulty = 3 as usize;
+    let difficulty = 4 as usize;
     let mut counter = 0;
     let zeros = String::from_utf8(vec![b'0'; difficulty]).unwrap();
     let mut hasher = Sha3_256::new();
