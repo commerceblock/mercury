@@ -106,6 +106,7 @@ pub enum Column {
     S1PubKey,
     WithdrawScSig,
     MasterPublic,
+    Challenge,
 
     // StateChain,
     // Id,
@@ -116,6 +117,7 @@ pub enum Column {
     TransferFinalizeData,
     TransferReady,
     SharedPublic,
+    Confirmed,
 
     // BackupTxs
     //Id,
@@ -252,6 +254,7 @@ impl PGDatabase {
                 txbackup varchar,
                 masterpublic varchar,
                 sharedpublic varchar,
+                challenge varchar,
                 PRIMARY KEY (id)
             );",
                 Table::UserSession.to_string(),
@@ -310,6 +313,7 @@ impl PGDatabase {
                 transferfinalizedata varchar,
                 transferready bool,
                 sharedpublic varchar,
+                confirmed bool NOT NULL DEFAULT false,
                 PRIMARY KEY (id)
             );",
                 Table::StateChain.to_string(),
@@ -1026,6 +1030,24 @@ impl Database for PGDatabase {
         self.get_1::<Uuid>(user_id, Table::UserSession, vec![Column::StateChainId])
     }
 
+    fn is_confirmed(&self, statechain_id: &Uuid) -> Result<bool> {
+        self.get_1::<bool>(*statechain_id, Table::StateChain, vec![Column::Confirmed])
+    }
+
+    fn set_confirmed(&self, statechain_id: &Uuid) -> Result<()> {
+        self.update(
+            statechain_id,
+            Table::StateChain,
+            vec![Column::Confirmed],
+            vec![&true],
+        )
+    }    
+
+    fn get_challenge(&self, user_id: &Uuid) -> Result<String> {
+        let challenge_str = self.get_1::<String>(*user_id, Table::UserSession, vec![Column::Challenge])?;
+        Ok(challenge_str)
+    }
+
     fn update_statechain_id(&self, user_id: &Uuid, statechain_id: &Uuid) -> Result<()> {
         self.update(
             user_id,
@@ -1621,14 +1643,14 @@ impl Database for PGDatabase {
 
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
-    fn create_user_session(&self, user_id: &Uuid, auth: &String, proof_key: &String) -> Result<()> {
+    fn create_user_session(&self, user_id: &Uuid, auth: &String, proof_key: &String, challenge: &String) -> Result<()> {
         self.insert(user_id, Table::UserSession)?;
         self.insert(user_id, Table::Lockbox)?;
         self.update(
             user_id,
             Table::UserSession,
-            vec![Column::Authentication, Column::ProofKey],
-            vec![&auth.clone(), &proof_key.to_owned()],
+            vec![Column::Authentication, Column::ProofKey, Column::Challenge],
+            vec![&auth.clone(), &proof_key.to_owned(), &challenge.clone()],
         )
     }
 

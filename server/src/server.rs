@@ -140,7 +140,7 @@ impl<
             Mode::Conductor => (None, Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config))))),
             Mode::Core => (init_lb(&config_rs), None)
         };
-        
+
         let sce = Self {
             config: config_rs,
             database: db,

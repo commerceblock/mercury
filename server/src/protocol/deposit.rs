@@ -18,6 +18,8 @@ use rocket_contrib::json::Json;
 use std::str::FromStr;
 use uuid::Uuid;
 use rocket_okapi::openapi;
+use rand::Rng;
+use hex;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -63,10 +65,16 @@ impl Deposit for SCE {
             )));
         };
 
+        // generate vdf challenge
+        let mut rng = rand::thread_rng();
+        let challenge_bytes = rng.gen::<[u8; 16]>();
+        let challenge = hex::encode(challenge_bytes);
+
         // Create DB entry for newly generated ID signalling that user has passed some
         // verification. For now use ID as 'password' to interact with state entity
+        // unsolved_vdf saved for verification at keygen first
         self.database
-            .create_user_session(&user_id, &deposit_msg1.auth, &deposit_msg1.proof_key)?;
+            .create_user_session(&user_id, &deposit_msg1.auth, &deposit_msg1.proof_key, &challenge)?;
 
         info!(
             "DEPOSIT: Protocol initiated. User ID generated: {}",
@@ -78,7 +86,7 @@ impl Deposit for SCE {
             deposit_msg1.proof_key.to_owned()
         );
 
-        Ok(UserID {id: user_id})
+        Ok(UserID {id: user_id, challenge: Some(challenge)})
     }
 
     fn deposit_confirm(&self, deposit_msg2: DepositMsg2) -> Result<StatechainID> {
@@ -196,7 +204,7 @@ pub mod tests {
     fn test_deposit_init() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().returning(|_, _, _| Ok(()));
+        db.expect_create_user_session().returning(|_, _, _, _| Ok(()));
 
         let sc_entity = test_sc_entity(db, None);
 
