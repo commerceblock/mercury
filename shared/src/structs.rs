@@ -45,7 +45,7 @@ pub struct UuidDef(String);
 pub struct UserID {
     #[schemars(with = "UuidDef")]
     pub id: Uuid,
-    pub vdf_challenge: Option<[u8; 32]>,
+    pub challenge: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
@@ -415,7 +415,7 @@ pub struct KeyGenMsg1 {
     #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
     pub protocol: Protocol,
-    pub vdf_solution: Option<Vec<u8>>,
+    pub solution: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]

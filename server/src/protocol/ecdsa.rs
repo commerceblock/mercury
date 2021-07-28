@@ -24,7 +24,8 @@ use std::string::ToString;
 use uuid::Uuid;
 use rocket_okapi::openapi;
 use url::Url;
-use vdf::{VDFParams, WesolowskiVDFParams, VDF};
+use sha3::Sha3_256;
+use digest::Digest;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -74,15 +75,17 @@ impl Ecdsa for SCE {
         
         // if deposit, verify VDF
         if (key_gen_msg1.protocol == Protocol::Deposit) {
-            let vdf = WesolowskiVDFParams(2048 as u16).new();
-            let challenge = db.get_vdf_challenge(&user_id)?;
-            let solution: Vec<u8> = match key_gen_msg1.vdf_solution {
-                Some(ref s) => s.to_vec(),
-                None => return Err(SEError::Generic(String::from("VDF solution missing on deposit")))
+            let mut hasher = Sha3_256::new();
+            let challenge = db.get_challenge(&user_id)?;
+            let solution: String = match key_gen_msg1.solution {
+                Some(ref s) => s.to_string(),
+                None => return Err(SEError::Generic(String::from("PoW solution missing on deposit")))
             };
-            let complete = vdf.verify(&challenge, self.config.vdf_difficulty, &solution);
-            if (!complete.is_ok()) {
-                return Err(SEError::Generic(String::from("VDF solution not valid")))
+            hasher.input(&format!("{}:{}", challenge, solution).as_bytes());
+            let result = hex::encode(hasher.result_reset());
+            let difficulty = self.config.difficulty.clone() as usize;
+            if (result[..difficulty] != String::from_utf8(vec![b'0'; difficulty]).unwrap()) {
+                return Err(SEError::Generic(String::from("PoW solution not valid")))
             }
         // else check confirmed            
         } else {
@@ -446,7 +449,7 @@ pub mod tests {
     #[test]
     fn test_keygen_lockbox_client() {
         let user_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
-        let challenge: [u8; 32] = [152, 226, 209, 228, 35, 71, 112, 87, 247, 92, 30, 255, 131, 61, 146, 183, 250, 148, 24, 246, 176, 13, 190, 190, 191, 210, 163, 132, 111, 112, 205, 4];
+        let challenge: String = "cc9391e5b30bfc533bafc5c7fa8d4af4".to_string();
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_create_user_session().returning(|_, _, _, _| Ok(()));
@@ -454,7 +457,7 @@ pub mod tests {
         db.expect_get_lockbox_url().returning(|_| Ok(Some(Url::from_str(&mockito::server_url()).unwrap())));
         db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
         db.expect_update_public_master().returning(|_,_| Ok(()));
-        db.expect_get_vdf_challenge().returning(move |_| Ok(challenge));
+        db.expect_get_challenge().returning(move |_| Ok(challenge.clone()));
 
         let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()));
 
@@ -467,9 +470,9 @@ pub mod tests {
           .with_body(serialized_m1)
           .create();
 
-        let vdf_solution: Vec<u8> = vec![0, 93, 247, 100, 95, 111, 124, 128, 129, 50, 220, 33, 155, 170, 241, 94, 86, 224, 221, 120, 132, 30, 220, 31, 172, 10, 234, 139, 67, 223, 166, 16, 6, 36, 194, 119, 207, 32, 143, 11, 223, 224, 57, 186, 21, 185, 209, 84, 35, 16, 86, 248, 145, 182, 178, 243, 1, 32, 50, 105, 206, 34, 206, 15, 70, 8, 247, 111, 150, 35, 16, 188, 88, 100, 135, 153, 66, 106, 218, 121, 135, 154, 56, 153, 27, 175, 254, 3, 224, 68, 139, 160, 96, 130, 107, 212, 45, 81, 206, 131, 255, 150, 77, 25, 107, 43, 86, 70, 5, 249, 40, 35, 9, 5, 54, 96, 49, 76, 112, 58, 91, 112, 170, 129, 178, 1, 214, 9, 224, 0, 49, 129, 162, 41, 122, 53, 164, 150, 163, 225, 60, 73, 105, 68, 55, 116, 241, 43, 107, 250, 34, 130, 110, 82, 74, 90, 116, 19, 54, 173, 147, 121, 119, 75, 48, 233, 3, 21, 12, 177, 119, 51, 133, 169, 153, 125, 192, 166, 176, 165, 119, 121, 98, 172, 187, 88, 44, 114, 40, 69, 49, 148, 154, 215, 223, 112, 155, 117, 110, 92, 180, 63, 85, 30, 144, 253, 188, 53, 174, 130, 171, 58, 231, 179, 221, 70, 181, 21, 229, 59, 180, 241, 158, 207, 118, 173, 107, 252, 210, 124, 75, 121, 243, 204, 208, 169, 183, 9, 96, 25, 205, 32, 69, 5, 12, 19, 11, 169, 8, 250, 245, 29, 25, 16, 181, 245, 144, 3, 0, 3, 182, 37, 225, 181, 18, 178, 23, 19, 179, 239, 155, 28, 185, 220, 123, 231, 4, 46, 115, 208, 99, 184, 93, 64, 8, 29, 142, 137, 71, 185, 199, 18, 212, 39, 38, 103, 164, 91, 151, 36, 47, 14, 229, 83, 21, 128, 68, 4, 224, 235, 159, 190, 251, 208, 147, 73, 165, 137, 104, 227, 189, 75, 228, 109, 35, 225, 2, 83, 3, 29, 222, 131, 208, 94, 58, 25, 126, 15, 99, 22, 131, 34, 209, 232, 254, 129, 109, 178, 178, 89, 181, 8, 162, 68, 191, 125, 223, 198, 79, 6, 198, 15, 89, 188, 98, 235, 220, 5, 190, 172, 58, 132, 45, 131, 120, 189, 139, 155, 156, 74, 69, 236, 24, 208, 42, 212, 150, 0, 1, 230, 129, 246, 157, 198, 226, 76, 36, 55, 95, 80, 219, 159, 120, 96, 241, 183, 20, 241, 52, 147, 77, 179, 99, 183, 67, 5, 87, 235, 22, 186, 190, 124, 180, 89, 85, 61, 168, 225, 241, 192, 141, 19, 212, 190, 201, 71, 126, 210, 207, 200, 135, 146, 135, 146, 213, 72, 253, 49, 208, 230, 218, 198, 206, 201, 231, 229, 13, 128, 138, 60, 249, 103, 177, 145, 45, 84, 236, 186, 166, 132, 231, 224, 233, 147, 217, 255, 210, 193, 45, 200, 78, 254, 72, 106, 69, 97, 165, 21, 255, 112, 158, 121, 192, 123, 126, 114, 163, 19, 34, 187, 129, 172, 85, 59, 193, 212, 205, 231, 129, 109, 105, 114, 179, 117, 223, 143];
+        let pow_solution: String = "3423".to_string();
 
-        let kg_msg_1 = KeyGenMsg1 { shared_key_id: user_id, protocol: Protocol::Deposit, vdf_solution: Some(vdf_solution)};
+        let kg_msg_1 = KeyGenMsg1 { shared_key_id: user_id, protocol: Protocol::Deposit, solution: Some(pow_solution)};
 
         let return_msg = sc_entity.first_message(kg_msg_1).unwrap();
 

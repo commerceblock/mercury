@@ -38,7 +38,7 @@ extern crate pyo3;
 extern crate rand;
 extern crate shared_lib;
 extern crate uuid;
-extern crate vdf;
+extern crate sha3;
 pub mod daemon;
 pub mod ecdsa;
 pub mod error;

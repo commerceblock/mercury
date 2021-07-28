@@ -16,7 +16,7 @@ pub fn get_master_key(
     secret_key: &FE,
     value: &u64,
     protocol: Protocol,
-    vdf_solution: Vec<u8>,
+    solution: String,
 ) -> Result<SharedKey> {
     let key_gen_reply_1: KeyGenReply1  = requests::postb(
         client_shim,
@@ -24,7 +24,7 @@ pub fn get_master_key(
         KeyGenMsg1 {
             shared_key_id: *shared_key_id,
             protocol, 
-            vdf_solution: Some(vdf_solution)
+            solution: Some(solution)
         },
     )?;
 

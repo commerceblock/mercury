@@ -23,7 +23,6 @@ extern crate log4rs;
 extern crate rusoto_dynamodb;
 extern crate serde_dynamodb;
 extern crate url;
-extern crate vdf;
 extern crate rand;
 
 extern crate curv;
@@ -136,7 +135,7 @@ pub trait Database {
     fn get_statechain_id(&self, user_id: Uuid) -> Result<Uuid>;
     fn is_confirmed(&self, statechain_id: &Uuid) -> Result<bool>;
     fn set_confirmed(&self, statechain_id: &Uuid) -> Result<()>;
-    fn get_vdf_challenge(&self, user_id: &Uuid) -> Result<[u8; 32]>;
+    fn get_challenge(&self, user_id: &Uuid) -> Result<String>;
     fn update_statechain_id(&self, user_id: &Uuid, statechain_id: &Uuid) -> Result<()>;
     fn get_statechain_amount(&self, statechain_id: Uuid) -> Result<StateChainAmount>;
     fn update_statechain_amount(
@@ -236,7 +235,7 @@ pub trait Database {
     fn get_recovery_data(&self, proofkey: String) -> Result<Vec<(Uuid,Uuid,Transaction)>>;
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
-    fn create_user_session(&self, user_id: &Uuid, auth: &String, proof_key: &String, challenge: &[u8; 32]) -> Result<()>;
+    fn create_user_session(&self, user_id: &Uuid, auth: &String, proof_key: &String, challenge: &String) -> Result<()>;
     // Create new UserSession to allow new owner to generate shared wallet
     fn transfer_init_user_session(
         &self,

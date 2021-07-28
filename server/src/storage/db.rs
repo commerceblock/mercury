@@ -106,7 +106,7 @@ pub enum Column {
     S1PubKey,
     WithdrawScSig,
     MasterPublic,
-    VDFChallenge,
+    Challenge,
 
     // StateChain,
     // Id,
@@ -254,7 +254,7 @@ impl PGDatabase {
                 txbackup varchar,
                 masterpublic varchar,
                 sharedpublic varchar,
-                vdfchallenge varchar,
+                challenge varchar,
                 PRIMARY KEY (id)
             );",
                 Table::UserSession.to_string(),
@@ -1042,10 +1042,9 @@ impl Database for PGDatabase {
         )
     }    
 
-    fn get_vdf_challenge(&self, user_id: &Uuid) -> Result<[u8; 32]> {
-        let vdf_challenge_str = self.get_1::<String>(*user_id, Table::UserSession, vec![Column::VDFChallenge])?;
-        let vdf_challenge: [u8; 32] = Self::deser(vdf_challenge_str)?;
-        Ok(vdf_challenge)
+    fn get_challenge(&self, user_id: &Uuid) -> Result<String> {
+        let challenge_str = self.get_1::<String>(*user_id, Table::UserSession, vec![Column::Challenge])?;
+        Ok(challenge_str)
     }
 
     fn update_statechain_id(&self, user_id: &Uuid, statechain_id: &Uuid) -> Result<()> {
@@ -1643,14 +1642,14 @@ impl Database for PGDatabase {
 
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
-    fn create_user_session(&self, user_id: &Uuid, auth: &String, proof_key: &String, challenge: &[u8; 32]) -> Result<()> {
+    fn create_user_session(&self, user_id: &Uuid, auth: &String, proof_key: &String, challenge: &String) -> Result<()> {
         self.insert(user_id, Table::UserSession)?;
         self.insert(user_id, Table::Lockbox)?;
         self.update(
             user_id,
             Table::UserSession,
-            vec![Column::Authentication, Column::ProofKey, Column::VDFChallenge],
-            vec![&auth.clone(), &proof_key.to_owned(), &Self::ser(challenge.clone())?],
+            vec![Column::Authentication, Column::ProofKey, Column::Challenge],
+            vec![&auth.clone(), &proof_key.to_owned(), &challenge.clone()],
         )
     }
 

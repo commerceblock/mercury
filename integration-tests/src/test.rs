@@ -7,7 +7,9 @@ mod tests {
     extern crate server_lib;
     extern crate shared_lib;
     extern crate time_test;
-    extern crate vdf;
+    extern crate sha3;
+    extern crate digest;
+    extern crate hex;
 
     use shared_lib::structs::Protocol;
 
@@ -15,7 +17,8 @@ mod tests {
     use curv::FE;
     use self::time_test::time_test;
     use shared_lib::util::transaction_deserialise;
-    use self::vdf::{VDFParams, WesolowskiVDFParams, VDF};
+    use self::sha3::Sha3_256;
+    use self::digest::Digest;
 
     #[test]
     #[serial]
@@ -29,14 +32,27 @@ mod tests {
         assert!(init_res.is_ok());
 
         // generate solution for the VDF challenge
-        let challenge = match init_res.clone().unwrap().vdf_challenge {
+        let challenge = match init_res.clone().unwrap().challenge {
             Some(c) => c,
             None => return,
         };
-        let vdf = WesolowskiVDFParams(2048 as u16).new();
-        let solution = &vdf.solve(&challenge, 5000).unwrap()[..];
 
-        let key_res = wallet.gen_shared_key(&init_res.unwrap().id, &1000, solution.to_vec());
+        let difficulty = 3 as usize;
+        let mut counter = 0;
+        let zeros = String::from_utf8(vec![b'0'; difficulty]).unwrap();
+        let mut hasher = Sha3_256::new();
+        loop {
+            hasher.input(&format!("{}:{:x}", challenge, counter).as_bytes());
+            let result = hex::encode(hasher.result_reset());
+            if result[..difficulty] == zeros {
+                break;
+            };
+            counter += 1
+        }
+
+        let solution = format!("{:x}", counter);
+
+        let key_res = wallet.gen_shared_key(&init_res.unwrap().id, &1000, solution.to_string());
         assert!(key_res.is_ok());
     }
 
@@ -54,7 +70,7 @@ mod tests {
             &secret_key,
             &1000,
             Protocol::Deposit,
-            vec![],
+            "".to_string(),
         );
         assert!(err.is_err());
     }

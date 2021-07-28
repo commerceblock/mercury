@@ -23,7 +23,8 @@ use crate::wallet::wallet::{to_bitcoin_public_key, Wallet};
 use bitcoin::{consensus, PublicKey, Transaction};
 use curv::elliptic::curves::traits::ECPoint;
 use uuid::Uuid;
-use vdf::{VDFParams, WesolowskiVDFParams, VDF};
+use sha3::Sha3_256;
+use digest::Digest;
 
 /// Message to server initiating state entity protocol.
 /// Shared wallet ID returned
@@ -66,16 +67,31 @@ pub fn deposit(
     // Init. session - Receive shared wallet ID
     let shared_key_id: UserID = session_init(wallet, &proof_key.to_string())?;
 
-    // generate solution for the VDF challenge
-    let challenge = match shared_key_id.vdf_challenge {
+    // generate solution for the PoW challenge
+    let challenge = match shared_key_id.challenge {
         Some(c) => c,
-        None => return Err(CError::Generic(String::from("missing vdf challenge from server"))),
+        None => return Err(CError::Generic(String::from("missing pow challenge from server"))),
     };
-    let vdf = WesolowskiVDFParams(2048 as u16).new();
-    let solution = &vdf.solve(&challenge, 5000).unwrap()[..];
+
+    let difficulty = 3 as usize;
+    let mut counter = 0;
+    let zeros = String::from_utf8(vec![b'0'; difficulty]).unwrap();
+    let mut hasher = Sha3_256::new();
+    loop {
+        hasher.input(&format!("{}:{:x}", challenge, counter).as_bytes());
+        println!("{}:{:x}",challenge, counter);
+        let result = hex::encode(hasher.result_reset());
+        println!("{:?}", result);
+        if result[..difficulty] == zeros {
+            break;
+        };
+        counter += 1
+    }
+
+    let solution = format!("{:x}", counter);
 
     // 2P-ECDSA with state entity to create a Shared key
-    let shared_key = wallet.gen_shared_key(&shared_key_id.id, amount, solution.to_vec())?;
+    let shared_key = wallet.gen_shared_key(&shared_key_id.id, amount, solution)?;
 
     // Create funding tx
     let pk = shared_key.share.public.q.get_element(); // co-owned key address to send funds to (P_addr)
