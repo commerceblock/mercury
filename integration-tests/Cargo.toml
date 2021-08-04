@@ -14,7 +14,7 @@ bitcoin = "0.25.0"
 rand = "0.6.5"
 env_logger = "0.7.1"
 floating-duration = "0.1.2"
-uuid = { version = "0.5", features = ["v4", "serde"] }
+uuid = { version = "0.8.2", features = ["v4", "serde"] }
 stoppable_thread = "0.2.1"
 serial_test = "0.5.0"
 sha3 = "0.8.2"
