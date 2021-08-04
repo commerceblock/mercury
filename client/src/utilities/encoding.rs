@@ -10,6 +10,7 @@ use bitcoin::{Address, Network};
 use crate::wallet::wallet::to_bitcoin_public_key;
 use uuid::Uuid;
 use hex;
+use std::convert::TryInto;
 
 use super::super::Result;
 use crate::error::CError;
@@ -60,9 +61,9 @@ pub fn encode_message(message: TransferMsg3) -> Result<String> {
 	//bytes 129..162 (33 bytes) compressed proof key
 	ser_bytes.append(&mut message.rec_se_addr.proof_key.clone().serialize().to_vec());
 	//bytes 162..178 (16 bytes) statechain_id
-	ser_bytes.append(&mut hex::decode(message.statechain_id.clone().simple().to_string()).unwrap());
+	ser_bytes.append(&mut hex::decode(message.statechain_id.clone().to_simple().to_string()).unwrap());
 	//bytes 178..194 (16 bytes) shared_key_id
-	ser_bytes.append(&mut hex::decode(message.tx_backup_psm.shared_key_ids[0].clone().simple().to_string()).unwrap());
+	ser_bytes.append(&mut hex::decode(message.tx_backup_psm.shared_key_ids[0].clone().to_simple().to_string()).unwrap());
 	//byte 194 is statechain signature length (variable)
 	ser_bytes.push(sig_bytes.len() as u8);
 	//byte 195..sig_len is statechain signature
@@ -112,7 +113,7 @@ pub fn decode_message(message: String, network: &String) -> Result<TransferMsg3>
 
 	let mut tx_backup_psm = PrepareSignTxMsg::default();
 	tx_backup_psm.tx_hex = hex::encode(tx_bytes);
-	tx_backup_psm.shared_key_ids = vec![Uuid::from_bytes(&shared_key_id_bytes.clone()).unwrap()];
+	tx_backup_psm.shared_key_ids = vec![Uuid::from_bytes(shared_key_id_bytes.clone().try_into().unwrap())];
 	tx_backup_psm.proof_key = Some(hex::encode(proof_key_bytes.clone()));
 	tx_backup_psm.protocol = Protocol::Transfer;
 
@@ -121,14 +122,14 @@ pub fn decode_message(message: String, network: &String) -> Result<TransferMsg3>
 
 	// recreate transfer message 3
 	let transfer_msg3 = TransferMsg3 {
-	    shared_key_id: Uuid::from_bytes(&shared_key_id_bytes.clone()).unwrap(),
+	    shared_key_id: Uuid::from_bytes(shared_key_id_bytes.clone().try_into().unwrap()),
 	    t1: t1,
 	    statechain_sig: StateChainSig {
 		    purpose: "TRANSFER".to_string(),
 		    data: hex::encode(proof_key_bytes.clone()),
 		    sig: hex::encode(sig_bytes),
 	    },
-	    statechain_id: Uuid::from_bytes(&statechain_id_bytes.clone()).unwrap(),
+	    statechain_id: Uuid::from_bytes(statechain_id_bytes.clone().try_into().unwrap()),
 	    tx_backup_psm: tx_backup_psm,
 	    rec_se_addr: SCEAddress {
 	    	tx_backup_addr,

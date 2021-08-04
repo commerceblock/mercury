@@ -27,7 +27,7 @@ serde_derive = "1.0"
 time-test = "0.2.2"
 log = "0.4"
 config = "0.10"
-uuid = { version = "0.5", features = ["v4", "serde"] }
+uuid = { version = "0.8.2", features = ["v4", "serde"] }
 error-chain = "0.12.4"
 failure = "0.1.8"
 jsonwebtoken = "5.0.1"
@@ -39,7 +39,7 @@ electrumx_client = { git = "https://github.com/commerceblock/rust-electrumx-clie
 reqwest = { version = "0.10", features = ["socks", "blocking", "json"] }
 env_logger = "0.7.1"
 log4rs = "0.13.0"
-postgres = { version = "0.15.2", features = ["with-uuid","with-chrono"] }
+postgres = { version = "0.19.1", features = ["with-uuid-0_8","with-chrono-0_4"] }
 chrono = "0.4"
 serial_test = "0.5.0"
 stoppable_thread = "0.2.1"

@@ -88,6 +88,11 @@ impl From<PostgresError> for SEError {
         SEError::Generic(e.to_string())
     }
 }
+impl From<rocket_contrib::databases::postgres::Error> for SEError {
+    fn from(e: rocket_contrib::databases::postgres::Error) -> SEError {
+        SEError::Generic(e.to_string())
+    }
+}
 impl From<ConfigError> for SEError {
     fn from(e: ConfigError) -> SEError {
         SEError::Generic(e.to_string())
@@ -100,8 +105,8 @@ impl From<ReqwestError> for SEError {
     }
 }
 
-impl From<uuid::ParseError> for SEError {
-    fn from(e: uuid::ParseError) -> SEError {
+impl From<uuid::Error> for SEError {
+    fn from(e: uuid::Error) -> SEError {
         SEError::Generic(e.to_string())
     }
 }
