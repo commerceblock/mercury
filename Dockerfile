@@ -68,6 +68,9 @@ RUN set -ex \
         getblockchaininfo
 
 RUN set -ex \
+    && rustup default nightly-2021-07-26 
+
+RUN set -ex \
     && cd server \
     && cargo test -j 4 -- --test-threads=4 \
     && cargo build --release
