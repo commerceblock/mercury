@@ -72,9 +72,9 @@ RUN set -ex \
 
 RUN set -ex \
     && rustup default nightly-2021-07-26 \
-    && rustup override set rustup default nightly-2021-07-26 \
+    && rustup override set nightly-2021-07-26 \
     && cd server \
-    && rustup override set rustup default nightly-2021-07-26 \
+    && rustup override set nightly-2021-07-26 \
     && cargo test -j 4 -- --test-threads=4 \
     && cargo build --release
 
