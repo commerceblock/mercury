@@ -125,7 +125,7 @@ pub trait Conductor {
     // StateChain they own and should not take any responsibility for the failure.
 
     // Get map of values/sizes to registrations
-    fn get_group_info(&self) -> Result<HashMap<SwapGroup,u64>>;
+    fn get_group_info(&self) -> Result<HashMap<SwapGroup,GroupStatus>>;
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -134,12 +134,14 @@ pub struct Scheduler {
     utxo_timeout: u32,
     //Timeout for swap group to complete
     group_timeout: u32,
+    //Time to initiate swap after group first joined
+    init_timeout: u32,
     //State chain id to requested swap size map
     statechain_swap_size_map: BisetMap<Uuid, u64>,
     //A map of state chain registereds for swap to amount
     statechain_amount_map: BisetMap<Uuid, u64>,
     //A map of swap groups to registrations
-    group_info_map: HashMap<SwapGroup, u64>,
+    group_info_map: HashMap<SwapGroup, GroupStatus>,
     //A map of state chain id to swap id
     swap_id_map: HashMap<Uuid, Uuid>,
     //A map of swap id to swap info
@@ -170,9 +172,10 @@ impl Scheduler {
             group_timeout: config.group_timeout.clone(),
             #[cfg(test)]
             group_timeout: 8,
+            init_timeout: config.init_timeout.clone(),
             statechain_swap_size_map: BisetMap::<Uuid, u64>::new(),
             statechain_amount_map: BisetMap::<Uuid, u64>::new(),
-            group_info_map: HashMap::<SwapGroup, u64>::new(),
+            group_info_map: HashMap::<SwapGroup, GroupStatus>::new(),
             swap_id_map: HashMap::<Uuid, Uuid>::new(),
             swap_info_map: HashMap::<Uuid, SwapInfo>::new(),
             status_map: BisetMap::<Uuid, SwapStatus>::new(),
@@ -271,8 +274,13 @@ impl Scheduler {
                 .insert(statechain_id.to_owned(), swap_size);
 
             let group = SwapGroup { amount: amount, size: swap_size};
-            let count = self.group_info_map.entry(group).or_insert(0);
-            *count += 1;
+            let count = self.group_info_map.entry(group)
+                .or_insert( GroupStatus { number: 0, time: Utc::now().naive_utc() });
+            count.number += 1;
+
+            if (count.number == 2) {
+                count.time = Utc::now().naive_utc() + Duration::seconds(self.init_timeout as i64)
+            }
 
             //metrics
             REG_SWAP_UTXOS.with_label_values(&[&swap_size.clone().to_string(),&amount.clone().to_string()]).inc();
@@ -337,11 +345,13 @@ impl Scheduler {
         let amount = self.statechain_amount_map.get(statechain_id);
         if (self.statechain_amount_map.contains(&statechain_id,&amount[0])) {
             let group = SwapGroup { amount: amount[0], size: swap_size[0]};
-            let count = self.group_info_map.entry(group).or_insert(0);
-            if count > &mut 0 {
-                *count -= 1;
+            let count = self.group_info_map.entry(group)
+                .or_insert( GroupStatus { number: 0, time: Utc::now().naive_utc() } );
+            if count.number > 0 {
+                count.number -= 1;
             }
-            self.group_info_map.retain(|_, &mut v| v != 0);
+            self.group_info_map.retain(|_, v| v.number != 0);
+
         }
         self.statechain_amount_map.remove(statechain_id, &amount[0]);
         self.poll_timeout_map.remove(statechain_id);
@@ -400,8 +410,24 @@ impl Scheduler {
                 .to_owned() as usize;
             let mut ids_for_swap = Vec::<Uuid>::new();
             while (!swap_size_collect.is_empty()) {
+
                 //Remove from the back of the vector, which will be the largest swap_size
-                let (swap_size, mut sc_ids) = swap_size_collect.pop().unwrap();
+                let (mut swap_size, mut sc_ids) = swap_size_collect.pop().unwrap();
+
+                let group = SwapGroup { amount: amount.clone(), size: swap_size.clone() };
+                let now: NaiveDateTime = Utc::now().naive_utc();
+
+                // if either group size has been met or that the countdown time has been reached with at least two registrations
+                // if countdown reached with > 1 coin, then use current group size
+                match self.group_info_map.get(&group.clone()) {
+                    Some(count) => {
+                        if (sc_ids.len() >= 2 && now >= count.time) {
+                            swap_size = (sc_ids.len() as u64)
+                        }
+                    }
+                    _ => ()
+                }
+
                 if (n_remaining + ids_for_swap.len() >= swap_size as usize) {
                     //Collect some ids together for a swap
                     while (!sc_ids.is_empty() && ids_for_swap.len() < swap_size_max) {
@@ -409,9 +435,11 @@ impl Scheduler {
                         ids_for_swap.push(id);
                         n_remaining = n_remaining - 1;
                     }
-                } else {
+                }
+                else {
                     break;
                 }
+
                 //Create a swap token with these ids and clear temporary vector of sc ids
                 if (ids_for_swap.len() == swap_size_max || n_remaining == 0) {
                     let swap_id = Uuid::new_v4();
@@ -439,14 +467,10 @@ impl Scheduler {
                         //as a coherence check
                         assert!(self.statechain_swap_size_map.delete(&id).len() == 1);
                         assert!(self.statechain_amount_map.delete(&id).len() == 1);
-
-                        let group = SwapGroup { amount: amount, size: swap_size};
-                        let count = self.group_info_map.entry(group).or_insert(0);
-                        if count > &mut 0 {
-                            *count -= 1;
-                        }
-                        self.group_info_map.retain(|_, &mut v| v != 0);
                     }
+
+                    self.group_info_map.remove(&group);
+
                     info!("SCHEDULER: Created Swap ID: {}", swap_id);
                     debug!("SCHEDULER: Swap Info: {:?}", si);
                 }
@@ -745,7 +769,7 @@ impl Conductor for SCE {
         Ok(())
     }
 
-    fn get_group_info(&self) -> Result<HashMap<SwapGroup,u64>> {
+    fn get_group_info(&self) -> Result<HashMap<SwapGroup,GroupStatus>> {
         let guard = self.scheduler.as_ref().expect("scheduler is None").lock()?;
         Ok(guard.group_info_map.clone())
     }
@@ -1083,7 +1107,7 @@ pub fn swap_second_message(
 #[get("/swap/groupinfo", format = "json")]
 pub fn get_group_info(
     sc_entity: State<SCE>,
-    ) -> Result<Json<(HashMap<SwapGroup,u64>)>> {
+    ) -> Result<Json<(HashMap<SwapGroup,GroupStatus>)>> {
     match sc_entity.get_group_info() {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -1162,6 +1186,7 @@ mod tests {
     fn get_scheduler(swap_size_amounts: Vec<(u64, u64)>) -> Scheduler {
         let utxo_timeout: u32 = 6;
         let group_timeout: u32 = 8;
+        let init_timeout: u32 = 10000;
         let now: NaiveDateTime = Utc::now().naive_utc();
         let t = now + chrono::Duration::seconds(utxo_timeout as i64);
         let t_swap = now + chrono::Duration::seconds(group_timeout as i64);
@@ -1183,9 +1208,10 @@ mod tests {
         Scheduler {
             utxo_timeout,
             group_timeout,
+            init_timeout,
             statechain_swap_size_map,
             statechain_amount_map,
-            group_info_map: HashMap::<SwapGroup,u64>::new(),
+            group_info_map: HashMap::<SwapGroup,GroupStatus>::new(),
             swap_id_map: HashMap::<Uuid, Uuid>::new(),
             swap_info_map: HashMap::<Uuid, SwapInfo>::new(),
             status_map: BisetMap::<Uuid, SwapStatus>::new(),
@@ -1432,7 +1458,7 @@ mod tests {
         let swap_group = SwapGroup { amount: 10, size: 10 };
         let groupinfo = sc_entity.get_group_info().unwrap();
 
-        assert_eq!(*groupinfo.get(&swap_group).unwrap(),1);
+        assert_eq!(groupinfo.get(&swap_group).unwrap().number,1);
     }
 
     #[test]
