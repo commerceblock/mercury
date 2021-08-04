@@ -100,6 +100,7 @@ impl Transfer for SCE {
 
         // Check that the funding transaction has the required number of confirmations
         self.verify_tx_confirmed(&tx_backup.input[0].previous_output.txid.to_string())?;
+        self.database.set_confirmed(&statechain_id)?;
 
         // Check if state chain is owned by user and not locked
         let sco = self.database.get_statechain_owner(statechain_id)?;
@@ -572,6 +573,7 @@ mod tests {
             });
         db.expect_create_transfer().returning(|_, _, _| Ok(()));
         db.expect_update_transfer_msg().returning(|_, _| Ok(()));
+        db.expect_set_confirmed().returning(|_| Ok(()));
 
         let sc_entity = test_sc_entity(db, None);
 

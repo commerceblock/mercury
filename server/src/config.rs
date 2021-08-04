@@ -31,6 +31,8 @@ pub struct ConductorConfig {
     pub utxo_timeout: u32, 
     /// Length of punishment for unresponsivve/misbehaving batch-transfer utxo
     pub punishment_duration: u64,
+    /// The time waited after a group is started until the swap begins
+    pub init_timeout: u32, 
 }
 
 impl Default for ConductorConfig {
@@ -38,7 +40,8 @@ impl Default for ConductorConfig {
         Self {
             group_timeout: 600,
             utxo_timeout: 60,
-            punishment_duration: 360
+            punishment_duration: 300,
+            init_timeout: 120,
         }
     }
 }
@@ -139,6 +142,8 @@ pub struct Config {
     pub watch_only: bool,
     /// bitcoind node connecton
     pub bitcoind: String,
+    /// VDF difficulty factor
+    pub difficulty: u64,
     /// Storage config
     pub storage: StorageConfig,
     /// Mainstay config
@@ -167,6 +172,7 @@ impl Default for Config {
             batch_lifetime: 3600,     // 1 hour
             watch_only: false,
             bitcoind: String::from(""),
+            difficulty: 4,
             storage: StorageConfig::default(),
             mainstay: Some(MainstayConfig::default()),
             rocket: RocketConfig::default(),

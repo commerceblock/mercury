@@ -7,6 +7,9 @@ mod tests {
     extern crate server_lib;
     extern crate shared_lib;
     extern crate time_test;
+    extern crate sha3;
+    extern crate digest;
+    extern crate hex;
 
     use shared_lib::structs::Protocol;
 
@@ -14,6 +17,8 @@ mod tests {
     use curv::FE;
     use self::time_test::time_test;
     use shared_lib::util::transaction_deserialise;
+    use self::sha3::Sha3_256;
+    use self::digest::Digest;
 
     #[test]
     #[serial]
@@ -25,7 +30,29 @@ mod tests {
         let init_res =
             client_lib::state_entity::deposit::session_init(&mut wallet, &proof_key.to_string());
         assert!(init_res.is_ok());
-        let key_res = wallet.gen_shared_key(&init_res.unwrap().id, &1000);
+
+        // generate solution for the VDF challenge
+        let challenge = match init_res.clone().unwrap().challenge {
+            Some(c) => c,
+            None => return,
+        };
+
+        let difficulty = 3 as usize;
+        let mut counter = 0;
+        let zeros = String::from_utf8(vec![b'0'; difficulty]).unwrap();
+        let mut hasher = Sha3_256::new();
+        loop {
+            hasher.input(&format!("{}:{:x}", challenge, counter).as_bytes());
+            let result = hex::encode(hasher.result_reset());
+            if result[..difficulty] == zeros {
+                break;
+            };
+            counter += 1
+        }
+
+        let solution = format!("{:x}", counter);
+
+        let key_res = wallet.gen_shared_key(&init_res.unwrap().id, &1000, solution.to_string());
         assert!(key_res.is_ok());
     }
 
@@ -43,6 +70,7 @@ mod tests {
             &secret_key,
             &1000,
             Protocol::Deposit,
+            "".to_string(),
         );
         assert!(err.is_err());
     }
@@ -616,7 +644,7 @@ mod tests {
             ))
         });
         db.expect_create_user_session()
-            .returning(|_user_id, _auth, _proof_key| Ok(()));
+            .returning(|_user_id, _auth, _proof_key, _challenge| Ok(()));
         db.expect_get_user_auth()
             .returning(|_user_id| Ok(Uuid::new_v4()));
         //Key generation not completed for this ID yet

@@ -17,6 +17,7 @@ use schemars;
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use serde::de::{self, Visitor, Unexpected};
 use regex::Regex;
+use chrono::{NaiveDateTime, Utc};
 
 use crate::ecies;
 use crate::{util::transaction_serialise, ecies::{Encryptable, SelfEncryptable, WalletDecryptable}};
@@ -45,6 +46,7 @@ pub struct UuidDef(String);
 pub struct UserID {
     #[schemars(with = "UuidDef")]
     pub id: Uuid,
+    pub challenge: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
@@ -127,7 +129,7 @@ impl fmt::Display for StateEntityFeeInfoAPI {
     }
 }
 
-/// Swap group status data
+/// Swap group data
 #[derive(JsonSchema, Debug, Hash, Eq, PartialEq, Clone)]
 #[schemars(example = "Self::example")]
 pub struct SwapGroup {
@@ -192,6 +194,74 @@ impl<'de> Deserialize<'de> for SwapGroup {
         D: Deserializer<'de>,
     {
     deserializer.deserialize_string(SwapGroupVisitor)
+    }
+}
+
+/// Swap group status data
+#[derive(JsonSchema, Debug, Hash, Eq, PartialEq, Clone)]
+#[schemars(example = "Self::example")]
+pub struct GroupStatus {
+    pub number: u64,
+    pub time: NaiveDateTime,
+}
+
+impl GroupStatus {
+    pub fn new(number: u64, time: NaiveDateTime) -> GroupStatus {
+        GroupStatus {number, time}
+    }
+
+    pub fn example() -> Self{
+        Self{
+            number: 2,
+            time: Utc::now().naive_utc(),
+        }
+    }
+}
+
+impl Serialize for GroupStatus {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+   {
+        serializer.serialize_str(&format!("{}:{}", self.number, self.time.timestamp()))
+    }
+}
+
+struct GroupStatusVisitor;
+
+impl<'de> Visitor<'de> for GroupStatusVisitor {
+    type Value = GroupStatus;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a colon-separated pair of u64 integers")
+    }
+
+    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        if let Some(nums) = Regex::new(r"(\d+):(\d+)").unwrap().captures_iter(s).next() {
+            if let Ok(number) = u64::from_str(&nums[1]) {
+                if let Ok(time) = i64::from_str(&nums[2]) {
+                    Ok(GroupStatus::new(number, NaiveDateTime::from_timestamp(time,0)))
+                } else {
+                    Err(de::Error::invalid_value(Unexpected::Str(s), &self))
+                }
+            } else {
+                Err(de::Error::invalid_value(Unexpected::Str(s), &self))
+            }
+        } else {
+            Err(de::Error::invalid_value(Unexpected::Str(s), &self))
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for GroupStatus {
+    fn deserialize<D>(deserializer: D) -> Result<GroupStatus, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+    deserializer.deserialize_string(GroupStatusVisitor)
     }
 }
 
@@ -414,6 +484,7 @@ pub struct KeyGenMsg1 {
     #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
     pub protocol: Protocol,
+    pub solution: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]

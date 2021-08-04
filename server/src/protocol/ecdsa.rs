@@ -24,6 +24,8 @@ use std::string::ToString;
 use uuid::Uuid;
 use rocket_okapi::openapi;
 use url::Url;
+use sha3::Sha3_256;
+use digest::Digest;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -69,9 +71,31 @@ impl Ecdsa for SCE {
     fn first_message(&self, key_gen_msg1: KeyGenMsg1) -> Result<KeyGenReply1> {
         let user_id = key_gen_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
+        let db = &self.database;
+        
+        // if deposit, verify VDF
+        if (key_gen_msg1.protocol == Protocol::Deposit) {
+            let mut hasher = Sha3_256::new();
+            let challenge = db.get_challenge(&user_id)?;
+            let solution: String = match key_gen_msg1.solution {
+                Some(ref s) => s.to_string(),
+                None => return Err(SEError::Generic(String::from("PoW solution missing on deposit")))
+            };
+            hasher.input(&format!("{}:{}", challenge, solution).as_bytes());
+            let result = hex::encode(hasher.result_reset());
+            let difficulty = self.config.difficulty.clone() as usize;
+            if (result[..difficulty] != String::from_utf8(vec![b'0'; difficulty]).unwrap()) {
+                return Err(SEError::Generic(String::from("PoW solution not valid")))
+            }
+        // else check confirmed            
+        } else {
+            let statechain_id = db.get_statechain_id(user_id.clone())?;
+            if (!db.is_confirmed(&statechain_id)?) {
+                return Err(SEError::Generic(String::from("Statecoin not confirmed")))
+            };
+        };
 
         let kg_first_msg;
-        let db = &self.database;
 
         let lockbox_url: Option<Url> = match db.get_lockbox_url(&user_id)?{
             Some(l) => Some(l),
@@ -425,13 +449,15 @@ pub mod tests {
     #[test]
     fn test_keygen_lockbox_client() {
         let user_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let challenge: String = "cc9391e5b30bfc533bafc5c7fa8d4af4".to_string();
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().returning(|_, _, _| Ok(()));
+        db.expect_create_user_session().returning(|_, _, _, _| Ok(()));
         db.expect_get_user_auth().returning(move |_| Ok(user_id));
         db.expect_get_lockbox_url().returning(|_| Ok(Some(Url::from_str(&mockito::server_url()).unwrap())));
         db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
         db.expect_update_public_master().returning(|_,_| Ok(()));
+        db.expect_get_challenge().returning(move |_| Ok(challenge.clone()));
 
         let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()));
 
@@ -444,7 +470,9 @@ pub mod tests {
           .with_body(serialized_m1)
           .create();
 
-        let kg_msg_1 = KeyGenMsg1 { shared_key_id: user_id, protocol: Protocol::Deposit };
+        let pow_solution: String = "3423".to_string();
+
+        let kg_msg_1 = KeyGenMsg1 { shared_key_id: user_id, protocol: Protocol::Deposit, solution: Some(pow_solution)};
 
         let return_msg = sc_entity.first_message(kg_msg_1).unwrap();
 
@@ -500,7 +528,7 @@ pub mod tests {
         let tx_backup: Transaction = serde_json::from_str(&BACKUP_TX_NOT_SIGNED).unwrap();
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().returning(|_, _, _| Ok(()));
+        db.expect_create_user_session().returning(|_, _, _, _| Ok(()));
         db.expect_get_user_auth().returning(move |_| Ok(user_id));
         db.expect_get_lockbox_url().returning(|_| Ok(Some(Url::parse(&mockito::server_url()).unwrap())));
         db.expect_get_user_backup_tx().returning(move |_| Ok(tx_backup.clone()));

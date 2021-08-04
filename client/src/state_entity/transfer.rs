@@ -284,7 +284,7 @@ pub fn transfer_receiver(
 
     // get SE/lockbox public key share
     let s1_pub: S1PubKey =
-        requests::postb(&wallet.client_shim, &format!("transfer/pubkey"), UserID { id: transfer_msg3.shared_key_id })?;    
+        requests::postb(&wallet.client_shim, &format!("transfer/pubkey"), UserID { id: transfer_msg3.shared_key_id, challenge: None })?;
 
     let msg4 = &mut TransferMsg4 {
         shared_key_id: transfer_msg3.shared_key_id,
