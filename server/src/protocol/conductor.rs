@@ -282,8 +282,6 @@ impl Scheduler {
                 count.time = Utc::now().naive_utc() + Duration::seconds(self.init_timeout as i64)
             }
 
-            println!("group_info_map r {:?}", self.group_info_map);
-
             //metrics
             REG_SWAP_UTXOS.with_label_values(&[&swap_size.clone().to_string(),&amount.clone().to_string()]).inc();
         } else {
@@ -354,7 +352,6 @@ impl Scheduler {
             }
             self.group_info_map.retain(|_, v| v.number != 0);
 
-            println!("group_info_map dr {:?}", self.group_info_map);
         }
         self.statechain_amount_map.remove(statechain_id, &amount[0]);
         self.poll_timeout_map.remove(statechain_id);
@@ -398,13 +395,9 @@ impl Scheduler {
             });
             let mut n_remaining = sc_id_vec.len();
 
-            println!("sc_id_vec: {:?}", sc_id_vec);
-
             if n_remaining == 0 {continue};
 
             let swap_size_map = swap_size_map.rev();
-
-            println!("swap_size_map: {:?}", swap_size_map);
 
             //Loop through swap sizes in descending order
             let mut swap_size_collect = swap_size_map.collect();
@@ -423,11 +416,16 @@ impl Scheduler {
 
                 let group = SwapGroup { amount: amount.clone(), size: swap_size.clone() };
                 let now: NaiveDateTime = Utc::now().naive_utc();
-                let count = self.group_info_map.entry(group.clone()).or_insert(GroupStatus { number: 0, time: now});
+
                 // if either group size has been met or that the countdown time has been reached with at least two registrations
                 // if countdown reached with > 1 coin, then use current group size
-                if (sc_ids.len() >= 2 && now >= count.time) {
-                    swap_size = (sc_ids.len() as u64)
+                match self.group_info_map.get(&group.clone()) {
+                    Some(count) => {
+                        if (sc_ids.len() >= 2 && now >= count.time) {
+                            swap_size = (sc_ids.len() as u64)
+                        }
+                    }
+                    _ => ()
                 }
 
                 if (n_remaining + ids_for_swap.len() >= swap_size as usize) {
@@ -1188,6 +1186,7 @@ mod tests {
     fn get_scheduler(swap_size_amounts: Vec<(u64, u64)>) -> Scheduler {
         let utxo_timeout: u32 = 6;
         let group_timeout: u32 = 8;
+        let init_timeout: u32 = 10000;
         let now: NaiveDateTime = Utc::now().naive_utc();
         let t = now + chrono::Duration::seconds(utxo_timeout as i64);
         let t_swap = now + chrono::Duration::seconds(group_timeout as i64);
@@ -1209,6 +1208,7 @@ mod tests {
         Scheduler {
             utxo_timeout,
             group_timeout,
+            init_timeout,
             statechain_swap_size_map,
             statechain_amount_map,
             group_info_map: HashMap::<SwapGroup,GroupStatus>::new(),
@@ -1458,7 +1458,7 @@ mod tests {
         let swap_group = SwapGroup { amount: 10, size: 10 };
         let groupinfo = sc_entity.get_group_info().unwrap();
 
-        assert_eq!(*groupinfo.get(&swap_group).unwrap(),1);
+        assert_eq!(groupinfo.get(&swap_group).unwrap().number,1);
     }
 
     #[test]
