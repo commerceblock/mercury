@@ -20,8 +20,6 @@ extern crate crypto;
 extern crate hex;
 extern crate jsonwebtoken as jwt;
 extern crate log4rs;
-extern crate rusoto_dynamodb;
-extern crate serde_dynamodb;
 extern crate url;
 extern crate rand;
 
