@@ -1231,7 +1231,7 @@ mod tests {
     fn get_scheduler(swap_size_amounts: Vec<(u64, u64)>) -> Scheduler {
         let utxo_timeout: u32 = 6;
         let group_timeout: u32 = 8;
-        let init_timeout: u32 = 10000;
+        let daily_epochs: u32 = 1;
         let now: NaiveDateTime = Utc::now().naive_utc();
         let t = now + chrono::Duration::seconds(utxo_timeout as i64);
         let t_swap = now + chrono::Duration::seconds(group_timeout as i64);
@@ -1253,7 +1253,7 @@ mod tests {
         Scheduler {
             utxo_timeout,
             group_timeout,
-            init_timeout,
+            daily_epochs,
             statechain_swap_size_map,
             statechain_amount_map,
             group_info_map: HashMap::<SwapGroup,GroupStatus>::new(),
