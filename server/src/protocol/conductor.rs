@@ -37,8 +37,11 @@ use rocket_okapi::openapi;
 use rocket_okapi::JsonSchema;
 use schemars;
 use bitcoin::secp256k1::Signature;
-use chrono::{NaiveDateTime, Utc, Duration};
+use chrono::{NaiveDateTime, Utc, Duration,Timelike};
 
+const MIN_AMOUNT: u64 = 100000; // bitcoin tx nlocktime cutoff
+const MAX_SWAP_SIZE: u64 = 3;
+const SECONDS_DAY: u32 = 86400;
 
 #[derive(JsonSchema)]
 #[schemars(remote = "Uuid")]
@@ -135,7 +138,7 @@ pub struct Scheduler {
     //Timeout for swap group to complete
     group_timeout: u32,
     //Time to initiate swap after group first joined
-    init_timeout: u32,
+    daily_epochs: u32,
     //State chain id to requested swap size map
     statechain_swap_size_map: BisetMap<Uuid, u64>,
     //A map of state chain registereds for swap to amount
@@ -172,7 +175,7 @@ impl Scheduler {
             group_timeout: config.group_timeout.clone(),
             #[cfg(test)]
             group_timeout: 8,
-            init_timeout: config.init_timeout.clone(),
+            daily_epochs: config.daily_epochs.clone(),
             statechain_swap_size_map: BisetMap::<Uuid, u64>::new(),
             statechain_amount_map: BisetMap::<Uuid, u64>::new(),
             group_info_map: HashMap::<SwapGroup, GroupStatus>::new(),
@@ -187,6 +190,36 @@ impl Scheduler {
             bst_sig_map: HashMap::new(),
             tb_sig_map: HashMap::new(),
         }
+    }
+
+    pub fn init_group_info_map(&mut self) -> Result<()> {
+        let epcoh_interval = SECONDS_DAY / self.daily_epochs as u32;
+
+        let now: NaiveDateTime = Utc::now().naive_utc();
+        let mn = now.num_seconds_from_midnight();
+        let next = (now.timestamp() as u32) - mn + epcoh_interval * (mn / epcoh_interval + 1);
+        let next_time = NaiveDateTime::from_timestamp(next.into(),0);
+        let status = GroupStatus { number: 0, time: next_time.clone() };
+
+        // update any expired epoch times
+        for value in self.group_info_map.values_mut() {
+            if value.time < now {
+                value.time = next_time.clone();
+            }
+        }
+
+        let group = SwapGroup { amount: MIN_AMOUNT, size: MAX_SWAP_SIZE };
+        self.group_info_map.entry(group).or_insert(status.clone());
+
+        let group = SwapGroup { amount: MIN_AMOUNT*10, size: MAX_SWAP_SIZE };
+        self.group_info_map.entry(group).or_insert(status.clone());
+
+        let group = SwapGroup { amount: MIN_AMOUNT*100, size: MAX_SWAP_SIZE };
+        self.group_info_map.entry(group).or_insert(status.clone());
+
+        let group = SwapGroup { amount: MIN_AMOUNT*1000, size: MAX_SWAP_SIZE };
+        self.group_info_map.entry(group).or_insert(status);        
+        Ok(())
     }
 
     pub fn get_swap_id(&self, statechain_id: &Uuid) -> Option<Uuid> {
@@ -273,14 +306,16 @@ impl Scheduler {
             self.statechain_swap_size_map
                 .insert(statechain_id.to_owned(), swap_size);
 
+            let epcoh_interval = SECONDS_DAY / self.daily_epochs as u32;
+            let now: NaiveDateTime = Utc::now().naive_utc();
+            let mn = now.num_seconds_from_midnight();
+            let next = (now.timestamp() as u32) - mn + epcoh_interval * (mn / epcoh_interval + 1);
+            let status = GroupStatus { number: 0, time: NaiveDateTime::from_timestamp(next.into(),0) };
+
             let group = SwapGroup { amount: amount, size: swap_size};
             let count = self.group_info_map.entry(group)
-                .or_insert( GroupStatus { number: 0, time: Utc::now().naive_utc() });
+                .or_insert(status);
             count.number += 1;
-
-            if (count.number == 2) {
-                count.time = Utc::now().naive_utc() + Duration::seconds(self.init_timeout as i64)
-            }
 
             //metrics
             REG_SWAP_UTXOS.with_label_values(&[&swap_size.clone().to_string(),&amount.clone().to_string()]).inc();
@@ -345,13 +380,15 @@ impl Scheduler {
         let amount = self.statechain_amount_map.get(statechain_id);
         if (self.statechain_amount_map.contains(&statechain_id,&amount[0])) {
             let group = SwapGroup { amount: amount[0], size: swap_size[0]};
-            let count = self.group_info_map.entry(group)
-                .or_insert( GroupStatus { number: 0, time: Utc::now().naive_utc() } );
-            if count.number > 0 {
-                count.number -= 1;
-            }
-            self.group_info_map.retain(|_, v| v.number != 0);
 
+            match self.group_info_map.get_mut(&group) {
+                Some(count) => {
+                    if count.number > 0 {
+                        count.number -= 1;
+                    }
+                }
+                _ => ()
+            }
         }
         self.statechain_amount_map.remove(statechain_id, &amount[0]);
         self.poll_timeout_map.remove(statechain_id);
@@ -469,7 +506,14 @@ impl Scheduler {
                         assert!(self.statechain_amount_map.delete(&id).len() == 1);
                     }
 
-                    self.group_info_map.remove(&group);
+                    // update the time to the next interval
+                    let epcoh_interval = SECONDS_DAY / self.daily_epochs as u32;
+                    let now2: NaiveDateTime = Utc::now().naive_utc();
+                    let mn = now2.num_seconds_from_midnight();
+                    let next = (now2.timestamp() as u32) - mn + epcoh_interval * (mn / epcoh_interval + 1);
+                    let status = GroupStatus { number: 0, time: NaiveDateTime::from_timestamp(next.into(),0) };
+
+                    self.group_info_map.insert(group,status);
 
                     info!("SCHEDULER: Created Swap ID: {}", swap_id);
                     debug!("SCHEDULER: Swap Info: {:?}", si);
@@ -627,6 +671,7 @@ impl Scheduler {
 
     pub fn update_swap_info(&mut self) -> Result<()> {
         self.update_swap_requests();
+        self.init_group_info_map();
         self.update_swaps()
     }
 

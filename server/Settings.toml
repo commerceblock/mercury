@@ -1,12 +1,12 @@
 electrum_server = "127.0.0.1:60401"
-network = "testnet"
+network = "regtest"
 required_confirmation = 0
-testing_mode = true
-lockheight_init = 1000
+testing_mode = false
+lockheight_init = 10000
 lh_decrement = 10
 
 # Fees
-fee_address = "tb1qzvv6yfeg0navfkrxpqc0fjdsu9ey4qgqqsarq4,tb1qzvv6yfeg0navfkrxpqc0fjdsu9ey4qgqqsarq4"
+fee_address = "bcrt1ql3xj35d57n3q6vd9cjae50dggjl9rm345cjglc,bcrt1ql3xj35d57n3q6vd9cjae50dggjl9rm345cjglc"
 fee_deposit = 0
 fee_withdraw = 300
 
