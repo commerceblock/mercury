@@ -358,6 +358,7 @@ impl Scheduler {
             Some(i) => {
                 for id in i.to_owned().swap_token.statechain_ids {
                     self.deregister_swap_id(&id);
+                    self.poll_timeout_map.remove(&id);
                 }
                 let swap_id = &i.swap_token.id;
                 self.swap_info_map.remove(swap_id);
