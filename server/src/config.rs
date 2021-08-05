@@ -32,16 +32,19 @@ pub struct ConductorConfig {
     /// Length of punishment for unresponsivve/misbehaving batch-transfer utxo
     pub punishment_duration: u64,
     /// The time waited after a group is started until the swap begins
-    pub init_timeout: u32, 
+    pub daily_epochs: u32,
+    /// The max swap size
+    pub max_swap_size: u32
 }
 
 impl Default for ConductorConfig {
     fn default() -> Self {
         Self {
             group_timeout: 600,
-            utxo_timeout: 60,
+            utxo_timeout: 10,
             punishment_duration: 300,
-            init_timeout: 120,
+            daily_epochs: 240,
+            max_swap_size: 5,
         }
     }
 }
