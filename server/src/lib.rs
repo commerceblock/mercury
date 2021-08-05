@@ -113,8 +113,8 @@ pub trait Database {
     ) -> Result<()>;
     fn update_sighash(&self, user_id: &Uuid, sig_hash: Hash) -> Result<()>;
     fn update_s1_pubkey(&self, user_id: &Uuid, pubkey: &GE) -> Result<()>;
-    fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<Url>>;
-    fn update_lockbox_url(&self, user_id: &Uuid, lockbox_url: &Url)->Result<()>;
+    fn get_lockbox_index(&self, user_id: &Uuid) -> Result<Option<u64>>;
+    fn update_lockbox_index(&self, user_id: &Uuid, lockbox_index: u64)->Result<()>;
     fn get_s1_pubkey(&self, user_id: &Uuid) -> Result<GE>;
     fn update_user_backup_tx(&self, user_id: &Uuid, tx: Transaction) -> Result<()>;
     fn get_user_backup_tx(&self, user_id: Uuid) -> Result<Transaction>;

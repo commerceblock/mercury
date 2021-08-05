@@ -67,12 +67,12 @@ impl Endpoints {
 
     /// Select a url from the list of active urls depending on the numerical value
     /// of the statechain identifier.
-    pub fn select(&self, statechain_id: &Uuid) -> Option<&Url> {
+    pub fn select(&self, statechain_id: &Uuid) -> Option<(&Url, index)> {
         let len = self.endpoints.len();
         if len == 0 {return None}
         let scid_bytes = statechain_id.as_bytes();
         let index = u128::from_be_bytes(*scid_bytes) % len as u128;
-        self.endpoints.get(index as usize)
+        self.endpoints.get(index as usize).map(|x|(x, index))
     }
 }
 
@@ -552,8 +552,9 @@ mod tests {
         let eps: Endpoints = Endpoints::from(urls.clone());
         for i in 0..100000 {
             let id = Uuid::from_bytes(&(i as u128).to_be_bytes()).unwrap();
-            let url_selected = eps.select(&id).unwrap();
-            let index = ( i % urls.len() as u128 ) as usize;  
+            let (url_selected, index) = eps.select(&id).unwrap();
+            let index_check = ( i % urls.len() as u128 ) as usize; 
+            assert_eq!(index, index_check); 
             assert_eq!(url_selected, &urls[index])
         }    
     }

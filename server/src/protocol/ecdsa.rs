@@ -72,6 +72,7 @@ impl Ecdsa for SCE {
         let user_id = key_gen_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
         let db = &self.database;
+        let config = &self.config;
         
         // if deposit, verify VDF
         if (key_gen_msg1.protocol == Protocol::Deposit) {
@@ -101,9 +102,9 @@ impl Ecdsa for SCE {
             Some(l) => Some(l),
             None => match &self.lockbox {
                 Some(l) => {
-                    match l.endpoint.select(&user_id){
-                        Some(l) => {
-                            db.update_lockbox_url(&user_id, &l)?;
+                    match l.endpoints.select(&user_id){
+                        Some((l,i)) => {
+                            db.update_lockbox_index(&user_id, &i)?;
                             Some(l.to_owned())
                         },
                         None => return Err(SEError::Generic(String::from("No active lockbox urls specified")))
@@ -165,9 +166,14 @@ impl Ecdsa for SCE {
         // call lockbox
         match &self.lockbox {
         Some(l) => {
-            let lockbox_url: Url = match db.get_lockbox_url(&user_id)? {
-                Some(l) => l,
-                None => return Err(SEError::Generic(format!("Lockbox url not found in database for user_id: {}", &user_id)))
+            let lockbox_url: Url = match db.get_lockbox_index(&user_id)? {
+                Some(i) => {
+                    match l.endpoints.get(&i){
+                        Some(url) => Some(url),
+                        None => return Err(SEError::Generic(format!("Lockbox url not found in config at index: {} for user_id {}", &i, &user_id)))
+                    }
+                },
+                None => return Err(SEError::Generic(format!("Lockbox index not found in database for user_id: {}", &user_id)))
             };
 
             let path: &str = "ecdsa/keygen/second";
@@ -233,28 +239,37 @@ impl Ecdsa for SCE {
 
      
 
-        match &db.get_lockbox_url(&user_id)? {
-        Some(l) => {
-            let path: &str = "ecdsa/sign/first";
-            let sign_party_one_first_message: party_one::EphKeyGenFirstMsg = post_lb(&l, path, &sign_msg1)?;
-            sign_party_one_first_msg = sign_party_one_first_message;
-        },
-        None => {
-           
-
-            let (sign_party_one_first_message, eph_ec_key_pair_party1) :
+        match &db.get_lockbox_index(&user_id)? {
+            Some(i) => {
+                match self.lockbox {
+                    Ok(l) => {
+                        l.endpoints.get(&i){
+                            Some(l) => {
+                                let path: &str = "ecdsa/sign/first";
+                                let sign_party_one_first_message: party_one::EphKeyGenFirstMsg = post_lb(&l, path, &sign_msg1)?;
+                                sign_party_one_first_msg = sign_party_one_first_message;
+                            },
+                            None => return Err(SEError::Generic(format!("Lockbox url not found in config at index: {} for user_id {}", &i, &user_id)))
+                        }
+                    },
+                    None => return Err(SEError::Generic(format!("No lockbox specified for user_id: {}", &user_id)))
+                } 
+            },
+            None => {
+                let (sign_party_one_first_message, eph_ec_key_pair_party1) :
                 //(multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::
-                    (party_one::EphKeyGenFirstMsg, party_one::EphEcKeyPair) =
+                (party_one::EphKeyGenFirstMsg, party_one::EphEcKeyPair) =
                 //(i64, i64) =
                 MasterKey1::sign_first_message();
 
-            db.update_ecdsa_sign_first(
-                user_id,
-                sign_msg1.eph_key_gen_first_message_party_two,
-                eph_ec_key_pair_party1,
-            )?;
-            sign_party_one_first_msg = sign_party_one_first_message;
-        }}
+                db.update_ecdsa_sign_first(
+                    user_id,
+                    sign_msg1.eph_key_gen_first_message_party_two,
+                    eph_ec_key_pair_party1,
+                )?;
+                sign_party_one_first_msg = sign_party_one_first_message;
+            }
+        };
         Ok(SignReply1 { msg: sign_party_one_first_msg } )
     }
 
@@ -291,7 +306,11 @@ impl Ecdsa for SCE {
 
         match &self.lockbox {
         Some(l) => {
-            let lockbox_url: Url = match db.get_lockbox_url(&user_id)? {
+            let lockbox_url: Url = match db.get_lockbox_index(&user_id)? {
+                Some(i) => {
+                    
+
+                }
                 Some(l) => l,
                 None => return Err(SEError::Generic(format!("Lockbox url not found in database for user_id: {}", &user_id)))
             };
