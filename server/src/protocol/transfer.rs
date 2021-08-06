@@ -30,6 +30,7 @@ use rocket_contrib::json::Json;
 use std::str::FromStr;
 use uuid::Uuid;
 use url::Url;
+use crate::protocol::util::Utilities;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -179,7 +180,7 @@ impl Transfer for SCE {
 
         let s2: FE;
         let s2_pub: GE;
-        match &self.database.get_lockbox_url(&user_id)? {
+        match &self.get_lockbox_url(&user_id)? {
             Some(l) => {
             let ku_send = KUSendMsg {
                 user_id,
@@ -189,7 +190,7 @@ impl Transfer for SCE {
                 o2_pub: transfer_msg4.o2_pub,
             };
             let path: &str = "ecdsa/keyupdate/first";
-            let ku_receive: KUReceiveMsg = post_lb(l, path, &ku_send)?;
+            let ku_receive: KUReceiveMsg = post_lb(&l.0, path, &ku_send)?;
             s2 = FE::new_random();
             s2_pub = ku_receive.s2_pub;
         },
@@ -310,7 +311,7 @@ impl Transfer for SCE {
         let new_user_id = finalized_data.new_shared_key_id;
 
         let sco = self.database.get_statechain_owner(statechain_id)?;
-        let lockbox_url: Option<Url> = self.database.get_lockbox_url(&sco.owner_id).map_err(|e| {dbg!("{}",&e); e} )?;
+        let lockbox_url: Option<(Url, usize)> = self.get_lockbox_url(&sco.owner_id).map_err(|e| {dbg!("{}",&e); e} )?;
 
         self.database.update_statechain_owner(
             &statechain_id,
@@ -335,8 +336,8 @@ impl Transfer for SCE {
                     shared_key_id: new_user_id,
                 };
                 let path: &str = "ecdsa/keyupdate/second";
-                let _ku_receive: KUAttest = post_lb(&l, path, &ku_send)?;
-                self.database.update_lockbox_url(&new_user_id, &l)?;
+                let _ku_receive: KUAttest = post_lb(&l.0, path, &ku_send)?;
+                self.database.update_lockbox_index(&new_user_id, &l.1)?;
             },
             None => ()
         };
@@ -655,7 +656,7 @@ mod tests {
                 chain: serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap(),
             })
         });
-        db.expect_get_lockbox_url().returning(|_| Ok(None));
+        db.expect_get_lockbox_index().returning(|_| Ok(None));
         db.expect_update_statechain_owner()
             .returning(|_, _, _| Ok(()));
         db.expect_transfer_init_user_session()
@@ -800,8 +801,8 @@ mod tests {
                 chain: serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap(),
             })
         });
-        db.expect_get_lockbox_url().returning(|_| Ok(Some(Url::parse(&mockito::server_url()).unwrap())));
-        db.expect_update_lockbox_url().returning(|_,_|Ok(()));
+        db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
+        db.expect_update_lockbox_index().returning(|_,_|Ok(()));
         db.expect_update_statechain_owner()
             .returning(|_, _, _| Ok(()));
         db.expect_transfer_init_user_session()

@@ -26,6 +26,7 @@ use rocket_okapi::openapi;
 use url::Url;
 use sha3::Sha3_256;
 use digest::Digest;
+use crate::protocol::util::Utilities;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -98,11 +99,11 @@ impl Ecdsa for SCE {
 
         let kg_first_msg;
 
-        let lockbox_url: Option<Url> = match db.get_lockbox_url(&user_id)?{
-            Some(l) => Some(l),
+        let lockbox_url: Option<Url> = match self.get_lockbox_url(&user_id)?{
+            Some(l) => Some(l.0),
             None => match &self.lockbox {
                 Some(l) => {
-                    match l.endpoints.select(&user_id){
+                    match l.endpoint.select(&user_id){
                         Some((l,i)) => {
                             db.update_lockbox_index(&user_id, &i)?;
                             Some(l.to_owned())
@@ -165,46 +166,42 @@ impl Ecdsa for SCE {
 
         // call lockbox
         match &self.lockbox {
-        Some(l) => {
-            let lockbox_url: Url = match db.get_lockbox_index(&user_id)? {
-                Some(i) => {
-                    match l.endpoints.get(&i){
-                        Some(url) => Some(url),
-                        None => return Err(SEError::Generic(format!("Lockbox url not found in config at index: {} for user_id {}", &i, &user_id)))
-                    }
-                },
-                None => return Err(SEError::Generic(format!("Lockbox index not found in database for user_id: {}", &user_id)))
-            };
+            Some(l) => {
+                let lockbox_url: Url = match self.get_lockbox_url(&user_id)?{
+                    Some(l) => l.0,
+                    None => return Err(SEError::Generic(format!("Lockbox index not found in database for user_id: {}", &user_id)))
+                };
+                
+                let path: &str = "ecdsa/keygen/second";
+                let kg_party_one_second_message: party1::KeyGenParty1Message2 = post_lb(&lockbox_url, path, &key_gen_msg2)?;
+                kg_party_one_second_msg = kg_party_one_second_message;
+            },
+            None => {
+                let party2_public: GE = key_gen_msg2.dlog_proof.pk.clone();
 
-            let path: &str = "ecdsa/keygen/second";
-            let kg_party_one_second_message: party1::KeyGenParty1Message2 = post_lb(&lockbox_url, path, &key_gen_msg2)?;
-            kg_party_one_second_msg = kg_party_one_second_message;
-        },
-        None => {
-            let party2_public: GE = key_gen_msg2.dlog_proof.pk.clone();
+                let (comm_witness, ec_key_pair) = db.get_ecdsa_witness_keypair(user_id)?;
 
-            let (comm_witness, ec_key_pair) = db.get_ecdsa_witness_keypair(user_id)?;
+                let (kg_party_one_second_message, paillier_key_pair, party_one_private): (
+                    party1::KeyGenParty1Message2,
+                    party_one::PaillierKeyPair,
+                    party_one::Party1Private,
+                ) = MasterKey1::key_gen_second_message(
+                    comm_witness,
+                    &ec_key_pair,
+                    &key_gen_msg2.dlog_proof,
+                );
 
-            let (kg_party_one_second_message, paillier_key_pair, party_one_private): (
-                party1::KeyGenParty1Message2,
-                party_one::PaillierKeyPair,
-                party_one::Party1Private,
-            ) = MasterKey1::key_gen_second_message(
-                comm_witness,
-                &ec_key_pair,
-                &key_gen_msg2.dlog_proof,
-            );
+                db.update_keygen_second_msg(
+                    &user_id,
+                    party2_public,
+                    paillier_key_pair,
+                    party_one_private,
+                )?;
 
-            db.update_keygen_second_msg(
-                &user_id,
-                party2_public,
-                paillier_key_pair,
-                party_one_private,
-            )?;
-
-            self.master_key(user_id)?;
-            kg_party_one_second_msg = kg_party_one_second_message;
-        }}
+                self.master_key(user_id)?;
+                kg_party_one_second_msg = kg_party_one_second_message;
+            }
+        }
 
         db.update_s1_pubkey(&key_gen_msg2.shared_key_id, 
             &kg_party_one_second_msg
@@ -239,21 +236,11 @@ impl Ecdsa for SCE {
 
      
 
-        match &db.get_lockbox_index(&user_id)? {
-            Some(i) => {
-                match self.lockbox {
-                    Ok(l) => {
-                        l.endpoints.get(&i){
-                            Some(l) => {
-                                let path: &str = "ecdsa/sign/first";
-                                let sign_party_one_first_message: party_one::EphKeyGenFirstMsg = post_lb(&l, path, &sign_msg1)?;
-                                sign_party_one_first_msg = sign_party_one_first_message;
-                            },
-                            None => return Err(SEError::Generic(format!("Lockbox url not found in config at index: {} for user_id {}", &i, &user_id)))
-                        }
-                    },
-                    None => return Err(SEError::Generic(format!("No lockbox specified for user_id: {}", &user_id)))
-                } 
+        match &self.get_lockbox_url(&user_id)? {
+           Some(l) => {
+                let path: &str = "ecdsa/sign/first";
+                let sign_party_one_first_message: party_one::EphKeyGenFirstMsg = post_lb(&l.0, path, &sign_msg1)?;
+                sign_party_one_first_msg = sign_party_one_first_message;
             },
             None => {
                 let (sign_party_one_first_message, eph_ec_key_pair_party1) :
@@ -306,13 +293,9 @@ impl Ecdsa for SCE {
 
         match &self.lockbox {
         Some(l) => {
-            let lockbox_url: Url = match db.get_lockbox_index(&user_id)? {
-                Some(i) => {
-                    
-
-                }
-                Some(l) => l,
-                None => return Err(SEError::Generic(format!("Lockbox url not found in database for user_id: {}", &user_id)))
+            let lockbox_url: Url = match self.get_lockbox_url(&user_id)?{
+                Some(l) => l.0,
+                None => return Err(SEError::Generic(format!("Lockbox index not found in database for user_id: {}", &user_id)))
             };
 
             let path: &str = "ecdsa/sign/second";
@@ -473,7 +456,7 @@ pub mod tests {
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_create_user_session().returning(|_, _, _, _| Ok(()));
         db.expect_get_user_auth().returning(move |_| Ok(user_id));
-        db.expect_get_lockbox_url().returning(|_| Ok(Some(Url::from_str(&mockito::server_url()).unwrap())));
+        db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
         db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
         db.expect_update_public_master().returning(|_,_| Ok(()));
         db.expect_get_challenge().returning(move |_| Ok(challenge.clone()));
@@ -549,7 +532,7 @@ pub mod tests {
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_create_user_session().returning(|_, _, _, _| Ok(()));
         db.expect_get_user_auth().returning(move |_| Ok(user_id));
-        db.expect_get_lockbox_url().returning(|_| Ok(Some(Url::parse(&mockito::server_url()).unwrap())));
+        db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
         db.expect_get_user_backup_tx().returning(move |_| Ok(tx_backup.clone()));
         db.expect_update_user_backup_tx().returning(|_, _| Ok(()));
         let hexhash = r#"

@@ -67,12 +67,16 @@ impl Endpoints {
 
     /// Select a url from the list of active urls depending on the numerical value
     /// of the statechain identifier.
-    pub fn select(&self, statechain_id: &Uuid) -> Option<(&Url, index)> {
+    pub fn select(&self, statechain_id: &Uuid) -> Option<(&Url, usize)> {
         let len = self.endpoints.len();
         if len == 0 {return None}
         let scid_bytes = statechain_id.as_bytes();
         let index = u128::from_be_bytes(*scid_bytes) % len as u128;
-        self.endpoints.get(index as usize).map(|x|(x, index))
+        self.get(&(index as usize)).map(|x|(x, index as usize))
+    }
+
+    pub fn get(&self, index: &usize) -> Option<&Url> {
+        self.endpoints.get(index.to_owned())
     }
 }
 
@@ -505,6 +509,8 @@ mock! {
             &self,
             recovery_request: Vec<RecoveryRequest>,
         ) -> util::Result<Vec<RecoveryDataMsg>>;
+        fn get_lockbox_url(&self, user_id: &Uuid
+        ) -> util::Result<Option<(Url, usize)>>;
     }
     trait Withdraw{
         fn verify_statechain_sig(&self,

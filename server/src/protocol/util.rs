@@ -90,6 +90,9 @@ pub trait Utilities {
 
     // get amount histogram of statecoins
     fn get_coin_info(&self) -> Result<CoinValueInfo>;
+
+    // get lockbox url
+    fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<(Url,usize)>>;
 }
 
 impl Utilities for SCE {
@@ -445,6 +448,30 @@ impl Utilities for SCE {
 
     fn get_coin_info(&self) -> Result<CoinValueInfo> {
         Ok(self.database.get_coins_histogram()?)
+    }
+
+    fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<(Url,usize)>> {
+        let db = &self.database;
+        let cf = &self.config;
+
+        match db.get_lockbox_index(user_id)? {
+            Some(i) => {
+                match &self.lockbox {
+                    Some(l) => {
+                        match l.endpoint.get(&i) {
+                            Some(url) => Ok(Some((url.clone(), i))),
+                            None => Err(SEError::Generic(format!(
+                                "get_lockbox_url - no endpoint with index {} for user_id {}",
+                                &i, &user_id))) 
+                        }
+                    },
+                    None => return Err(SEError::Generic(format!(
+                        "get_lockbox_url - lockbox not configured"))),
+
+                }
+            },
+            None => Ok(None),
+        }
     }
 }
 
