@@ -40,7 +40,6 @@ use bitcoin::secp256k1::Signature;
 use chrono::{NaiveDateTime, Utc, Duration,Timelike};
 
 const MIN_AMOUNT: u64 = 100000; // bitcoin tx nlocktime cutoff
-const MAX_SWAP_SIZE: u64 = 3;
 const SECONDS_DAY: u32 = 86400;
 
 #[derive(JsonSchema)]
@@ -139,6 +138,8 @@ pub struct Scheduler {
     group_timeout: u32,
     //Time to initiate swap after group first joined
     daily_epochs: u32,
+    //init swap group size,
+    max_swap_size: u32,
     //State chain id to requested swap size map
     statechain_swap_size_map: BisetMap<Uuid, u64>,
     //A map of state chain registereds for swap to amount
@@ -176,6 +177,7 @@ impl Scheduler {
             #[cfg(test)]
             group_timeout: 8,
             daily_epochs: config.daily_epochs.clone(),
+            max_swap_size: config.max_swap_size.clone(),
             statechain_swap_size_map: BisetMap::<Uuid, u64>::new(),
             statechain_amount_map: BisetMap::<Uuid, u64>::new(),
             group_info_map: HashMap::<SwapGroup, GroupStatus>::new(),
@@ -208,16 +210,16 @@ impl Scheduler {
             }
         }
 
-        let group = SwapGroup { amount: MIN_AMOUNT, size: MAX_SWAP_SIZE };
+        let group = SwapGroup { amount: MIN_AMOUNT, size: self.max_swap_size as u64 };
         self.group_info_map.entry(group).or_insert(status.clone());
 
-        let group = SwapGroup { amount: MIN_AMOUNT*10, size: MAX_SWAP_SIZE };
+        let group = SwapGroup { amount: MIN_AMOUNT*10, size: self.max_swap_size as u64 };
         self.group_info_map.entry(group).or_insert(status.clone());
 
-        let group = SwapGroup { amount: MIN_AMOUNT*100, size: MAX_SWAP_SIZE };
+        let group = SwapGroup { amount: MIN_AMOUNT*100, size: self.max_swap_size as u64 };
         self.group_info_map.entry(group).or_insert(status.clone());
 
-        let group = SwapGroup { amount: MIN_AMOUNT*1000, size: MAX_SWAP_SIZE };
+        let group = SwapGroup { amount: MIN_AMOUNT*1000, size: self.max_swap_size as u64 };
         self.group_info_map.entry(group).or_insert(status);        
         Ok(())
     }
@@ -356,6 +358,7 @@ impl Scheduler {
             Some(i) => {
                 for id in i.to_owned().swap_token.statechain_ids {
                     self.deregister_swap_id(&id);
+                    self.poll_timeout_map.remove(&id);
                 }
                 let swap_id = &i.swap_token.id;
                 self.swap_info_map.remove(swap_id);
@@ -1232,6 +1235,7 @@ mod tests {
         let utxo_timeout: u32 = 6;
         let group_timeout: u32 = 8;
         let daily_epochs: u32 = 1;
+        let max_swap_size: u32 = 3;
         let now: NaiveDateTime = Utc::now().naive_utc();
         let t = now + chrono::Duration::seconds(utxo_timeout as i64);
         let t_swap = now + chrono::Duration::seconds(group_timeout as i64);
@@ -1254,6 +1258,7 @@ mod tests {
             utxo_timeout,
             group_timeout,
             daily_epochs,
+            max_swap_size,
             statechain_swap_size_map,
             statechain_amount_map,
             group_info_map: HashMap::<SwapGroup,GroupStatus>::new(),
