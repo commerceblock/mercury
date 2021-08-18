@@ -3838,7 +3838,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "0.2.15"
+version = "0.2.17"
 dependencies = [
  "bisetmap",
  "bitcoin",

@@ -452,7 +452,6 @@ impl Utilities for SCE {
 
     fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<(Url,usize)>> {
         let db = &self.database;
-        let cf = &self.config;
 
         match db.get_lockbox_index(user_id)? {
             Some(i) => {

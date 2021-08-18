@@ -838,10 +838,8 @@ mod tests {
         db.expect_update_finalize_batch_data()
             .returning(|_, _| Ok(()));
 
-        let mut sc_entity = test_sc_entity(db, None);
+        let sc_entity = test_sc_entity(db, Some(mockito::server_url()));
         let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
-
-        sc_entity.lockbox.as_mut().map(|l| l.endpoint = Endpoints::from(vec![Url::parse(&mockito::server_url()).unwrap()]));
 
         // simulate lockbox secret operations
         let kp = ECDSAKeypair {
@@ -906,6 +904,6 @@ mod tests {
                 .contains("Error: State chain siganture provided does not match state chain at")),
         }
         // Expected successful run
-        assert!(sc_entity.transfer_receiver(transfer_msg_4.clone()).is_ok());
+        sc_entity.transfer_receiver(transfer_msg_4.clone()).expect("expected transfer_receiver to return Ok");
     }
 }
