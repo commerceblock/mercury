@@ -35,6 +35,7 @@ use rocket_okapi::JsonSchema;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 use url::Url;
+use std::convert::TryInto;
 
 use monotree::database::MemCache;
 
@@ -267,7 +268,7 @@ impl PGDatabase {
                 "
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
-                lockbox varchar,
+                lockbox int8,
                 PRIMARY KEY (id)
             );",
                 Table::Lockbox.to_string(),
@@ -769,9 +770,9 @@ impl Database for PGDatabase {
         )
     }
 
-    fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<Url>> {
-        match self.get_1::<String>(*user_id, Table::Lockbox, vec![Column::Lockbox]){
-            Ok(r) => Ok(Some(Url::parse(&r)?)),
+    fn get_lockbox_index(&self, user_id: &Uuid) -> Result<Option<usize>> {
+        match self.get_1::<i64>(*user_id, Table::Lockbox, vec![Column::Lockbox]){
+            Ok(r) => Ok(Some(r as usize)),
             Err(e) => match e {
                         SEError::DBError(ref error_type, ref _message) => match error_type {
                             NoDataForID => Ok(None),
@@ -785,13 +786,12 @@ impl Database for PGDatabase {
             }
         }
     }
-    
-
-    fn update_lockbox_url(&self, user_id: &Uuid, lockbox_url: &Url)->Result<()>{
+  
+    fn update_lockbox_index(&self, user_id: &Uuid, lockbox_index: &usize)->Result<()>{
         self.update(user_id,
                     Table::Lockbox,
                     vec![Column::Lockbox],
-                    vec![&String::from(lockbox_url.as_str())])
+                    vec![&(*lockbox_index as i64)])
     }
 
     fn get_s1_pubkey(&self, user_id: &Uuid) -> Result<GE> {

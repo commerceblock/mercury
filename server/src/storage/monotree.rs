@@ -337,11 +337,11 @@ impl Database for MemoryDB {
         unimplemented!()
     }
     
-    fn get_lockbox_url(&self, _user_id: &uuid::Uuid) -> crate::Result<Option<Url>>{
+    fn get_lockbox_index(&self, _user_id: &uuid::Uuid) -> crate::Result<Option<usize>>{
         unimplemented!()
     }
-    
-    fn update_lockbox_url(&self, _user_id: &uuid::Uuid, _lockbox_url: &Url)->crate::Result<()>{
+
+    fn update_lockbox_index(&self, _user_id: &uuid::Uuid, _index: &usize)->crate::Result<()>{
         unimplemented!()
     }
 
