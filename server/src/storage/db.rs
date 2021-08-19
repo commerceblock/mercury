@@ -665,8 +665,9 @@ impl PGDatabase {
 }
 
 impl Database for PGDatabase {
-    fn init(&self) -> Result<()> {
-        self.make_tables()
+    fn init(&mut self) -> Result<()> {
+        self.make_tables()?;
+        self.init_coins_histo()
     }
 
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self {
@@ -678,7 +679,7 @@ impl Database for PGDatabase {
                 batch_on: false,
                 batch: HashMap::new(),
             },
-            //coins_histo: CoinValueInfo::new(),
+            coins_histo: CoinValueInfo::new(),
         }
     }
 
@@ -691,7 +692,7 @@ impl Database for PGDatabase {
                 batch_on: false,
                 batch: HashMap::new(),
             },
-            //coins_histo: CoinValueInfo::new(),
+            coins_histo: CoinValueInfo::new(),
         }
     }
 
@@ -725,21 +726,25 @@ impl Database for PGDatabase {
         self.drop_tables()
     }
 
-    fn get_coins_histogram(&self) -> Result<CoinValueInfo> {
+    fn get_coins_histogram(&self) -> CoinValueInfo {
+        self.coins_histo.clone()
+    }
+
+    fn init_coins_histo(&mut self) -> Result<()> {
         let dbr = self.database_r()?;
         let statement =
             dbr.prepare(&format!("SELECT amount,count(1) FROM {} GROUP BY amount", Table::StateChain.to_string(),))?;
         let rows = statement.query(&[])?;
         let mut coins_hist = CoinValueInfo::new();
         if rows.is_empty() {
-            return Ok(coins_hist);
+            return Ok(());
         };
         for row in &rows {
             let amount: u64 = row.get_opt::<usize, i64>(0).unwrap().unwrap() as u64;
             let count: u64 = row.get_opt::<usize, i64>(1).unwrap().unwrap() as u64;
             coins_hist.values.insert(amount,count);
         }
-        Ok(coins_hist)
+        Ok(())
     }
 
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid> {

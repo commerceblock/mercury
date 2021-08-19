@@ -491,7 +491,7 @@ mock! {
     }
     trait Utilities {
         fn get_fees(&self) -> util::Result<StateEntityFeeInfoAPI>;
-        fn get_coin_info(&self) -> util::Result<CoinValueInfo>;
+        fn get_coin_info(&self) -> CoinValueInfo;
         /// API: Generates sparse merkle tree inclusion proof for some key in a tree with some root.
         fn get_smt_proof(
             &self,
