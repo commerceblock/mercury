@@ -91,6 +91,7 @@ pub struct PGDatabaseSmt {
 pub struct PGDatabase {
     pub pool: Option<r2d2::Pool<PostgresConnectionManager>>,
     pub smt: PGDatabaseSmt,
+    //pub coins_histo: CoinValueInfo,
 }
 
 use structs::*;

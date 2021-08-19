@@ -678,6 +678,7 @@ impl Database for PGDatabase {
                 batch_on: false,
                 batch: HashMap::new(),
             },
+            //coins_histo: CoinValueInfo::new(),
         }
     }
 
@@ -690,6 +691,7 @@ impl Database for PGDatabase {
                 batch_on: false,
                 batch: HashMap::new(),
             },
+            //coins_histo: CoinValueInfo::new(),
         }
     }
 
@@ -1077,12 +1079,27 @@ impl Database for PGDatabase {
         state_chain: StateChain,
         amount: u64,
     ) -> Result<()> {
+        //let prev_statechain_amount = &self.get_statechain_amount(*statechain_id)?.amount;
+        //self.coins_histo.update(amount,prev_statechain_amount)?;
+        
+        //match 
         self.update(
             statechain_id,
             Table::StateChain,
             vec![Column::Chain, Column::Amount],
             vec![&Self::ser(state_chain)?, &(amount as i64)], // signals withdrawn funds
         )
+        /*
+        {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                //Revert the local coins_histo change if the database update failed.
+                self.coins_histo.update(prev_statechain_amount, amount)
+                    .expect("Expected too be able to revert the coins_histo");
+                Err(e)
+            }
+        }
+        */
     }
 
     fn create_statechain(
@@ -1092,6 +1109,7 @@ impl Database for PGDatabase {
         state_chain: &StateChain,
         amount: &i64,
     ) -> Result<()> {
+
         self.insert(statechain_id, Table::StateChain)?;
         self.update(
             statechain_id,
@@ -1109,6 +1127,8 @@ impl Database for PGDatabase {
                 &user_id.to_owned(),
             ],
         )
+
+        //self.coins_histo.insert(amount);
     }
 
     fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain> {

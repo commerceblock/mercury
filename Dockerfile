@@ -35,6 +35,7 @@ WORKDIR /mercury
 RUN set -ex \
     && apt update \
     && apt install -y \
+        apt-utils \
         lsb-core \
         software-properties-common \
         apt-transport-https \
@@ -92,7 +93,7 @@ COPY ./docker-entrypoint.sh /docker-entrypoint.sh
 
 RUN set -ex \
     && apt update \
-    && apt install -y libssl-dev apt-transport-https ca-certificates \
+    && apt install -y apt-utils libssl-dev apt-transport-https ca-certificates \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
