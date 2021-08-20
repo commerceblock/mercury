@@ -7,6 +7,7 @@ use monotree::database::{Database as MonotreeDatabase, MemCache, MemoryDB};
 use monotree::Errors;
 use std::collections::HashMap;
 use url::Url;
+use shared_lib::structs::CoinValueInfo;
 
 pub type Result<T> = std::result::Result<T, Errors>;
 
@@ -24,6 +25,7 @@ impl MonotreeDatabase for PGDatabase {
                 batch_on: false,
                 batch: HashMap::new(),
             },
+            coins_histo: CoinValueInfo::new(),
         }
     }
     /// Monotree get
@@ -312,7 +314,10 @@ impl Database for MemoryDB {
     fn has_withdraw_sc_sig(&self, _user_id: uuid::Uuid) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_coins_histogram(&self) -> crate::Result<shared_lib::structs::CoinValueInfo> {
+    fn get_coins_histogram(&self) -> shared_lib::structs::CoinValueInfo {
+        unimplemented!()
+    }
+    fn init_coins_histo(&mut self) -> crate::Result<()> {
         unimplemented!()
     }
     fn update_withdraw_sc_sig(
@@ -704,7 +709,7 @@ impl Database for MemoryDB {
     fn reset(&self) -> crate::Result<()> {
         unimplemented!()
     }
-    fn init(&self) -> crate::Result<()> {
+    fn init(&mut self) -> crate::Result<()> {
         unimplemented!()
     }
     fn get_ecdsa_master_key_input(

@@ -91,6 +91,7 @@ pub struct PGDatabaseSmt {
 pub struct PGDatabase {
     pub pool: Option<r2d2::Pool<PostgresConnectionManager>>,
     pub smt: PGDatabaseSmt,
+    pub coins_histo: CoinValueInfo,
 }
 
 use structs::*;
@@ -103,7 +104,8 @@ pub trait Database {
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self;
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid>;
     fn has_withdraw_sc_sig(&self, user_id: Uuid) -> Result<()>;
-    fn get_coins_histogram(&self) -> Result<CoinValueInfo>;
+    fn get_coins_histogram(&self) -> CoinValueInfo;
+    fn init_coins_histo(&mut self) -> Result<()>;
     fn update_withdraw_sc_sig(&self, user_id: &Uuid, sig: StateChainSig) -> Result<()>;
     fn update_withdraw_tx_sighash(
         &self,
@@ -253,7 +255,7 @@ pub trait Database {
     fn get_tx_withdraw(&self, user_id: Uuid) -> Result<Transaction>;
     fn update_tx_withdraw(&self, user_id: Uuid, tx: Transaction) -> Result<()>;
     fn reset(&self) -> Result<()>;
-    fn init(&self) -> Result<()>;
+    fn init(&mut self) -> Result<()>;
     fn get_ecdsa_master_key_input(&self, user_id: Uuid) -> Result<ECDSAMasterKeyInput>;
     fn update_public_master(&self, user_id: &Uuid, master_public: Party1Public) -> Result<()>;
     fn update_shared_pubkey(&self, user_id: Uuid, pubkey: GE) -> Result<()>;

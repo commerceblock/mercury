@@ -89,7 +89,7 @@ pub trait Utilities {
     fn get_recovery_data(&self, recovery_request: Vec<RecoveryRequest>) -> Result<Vec<RecoveryDataMsg>>;
 
     // get amount histogram of statecoins
-    fn get_coin_info(&self) -> Result<CoinValueInfo>;
+    fn get_coin_info(&self) -> CoinValueInfo;
 
     // get lockbox url
     fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<(Url,usize)>>;
@@ -446,8 +446,8 @@ impl Utilities for SCE {
         return Ok(recovery_data);
     }
 
-    fn get_coin_info(&self) -> Result<CoinValueInfo> {
-        Ok(self.database.get_coins_histogram()?)
+    fn get_coin_info(&self) -> CoinValueInfo {
+        self.database.get_coins_histogram()
     }
 
     fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<(Url,usize)>> {
@@ -488,10 +488,7 @@ pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
 /// # Get the current statecoin amount histogram
 #[get("/info/coins", format = "json")]
 pub fn get_coin_info(sc_entity: State<SCE>) -> Result<Json<CoinValueInfo>> {
-    match sc_entity.get_coin_info() {
-        Ok(res) => return Ok(Json(res)),
-        Err(e) => return Err(e),
-    }
+    Ok(Json(sc_entity.get_coin_info()))
 }
 
 #[openapi]
