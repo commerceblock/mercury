@@ -40,7 +40,9 @@ RUN set -ex \
         software-properties-common \
         apt-transport-https \
         ca-certificates \
-    && bash -c "$(wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && su -c ./llvm.sh 12)" \
+    && wget https://apt.llvm.org/llvm.sh \
+    && chmod +x llvm.sh \
+    && ./llvm.sh 12 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=bitcoin /opt/bitcoin-${BITCOIN_VERSION}/bin/bitcoin-cli /usr/local/bin/
