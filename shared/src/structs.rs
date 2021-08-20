@@ -2,6 +2,7 @@
 //!
 //! Struct definitions used in State entity protocols
 
+use crate::error::SharedLibError;
 use crate::state_chain::{State, StateChainSig};
 use crate::Root;
 use bitcoin::{OutPoint, Transaction, TxIn, TxOut};
@@ -274,6 +275,31 @@ pub struct CoinValueInfo {
 impl CoinValueInfo {
     pub fn new() -> Self {
         Self { values: HashMap::<u64,u64>::new() }
+    }
+
+    fn update(
+        &mut self,
+        amount: &u64,
+        prev_amount: &u64,
+    ) -> crate::Result<()> {
+        match self.values.remove(prev_amount){
+            Some(c) => {
+                if c > 1 {
+                    self.values.insert(*prev_amount, c-1);
+                }
+                self.increment(amount);
+                Ok(())
+            },
+            None =>  Err(SharedLibError::Generic(String::from("CoinValueInfo - update error: previous amount not found"))),
+        }
+    }
+
+    fn increment(
+        &mut self,
+        amount: &u64,
+    ) {
+        let new_count = self.values.get(amount).map_or(1, |c| c+1);
+        self.values.insert(*amount, new_count); 
     }
 }
 
@@ -947,5 +973,26 @@ mod tests {
         assert_ne!(msg_ref, &msg_clone);
         msg_ref.decrypt(&priv_k).unwrap();
         assert_eq!(msg_ref, &msg_clone);
+    }
+
+    #[test]
+    fn test_coinvalueinfo() {
+        let mut cvi = CoinValueInfo::new();
+        assert!(cvi.update(&(1 as u64), &(1 as u64)).is_err());
+        cvi.increment(&(1 as u64));
+        cvi.increment(&(1 as u64));
+        cvi.increment(&(1 as u64));
+        cvi.increment(&(1 as u64));
+        cvi.update(&(10 as u64), &(1 as u64)).unwrap();
+        cvi.update(&(20 as u64), &(10 as u64)).unwrap();
+        assert!(cvi.update(&(20 as u64), &(10 as u64)).is_err());
+        cvi.update(&(3 as u64), &(1 as u64));
+        cvi.increment(&(2 as u64));
+        let mut testMap = HashMap::<u64, u64>::new();
+        testMap.insert(3 as u64, 1 as u64);
+        testMap.insert(20 as u64, 1 as u64);
+        testMap.insert(1 as u64, 2 as u64);
+        testMap.insert(2 as u64, 1 as u64);
+        assert_eq!(cvi.values, testMap); 
     }
 }

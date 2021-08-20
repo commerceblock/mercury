@@ -35,6 +35,7 @@ use rocket_okapi::JsonSchema;
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 use url::Url;
+use std::convert::TryInto;
 
 use monotree::database::MemCache;
 
@@ -267,7 +268,7 @@ impl PGDatabase {
                 "
             CREATE TABLE IF NOT EXISTS {} (
                 id uuid NOT NULL,
-                lockbox varchar,
+                lockbox int8,
                 PRIMARY KEY (id)
             );",
                 Table::Lockbox.to_string(),
@@ -665,8 +666,9 @@ impl PGDatabase {
 }
 
 impl Database for PGDatabase {
-    fn init(&self) -> Result<()> {
-        self.make_tables()
+    fn init(&mut self) -> Result<()> {
+        self.make_tables()?;
+        self.init_coins_histo()
     }
 
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self {
@@ -678,6 +680,7 @@ impl Database for PGDatabase {
                 batch_on: false,
                 batch: HashMap::new(),
             },
+            coins_histo: CoinValueInfo::new(),
         }
     }
 
@@ -690,6 +693,7 @@ impl Database for PGDatabase {
                 batch_on: false,
                 batch: HashMap::new(),
             },
+            coins_histo: CoinValueInfo::new(),
         }
     }
 
@@ -723,21 +727,25 @@ impl Database for PGDatabase {
         self.drop_tables()
     }
 
-    fn get_coins_histogram(&self) -> Result<CoinValueInfo> {
+    fn get_coins_histogram(&self) -> CoinValueInfo {
+        self.coins_histo.clone()
+    }
+
+    fn init_coins_histo(&mut self) -> Result<()> {
         let dbr = self.database_r()?;
         let statement =
             dbr.prepare(&format!("SELECT amount,count(1) FROM {} GROUP BY amount", Table::StateChain.to_string(),))?;
         let rows = statement.query(&[])?;
         let mut coins_hist = CoinValueInfo::new();
         if rows.is_empty() {
-            return Ok(coins_hist);
+            return Ok(());
         };
         for row in &rows {
             let amount: u64 = row.get_opt::<usize, i64>(0).unwrap().unwrap() as u64;
             let count: u64 = row.get_opt::<usize, i64>(1).unwrap().unwrap() as u64;
             coins_hist.values.insert(amount,count);
         }
-        Ok(coins_hist)
+        Ok(())
     }
 
     fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid> {
@@ -769,9 +777,9 @@ impl Database for PGDatabase {
         )
     }
 
-    fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<Url>> {
-        match self.get_1::<String>(*user_id, Table::Lockbox, vec![Column::Lockbox]){
-            Ok(r) => Ok(Some(Url::parse(&r)?)),
+    fn get_lockbox_index(&self, user_id: &Uuid) -> Result<Option<usize>> {
+        match self.get_1::<i64>(*user_id, Table::Lockbox, vec![Column::Lockbox]){
+            Ok(r) => Ok(Some(r as usize)),
             Err(e) => match e {
                         SEError::DBError(ref error_type, ref _message) => match error_type {
                             NoDataForID => Ok(None),
@@ -785,13 +793,12 @@ impl Database for PGDatabase {
             }
         }
     }
-    
-
-    fn update_lockbox_url(&self, user_id: &Uuid, lockbox_url: &Url)->Result<()>{
+  
+    fn update_lockbox_index(&self, user_id: &Uuid, lockbox_index: &usize)->Result<()>{
         self.update(user_id,
                     Table::Lockbox,
                     vec![Column::Lockbox],
-                    vec![&String::from(lockbox_url.as_str())])
+                    vec![&(*lockbox_index as i64)])
     }
 
     fn get_s1_pubkey(&self, user_id: &Uuid) -> Result<GE> {
@@ -1077,12 +1084,27 @@ impl Database for PGDatabase {
         state_chain: StateChain,
         amount: u64,
     ) -> Result<()> {
+        //let prev_statechain_amount = &self.get_statechain_amount(*statechain_id)?.amount;
+        //self.coins_histo.update(amount,prev_statechain_amount)?;
+        
+        //match 
         self.update(
             statechain_id,
             Table::StateChain,
             vec![Column::Chain, Column::Amount],
             vec![&Self::ser(state_chain)?, &(amount as i64)], // signals withdrawn funds
         )
+        /*
+        {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                //Revert the local coins_histo change if the database update failed.
+                self.coins_histo.update(prev_statechain_amount, amount)
+                    .expect("Expected too be able to revert the coins_histo");
+                Err(e)
+            }
+        }
+        */
     }
 
     fn create_statechain(
@@ -1092,6 +1114,7 @@ impl Database for PGDatabase {
         state_chain: &StateChain,
         amount: &i64,
     ) -> Result<()> {
+
         self.insert(statechain_id, Table::StateChain)?;
         self.update(
             statechain_id,
@@ -1109,6 +1132,8 @@ impl Database for PGDatabase {
                 &user_id.to_owned(),
             ],
         )
+
+        //self.coins_histo.insert(amount);
     }
 
     fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain> {
