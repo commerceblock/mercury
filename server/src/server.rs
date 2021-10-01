@@ -35,6 +35,10 @@ use crate::error::SEError;
 use std::convert::TryInto;
 use url::Url;
 
+use std::num::NonZeroU32;
+use nonzero_ext::*;
+use governor::{Quota, RateLimiter, clock::DefaultClock, state::keyed::DashMapStateStore};
+
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
     IntCounter::new("deposit_counter", "Total completed deposits")
@@ -103,6 +107,7 @@ pub struct StateChainEntity<
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
     pub scheduler: Option<Arc<Mutex<Scheduler>>>,
     pub lockbox: Option<Lockbox>,
+    pub rate_limiter: Arc<RateLimiter<String, DashMapStateStore<String> , DefaultClock> >
 }
 
 impl<
@@ -145,12 +150,16 @@ impl<
             Mode::Core => (init_lb(&config_rs), None)
         };
 
+        //Construct a keyed rate limiter.
+        let rate_limiter = Arc::new(RateLimiter::dashmap(Quota::per_second(nonzero!(1u32))));
+
         let sce = Self {
             config: config_rs,
             database: db,
             smt: Arc::new(Mutex::new(smt)),
             scheduler,
             lockbox,
+            rate_limiter
         };
 
         match &sce.scheduler {

@@ -23,6 +23,7 @@ use rocket_okapi::response::OpenApiResponder;
 use rocket_okapi::Result as OpenApiResult;
 use okapi::openapi3::Responses;
 use uuid;
+use governor::{NotUntil, clock::{QuantaInstant}};
 
 
 /// State Entity library specific errors
@@ -50,6 +51,8 @@ pub enum SEError {
     TransferBatchEnded(String),
     /// Lockbox error
     LockboxError(String),
+    /// Rate limit error
+    RateLimitError(String),
 }
 
 impl From<String> for SEError {
@@ -127,6 +130,17 @@ impl From<Box<dyn std::error::Error>>
     }
 }
 
+
+impl From<NotUntil<'_, QuantaInstant>>
+    for SEError{
+        fn from(
+            e: NotUntil<'_, QuantaInstant>
+        ) -> SEError {
+            SEError::RateLimitError(format!("{:?}",e.earliest_possible()))
+        }
+    }
+
+
 /// DB error types
 #[derive(Debug, Deserialize, JsonSchema)]
 pub enum DBErrorType {
@@ -167,6 +181,7 @@ impl fmt::Display for SEError {
             SEError::TryAgain(ref e) => write!(f, "Error: try again: {}", e),
             SEError::TransferBatchEnded(ref e) => write!(f, "Error: Transfer batch ended. {}", e),
             SEError::LockboxError(ref e) => write!(f, "Lockbox Error: {}", e),
+            SEError::RateLimitError(ref e) => write!(f, "Not available until {} due to a rate limitation.", e),
         }
     }
 }

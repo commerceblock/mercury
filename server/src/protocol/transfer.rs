@@ -164,6 +164,8 @@ impl Transfer for SCE {
 
     fn transfer_receiver(&self, mut transfer_msg4: TransferMsg4) -> Result<TransferMsg5> {
 
+        self.rate_limiter.check_key(&String::from("lockbox"))?;
+
         let user_id = transfer_msg4.shared_key_id;
         let statechain_id = transfer_msg4.statechain_id;
 
@@ -299,6 +301,9 @@ impl Transfer for SCE {
     /// This function is called immediately in the regular transfer case or after confirmation of atomic
     /// transfers completion in the batch transfer case.
     fn transfer_finalize(&self, finalized_data: &TransferFinalizeData) -> Result<()> {
+      
+        self.rate_limiter.check_key(&String::from("lockbox"))?;
+      
         let statechain_id = finalized_data.statechain_id;
 
         info!("TRANSFER_FINALIZE: State Chain ID: {}", statechain_id);
