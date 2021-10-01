@@ -12,6 +12,8 @@ use std::str::FromStr;
 use std::vec::Vec;
 use uuid::Uuid;
 use url::Url;
+use std::num::NonZeroU32;
+use nonzero_ext::*;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")] 
@@ -99,7 +101,7 @@ pub struct RocketConfig {
     /// Rocket address
     pub address: String,
     /// Rocket port
-    pub port: u16,
+    pub port: u16
 }
 
 impl Default for RocketConfig {
@@ -107,7 +109,7 @@ impl Default for RocketConfig {
         RocketConfig {
             keep_alive: 100,
             address: "0.0.0.0".to_string(),
-            port: 8000,
+            port: 8000
         }
     }
 }
@@ -154,7 +156,9 @@ pub struct Config {
     /// Rocket config
     pub rocket: RocketConfig,
     /// Conductor config
-    pub conductor: ConductorConfig
+    pub conductor: ConductorConfig,
+    /// Rate limit (per second) for certain API calls - must be non-zero
+    pub rate_limit: NonZeroU32
 }
 
 impl Default for Config {
@@ -180,6 +184,7 @@ impl Default for Config {
             mainstay: Some(MainstayConfig::default()),
             rocket: RocketConfig::default(),
             conductor: ConductorConfig::default(),
+            rate_limit: nonzero!(1u32),
         }
     }
 }
@@ -296,6 +301,12 @@ mod tests {
         let urls_str = "[\"https://url1.net\", \"https://url2.net\", \"https://url3.net\"]";
         let urls_deser: Option<Vec<Url>> = serde_json::from_str(urls_str).unwrap();
         assert_eq!(urls, urls_deser);
+    }
+
+    #[test]
+    fn test_rate_limit_config() {
+
+
     }
 }
 

@@ -60,7 +60,8 @@ pub mod tests {
             },
             _ => assert!(false, "expected RateLimitError")
         }
-        thread::sleep(Duration::from_secs(1));
+
+        thread::sleep(Duration::from_millis(1000u64 / (sc_entity.config.rate_limit.get() as u64) + 1u64));
         assert_eq!(sc_entity.ping_rate_limited().unwrap(), ());
     }
 }

@@ -151,7 +151,7 @@ impl<
         };
 
         //Construct a keyed rate limiter.
-        let rate_limiter = Arc::new(RateLimiter::dashmap(Quota::per_second(nonzero!(1u32))));
+        let rate_limiter = Arc::new(RateLimiter::dashmap(Quota::per_second(config_rs.rate_limit)));
 
         let sce = Self {
             config: config_rs,
