@@ -75,6 +75,9 @@ use shared_lib::{state_chain::*, structs::TransferMsg3, Root, structs::CoinValue
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 use url::Url;
+use std::sync::MutexGuard;
+use crate::server::UserIDs;
+use std::sync::{Arc, Mutex};
 
 #[database("postgres_w")]
 pub struct DatabaseW(postgres::Connection);
@@ -91,7 +94,6 @@ pub struct PGDatabaseSmt {
 pub struct PGDatabase {
     pub pool: Option<r2d2::Pool<PostgresConnectionManager>>,
     pub smt: PGDatabaseSmt,
-    pub coins_histo: CoinValueInfo,
 }
 
 use structs::*;
@@ -102,10 +104,10 @@ pub trait Database {
     fn set_connection_from_config(&mut self, config: &crate::config::Config) -> Result<()>;
     fn set_connection(&mut self, url: &String) -> Result<()>;
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self;
-    fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid>;
+    fn get_user_auth(&self, user_id: Uuid, user_ids: &Arc<Mutex<UserIDs>>) -> Result<Uuid>;
     fn has_withdraw_sc_sig(&self, user_id: Uuid) -> Result<()>;
-    fn get_coins_histogram(&self) -> CoinValueInfo;
-    fn init_coins_histo(&mut self) -> Result<()>;
+    fn init_coins_histo(&self, coins_histo: &Arc<Mutex<CoinValueInfo>>) -> Result<()>;
+    fn init_user_ids(&self, user_ids: &Arc<Mutex<UserIDs>>) -> Result<()>;
     fn update_withdraw_sc_sig(&self, user_id: &Uuid, sig: StateChainSig) -> Result<()>;
     fn update_withdraw_tx_sighash(
         &self,
@@ -143,6 +145,7 @@ pub trait Database {
         statechain_id: &Uuid,
         state_chain: StateChain,
         amount: u64,
+        coins_histo: &Arc<Mutex<CoinValueInfo>>,
     ) -> Result<()>;
     fn create_statechain(
         &self,
@@ -150,6 +153,7 @@ pub trait Database {
         user_id: &Uuid,
         state_chain: &StateChain,
         amount: &i64,
+        coins_histo: &Arc<Mutex<CoinValueInfo>>
     ) -> Result<()>;
     fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain>;
     fn update_statechain_owner(
@@ -235,13 +239,16 @@ pub trait Database {
     fn get_recovery_data(&self, proofkey: String) -> Result<Vec<(Uuid,Uuid,Transaction)>>;
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
-    fn create_user_session(&self, user_id: &Uuid, auth: &String, proof_key: &String, challenge: &String) -> Result<()>;
+    fn create_user_session(&self, user_id: &Uuid, auth: &String, 
+        proof_key: &String, challenge: &String, 
+        user_ids: &Arc<Mutex<UserIDs>>) -> Result<()>;
     // Create new UserSession to allow new owner to generate shared wallet
     fn transfer_init_user_session(
         &self,
         new_user_id: &Uuid,
         statechain_id: &Uuid,
         finalized_data: TransferFinalizeData,
+        user_ids: &Arc<Mutex<UserIDs>>
     ) -> Result<()>;
     fn update_ecdsa_sign_first(
         &self,
@@ -255,7 +262,7 @@ pub trait Database {
     fn get_tx_withdraw(&self, user_id: Uuid) -> Result<Transaction>;
     fn update_tx_withdraw(&self, user_id: Uuid, tx: Transaction) -> Result<()>;
     fn reset(&self) -> Result<()>;
-    fn init(&mut self) -> Result<()>;
+    fn init(&mut self, coins_histo: &Arc<Mutex<CoinValueInfo>>, user_ids: &Arc<Mutex<UserIDs>>) -> Result<()>;
     fn get_ecdsa_master_key_input(&self, user_id: Uuid) -> Result<ECDSAMasterKeyInput>;
     fn update_public_master(&self, user_id: &Uuid, master_public: Party1Public) -> Result<()>;
     fn update_shared_pubkey(&self, user_id: Uuid, pubkey: GE) -> Result<()>;

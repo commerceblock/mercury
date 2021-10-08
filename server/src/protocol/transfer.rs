@@ -325,6 +325,7 @@ impl Transfer for SCE {
             &new_user_id,
             &statechain_id,
             finalized_data.to_owned(),
+            &self.user_ids   
         )?;
 
         //lockbox finalise and delete key
@@ -534,7 +535,7 @@ mod tests {
             .returning(move |_| Ok(pubkey.to_string()));
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth()
-            .returning(move |_| Ok(shared_key_id));
+            .returning(move |_, _| Ok(shared_key_id));
         db.expect_get_statechain_id()
             .with(predicate::eq(shared_key_id))
             .returning(move |_| Ok(statechain_id));
@@ -622,7 +623,7 @@ mod tests {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth()
-            .returning(move |_| Ok(shared_key_id));
+            .returning(move |_, _| Ok(shared_key_id));
         db.expect_get_transfer_data()
             .with(predicate::eq(statechain_id))
             .returning(move |_| {
@@ -660,7 +661,7 @@ mod tests {
         db.expect_update_statechain_owner()
             .returning(|_, _, _| Ok(()));
         db.expect_transfer_init_user_session()
-            .returning(|_, _, _| Ok(()));
+            .returning(|_, _, _, _| Ok(()));
         db.expect_update_backup_tx().returning(|_, _| Ok(()));
         db.expect_remove_transfer_data().returning(|_| Ok(()));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
@@ -766,7 +767,7 @@ mod tests {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth()
-            .returning(move |_| Ok(shared_key_id));
+            .returning(move |_, _| Ok(shared_key_id));
         db.expect_get_transfer_data()
             .with(predicate::eq(statechain_id))
             .returning(move |_| {
@@ -806,7 +807,7 @@ mod tests {
         db.expect_update_statechain_owner()
             .returning(|_, _, _| Ok(()));
         db.expect_transfer_init_user_session()
-            .returning(|_, _, _| Ok(()));
+            .returning(|_, _, _, _| Ok(()));
         db.expect_update_backup_tx().returning(|_, _| Ok(()));
         db.expect_remove_transfer_data().returning(|_| Ok(()));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));

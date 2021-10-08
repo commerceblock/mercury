@@ -141,7 +141,7 @@ impl Withdraw for SCE {
             state_chain.add(wcd.withdraw_sc_sig.to_owned())?;
 
             self.database
-                .update_statechain_amount(&wcd.statechain_id, state_chain, 0)?;
+                .update_statechain_amount(&wcd.statechain_id, state_chain, 0, &self.coin_value_info)?;
 
             // Remove statechain_id from user session to signal end of session
             self.database.remove_statechain_id(&user_id)?;
@@ -243,7 +243,7 @@ mod tests {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth()
-            .returning(move |_| Ok(shared_key_id));
+            .returning(move |_, _| Ok(shared_key_id));
         db.expect_get_statechain_id()
             .with(predicate::eq(shared_key_id))
             .returning(move |_| Ok(statechain_id));
@@ -311,7 +311,7 @@ mod tests {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth()
-            .returning(move |_| Ok(shared_key_ids[0]));
+            .returning(move |_, _| Ok(shared_key_ids[0]));
         db.expect_get_withdraw_confirm_data()
             .times(1)
             .returning(move |_| {
@@ -337,7 +337,7 @@ mod tests {
         db.expect_get_statechain()
             .returning(move |_| Ok(serde_json::from_str::<StateChain>(STATE_CHAIN).unwrap()));
         db.expect_update_statechain_amount()
-            .returning(|_, _, _| Ok(()));
+            .returning(|_, _, _, _| Ok(()));
         db.expect_remove_statechain_id().returning(|_| Ok(()));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
         db.expect_get_root().returning(|_| Ok(None));

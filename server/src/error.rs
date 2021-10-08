@@ -2,7 +2,7 @@
 //!
 //! Custom Error types for server
 
-use shared_lib::error::SharedLibError;
+use shared_lib::{error::SharedLibError, structs::CoinValueInfo};
 
 use crate::storage::db::Column;
 use bitcoin::secp256k1::Error as SecpError;
@@ -112,6 +112,26 @@ impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, crate::protocol::cond
 {
     fn from(
         e: std::sync::PoisonError<std::sync::MutexGuard<'_, crate::protocol::conductor::Scheduler>>,
+    ) -> SEError {
+        SEError::Generic(e.to_string())
+    }
+}
+
+impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, CoinValueInfo>>>
+    for SEError
+{
+    fn from(
+        e: std::sync::PoisonError<std::sync::MutexGuard<'_, CoinValueInfo>>,
+    ) -> SEError {
+        SEError::Generic(e.to_string())
+    }
+}
+
+impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, crate::server::UserIDs>>>
+    for SEError
+{
+    fn from(
+        e: std::sync::PoisonError<std::sync::MutexGuard<'_, crate::server::UserIDs>>,
     ) -> SEError {
         SEError::Generic(e.to_string())
     }

@@ -19,6 +19,7 @@ use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use serde::de::{self, Visitor, Unexpected};
 use regex::Regex;
 use chrono::{NaiveDateTime, Utc};
+use std::default::Default;
 
 use crate::ecies;
 use crate::{util::transaction_serialise, ecies::{Encryptable, SelfEncryptable, WalletDecryptable}};
@@ -99,7 +100,7 @@ pub struct StateEntityFeeInfoAPI {
     /// The Bitcoin address that the SE fee must be paid to
     pub address: String, // Receive address for fee payments
     /// The deposit fee, which is specified as a proportion of the deposit amount in basis points
-    pub deposit: u64,    // basis points
+    pub deposit: i64,    // basis points
     /// The withdrawal fee, which is specified as a proportion of the deposit amount in basis points
     pub withdraw: u64,   // basis points
     /// The decementing nLocktime (block height) interval enforced for backup transactions
@@ -269,18 +270,26 @@ impl<'de> Deserialize<'de> for GroupStatus {
 /// List of current statecoin amounts and the number of each
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct CoinValueInfo {
-    pub values: HashMap<u64,u64>,
+    pub values: HashMap<i64,i64>,
 }
+
+
+impl Default for CoinValueInfo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 
 impl CoinValueInfo {
     pub fn new() -> Self {
-        Self { values: HashMap::<u64,u64>::new() }
+        Self { values: HashMap::<i64,i64>::new() }
     }
 
-    fn update(
+    pub fn update(
         &mut self,
-        amount: &u64,
-        prev_amount: &u64,
+        amount: &i64,
+        prev_amount: &i64,
     ) -> crate::Result<()> {
         match self.values.remove(prev_amount){
             Some(c) => {
@@ -294,9 +303,9 @@ impl CoinValueInfo {
         }
     }
 
-    fn increment(
+    pub fn increment(
         &mut self,
-        amount: &u64,
+        amount: &i64,
     ) {
         let new_count = self.values.get(amount).map_or(1, |c| c+1);
         self.values.insert(*amount, new_count); 
@@ -978,21 +987,21 @@ mod tests {
     #[test]
     fn test_coinvalueinfo() {
         let mut cvi = CoinValueInfo::new();
-        assert!(cvi.update(&(1 as u64), &(1 as u64)).is_err());
-        cvi.increment(&(1 as u64));
-        cvi.increment(&(1 as u64));
-        cvi.increment(&(1 as u64));
-        cvi.increment(&(1 as u64));
-        cvi.update(&(10 as u64), &(1 as u64)).unwrap();
-        cvi.update(&(20 as u64), &(10 as u64)).unwrap();
-        assert!(cvi.update(&(20 as u64), &(10 as u64)).is_err());
-        cvi.update(&(3 as u64), &(1 as u64));
-        cvi.increment(&(2 as u64));
-        let mut testMap = HashMap::<u64, u64>::new();
-        testMap.insert(3 as u64, 1 as u64);
-        testMap.insert(20 as u64, 1 as u64);
-        testMap.insert(1 as u64, 2 as u64);
-        testMap.insert(2 as u64, 1 as u64);
+        assert!(cvi.update(&(1 as i64), &(1 as i64)).is_err());
+        cvi.increment(&(1 as i64));
+        cvi.increment(&(1 as i64));
+        cvi.increment(&(1 as i64));
+        cvi.increment(&(1 as i64));
+        cvi.update(&(10 as i64), &(1 as i64)).unwrap();
+        cvi.update(&(20 as i64), &(10 as i64)).unwrap();
+        assert!(cvi.update(&(20 as i64), &(10 as i64)).is_err());
+        cvi.update(&(3 as i64), &(1 as i64));
+        cvi.increment(&(2 as i64));
+        let mut testMap = HashMap::<i64, i64>::new();
+        testMap.insert(3 as i64, 1 as i64);
+        testMap.insert(20 as i64, 1 as i64);
+        testMap.insert(1 as i64, 2 as i64);
+        testMap.insert(2 as i64, 1 as i64);
         assert_eq!(cvi.values, testMap); 
     }
 }

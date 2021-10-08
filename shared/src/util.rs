@@ -248,7 +248,7 @@ pub fn tx_withdraw_build(
             
             txins.push(txin);
         };
-        total + se_fee_info.deposit
+        total + se_fee_info.deposit as u64
     };
 
     let fee = (amount*se_fee_info.withdraw) / 10000 as u64;
