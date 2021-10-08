@@ -37,6 +37,8 @@ use bitcoin::OutPoint;
 use bitcoin::Transaction;
 use curv::GE;
 use crate::config::Config;
+use std::sync::MutexGuard;
+use std::ops::Deref;
 
 const MAX_LOCKTIME: u32 = 500000000; // bitcoin tx nlocktime cutoff
 
@@ -88,9 +90,6 @@ pub trait Utilities {
     /// The request includes the public proof key and an authenticating signature
     fn get_recovery_data(&self, recovery_request: Vec<RecoveryRequest>) -> Result<Vec<RecoveryDataMsg>>;
 
-    // get amount histogram of statecoins
-    fn get_coin_info(&self) -> CoinValueInfo;
-
     // get lockbox url
     fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<(Url,usize)>>;
 }
@@ -100,7 +99,7 @@ impl Utilities for SCE {
         let fee_address_vec: Vec<&str> = self.config.fee_address.split(",").collect();
         Ok(StateEntityFeeInfoAPI {
             address: fee_address_vec[0].to_string().clone(),
-            deposit: self.config.fee_deposit,
+            deposit: self.config.fee_deposit as i64,
             withdraw: self.config.fee_withdraw,
             interval: self.config.lh_decrement,
             initlock: self.config.lockheight_init,
@@ -446,10 +445,6 @@ impl Utilities for SCE {
         return Ok(recovery_data);
     }
 
-    fn get_coin_info(&self) -> CoinValueInfo {
-        self.database.get_coins_histogram()
-    }
-
     fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<(Url,usize)>> {
         let db = &self.database;
 
@@ -488,7 +483,8 @@ pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
 /// # Get the current statecoin amount histogram
 #[get("/info/coins", format = "json")]
 pub fn get_coin_info(sc_entity: State<SCE>) -> Result<Json<CoinValueInfo>> {
-    Ok(Json(sc_entity.get_coin_info()))
+    let guard = sc_entity.coin_value_info.as_ref().lock()?;
+    Ok(Json(guard.deref().clone()))
 }
 
 #[openapi]
@@ -652,7 +648,7 @@ impl SCE {
     /// Check if user has passed authentication.
     pub fn check_user_auth(&self, user_id: &Uuid) -> Result<()> {
         // check authorisation id is in DB (and TOOD: check password?)
-        if let Err(_) = self.database.get_user_auth(*user_id) {
+        if let Err(_) = self.database.get_user_auth(*user_id, &self.user_ids) {
             return Err(SEError::AuthError);
         }
         Ok(())

@@ -8,6 +8,10 @@ use monotree::Errors;
 use std::collections::HashMap;
 use url::Url;
 use shared_lib::structs::CoinValueInfo;
+use std::collections::HashSet;
+use uuid::Uuid;
+use crate::server::UserIDs;
+use std::sync::{Arc, Mutex};
 
 pub type Result<T> = std::result::Result<T, Errors>;
 
@@ -25,7 +29,6 @@ impl MonotreeDatabase for PGDatabase {
                 batch_on: false,
                 batch: HashMap::new(),
             },
-            coins_histo: CoinValueInfo::new(),
         }
     }
     /// Monotree get
@@ -308,16 +311,17 @@ impl Database for MemoryDB {
     ) -> Self {
         unimplemented!()
     }
-    fn get_user_auth(&self, _user_id: uuid::Uuid) -> crate::Result<uuid::Uuid> {
+    fn get_user_auth(&self, _user_id: uuid::Uuid, user_ids: &Arc<Mutex<UserIDs>>) -> crate::Result<uuid::Uuid> {
         unimplemented!()
     }
     fn has_withdraw_sc_sig(&self, _user_id: uuid::Uuid) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_coins_histogram(&self) -> shared_lib::structs::CoinValueInfo {
+
+    fn init_coins_histo(&self, _coins_histo: &Arc<Mutex<CoinValueInfo>>) -> crate::Result<()> {
         unimplemented!()
     }
-    fn init_coins_histo(&mut self) -> crate::Result<()> {
+    fn init_user_ids(&self, _user_ids: &Arc<Mutex<UserIDs>>) -> crate::Result<()> {
         unimplemented!()
     }
     fn update_withdraw_sc_sig(
@@ -421,6 +425,7 @@ impl Database for MemoryDB {
         _statechain_id: &uuid::Uuid,
         _state_chain: super::StateChain,
         _amount: u64,
+        _coins_histo: &Arc<Mutex<CoinValueInfo>>
     ) -> crate::Result<()> {
         unimplemented!()
     }
@@ -430,6 +435,7 @@ impl Database for MemoryDB {
         _user_id: &uuid::Uuid,
         _state_chain: &super::StateChain,
         _amount: &i64,
+         user_ids: &Arc<Mutex<CoinValueInfo>>
     ) -> crate::Result<()> {
         unimplemented!()
     }
@@ -671,6 +677,7 @@ impl Database for MemoryDB {
         _auth: &String,
         _proof_key: &String,
         _challenge: &String,
+         user_ids: &Arc<Mutex<UserIDs>>
     ) -> crate::Result<()> {
         unimplemented!()
     }
@@ -679,6 +686,7 @@ impl Database for MemoryDB {
         _new_user_id: &uuid::Uuid,
         _statechain_id: &uuid::Uuid,
         _finalized_data: crate::protocol::transfer::TransferFinalizeData,
+        _user_ids: &Arc<Mutex<UserIDs>>
     ) -> crate::Result<()> {
         unimplemented!()
     }
@@ -709,7 +717,7 @@ impl Database for MemoryDB {
     fn reset(&self) -> crate::Result<()> {
         unimplemented!()
     }
-    fn init(&mut self) -> crate::Result<()> {
+    fn init(&mut self, coins_histo: &Arc<Mutex<CoinValueInfo>>, user_ids: &Arc<Mutex<UserIDs>> ) -> crate::Result<()> {
         unimplemented!()
     }
     fn get_ecdsa_master_key_input(

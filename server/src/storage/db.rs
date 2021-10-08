@@ -7,7 +7,7 @@ use bitcoin::Transaction;
 pub type Hash = bitcoin::hashes::sha256d::Hash;
 
 use crate::protocol::transfer::TransferFinalizeData;
-use crate::server::get_postgres_url;
+use crate::server::{get_postgres_url, UserIDs};
 use crate::{
     error::{
         DBErrorType::{ConnectionFailed, NoDataForID, UpdateFailed},
@@ -36,6 +36,7 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 use url::Url;
 use std::convert::TryInto;
+use std::sync::{Arc, Mutex};
 
 use monotree::database::MemCache;
 
@@ -666,9 +667,10 @@ impl PGDatabase {
 }
 
 impl Database for PGDatabase {
-    fn init(&mut self) -> Result<()> {
+    fn init(&mut self, coins_histo: &Arc<Mutex<CoinValueInfo>>, user_ids: &Arc<Mutex<UserIDs>>) -> Result<()> {
         self.make_tables()?;
-        self.init_coins_histo()
+        self.init_coins_histo(coins_histo)?;
+        self.init_user_ids(user_ids)
     }
 
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self {
@@ -680,7 +682,6 @@ impl Database for PGDatabase {
                 batch_on: false,
                 batch: HashMap::new(),
             },
-            coins_histo: CoinValueInfo::new(),
         }
     }
 
@@ -693,7 +694,6 @@ impl Database for PGDatabase {
                 batch_on: false,
                 batch: HashMap::new(),
             },
-            coins_histo: CoinValueInfo::new(),
         }
     }
 
@@ -727,29 +727,47 @@ impl Database for PGDatabase {
         self.drop_tables()
     }
 
-    fn get_coins_histogram(&self) -> CoinValueInfo {
-        self.coins_histo.clone()
-    }
-
-    fn init_coins_histo(&mut self) -> Result<()> {
+    fn init_coins_histo(&self, coins_histo: &Arc<Mutex<CoinValueInfo>> ) -> Result<()> {
+        let mut guard = coins_histo.as_ref().lock()?;
         let dbr = self.database_r()?;
         let statement =
             dbr.prepare(&format!("SELECT amount,count(1) FROM {} GROUP BY amount", Table::StateChain.to_string(),))?;
         let rows = statement.query(&[])?;
-        let mut coins_hist = CoinValueInfo::new();
+        
         if rows.is_empty() {
             return Ok(());
         };
         for row in &rows {
-            let amount: u64 = row.get_opt::<usize, i64>(0).unwrap().unwrap() as u64;
-            let count: u64 = row.get_opt::<usize, i64>(1).unwrap().unwrap() as u64;
-            coins_hist.values.insert(amount,count);
+            let amount: i64 = row.get_opt::<usize, i64>(0).unwrap().unwrap();
+            let count: i64 = row.get_opt::<usize, i64>(1).unwrap().unwrap();
+            guard.values.insert(amount,count);
         }
+        drop(guard);
         Ok(())
     }
 
-    fn get_user_auth(&self, user_id: Uuid) -> Result<Uuid> {
-        self.get_1::<Uuid>(user_id, Table::UserSession, vec![Column::Id])
+    fn init_user_ids(&self, user_ids: &Arc<Mutex<UserIDs>>) -> Result<()> {
+        let mut guard = user_ids.as_ref().lock()?;
+        let dbr = self.database_r()?;
+        let statement =
+            dbr.prepare(&format!("SELECT * FROM {}", Table::UserSession.to_string()))?;
+        let rows = statement.query(&[])?;
+                
+        for row in &rows {
+            let id: Uuid = row.get_opt::<usize, Uuid>(0).unwrap().unwrap();
+            guard.insert(id);
+        }
+        
+        drop(guard);
+        Ok(())
+    }
+
+    fn get_user_auth(&self, user_id: Uuid, user_ids: &Arc<Mutex<UserIDs>>) -> Result<Uuid> {
+        let mut guard = user_ids.as_ref().lock()?;
+        match guard.contains(&user_id){
+            true => self.get_1::<Uuid>(user_id, Table::UserSession, vec![Column::Id]),
+            false => Err(SEError::AuthError),
+        }
     }
 
     fn has_withdraw_sc_sig(&self, user_id: Uuid) -> Result<()> {
@@ -1083,28 +1101,26 @@ impl Database for PGDatabase {
         statechain_id: &Uuid,
         state_chain: StateChain,
         amount: u64,
+        coins_histo: &Arc<Mutex<CoinValueInfo>>
     ) -> Result<()> {
-        //let prev_statechain_amount = &self.get_statechain_amount(*statechain_id)?.amount;
-        //self.coins_histo.update(amount,prev_statechain_amount)?;
-        
-        //match 
-        self.update(
+
+        match self.update(
             statechain_id,
             Table::StateChain,
             vec![Column::Chain, Column::Amount],
             vec![&Self::ser(state_chain)?, &(amount as i64)], // signals withdrawn funds
         )
-        /*
         {
-            Ok(_) => Ok(()),
+            Ok(_) => {
+                let prev_statechain_amount = &self.get_statechain_amount(*statechain_id)?.amount;
+                let mut guard = coins_histo.as_ref().lock()?;
+                guard.update(&(amount as i64),prev_statechain_amount)?;
+                Ok(())
+            },
             Err(e) => {
-                //Revert the local coins_histo change if the database update failed.
-                self.coins_histo.update(prev_statechain_amount, amount)
-                    .expect("Expected too be able to revert the coins_histo");
                 Err(e)
             }
         }
-        */
     }
 
     fn create_statechain(
@@ -1113,8 +1129,9 @@ impl Database for PGDatabase {
         user_id: &Uuid,
         state_chain: &StateChain,
         amount: &i64,
+        coins_histo: &Arc<Mutex<CoinValueInfo>>
     ) -> Result<()> {
-
+        let mut guard = coins_histo.as_ref().lock()?;
         self.insert(statechain_id, Table::StateChain)?;
         self.update(
             statechain_id,
@@ -1131,9 +1148,10 @@ impl Database for PGDatabase {
                 &get_time_now(),
                 &user_id.to_owned(),
             ],
-        )
+        )?;
 
-        //self.coins_histo.insert(amount);
+        guard.increment(amount);
+        Ok(())
     }
 
     fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain> {
@@ -1668,7 +1686,10 @@ impl Database for PGDatabase {
 
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
-    fn create_user_session(&self, user_id: &Uuid, auth: &String, proof_key: &String, challenge: &String) -> Result<()> {
+    fn create_user_session(&self, user_id: &Uuid, auth: &String, 
+        proof_key: &String, challenge: &String,
+        user_ids: &Arc<Mutex<UserIDs>>) -> Result<()> {
+        let mut guard = user_ids.as_ref().lock()?;
         self.insert(user_id, Table::UserSession)?;
         self.insert(user_id, Table::Lockbox)?;
         self.update(
@@ -1676,7 +1697,9 @@ impl Database for PGDatabase {
             Table::UserSession,
             vec![Column::Authentication, Column::ProofKey, Column::Challenge],
             vec![&auth.clone(), &proof_key.to_owned(), &challenge.clone()],
-        )
+        )?;
+        guard.insert(user_id.to_owned());
+        Ok(())
     }
 
     // Create new UserSession to allow new owner to generate shared wallet
@@ -1685,8 +1708,11 @@ impl Database for PGDatabase {
         new_user_id: &Uuid,
         statechain_id: &Uuid,
         finalized_data: TransferFinalizeData,
+        user_ids: &Arc<Mutex<UserIDs>>
     ) -> Result<()> {
+        let mut guard = user_ids.as_ref().lock()?;
         self.insert(new_user_id, Table::UserSession)?;
+        guard.insert(new_user_id.to_owned());
         self.insert(new_user_id, Table::Lockbox)?;
         self.update(
             new_user_id,

@@ -74,7 +74,7 @@ impl Deposit for SCE {
         // verification. For now use ID as 'password' to interact with state entity
         // unsolved_vdf saved for verification at keygen first
         self.database
-            .create_user_session(&user_id, &deposit_msg1.auth, &deposit_msg1.proof_key, &challenge)?;
+            .create_user_session(&user_id, &deposit_msg1.auth, &deposit_msg1.proof_key, &challenge, &self.user_ids)?;
 
         info!(
             "DEPOSIT: Protocol initiated. User ID generated: {}",
@@ -120,7 +120,7 @@ impl Deposit for SCE {
 
         // Insert into StateChain table
         self.database
-            .create_statechain(&statechain_id, &user_id, &state_chain, &amount)?;
+            .create_statechain(&statechain_id, &user_id, &state_chain, &amount, &self.coin_value_info)?;
 
         // set the shared public key
         let shared_pubkey = self.database.get_shared_pubkey(user_id.clone())?;
@@ -204,7 +204,7 @@ pub mod tests {
     fn test_deposit_init() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().returning(|_, _, _, _| Ok(()));
+        db.expect_create_user_session().returning(|_, _, _, _, _| Ok(()));
 
         let sc_entity = test_sc_entity(db, None);
 
@@ -247,7 +247,7 @@ pub mod tests {
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_get_user_auth().returning(move |_| Ok(user_id));
+        db.expect_get_user_auth().returning(move |_, _| Ok(user_id));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
         db.expect_get_root().returning(|_| Ok(None));
         db.expect_root_update().returning(|_| Ok(1));
@@ -258,7 +258,7 @@ pub mod tests {
         // Second time return signed back up tx
         db.expect_get_backup_transaction_and_proof_key()
             .returning(move |_| Ok((tx_backup_signed.clone(), proof_key.clone())));
-        db.expect_create_statechain().returning(|_, _, _, _| Ok(()));
+        db.expect_create_statechain().returning(|_, _, _, _, _| Ok(()));
         db.expect_create_backup_transaction()
             .returning(|_, _| Ok(()));
         db.expect_update_statechain_id().returning(|_, _| Ok(()));

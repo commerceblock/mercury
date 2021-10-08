@@ -34,6 +34,8 @@ use std::collections::HashMap;
 use crate::error::SEError;
 use std::convert::TryInto;
 use url::Url;
+use std::collections::HashSet;
+use std::default::Default;
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -54,6 +56,8 @@ pub static REG_SWAP_UTXOS: Lazy<IntCounterVec> = Lazy::new(|| {
 });
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+pub type UserIDs = HashSet::<Uuid>;
 
 #[derive(Debug, Clone)]
 pub struct Endpoints {
@@ -100,6 +104,8 @@ pub struct StateChainEntity<
 > {
     pub config: Config,
     pub database: T,
+    pub coin_value_info: Arc<Mutex<CoinValueInfo>>,
+    pub user_ids: Arc<Mutex<UserIDs>>,
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
     pub scheduler: Option<Arc<Mutex<Scheduler>>>,
     pub lockbox: Option<Lockbox>,
@@ -148,6 +154,8 @@ impl<
         let sce = Self {
             config: config_rs,
             database: db,
+            coin_value_info: Arc::new(Mutex::new(Default::default())),
+            user_ids: Arc::new(Mutex::new(Default::default())),
             smt: Arc::new(Mutex::new(smt)),
             scheduler,
             lockbox,
@@ -287,12 +295,12 @@ pub fn get_server<
     set_logging_config(&sc_entity.config.log_file);
 
     // Initialise DBs
-    sc_entity.database.init()?;
+    sc_entity.database.init(&sc_entity.coin_value_info, &sc_entity.user_ids)?;
     if sc_entity.config.testing_mode {
         info!("Server running in testing mode.");
         // reset dbs
         sc_entity.database.reset()?;
-        sc_entity.database.init()?;
+        sc_entity.database.init(&sc_entity.coin_value_info, &sc_entity.user_ids)?;
     }
 
     match mainstay_config {
@@ -495,7 +503,6 @@ mock! {
     }
     trait Utilities {
         fn get_fees(&self) -> util::Result<StateEntityFeeInfoAPI>;
-        fn get_coin_info(&self) -> CoinValueInfo;
         /// API: Generates sparse merkle tree inclusion proof for some key in a tree with some root.
         fn get_smt_proof(
             &self,

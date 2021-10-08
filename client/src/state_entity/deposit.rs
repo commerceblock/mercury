@@ -49,13 +49,13 @@ pub fn deposit(
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
 
     // Ensure funds cover fees before initiating protocol
-    if FEE + se_fee_info.deposit >= *amount {
+    if FEE + se_fee_info.deposit as u64 >= *amount {
         return Err(CError::WalletError(WalletErrorType::NotEnoughFunds));
     }
 
     //calculate SE fee amount from rate
-    let deposit_fee = (amount * se_fee_info.deposit) / 10000 as u64;
-    let withdraw_fee = (amount * se_fee_info.withdraw) / 10000 as u64;
+    let deposit_fee = (amount * se_fee_info.deposit as u64) / 10000 as u64;
+    let withdraw_fee = (amount * se_fee_info.withdraw as u64) / 10000 as u64;
 
     // Greedy coin selection.
     let (inputs, addrs, amounts) =
