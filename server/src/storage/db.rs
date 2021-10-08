@@ -763,7 +763,7 @@ impl Database for PGDatabase {
     }
 
     fn get_user_auth(&self, user_id: Uuid, user_ids: &Arc<Mutex<UserIDs>>) -> Result<Uuid> {
-        let mut guard = user_ids.as_ref().lock()?;
+        let guard = user_ids.as_ref().lock()?;
         match guard.contains(&user_id){
             true => self.get_1::<Uuid>(user_id, Table::UserSession, vec![Column::Id]),
             false => Err(SEError::AuthError),
