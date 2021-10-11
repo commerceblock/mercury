@@ -330,7 +330,7 @@ impl Transfer for SCE {
             &new_user_id,
             &statechain_id,
             finalized_data.to_owned(),
-            &self.user_ids   
+            self.user_ids.clone()   
         )?;
 
         //lockbox finalise and delete key

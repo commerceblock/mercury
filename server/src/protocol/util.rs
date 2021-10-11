@@ -385,7 +385,6 @@ impl Utilities for SCE {
                     // add unsigned transaction to backup store
                     // (this ensures that incompleted swaps also decrement the required locktime)
                     self.database.update_backup_tx(&statechain_id, tx.clone())?;
-
                 }
 
                 let sig_hash = get_sighash(
@@ -565,7 +564,7 @@ pub fn prepare_sign_tx(
 #[post("/test/reset-db", format = "json")]
 pub fn reset_test_dbs(sc_entity: State<SCE>) -> Result<Json<()>> {
     if sc_entity.config.testing_mode {
-        match sc_entity.database.reset(&sc_entity.coin_value_info, &sc_entity.user_ids) {
+        match sc_entity.database.reset(sc_entity.coin_value_info.clone(), sc_entity.user_ids.clone()) {
             Ok(res) => return {
                 Ok(Json(res))
             },
@@ -650,10 +649,17 @@ impl SCE {
     /// Check if user has passed authentication.
     pub fn check_user_auth(&self, user_id: &Uuid) -> Result<()> {
         // check authorisation id is in DB (and TOOD: check password?)
-        let guard = self.user_ids.as_ref().lock()?;
+        let mut guard = self.user_ids.as_ref().lock()?;
         match guard.contains(user_id){
             true => Ok(()),
-            false => Err(SEError::AuthError)
+            //Update the user ids set in a rate-limited manner
+            false => {
+                let _auth = self.rate_limiter.check_key(&String::from("check_user_auth"))
+                            .and_then(|_| Ok(self.database.get_user_auth(user_id)))
+                            .map_err(|_| SEError::AuthError)?;
+                guard.insert(*user_id);
+                Ok(())
+            }
         }
     }
 

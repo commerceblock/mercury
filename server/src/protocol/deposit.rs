@@ -74,7 +74,7 @@ impl Deposit for SCE {
         // verification. For now use ID as 'password' to interact with state entity
         // unsolved_vdf saved for verification at keygen first
         self.database
-            .create_user_session(&user_id, &deposit_msg1.auth, &deposit_msg1.proof_key, &challenge, &self.user_ids)?;
+            .create_user_session(&user_id, &deposit_msg1.auth, &deposit_msg1.proof_key, &challenge, self.user_ids.clone())?;
 
         info!(
             "DEPOSIT: Protocol initiated. User ID generated: {}",
@@ -120,7 +120,7 @@ impl Deposit for SCE {
 
         // Insert into StateChain table
         self.database
-            .create_statechain(&statechain_id, &user_id, &state_chain, &amount, &self.coin_value_info)?;
+            .create_statechain(&statechain_id, &user_id, &state_chain, &amount, self.coin_value_info.clone())?;
 
         // set the shared public key
         let shared_pubkey = self.database.get_shared_pubkey(user_id.clone())?;
@@ -273,7 +273,7 @@ pub mod tests {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e
                 .to_string()
-                .contains("Signed Back up transaction not found.")),
+                .contains("Signed Back up transaction not found."), e.to_string()),
         }
 
         // Clean protocol run

@@ -157,7 +157,9 @@ impl<
         };
 
         //Construct a keyed rate limiter.
-        let rate_limiter = Arc::new(RateLimiter::dashmap(Quota::per_second(config_rs.rate_limit)));
+        let rate_limit = NonZeroU32::new(u32::MAX).unwrap();
+        //let rate_limit = config_rs.rate_limit;
+        let rate_limiter = Arc::new(RateLimiter::dashmap(Quota::per_second(rate_limit)));
 
         let sce = Self {
             config: config_rs,
@@ -304,13 +306,12 @@ pub fn get_server<
     set_logging_config(&sc_entity.config.log_file);
 
     // Initialise DBs
-    sc_entity.database.init(&sc_entity.coin_value_info, &sc_entity.user_ids)?;
     if sc_entity.config.testing_mode {
         info!("Server running in testing mode.");
         // reset dbs
-        sc_entity.database.reset(&sc_entity.coin_value_info, &sc_entity.user_ids)?;
-        sc_entity.database.init(&sc_entity.coin_value_info, &sc_entity.user_ids)?;
+        sc_entity.database.reset(sc_entity.coin_value_info.clone(), sc_entity.user_ids.clone())?;
     }
+    sc_entity.database.init(sc_entity.coin_value_info.clone(), sc_entity.user_ids.clone())?;
 
     match mainstay_config {
         Some(c) => sc_entity.config.mainstay = Some(c),

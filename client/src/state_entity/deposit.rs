@@ -79,9 +79,7 @@ pub fn deposit(
     let mut hasher = Sha3_256::new();
     loop {
         hasher.input(&format!("{}:{:x}", challenge, counter).as_bytes());
-        println!("{}:{:x}",challenge, counter);
         let result = hex::encode(hasher.result_reset());
-        println!("{:?}", result);
         if result[..difficulty] == zeros {
             break;
         };

@@ -141,7 +141,7 @@ impl Withdraw for SCE {
             state_chain.add(wcd.withdraw_sc_sig.to_owned())?;
 
             self.database
-                .update_statechain_amount(&wcd.statechain_id, state_chain, 0, &self.coin_value_info)?;
+                .update_statechain_amount(&wcd.statechain_id, state_chain, 0, self.coin_value_info.clone())?;
 
             // Remove statechain_id from user session to signal end of session
             self.database.remove_statechain_id(&user_id)?;

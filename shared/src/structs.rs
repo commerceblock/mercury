@@ -20,6 +20,7 @@ use serde::de::{self, Visitor, Unexpected};
 use regex::Regex;
 use chrono::{NaiveDateTime, Utc};
 use std::default::Default;
+use std::num::NonZeroU64;
 
 use crate::ecies;
 use crate::{util::transaction_serialise, ecies::{Encryptable, SelfEncryptable, WalletDecryptable}};
@@ -270,7 +271,7 @@ impl<'de> Deserialize<'de> for GroupStatus {
 /// List of current statecoin amounts and the number of each
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct CoinValueInfo {
-    pub values: HashMap<i64,i64>,
+    pub values: HashMap<i64,NonZeroU64>,
 }
 
 
@@ -283,7 +284,7 @@ impl Default for CoinValueInfo {
 
 impl CoinValueInfo {
     pub fn new() -> Self {
-        Self { values: HashMap::<i64,i64>::new() }
+        Self { values: HashMap::<i64,NonZeroU64>::new() }
     }
 
     pub fn update(
@@ -291,24 +292,52 @@ impl CoinValueInfo {
         amount: &i64,
         prev_amount: &i64,
     ) -> crate::Result<()> {
-        match self.values.remove(prev_amount){
-            Some(c) => {
-                if c > 1 {
-                    self.values.insert(*prev_amount, c-1);
-                }
-                self.increment(amount);
-                Ok(())
-            },
-            None =>  Err(SharedLibError::Generic(String::from("CoinValueInfo - update error: previous amount not found"))),
-        }
+        self.decrement(prev_amount)?;
+        self.increment(amount);
+        Ok(())
     }
 
     pub fn increment(
         &mut self,
         amount: &i64,
     ) {
-        let new_count = self.values.get(amount).map_or(1, |c| c+1);
-        self.values.insert(*amount, new_count); 
+        let new_count = match self.values.get(amount){
+            Some(c) => {
+                let c_new = c.get()+1;
+                println!("c:{}, c_new:{}", &c, &c_new);
+                c_new
+            },
+            None => {
+                println!("c:None, c_new:{}", 1);
+                1
+            }
+        };
+        //.map_or(1, |c| c+1);
+        self.values.insert(*amount, unsafe {NonZeroU64::new_unchecked(new_count)}); 
+        
+        println!("increment {}:{}", amount, self.values.get(amount).unwrap());
+    }
+
+    pub fn decrement(
+        &mut self,
+        amount: &i64,
+    ) -> crate::Result<()> {
+        match self.values.get(amount){
+            Some(c) => {
+                match NonZeroU64::new(c.get()-1){
+                    Some(c) => self.values.insert(*amount, c),
+                    None => self.values.remove(amount)
+                };
+                Ok(())
+            },
+            None => {
+                return Err(SharedLibError::Generic(format!("amount not found: {}", amount)));
+            }
+        }
+    }
+
+    pub fn clear(&mut self){
+        *self = Self::new();
     }
 }
 

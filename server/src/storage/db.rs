@@ -39,6 +39,7 @@ use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
 
 use monotree::database::MemCache;
+use std::num::NonZeroU64;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Alpha {
@@ -667,7 +668,7 @@ impl PGDatabase {
 }
 
 impl Database for PGDatabase {
-    fn init(&mut self, coins_histo: &Arc<Mutex<CoinValueInfo>>, user_ids: &Arc<Mutex<UserIDs>>) -> Result<()> {
+    fn init(&mut self, coins_histo: Arc<Mutex<CoinValueInfo>>, user_ids: Arc<Mutex<UserIDs>>) -> Result<()> {
         self.make_tables()?;
         self.init_coins_histo(coins_histo)?;
         self.init_user_ids(user_ids)
@@ -721,37 +722,42 @@ impl Database for PGDatabase {
         }
     }
 
-    fn reset(&self, coins_histo: &Arc<Mutex<CoinValueInfo>>, user_ids: &Arc<Mutex<UserIDs>>) -> Result<()> {
+    fn reset(&self, coins_histo: Arc<Mutex<CoinValueInfo>>, user_ids: Arc<Mutex<UserIDs>>) -> Result<()> {
         let mut guard_coins = coins_histo.as_ref().lock()?;
         let mut guard_ids = user_ids.as_ref().lock()?;
         // truncate all postgres tables
         self.truncate_tables()?;
         self.drop_tables()?;
-        guard_coins.values.clear();
+        guard_coins.clear();
         guard_ids.clear();
+        println!("reset - lens: {} {}", guard_coins.values.len(), guard_ids.len());
         Ok(())
     }
 
-    fn init_coins_histo(&self, coins_histo: &Arc<Mutex<CoinValueInfo>> ) -> Result<()> {
+    fn init_coins_histo(&self, coins_histo: Arc<Mutex<CoinValueInfo>> ) -> Result<()> {
         let mut guard = coins_histo.as_ref().lock()?;
         let dbr = self.database_r()?;
         let statement =
             dbr.prepare(&format!("SELECT amount,count(1) FROM {} GROUP BY amount", Table::StateChain.to_string(),))?;
         let rows = statement.query(&[])?;
-        
+        println!("init coins histo - rows length: {}", rows.len());
         if rows.is_empty() {
             return Ok(());
         };
         for row in &rows {
-            let amount: i64 = row.get_opt::<usize, i64>(0).unwrap().unwrap();
-            let count: i64 = row.get_opt::<usize, i64>(1).unwrap().unwrap();
-            guard.values.insert(amount,count);
+            match NonZeroU64::new(row.get_opt::<usize, i64>(1).unwrap().unwrap().try_into().unwrap()){
+                Some(count) => {
+                    let amount: i64 = row.get_opt::<usize, i64>(0).unwrap().unwrap();
+                    guard.values.insert(amount,count);
+                },
+                None => ()
+            };
         }
         drop(guard);
         Ok(())
     }
 
-    fn init_user_ids(&self, user_ids: &Arc<Mutex<UserIDs>>) -> Result<()> {
+    fn init_user_ids(&self, user_ids: Arc<Mutex<UserIDs>>) -> Result<()> {
         let mut guard = user_ids.as_ref().lock()?;
         let dbr = self.database_r()?;
         let statement =
@@ -1052,6 +1058,10 @@ impl Database for PGDatabase {
         self.get_1::<Uuid>(user_id, Table::UserSession, vec![Column::StateChainId])
     }
 
+    fn get_user_auth(&self, user_id: &Uuid) -> Result<String> {
+        self.get_1::<String>(*user_id, Table::UserSession, vec![Column::Authentication])
+    }
+
     fn is_confirmed(&self, statechain_id: &Uuid) -> Result<bool> {
         self.get_1::<bool>(*statechain_id, Table::StateChain, vec![Column::Confirmed])
     }
@@ -1098,9 +1108,9 @@ impl Database for PGDatabase {
         statechain_id: &Uuid,
         state_chain: StateChain,
         amount: u64,
-        coins_histo: &Arc<Mutex<CoinValueInfo>>
+        coins_histo: Arc<Mutex<CoinValueInfo>>
     ) -> Result<()> {
-
+        let prev_statechain_amount = &self.get_statechain_amount(*statechain_id)?.amount;
         match self.update(
             statechain_id,
             Table::StateChain,
@@ -1109,7 +1119,6 @@ impl Database for PGDatabase {
         )
         {
             Ok(_) => {
-                let prev_statechain_amount = &self.get_statechain_amount(*statechain_id)?.amount;
                 let mut guard = coins_histo.as_ref().lock()?;
                 guard.update(&(amount as i64),prev_statechain_amount)?;
                 Ok(())
@@ -1126,7 +1135,7 @@ impl Database for PGDatabase {
         user_id: &Uuid,
         state_chain: &StateChain,
         amount: &i64,
-        coins_histo: &Arc<Mutex<CoinValueInfo>>
+        coins_histo: Arc<Mutex<CoinValueInfo>>
     ) -> Result<()> {
         let mut guard = coins_histo.as_ref().lock()?;
         self.insert(statechain_id, Table::StateChain)?;
@@ -1685,7 +1694,7 @@ impl Database for PGDatabase {
     // verification. For now use ID as 'password' to interact with state entity
     fn create_user_session(&self, user_id: &Uuid, auth: &String, 
         proof_key: &String, challenge: &String,
-        user_ids: &Arc<Mutex<UserIDs>>) -> Result<()> {
+        user_ids: Arc<Mutex<UserIDs>>) -> Result<()> {
         let mut guard = user_ids.as_ref().lock()?;
         guard.insert(user_id.to_owned());
         self.insert(user_id, Table::UserSession).map_err(|e| { guard.remove(user_id); e })?;
@@ -1714,7 +1723,7 @@ impl Database for PGDatabase {
         new_user_id: &Uuid,
         statechain_id: &Uuid,
         finalized_data: TransferFinalizeData,
-        user_ids: &Arc<Mutex<UserIDs>>
+        user_ids: Arc<Mutex<UserIDs>>
     ) -> Result<()> {
         let mut guard = user_ids.as_ref().lock()?;
         guard.insert(new_user_id.clone());

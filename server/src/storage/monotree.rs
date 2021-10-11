@@ -315,10 +315,10 @@ impl Database for MemoryDB {
         unimplemented!()
     }
 
-    fn init_coins_histo(&self, _coins_histo: &Arc<Mutex<CoinValueInfo>>) -> crate::Result<()> {
+    fn init_coins_histo(&self, _coins_histo: Arc<Mutex<CoinValueInfo>>) -> crate::Result<()> {
         unimplemented!()
     }
-    fn init_user_ids(&self, _user_ids: &Arc<Mutex<UserIDs>>) -> crate::Result<()> {
+    fn init_user_ids(&self, _user_ids: Arc<Mutex<UserIDs>>) -> crate::Result<()> {
         unimplemented!()
     }
     fn update_withdraw_sc_sig(
@@ -395,6 +395,9 @@ impl Database for MemoryDB {
     fn get_statechain_id(&self, _user_id: uuid::Uuid) -> crate::Result<uuid::Uuid> {
         unimplemented!()
     }
+    fn get_user_auth(&self, user_id: &uuid::Uuid) -> crate::Result<String> {
+        unimplemented!()
+    }
     fn is_confirmed(&self, _statechain_id: &uuid::Uuid) -> crate::Result<bool> {
         unimplemented!()
     }
@@ -422,7 +425,7 @@ impl Database for MemoryDB {
         _statechain_id: &uuid::Uuid,
         _state_chain: super::StateChain,
         _amount: u64,
-        _coins_histo: &Arc<Mutex<CoinValueInfo>>
+        _coins_histo: Arc<Mutex<CoinValueInfo>>
     ) -> crate::Result<()> {
         unimplemented!()
     }
@@ -432,7 +435,7 @@ impl Database for MemoryDB {
         _user_id: &uuid::Uuid,
         _state_chain: &super::StateChain,
         _amount: &i64,
-         user_ids: &Arc<Mutex<CoinValueInfo>>
+         user_ids: Arc<Mutex<CoinValueInfo>>
     ) -> crate::Result<()> {
         unimplemented!()
     }
@@ -674,7 +677,7 @@ impl Database for MemoryDB {
         _auth: &String,
         _proof_key: &String,
         _challenge: &String,
-         user_ids: &Arc<Mutex<UserIDs>>
+         user_ids: Arc<Mutex<UserIDs>>
     ) -> crate::Result<()> {
         unimplemented!()
     }
@@ -683,7 +686,7 @@ impl Database for MemoryDB {
         _new_user_id: &uuid::Uuid,
         _statechain_id: &uuid::Uuid,
         _finalized_data: crate::protocol::transfer::TransferFinalizeData,
-        _user_ids: &Arc<Mutex<UserIDs>>
+        _user_ids: Arc<Mutex<UserIDs>>
     ) -> crate::Result<()> {
         unimplemented!()
     }
@@ -711,10 +714,10 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
-    fn reset(&self, coins_histo: &Arc<Mutex<CoinValueInfo>>, user_ids: &Arc<Mutex<UserIDs>> ) -> crate::Result<()> {
+    fn reset(&self, coins_histo: Arc<Mutex<CoinValueInfo>>, user_ids: Arc<Mutex<UserIDs>> ) -> crate::Result<()> {
         unimplemented!()
     }
-    fn init(&mut self, coins_histo: &Arc<Mutex<CoinValueInfo>>, user_ids: &Arc<Mutex<UserIDs>> ) -> crate::Result<()> {
+    fn init(&mut self, coins_histo: Arc<Mutex<CoinValueInfo>>, user_ids: Arc<Mutex<UserIDs>> ) -> crate::Result<()> {
         unimplemented!()
     }
     fn get_ecdsa_master_key_input(

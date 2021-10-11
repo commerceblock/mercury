@@ -106,7 +106,7 @@ mod tests {
         let coins = state_entity::api::get_coins_info(&wallet.client_shim).unwrap();
         println!("coins info done.");
 
-        assert_eq!(*coins.values.get(&10000).unwrap(),1);
+        assert_eq!(coins.values.get(&10000).unwrap().get(),1);
 
         println!("Shared wallet id: {:?} ", funding_txid);
         println!("Funding txid: {:?} ", funding_txid);
@@ -474,7 +474,10 @@ mod tests {
         assert!(state_entity::withdraw::withdraw(&mut wallet, &Uuid::new_v4()).is_err());
 
         // Check withdraw method completes without Err
+
+        println!("running withdraw...");
         run_withdraw(&mut wallet, statechain_id);
+        println!("withdraw complete.");
         
         // Check marked spent in wallet
         assert!(!wallet.get_shared_key(shared_key_id).unwrap().unspent);
@@ -510,6 +513,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_batch_withdraw() {
         time_test!();
         let _handle = start_server(None, None);
