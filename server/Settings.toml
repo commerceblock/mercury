@@ -23,4 +23,4 @@ watch_only = false
 bitcoind = ""
 
 #Rate limiter for certain API calls
-rate_limit = 1
+rate_limit = 999999999
