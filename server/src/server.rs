@@ -305,14 +305,21 @@ pub fn get_server<
 
     set_logging_config(&sc_entity.config.log_file);
 
+    let mut guard_coins = sc_entity.coin_value_info.as_ref().lock()?;
+    let mut guard_ids = sc_entity.user_ids.as_ref().lock()?;
     // Initialise DBs
     if sc_entity.config.testing_mode {
         info!("Server running in testing mode.");
         // reset dbs
-        sc_entity.database.reset(sc_entity.coin_value_info.clone(), sc_entity.user_ids.clone())?;
-    }
-    sc_entity.database.init(sc_entity.coin_value_info.clone(), sc_entity.user_ids.clone())?;
 
+        sc_entity.database.reset()?;
+        guard_coins.clear();
+        guard_ids.clear();
+        println!("reset - lens: {} {}", guard_coins.values.len(), guard_ids.len());
+    }
+    sc_entity.database.init(guard_coins.deref_mut(), guard_ids.deref_mut())?;
+    drop(guard_coins);
+    drop(guard_ids);
     match mainstay_config {
         Some(c) => sc_entity.config.mainstay = Some(c),
         None => (),

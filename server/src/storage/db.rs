@@ -668,7 +668,7 @@ impl PGDatabase {
 }
 
 impl Database for PGDatabase {
-    fn init(&mut self, coins_histo: Arc<Mutex<CoinValueInfo>>, user_ids: Arc<Mutex<UserIDs>>) -> Result<()> {
+    fn init(&mut self, coins_histo: &mut CoinValueInfo, user_ids: &mut UserIDs) -> Result<()> {
         self.make_tables()?;
         self.init_coins_histo(coins_histo)?;
         self.init_user_ids(user_ids)
@@ -722,20 +722,14 @@ impl Database for PGDatabase {
         }
     }
 
-    fn reset(&self, coins_histo: Arc<Mutex<CoinValueInfo>>, user_ids: Arc<Mutex<UserIDs>>) -> Result<()> {
-        let mut guard_coins = coins_histo.as_ref().lock()?;
-        let mut guard_ids = user_ids.as_ref().lock()?;
+    fn reset(&self) -> Result<()> {
         // truncate all postgres tables
         self.truncate_tables()?;
         self.drop_tables()?;
-        guard_coins.clear();
-        guard_ids.clear();
-        println!("reset - lens: {} {}", guard_coins.values.len(), guard_ids.len());
         Ok(())
     }
 
-    fn init_coins_histo(&self, coins_histo: Arc<Mutex<CoinValueInfo>> ) -> Result<()> {
-        let mut guard = coins_histo.as_ref().lock()?;
+    fn init_coins_histo(&self, coins_histo: &mut CoinValueInfo ) -> Result<()> {
         let dbr = self.database_r()?;
         let statement =
             dbr.prepare(&format!("SELECT amount,count(1) FROM {} GROUP BY amount", Table::StateChain.to_string(),))?;
@@ -748,17 +742,15 @@ impl Database for PGDatabase {
             match NonZeroU64::new(row.get_opt::<usize, i64>(1).unwrap().unwrap().try_into().unwrap()){
                 Some(count) => {
                     let amount: i64 = row.get_opt::<usize, i64>(0).unwrap().unwrap();
-                    guard.values.insert(amount,count);
+                    coins_histo.values.insert(amount,count);
                 },
                 None => ()
             };
         }
-        drop(guard);
         Ok(())
     }
 
-    fn init_user_ids(&self, user_ids: Arc<Mutex<UserIDs>>) -> Result<()> {
-        let mut guard = user_ids.as_ref().lock()?;
+    fn init_user_ids(&self, user_ids: &mut UserIDs) -> Result<()> {
         let dbr = self.database_r()?;
         let statement =
             dbr.prepare(&format!("SELECT * FROM {}", Table::UserSession.to_string()))?;
@@ -767,9 +759,8 @@ impl Database for PGDatabase {
         for row in &rows {
             let id: Uuid = row.get_opt::<usize, Uuid>(0).unwrap().unwrap();
             println!("init user ids - insert: {}", id);
-            guard.insert(id);
+            user_ids.insert(id);
         }
-        drop(guard);
         Ok(())
     }
 

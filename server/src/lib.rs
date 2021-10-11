@@ -105,8 +105,8 @@ pub trait Database {
     fn set_connection(&mut self, url: &String) -> Result<()>;
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self;
     fn has_withdraw_sc_sig(&self, user_id: Uuid) -> Result<()>;
-    fn init_coins_histo(&self, coins_histo: Arc<Mutex<CoinValueInfo>>) -> Result<()>;
-    fn init_user_ids(&self, user_ids: Arc<Mutex<UserIDs>>) -> Result<()>;
+    fn init_coins_histo(&self, coins_histo: &mut CoinValueInfo) -> Result<()>;
+    fn init_user_ids(&self, user_ids: &mut UserIDs) -> Result<()>;
     fn update_withdraw_sc_sig(&self, user_id: &Uuid, sig: StateChainSig) -> Result<()>;
     fn update_withdraw_tx_sighash(
         &self,
@@ -261,8 +261,8 @@ pub trait Database {
 
     fn get_tx_withdraw(&self, user_id: Uuid) -> Result<Transaction>;
     fn update_tx_withdraw(&self, user_id: Uuid, tx: Transaction) -> Result<()>;
-    fn reset(&self,  coins_histo: Arc<Mutex<CoinValueInfo>>, user_ids: Arc<Mutex<UserIDs>>) -> Result<()>;
-    fn init(&mut self, coins_histo: Arc<Mutex<CoinValueInfo>>, user_ids: Arc<Mutex<UserIDs>>) -> Result<()>;
+    fn reset(&self) -> Result<()>;
+    fn init(&mut self, coins_histo: &mut CoinValueInfo, user_ids: &mut UserIDs) -> Result<()>;
     fn get_ecdsa_master_key_input(&self, user_id: Uuid) -> Result<ECDSAMasterKeyInput>;
     fn update_public_master(&self, user_id: &Uuid, master_public: Party1Public) -> Result<()>;
     fn update_shared_pubkey(&self, user_id: Uuid, pubkey: GE) -> Result<()>;
