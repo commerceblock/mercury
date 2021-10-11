@@ -102,7 +102,9 @@ mod tests {
         assert_eq!(shared_key.smt_proof.clone().unwrap().proof, proof);
         assert_eq!(shared_key.proof_key.clone().unwrap(), proof_key);
 
+        println!("coins info...");
         let coins = state_entity::api::get_coins_info(&wallet.client_shim).unwrap();
+        println!("coins info done.");
 
         assert_eq!(*coins.values.get(&10000).unwrap(),1);
 
