@@ -27,6 +27,7 @@ use url::Url;
 use sha3::Sha3_256;
 use digest::Digest;
 use crate::protocol::util::Utilities;
+use governor::NotUntil;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -70,6 +71,7 @@ impl Ecdsa for SCE {
     }
 
     fn first_message(&self, key_gen_msg1: KeyGenMsg1) -> Result<KeyGenReply1> {
+        self.rate_limiter.check_key(&String::from("lockbox"))?;
         let user_id = key_gen_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
         let db = &self.database;
@@ -160,6 +162,7 @@ impl Ecdsa for SCE {
     }
 
     fn second_message(&self, key_gen_msg2: KeyGenMsg2) -> Result<KeyGenReply2> {
+        self.rate_limiter.check_key(&String::from("lockbox"))?;
         let kg_party_one_second_msg: party1::KeyGenParty1Message2;
         let db = &self.database;
         let user_id = key_gen_msg2.shared_key_id;
@@ -227,7 +230,7 @@ impl Ecdsa for SCE {
     }
 
     fn sign_first(&self, sign_msg1: SignMsg1) -> Result<SignReply1> {
-
+        self.rate_limiter.check_key(&String::from("lockbox"))?;
         let user_id = sign_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
 
@@ -261,7 +264,7 @@ impl Ecdsa for SCE {
     }
 
     fn sign_second(&self, sign_msg2: SignMsg2) -> Result<Vec<Vec<u8>>> {
-
+        self.rate_limiter.check_key(&String::from("lockbox"))?;
         let user_id = sign_msg2.shared_key_id;
         self.check_user_auth(&user_id)?;
         let db = &self.database;

@@ -21,3 +21,6 @@ mainstay_config = ""
 #Watch config
 watch_only = false
 bitcoind = ""
+
+#Rate limiter for certain API calls
+rate_limit = 1
