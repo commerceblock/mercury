@@ -721,10 +721,15 @@ impl Database for PGDatabase {
         }
     }
 
-    fn reset(&self) -> Result<()> {
+    fn reset(&self, coins_histo: &Arc<Mutex<CoinValueInfo>>, user_ids: &Arc<Mutex<UserIDs>>) -> Result<()> {
+        let mut guard_coins = coins_histo.as_ref().lock()?;
+        let mut guard_ids = user_ids.as_ref().lock()?;
         // truncate all postgres tables
         self.truncate_tables()?;
-        self.drop_tables()
+        self.drop_tables()?;
+        guard_coins.values.clear();
+        guard_ids.clear();
+        Ok(())
     }
 
     fn init_coins_histo(&self, coins_histo: &Arc<Mutex<CoinValueInfo>> ) -> Result<()> {
@@ -752,22 +757,14 @@ impl Database for PGDatabase {
         let statement =
             dbr.prepare(&format!("SELECT * FROM {}", Table::UserSession.to_string()))?;
         let rows = statement.query(&[])?;
-                
+        println!("init user ids - rows length: {}", rows.len());
         for row in &rows {
             let id: Uuid = row.get_opt::<usize, Uuid>(0).unwrap().unwrap();
+            println!("init user ids - insert: {}", id);
             guard.insert(id);
         }
-        
         drop(guard);
         Ok(())
-    }
-
-    fn get_user_auth(&self, user_id: Uuid, user_ids: &Arc<Mutex<UserIDs>>) -> Result<Uuid> {
-        let guard = user_ids.as_ref().lock()?;
-        match guard.contains(&user_id){
-            true => self.get_1::<Uuid>(user_id, Table::UserSession, vec![Column::Id]),
-            false => Err(SEError::AuthError),
-        }
     }
 
     fn has_withdraw_sc_sig(&self, user_id: Uuid) -> Result<()> {
@@ -1690,15 +1687,24 @@ impl Database for PGDatabase {
         proof_key: &String, challenge: &String,
         user_ids: &Arc<Mutex<UserIDs>>) -> Result<()> {
         let mut guard = user_ids.as_ref().lock()?;
-        self.insert(user_id, Table::UserSession)?;
-        self.insert(user_id, Table::Lockbox)?;
+        guard.insert(user_id.to_owned());
+        self.insert(user_id, Table::UserSession).map_err(|e| { guard.remove(user_id); e })?;
+        self.insert(user_id, Table::Lockbox).map_err(|e| { 
+            guard.remove(user_id); 
+            let _ = self.remove(user_id, Table::UserSession); 
+            e
+         })?;
         self.update(
             user_id,
             Table::UserSession,
             vec![Column::Authentication, Column::ProofKey, Column::Challenge],
             vec![&auth.clone(), &proof_key.to_owned(), &challenge.clone()],
-        )?;
-        guard.insert(user_id.to_owned());
+        ).map_err(|e| { 
+            guard.remove(user_id); 
+            let _ = self.remove(user_id, Table::UserSession);
+            let _ = self.remove(user_id, Table::Lockbox);
+            e
+         })?;
         Ok(())
     }
 
@@ -1711,9 +1717,16 @@ impl Database for PGDatabase {
         user_ids: &Arc<Mutex<UserIDs>>
     ) -> Result<()> {
         let mut guard = user_ids.as_ref().lock()?;
-        self.insert(new_user_id, Table::UserSession)?;
-        guard.insert(new_user_id.to_owned());
-        self.insert(new_user_id, Table::Lockbox)?;
+        guard.insert(new_user_id.clone());
+        self.insert(new_user_id, Table::UserSession).map_err(|e| { 
+            guard.remove(new_user_id); 
+            e
+         })?;
+        self.insert(new_user_id, Table::Lockbox).map_err(|e| { 
+            guard.remove(new_user_id); 
+            let _ = self.remove(new_user_id, Table::UserSession);
+            e
+         })?;
         self.update(
             new_user_id,
             Table::UserSession,
@@ -1731,7 +1744,13 @@ impl Database for PGDatabase {
                 &statechain_id,
                 &Self::ser(finalized_data.s2)?,
             ],
-        )
+        ).map_err(|e| { 
+            guard.remove(new_user_id); 
+            let _ = self.remove(new_user_id, Table::UserSession);
+            let _ = self.remove(new_user_id, Table::Lockbox);
+            e
+         })?;
+         Ok(())
     }
 
     fn update_ecdsa_sign_first(

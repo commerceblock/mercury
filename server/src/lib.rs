@@ -104,7 +104,6 @@ pub trait Database {
     fn set_connection_from_config(&mut self, config: &crate::config::Config) -> Result<()>;
     fn set_connection(&mut self, url: &String) -> Result<()>;
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self;
-    fn get_user_auth(&self, user_id: Uuid, user_ids: &Arc<Mutex<UserIDs>>) -> Result<Uuid>;
     fn has_withdraw_sc_sig(&self, user_id: Uuid) -> Result<()>;
     fn init_coins_histo(&self, coins_histo: &Arc<Mutex<CoinValueInfo>>) -> Result<()>;
     fn init_user_ids(&self, user_ids: &Arc<Mutex<UserIDs>>) -> Result<()>;
@@ -261,7 +260,7 @@ pub trait Database {
 
     fn get_tx_withdraw(&self, user_id: Uuid) -> Result<Transaction>;
     fn update_tx_withdraw(&self, user_id: Uuid, tx: Transaction) -> Result<()>;
-    fn reset(&self) -> Result<()>;
+    fn reset(&self,  coins_histo: &Arc<Mutex<CoinValueInfo>>, user_ids: &Arc<Mutex<UserIDs>>) -> Result<()>;
     fn init(&mut self, coins_histo: &Arc<Mutex<CoinValueInfo>>, user_ids: &Arc<Mutex<UserIDs>>) -> Result<()>;
     fn get_ecdsa_master_key_input(&self, user_id: Uuid) -> Result<ECDSAMasterKeyInput>;
     fn update_public_master(&self, user_id: &Uuid, master_public: Party1Public) -> Result<()>;

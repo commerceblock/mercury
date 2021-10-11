@@ -242,8 +242,6 @@ mod tests {
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_get_user_auth()
-            .returning(move |_, _| Ok(shared_key_id));
         db.expect_get_statechain_id()
             .with(predicate::eq(shared_key_id))
             .returning(move |_| Ok(statechain_id));
@@ -310,8 +308,6 @@ mod tests {
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_get_user_auth()
-            .returning(move |_, _| Ok(shared_key_ids[0]));
         db.expect_get_withdraw_confirm_data()
             .times(1)
             .returning(move |_| {

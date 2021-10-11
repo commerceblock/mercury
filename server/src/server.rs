@@ -299,7 +299,7 @@ pub fn get_server<
     if sc_entity.config.testing_mode {
         info!("Server running in testing mode.");
         // reset dbs
-        sc_entity.database.reset()?;
+        sc_entity.database.reset(&sc_entity.coin_value_info, &sc_entity.user_ids)?;
         sc_entity.database.init(&sc_entity.coin_value_info, &sc_entity.user_ids)?;
     }
 

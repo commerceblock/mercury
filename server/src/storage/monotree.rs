@@ -311,9 +311,6 @@ impl Database for MemoryDB {
     ) -> Self {
         unimplemented!()
     }
-    fn get_user_auth(&self, _user_id: uuid::Uuid, user_ids: &Arc<Mutex<UserIDs>>) -> crate::Result<uuid::Uuid> {
-        unimplemented!()
-    }
     fn has_withdraw_sc_sig(&self, _user_id: uuid::Uuid) -> crate::Result<()> {
         unimplemented!()
     }
@@ -714,7 +711,7 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
-    fn reset(&self) -> crate::Result<()> {
+    fn reset(&self, coins_histo: &Arc<Mutex<CoinValueInfo>>, user_ids: &Arc<Mutex<UserIDs>> ) -> crate::Result<()> {
         unimplemented!()
     }
     fn init(&mut self, coins_histo: &Arc<Mutex<CoinValueInfo>>, user_ids: &Arc<Mutex<UserIDs>> ) -> crate::Result<()> {

@@ -565,8 +565,10 @@ pub fn prepare_sign_tx(
 #[post("/test/reset-db", format = "json")]
 pub fn reset_test_dbs(sc_entity: State<SCE>) -> Result<Json<()>> {
     if sc_entity.config.testing_mode {
-        match sc_entity.database.reset() {
-            Ok(res) => return Ok(Json(res)),
+        match sc_entity.database.reset(&sc_entity.coin_value_info, &sc_entity.user_ids) {
+            Ok(res) => return {
+                Ok(Json(res))
+            },
             Err(e) => return Err(e),
         }
     }
@@ -648,10 +650,11 @@ impl SCE {
     /// Check if user has passed authentication.
     pub fn check_user_auth(&self, user_id: &Uuid) -> Result<()> {
         // check authorisation id is in DB (and TOOD: check password?)
-        if let Err(_) = self.database.get_user_auth(*user_id, &self.user_ids) {
-            return Err(SEError::AuthError);
+        let guard = self.user_ids.as_ref().lock()?;
+        match guard.contains(user_id){
+            true => Ok(()),
+            false => Err(SEError::AuthError)
         }
-        Ok(())
     }
 
     pub fn get_transfer_batch_status(&self, batch_id: Uuid) -> Result<TransferBatchDataAPI> {
