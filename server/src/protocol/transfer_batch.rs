@@ -303,7 +303,7 @@ mod tests {
         db.expect_create_transfer_batch_data()
             .returning(|_, _| Ok(()));
 
-        let sc_entity = test_sc_entity(db, None);
+        let sc_entity = test_sc_entity(db, None, None);
 
         // Try batch id already exists
         let mut init_msg_batch_id_already_exists = transfer_batch_init_msg.clone();
@@ -397,7 +397,7 @@ mod tests {
         db.expect_update_statechain_owner()
         .returning(|_, _, _| Ok(()));
 
-        let sc_entity = test_sc_entity(db, None);
+        let sc_entity = test_sc_entity(db, None, None);
 
         match sc_entity.finalize_batch(batch_id) {
             Ok(_) => assert!(false, "Expected failure."),
@@ -487,7 +487,7 @@ mod tests {
             Err(SEError::DBError(
                 DBErrorType::NoDataForID, "no data".to_string())));
 
-        let sc_entity = test_sc_entity(db, None);
+        let sc_entity = test_sc_entity(db, None, None);
 
         let mut commitment_data = statechain_id.to_string();
         for sc in state_chains_sorted {

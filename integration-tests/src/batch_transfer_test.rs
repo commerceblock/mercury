@@ -2,10 +2,6 @@
 #[cfg(not(feature = "mockdb"))]
 mod tests {
     use crate::*;
-    extern crate bitcoin;
-    extern crate client_lib;
-    extern crate server_lib;
-    extern crate shared_lib;
 
     use shared_lib::{commitment::verify_commitment, state_chain::StateChainSig};
 
@@ -13,6 +9,8 @@ mod tests {
     use client_lib::state_entity;
     use std::thread::spawn;
     use std::{str::FromStr, thread, time::Duration};
+    use nix::unistd::Pid;
+    use nix::sys::signal::{self, Signal};
 
     /// Test batch transfer signature generation
     #[test]
@@ -112,6 +110,8 @@ mod tests {
                 .contains("Signture's purpose is not valid for batch transfer.")),
             _ => assert!(false),
         }
+        //println!("resetting data...");
+        //reset_data(&wallet.client_shim).unwrap();
     }
 
     /// Perform batch transfer with tests and checks throughout

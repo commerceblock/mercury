@@ -40,6 +40,8 @@ use std::default::Default;
 use std::num::NonZeroU32;
 use nonzero_ext::*;
 use governor::{Quota, RateLimiter, clock::DefaultClock, state::keyed::DashMapStateStore};
+use std::ops::DerefMut;
+use std::borrow::Borrow;
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -113,7 +115,7 @@ pub struct StateChainEntity<
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
     pub scheduler: Option<Arc<Mutex<Scheduler>>>,
     pub lockbox: Option<Lockbox>,
-    pub rate_limiter: Arc<RateLimiter<String, DashMapStateStore<String> , DefaultClock> >
+    pub rate_limiter: Option<Arc<RateLimiter<String, DashMapStateStore<String> , DefaultClock> >>
 }
 
 impl<
@@ -121,6 +123,7 @@ impl<
         D: Database + MonotreeDatabase + Send + Sync + 'static,
     > StateChainEntity<T, D>
 {
+
     pub fn load(mut db: T, mut db_smt: D, config: Option<Config>) -> Result<StateChainEntity<T, D>> {
         // Get config as defaults, Settings.toml and env vars
         let config_rs = config.unwrap_or(Config::load()?);
@@ -157,9 +160,7 @@ impl<
         };
 
         //Construct a keyed rate limiter.
-        let rate_limit = NonZeroU32::new(u32::MAX).unwrap();
-        //let rate_limit = config_rs.rate_limit;
-        let rate_limiter = Arc::new(RateLimiter::dashmap(Quota::per_second(rate_limit)));
+        let rate_limiter = config_rs.rate_limit.map(|r| Arc::new(RateLimiter::dashmap(Quota::per_second(r))));
 
         let sce = Self {
             config: config_rs,
@@ -305,21 +306,19 @@ pub fn get_server<
 
     set_logging_config(&sc_entity.config.log_file);
 
-    let mut guard_coins = sc_entity.coin_value_info.as_ref().lock()?;
-    let mut guard_ids = sc_entity.user_ids.as_ref().lock()?;
     // Initialise DBs
     if sc_entity.config.testing_mode {
         info!("Server running in testing mode.");
         // reset dbs
-
         sc_entity.database.reset()?;
-        guard_coins.clear();
-        guard_ids.clear();
-        println!("reset - lens: {} {}", guard_coins.values.len(), guard_ids.len());
     }
-    sc_entity.database.init(guard_coins.deref_mut(), guard_ids.deref_mut())?;
-    drop(guard_coins);
-    drop(guard_ids);
+    let guard_coins_mutex: &Mutex::<CoinValueInfo> = sc_entity.coin_value_info.as_ref();
+    //let mut guard_coins: &mut CoinValueInfo = guard_coins_mutex.lock()?.deref_mut();
+    let guard_ids_mutex: &Mutex::<HashSet::<Uuid>> = sc_entity.user_ids.as_ref();
+    //let mut guard_ids = guard_ids_mutex.lock()?.deref_mut();
+    sc_entity.database.init(guard_coins_mutex, guard_ids_mutex)?;
+    drop(guard_coins_mutex);
+    drop(guard_ids_mutex);
     match mainstay_config {
         Some(c) => sc_entity.config.mainstay = Some(c),
         None => (),
@@ -535,6 +534,7 @@ mock! {
         ) -> util::Result<Vec<RecoveryDataMsg>>;
         fn get_lockbox_url(&self, user_id: &Uuid
         ) -> util::Result<Option<(Url, usize)>>;
+        fn check_rate(&self, key: &str) -> storage::Result<()>;
     }
     trait Withdraw{
         fn verify_statechain_sig(&self,
@@ -552,6 +552,7 @@ mock! {
         ) -> withdraw::Result<Vec<Vec<Vec<u8>>>>;
     }
     trait Storage{
+        fn reset_data(&self) -> storage::Result<()>;
         fn update_smt(&self, funding_txid: &String, proof_key: &String)
             -> storage::Result<(Option<storage::Root>, storage::Root)>;
         fn get_confirmed_smt_root(&self) -> storage::Result<Option<storage::Root>>;

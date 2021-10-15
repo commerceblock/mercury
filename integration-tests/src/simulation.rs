@@ -2,14 +2,12 @@
 //!
 //! Test spawns a server and randomly performs deposits, transfers, withdrawals and batch-transfers.
 
-extern crate bitcoin;
-extern crate server_lib;
-extern crate shared_lib;
-
 use crate::*;
 use client_lib::wallet::wallet::Wallet;
 use rand::Rng;
 use std::str::FromStr;
+use nix::unistd::Pid;
+use nix::sys::signal::{self, Signal};
 
 #[cfg(test)]
 use mockito;

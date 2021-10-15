@@ -668,7 +668,7 @@ impl PGDatabase {
 }
 
 impl Database for PGDatabase {
-    fn init(&mut self, coins_histo: &mut CoinValueInfo, user_ids: &mut UserIDs) -> Result<()> {
+    fn init(&mut self, coins_histo: &Mutex<CoinValueInfo>, user_ids: &Mutex<UserIDs>) -> Result<()> {
         self.make_tables()?;
         self.init_coins_histo(coins_histo)?;
         self.init_user_ids(user_ids)
@@ -729,7 +729,8 @@ impl Database for PGDatabase {
         Ok(())
     }
 
-    fn init_coins_histo(&self, coins_histo: &mut CoinValueInfo ) -> Result<()> {
+    fn init_coins_histo(&self, coins_histo: &Mutex<CoinValueInfo> ) -> Result<()> {
+        let mut guard = coins_histo.lock()?;
         let dbr = self.database_r()?;
         let statement =
             dbr.prepare(&format!("SELECT amount,count(1) FROM {} GROUP BY amount", Table::StateChain.to_string(),))?;
@@ -742,7 +743,7 @@ impl Database for PGDatabase {
             match NonZeroU64::new(row.get_opt::<usize, i64>(1).unwrap().unwrap().try_into().unwrap()){
                 Some(count) => {
                     let amount: i64 = row.get_opt::<usize, i64>(0).unwrap().unwrap();
-                    coins_histo.values.insert(amount,count);
+                    guard.values.insert(amount,count);
                 },
                 None => ()
             };
@@ -750,7 +751,8 @@ impl Database for PGDatabase {
         Ok(())
     }
 
-    fn init_user_ids(&self, user_ids: &mut UserIDs) -> Result<()> {
+    fn init_user_ids(&self, user_ids: &Mutex<UserIDs>) -> Result<()> {
+        let mut guard = user_ids.lock()?;
         let dbr = self.database_r()?;
         let statement =
             dbr.prepare(&format!("SELECT * FROM {}", Table::UserSession.to_string()))?;
@@ -759,7 +761,7 @@ impl Database for PGDatabase {
         for row in &rows {
             let id: Uuid = row.get_opt::<usize, Uuid>(0).unwrap().unwrap();
             println!("init user ids - insert: {}", id);
-            user_ids.insert(id);
+            guard.insert(id);
         }
         Ok(())
     }

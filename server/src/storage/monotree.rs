@@ -315,10 +315,10 @@ impl Database for MemoryDB {
         unimplemented!()
     }
 
-    fn init_coins_histo(&self, _coins_histo: &mut CoinValueInfo) -> crate::Result<()> {
+    fn init_coins_histo(&self, _coins_histo: &Mutex<CoinValueInfo>) -> crate::Result<()> {
         unimplemented!()
     }
-    fn init_user_ids(&self, _user_ids: &mut UserIDs) -> crate::Result<()> {
+    fn init_user_ids(&self, _user_ids: &Mutex<UserIDs>) -> crate::Result<()> {
         unimplemented!()
     }
     fn update_withdraw_sc_sig(
@@ -714,10 +714,10 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
-    fn reset(&self, coins_histo: &mut CoinValueInfo, user_ids: &mut UserIDs ) -> crate::Result<()> {
+    fn reset(&self) -> crate::Result<()> {
         unimplemented!()
     }
-    fn init(&mut self, coins_histo: &mut CoinValueInfo, user_ids: &mut UserIDs ) -> crate::Result<()> {
+    fn init(&mut self, coins_histo: &Mutex<CoinValueInfo>, user_ids: &Mutex<UserIDs> ) -> crate::Result<()> {
         unimplemented!()
     }
     fn get_ecdsa_master_key_input(

@@ -71,7 +71,7 @@ impl Ecdsa for SCE {
     }
 
     fn first_message(&self, key_gen_msg1: KeyGenMsg1) -> Result<KeyGenReply1> {
-        self.rate_limiter.check_key(&String::from("lockbox"))?;
+        self.check_rate("lockbox")?;
         let user_id = key_gen_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
         let db = &self.database;
@@ -162,7 +162,7 @@ impl Ecdsa for SCE {
     }
 
     fn second_message(&self, key_gen_msg2: KeyGenMsg2) -> Result<KeyGenReply2> {
-        self.rate_limiter.check_key(&String::from("lockbox"))?;
+        self.check_rate("lockbox")?;
         let kg_party_one_second_msg: party1::KeyGenParty1Message2;
         let db = &self.database;
         let user_id = key_gen_msg2.shared_key_id;
@@ -230,7 +230,7 @@ impl Ecdsa for SCE {
     }
 
     fn sign_first(&self, sign_msg1: SignMsg1) -> Result<SignReply1> {
-        self.rate_limiter.check_key(&String::from("lockbox"))?;
+        self.check_rate("lockbox")?;
         let user_id = sign_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
 
@@ -264,7 +264,7 @@ impl Ecdsa for SCE {
     }
 
     fn sign_second(&self, sign_msg2: SignMsg2) -> Result<Vec<Vec<u8>>> {
-        self.rate_limiter.check_key(&String::from("lockbox"))?;
+        self.check_rate("lockbox")?;
         let user_id = sign_msg2.shared_key_id;
         self.check_user_auth(&user_id)?;
         let db = &self.database;
@@ -458,12 +458,14 @@ pub mod tests {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_create_user_session().returning(|_, _, _, _, _| Ok(()));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
         db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
         db.expect_update_public_master().returning(|_,_| Ok(()));
         db.expect_get_challenge().returning(move |_| Ok(challenge.clone()));
 
-        let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()));
+        let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()), None);
 
         let kg_first_msg = party_one::KeyGenFirstMsg { pk_commitment: BigInt::from(0), zk_pok_commitment: BigInt::from(1) };
 
@@ -533,6 +535,8 @@ pub mod tests {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_create_user_session().returning(|_, _, _, _, _| Ok(()));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
         db.expect_get_user_backup_tx().returning(move |_| Ok(tx_backup.clone()));
         db.expect_update_user_backup_tx().returning(|_, _| Ok(()));
@@ -543,7 +547,7 @@ pub mod tests {
         db.expect_get_sighash().returning(move |_| Ok(sig_hash));
         db.expect_update_shared_pubkey().returning(|_,_| Ok(()));
 
-        let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()));
+        let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()), None);
 
         let (eph_key_gen_first_message_party_two, _, _) =
             MasterKey2::sign_first_message();

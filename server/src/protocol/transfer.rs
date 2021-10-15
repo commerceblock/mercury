@@ -163,9 +163,8 @@ impl Transfer for SCE {
     }
 
     fn transfer_receiver(&self, mut transfer_msg4: TransferMsg4) -> Result<TransferMsg5> {
-
-        self.rate_limiter.check_key(&String::from("lockbox"))?;
-
+        self.check_rate("lockbox")?;
+        
         let user_id = transfer_msg4.shared_key_id;
         let statechain_id = transfer_msg4.statechain_id;
 
@@ -302,8 +301,8 @@ impl Transfer for SCE {
     /// transfers completion in the batch transfer case.
     fn transfer_finalize(&self, finalized_data: &TransferFinalizeData) -> Result<()> {
       
-        self.rate_limiter.check_key(&String::from("lockbox"))?;
-      
+        self.check_rate("lockbox")?;
+              
         let statechain_id = finalized_data.statechain_id;
 
         info!("TRANSFER_FINALIZE: State Chain ID: {}", statechain_id);
@@ -539,6 +538,8 @@ mod tests {
         db.expect_get_proof_key()
             .returning(move |_| Ok(pubkey.to_string()));
         db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_statechain_id()
             .with(predicate::eq(shared_key_id))
             .returning(move |_| Ok(statechain_id));
@@ -580,7 +581,7 @@ mod tests {
         db.expect_update_transfer_msg().returning(|_, _| Ok(()));
         db.expect_set_confirmed().returning(|_| Ok(()));
 
-        let sc_entity = test_sc_entity(db, None);
+        let sc_entity = test_sc_entity(db, None, None);
 
         // user does not own State Chain
         let mut msg_1_wrong_shared_key_id = transfer_msg_1.clone();
@@ -625,6 +626,8 @@ mod tests {
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_transfer_data()
             .with(predicate::eq(statechain_id))
             .returning(move |_| {
@@ -703,7 +706,7 @@ mod tests {
         db.expect_update_finalize_batch_data()
             .returning(|_, _| Ok(()));
 
-        let sc_entity = test_sc_entity(db, None);
+        let sc_entity = test_sc_entity(db, None, None);
         let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
 
         // Input data to transfer_receiver
@@ -767,6 +770,8 @@ mod tests {
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_transfer_data()
             .with(predicate::eq(statechain_id))
             .returning(move |_| {
@@ -838,7 +843,7 @@ mod tests {
         db.expect_update_finalize_batch_data()
             .returning(|_, _| Ok(()));
 
-        let sc_entity = test_sc_entity(db, Some(mockito::server_url()));
+        let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None);
         let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
 
         // simulate lockbox secret operations

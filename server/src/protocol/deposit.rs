@@ -206,7 +206,7 @@ pub mod tests {
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_create_user_session().returning(|_, _, _, _, _| Ok(()));
 
-        let sc_entity = test_sc_entity(db, None);
+        let sc_entity = test_sc_entity(db, None, None);
 
         // Invalid proof key
         match sc_entity.deposit_init(DepositMsg1 {
@@ -247,6 +247,8 @@ pub mod tests {
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
         db.expect_get_root().returning(|_| Ok(None));
         db.expect_root_update().returning(|_| Ok(1));
@@ -264,7 +266,7 @@ pub mod tests {
         db.expect_get_shared_pubkey().returning(|_| Ok(Some("".to_string())));
         db.expect_set_shared_pubkey().returning(|_,_| Ok(()));
 
-        let sc_entity = test_sc_entity(db, None);
+        let sc_entity = test_sc_entity(db, None, None);
 
         // Backup tx not signed error
         match sc_entity.deposit_confirm(DepositMsg2 {

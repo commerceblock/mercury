@@ -641,7 +641,7 @@ mod tests {
         let mut db = MockDatabase::new();
         let wallet = gen_wallet(None);
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_reset().returning(|_,_| Ok(()));
+        db.expect_reset().returning(|| Ok(()));
         let invalid_scid = Uuid::new_v4();
         db.expect_get_statechain_amount().returning(|_x| {
             Err(server_lib::error::SEError::DBError(
@@ -651,7 +651,9 @@ mod tests {
         });
         db.expect_create_user_session()
             .returning(|_user_id, _auth, _proof_key, _challenge, _user_ids| Ok(()));
-        //Key generation not completed for this ID yet
+        db.expect_get_user_auth()
+            .returning(|_user_id| Ok(String::from("user_auth")));
+            //Key generation not completed for this ID yet
         db.expect_get_ecdsa_master().returning(|_user_id| Ok(None));
         db.expect_update_keygen_first_msg()
             .returning(|_user_id, _fm, _cw, _ec_kp| Ok(()));

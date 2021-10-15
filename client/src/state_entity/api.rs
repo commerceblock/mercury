@@ -81,6 +81,11 @@ pub fn get_transfer_batch_status(
     requests::get(client_shim, &format!("info/transfer-batch/{}", batch_id))
 }
 
+/// Get state entity's sparse merkle tree root that has been confirmed by mainstay
+pub fn reset_data(client_shim: &ClientShim) -> Result<()> {
+    requests::get(&client_shim, &format!("/test/reset-db"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,3 +110,4 @@ mod tests {
         //assert_eq!(test_string, "test string".to_string());
     }
 }
+

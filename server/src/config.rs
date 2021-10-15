@@ -158,7 +158,7 @@ pub struct Config {
     /// Conductor config
     pub conductor: ConductorConfig,
     /// Rate limit (per second) for certain API calls - must be non-zero
-    pub rate_limit: NonZeroU32
+    pub rate_limit: Option<NonZeroU32>
 }
 
 impl Default for Config {
@@ -184,7 +184,7 @@ impl Default for Config {
             mainstay: Some(MainstayConfig::default()),
             rocket: RocketConfig::default(),
             conductor: ConductorConfig::default(),
-            rate_limit: nonzero!(1u32),
+            rate_limit: None,
         }
     }
 }
@@ -301,12 +301,6 @@ mod tests {
         let urls_str = "[\"https://url1.net\", \"https://url2.net\", \"https://url3.net\"]";
         let urls_deser: Option<Vec<Url>> = serde_json::from_str(urls_str).unwrap();
         assert_eq!(urls, urls_deser);
-    }
-
-    #[test]
-    fn test_rate_limit_config() {
-
-
     }
 }
 

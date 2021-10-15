@@ -242,6 +242,8 @@ mod tests {
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_statechain_id()
             .with(predicate::eq(shared_key_id))
             .returning(move |_| Ok(statechain_id));
@@ -275,7 +277,7 @@ mod tests {
             });
         db.expect_update_withdraw_sc_sig().returning(|_, _| Ok(()));
 
-        let sc_entity = test_sc_entity(db, None);
+        let sc_entity = test_sc_entity(db, None, None);
 
         // user does not own State Chain
         let mut msg_1_wrong_shared_key = withdraw_msg_1.clone();
@@ -308,6 +310,8 @@ mod tests {
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_withdraw_confirm_data()
             .times(1)
             .returning(move |_| {
@@ -340,7 +344,7 @@ mod tests {
         db.expect_root_update().returning(|_| Ok(1));
         db.expect_remove_backup_tx().returning(|_| Ok(()));
 
-        let sc_entity = test_sc_entity(db, None);
+        let sc_entity = test_sc_entity(db, None, None);
         let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
 
         // Ensure backup tx has been signed

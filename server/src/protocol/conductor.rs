@@ -1369,7 +1369,7 @@ mod tests {
     fn test_poll_utxo() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        let mut sc_entity = test_sc_entity(db, None);
+        let mut sc_entity = test_sc_entity(db, None, None);
         sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
 
         let utxo_not_in_swap = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d4").unwrap();
@@ -1404,7 +1404,7 @@ mod tests {
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        let mut sc_entity = test_sc_entity(db, None);
+        let mut sc_entity = test_sc_entity(db, None, None);
         sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
         let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         guard.update_swap_info().unwrap();
@@ -1472,7 +1472,7 @@ mod tests {
         db.expect_get_statechain_amount()
             .returning(move |_| Ok(statechain_amount.clone()));
 
-        let mut sc_entity = test_sc_entity(db, None);
+        let mut sc_entity = test_sc_entity(db, None, None);
         sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
 
         // Try invalid signature for proof key
@@ -1567,7 +1567,7 @@ mod tests {
                 .returning(move |_| Ok(statechain2.clone()));
         }
 
-        let mut sc_entity = test_sc_entity(db, None);
+        let mut sc_entity = test_sc_entity(db, None, None);
         sc_entity.scheduler = Some(Arc::new(Mutex::new(scheduler)));
 
         let mut swap_token_no_sc = swap_token.clone();
@@ -1682,7 +1682,7 @@ mod tests {
     fn test_get_blinded_spend_token() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        let mut sc_entity = test_sc_entity(db, None);
+        let mut sc_entity = test_sc_entity(db, None, None);
         sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
         let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         guard.update_swap_info().unwrap();
@@ -1752,7 +1752,7 @@ mod tests {
     fn test_swap_second_message() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        let mut sc_entity = test_sc_entity(db, None);
+        let mut sc_entity = test_sc_entity(db, None, None);
         sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
         let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         guard.update_swap_info().unwrap();
@@ -1885,7 +1885,7 @@ mod tests {
     fn test_get_address_from_blinded_spend_token() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        let mut sc_entity = test_sc_entity(db, None);
+        let mut sc_entity = test_sc_entity(db, None, None);
         sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
         let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         guard.update_swap_info().unwrap();

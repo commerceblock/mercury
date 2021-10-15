@@ -1026,11 +1026,11 @@ mod tests {
         assert!(cvi.update(&(20 as i64), &(10 as i64)).is_err());
         cvi.update(&(3 as i64), &(1 as i64));
         cvi.increment(&(2 as i64));
-        let mut testMap = HashMap::<i64, i64>::new();
-        testMap.insert(3 as i64, 1 as i64);
-        testMap.insert(20 as i64, 1 as i64);
-        testMap.insert(1 as i64, 2 as i64);
-        testMap.insert(2 as i64, 1 as i64);
+        let mut testMap = HashMap::<i64, NonZeroU64>::new();
+        testMap.insert(3 as i64, NonZeroU64::new(1).unwrap());
+        testMap.insert(20 as i64, NonZeroU64::new(1).unwrap());
+        testMap.insert(1 as i64, NonZeroU64::new(2).unwrap());
+        testMap.insert(2 as i64, NonZeroU64::new(1).unwrap());
         assert_eq!(cvi.values, testMap); 
     }
 }

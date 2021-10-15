@@ -3,6 +3,8 @@ pub use crate::{error::SEError, Result};
 use rocket::State;
 use cfg_if::cfg_if;
 use crate::server::StateChainEntity;
+use std::num::NonZeroU32;
+use crate::protocol::util::Utilities;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -35,7 +37,7 @@ pub trait Ping {
 
 impl Ping for SCE {
     fn ping_rate_limited(&self) -> Result<()> {
-        self.rate_limiter.check_key(&String::from("ping"))?;
+        self.check_rate("ping")?;
         Ok(())
     }
 }
@@ -52,16 +54,18 @@ pub mod tests {
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         //db.expect_create_user_session().returning(|_, _, _, _| Ok(()));
         
-        let sc_entity = test_sc_entity(db, None);
+        let rate_limit = NonZeroU32::new(1);
+
+        let sc_entity = test_sc_entity(db, None, rate_limit);
         assert_eq!(sc_entity.ping_rate_limited().unwrap(), ());
         match sc_entity.ping_rate_limited() {
-            Err(SEError::RateLimitError(ref message)) => {
+            Err(SEError::RateLimitError(ref _message)) => {
                 ()
             },
             _ => assert!(false, "expected RateLimitError")
         }
 
-        thread::sleep(Duration::from_millis(1000u64 / (sc_entity.config.rate_limit.get() as u64) + 1u64));
+        thread::sleep(Duration::from_millis(1000u64 / (rate_limit.unwrap().get() as u64) + 1u64));
         assert_eq!(sc_entity.ping_rate_limited().unwrap(), ());
     }
 }
