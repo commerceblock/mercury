@@ -10,10 +10,8 @@ use shared_lib::mainstay::MainstayConfig;
 use std::env;
 use std::str::FromStr;
 use std::vec::Vec;
-use uuid::Uuid;
-use url::Url;
 use std::num::NonZeroU32;
-use nonzero_ext::*;
+
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")] 
@@ -291,6 +289,7 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use url::Url;
     
     #[test]
     fn test_deserialize_lockbox() {

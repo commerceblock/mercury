@@ -27,7 +27,6 @@ use url::Url;
 use sha3::Sha3_256;
 use digest::Digest;
 use crate::protocol::util::Utilities;
-use governor::NotUntil;
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -75,7 +74,6 @@ impl Ecdsa for SCE {
         let user_id = key_gen_msg1.shared_key_id;
         self.check_user_auth(&user_id)?;
         let db = &self.database;
-        let config = &self.config;
         
         // if deposit, verify VDF
         if (key_gen_msg1.protocol == Protocol::Deposit) {
@@ -169,7 +167,7 @@ impl Ecdsa for SCE {
 
         // call lockbox
         match &self.lockbox {
-            Some(l) => {
+            Some(_) => {
                 let lockbox_url: Url = match self.get_lockbox_url(&user_id)?{
                     Some(l) => l.0,
                     None => return Err(SEError::Generic(format!("Lockbox index not found in database for user_id: {}", &user_id)))
@@ -295,7 +293,7 @@ impl Ecdsa for SCE {
         let mut ws: Vec<Vec<u8>>;
 
         match &self.lockbox {
-        Some(l) => {
+        Some(_) => {
             let lockbox_url: Url = match self.get_lockbox_url(&user_id)?{
                 Some(l) => l.0,
                 None => return Err(SEError::Generic(format!("Lockbox index not found in database for user_id: {}", &user_id)))
@@ -465,7 +463,7 @@ pub mod tests {
         db.expect_update_public_master().returning(|_,_| Ok(()));
         db.expect_get_challenge().returning(move |_| Ok(challenge.clone()));
 
-        let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()), None);
+        let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None);
 
         let kg_first_msg = party_one::KeyGenFirstMsg { pk_commitment: BigInt::from(0), zk_pok_commitment: BigInt::from(1) };
 
@@ -547,7 +545,7 @@ pub mod tests {
         db.expect_get_sighash().returning(move |_| Ok(sig_hash));
         db.expect_update_shared_pubkey().returning(|_,_| Ok(()));
 
-        let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()), None);
+        let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None);
 
         let (eph_key_gen_first_message_party_two, _, _) =
             MasterKey2::sign_first_message();

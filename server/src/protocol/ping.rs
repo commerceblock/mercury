@@ -3,7 +3,6 @@ pub use crate::{error::SEError, Result};
 use rocket::State;
 use cfg_if::cfg_if;
 use crate::server::StateChainEntity;
-use std::num::NonZeroU32;
 use crate::protocol::util::Utilities;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
@@ -47,6 +46,7 @@ pub mod tests {
     use super::*;
     use super::super::util::tests::test_sc_entity;
     use std::{thread, time::Duration};
+    use std::num::NonZeroU32;
 
     #[test]
     fn test_ping_rate_limited() {

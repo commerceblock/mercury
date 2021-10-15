@@ -6,8 +6,6 @@ use crate::*;
 use client_lib::wallet::wallet::Wallet;
 use rand::Rng;
 use std::str::FromStr;
-use nix::unistd::Pid;
-use nix::sys::signal::{self, Signal};
 
 #[cfg(test)]
 use mockito;

@@ -31,17 +31,10 @@ use once_cell::sync::Lazy;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 use std::collections::HashMap;
-use crate::error::SEError;
-use std::convert::TryInto;
 use url::Url;
 use std::collections::HashSet;
 use std::default::Default;
-
-use std::num::NonZeroU32;
-use nonzero_ext::*;
 use governor::{Quota, RateLimiter, clock::DefaultClock, state::keyed::DashMapStateStore};
-use std::ops::DerefMut;
-use std::borrow::Borrow;
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -570,7 +563,7 @@ mock! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_endpoints() {
         let urls: Vec<Url> = vec![];

@@ -74,8 +74,6 @@ use rocket_contrib::databases::postgres;
 use shared_lib::{state_chain::*, structs::TransferMsg3, Root, structs::CoinValueInfo};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
-use url::Url;
-use std::sync::MutexGuard;
 use crate::server::UserIDs;
 use std::sync::{Arc, Mutex};
 

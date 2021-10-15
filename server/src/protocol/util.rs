@@ -36,8 +36,6 @@ use uuid::Uuid;
 use bitcoin::OutPoint;
 use bitcoin::Transaction;
 use curv::GE;
-use crate::config::Config;
-use std::sync::MutexGuard;
 use std::ops::Deref;
 
 
@@ -1079,13 +1077,14 @@ pub mod mocks {
 pub mod tests {
     use super::*;
     use crate::shared_lib::mainstay;
-    use crate::{structs::StateChainAmount, MockDatabase, server::Endpoints};
+    use crate::{structs::StateChainAmount, MockDatabase};
     use monotree::database::{Database as monotreeDatabase, MemoryDB};
     use std::convert::TryInto;
     use std::str::FromStr;
     use bitcoin::Transaction;
     use std::num::NonZeroU32;
-
+    use crate::config::Config;
+    
     // Useful data structs for tests throughout codebase
     pub static BACKUP_TX_NOT_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
     pub static BACKUP_TX_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,68,2,32,45,42,91,77,252,143,55,65,154,96,191,149,204,131,88,79,80,161,231,209,234,229,217,100,28,99,48,148,136,194,204,98,2,32,90,111,183,68,74,24,75,120,179,80,20,183,60,198,127,106,102,64,37,193,174,226,199,118,237,35,96,236,45,94,203,49,1],[2,242,131,110,175,215,21,123,219,179,199,144,85,14,163,42,19,197,97,249,41,130,243,139,15,17,51,185,147,228,100,122,213]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";

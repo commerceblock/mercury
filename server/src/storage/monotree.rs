@@ -6,10 +6,7 @@ use crate::PGDatabase;
 use monotree::database::{Database as MonotreeDatabase, MemCache, MemoryDB};
 use monotree::Errors;
 use std::collections::HashMap;
-use url::Url;
 use shared_lib::structs::CoinValueInfo;
-use std::collections::HashSet;
-use uuid::Uuid;
 use crate::server::UserIDs;
 use std::sync::{Arc, Mutex};
 
@@ -395,7 +392,7 @@ impl Database for MemoryDB {
     fn get_statechain_id(&self, _user_id: uuid::Uuid) -> crate::Result<uuid::Uuid> {
         unimplemented!()
     }
-    fn get_user_auth(&self, user_id: &uuid::Uuid) -> crate::Result<String> {
+    fn get_user_auth(&self, _user_id: &uuid::Uuid) -> crate::Result<String> {
         unimplemented!()
     }
     fn is_confirmed(&self, _statechain_id: &uuid::Uuid) -> crate::Result<bool> {
@@ -435,7 +432,7 @@ impl Database for MemoryDB {
         _user_id: &uuid::Uuid,
         _state_chain: &super::StateChain,
         _amount: &i64,
-         user_ids: Arc<Mutex<CoinValueInfo>>
+        _user_ids: Arc<Mutex<CoinValueInfo>>
     ) -> crate::Result<()> {
         unimplemented!()
     }
@@ -677,7 +674,7 @@ impl Database for MemoryDB {
         _auth: &String,
         _proof_key: &String,
         _challenge: &String,
-         user_ids: Arc<Mutex<UserIDs>>
+        _user_ids: Arc<Mutex<UserIDs>>
     ) -> crate::Result<()> {
         unimplemented!()
     }
@@ -717,7 +714,7 @@ impl Database for MemoryDB {
     fn reset(&self) -> crate::Result<()> {
         unimplemented!()
     }
-    fn init(&self, coins_histo: &Mutex<CoinValueInfo>, user_ids: &Mutex<UserIDs> ) -> crate::Result<()> {
+    fn init(&self, _coins_histo: &Mutex<CoinValueInfo>, _user_ids: &Mutex<UserIDs> ) -> crate::Result<()> {
         unimplemented!()
     }
     fn get_ecdsa_master_key_input(

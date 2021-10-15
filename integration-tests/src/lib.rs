@@ -146,8 +146,8 @@ impl SpawnServer for MockDatabase {
     fn spawn_server(
         self,
         mainstay_config: Option<mainstay::MainstayConfig>,
-        port: Option<u16>,
-        mode: Option<String>
+        _port: Option<u16>,
+        _mode: Option<String>
     ) -> thread::JoinHandle<SpawnError> {
         // Set enviroment variable to testing_mode=true to override Settings.toml
         env::set_var("MERC_TESTING_MODE", "true");

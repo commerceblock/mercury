@@ -275,7 +275,7 @@ pub mod tests {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e
                 .to_string()
-                .contains("Signed Back up transaction not found."), e.to_string()),
+                .contains("Signed Back up transaction not found."), "{}", e.to_string()),
         }
 
         // Clean protocol run

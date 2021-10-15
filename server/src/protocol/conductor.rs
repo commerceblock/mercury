@@ -674,7 +674,7 @@ impl Scheduler {
 
     pub fn update_swap_info(&mut self) -> Result<()> {
         self.update_swap_requests();
-        self.init_group_info_map();
+        self.init_group_info_map()?;
         self.update_swaps()
     }
 

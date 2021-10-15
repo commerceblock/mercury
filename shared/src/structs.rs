@@ -1021,13 +1021,13 @@ mod tests {
         cvi.update(&(10 as i64), &(1 as i64)).unwrap();
         cvi.update(&(20 as i64), &(10 as i64)).unwrap();
         assert!(cvi.update(&(20 as i64), &(10 as i64)).is_err());
-        cvi.update(&(3 as i64), &(1 as i64));
+        cvi.update(&(3 as i64), &(1 as i64)).unwrap();
         cvi.increment(&(2 as i64));
-        let mut testMap = HashMap::<i64, NonZeroU64>::new();
-        testMap.insert(3 as i64, NonZeroU64::new(1).unwrap());
-        testMap.insert(20 as i64, NonZeroU64::new(1).unwrap());
-        testMap.insert(1 as i64, NonZeroU64::new(2).unwrap());
-        testMap.insert(2 as i64, NonZeroU64::new(1).unwrap());
-        assert_eq!(cvi.values, testMap); 
+        let mut test_map = HashMap::<i64, NonZeroU64>::new();
+        test_map.insert(3 as i64, NonZeroU64::new(1).unwrap());
+        test_map.insert(20 as i64, NonZeroU64::new(1).unwrap());
+        test_map.insert(1 as i64, NonZeroU64::new(2).unwrap());
+        test_map.insert(2 as i64, NonZeroU64::new(1).unwrap());
+        assert_eq!(cvi.values, test_map); 
     }
 }

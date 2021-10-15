@@ -15,7 +15,7 @@ use bitcoin::network::constants::Network;
 
 use crate::error::SEError;
 use crate::Database;
-use crate::{server::{StateChainEntity, Endpoints}, storage::Storage};
+use crate::{server::StateChainEntity, storage::Storage};
 use super::requests::post_lb;
 use rocket_okapi::openapi;
 

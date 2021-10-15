@@ -34,7 +34,6 @@ use rocket_okapi::JsonSchema;
 
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
-use url::Url;
 use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
 

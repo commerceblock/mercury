@@ -39,7 +39,7 @@ fn main() {
             let address: String =
                 match query_wallet_daemon(DaemonRequest::GenAddressSE).unwrap() {
                     DaemonResponse::Value(val) => val,
-                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                     DaemonResponse::None => panic!("None value returned."),
                 };
             println!("\nMercury Address: {:?}\n", address.to_string());
@@ -47,7 +47,7 @@ fn main() {
             let (addrs, balances): (Vec<bitcoin::Address>, Vec<GetBalanceResponse>) =
                 match query_wallet_daemon(DaemonRequest::GetWalletBalance).unwrap() {
                     DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
-                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                     DaemonResponse::None => panic!("None value returned."),
                 };
             if addrs.len() > 0 {
@@ -63,7 +63,7 @@ fn main() {
             let (_, statechain_ids, bals, lktimes): (Vec<Uuid>, Vec<Uuid>, Vec<GetBalanceResponse>, Vec<u32>) =
                 match query_wallet_daemon(DaemonRequest::GetStateChainsInfo).unwrap() {
                     DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
-                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                     DaemonResponse::None => panic!("None value returned."),
                 };
             if statechain_ids.len() > 0 {
@@ -82,7 +82,7 @@ fn main() {
                 let txhex: String =
                     match query_wallet_daemon(DaemonRequest::GetBackup(statechain_id)).unwrap() {
                         DaemonResponse::Value(val) => val,
-                        DaemonResponse::Error(e) => panic!(e.to_string()),
+                        DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                         DaemonResponse::None => panic!("None value returned."),
                     };
 
@@ -92,7 +92,7 @@ fn main() {
             let (_, unspent_list): (Vec<bitcoin::Address>, Vec<Vec<GetListUnspentResponse>>) =
                 match query_wallet_daemon(DaemonRequest::GetListUnspent).unwrap() {
                     DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
-                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                     DaemonResponse::None => panic!("None value returned."),
                 };
             let mut hashes: Vec<String> = vec![];
@@ -114,7 +114,7 @@ fn main() {
                     PublicKey,
                 ) = match query_wallet_daemon(DaemonRequest::Deposit(amount)).unwrap() {
                     DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
-                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                     DaemonResponse::None => panic!("None value returned."),
                 };
                 println!(
@@ -133,7 +133,7 @@ fn main() {
                 let (txid, statechain_id, amount): (String, Uuid, u64) =
                     match query_wallet_daemon(DaemonRequest::Withdraw(statechain_id)).unwrap() {
                         DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
-                        DaemonResponse::Error(e) => panic!(e.to_string()),
+                        DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                         DaemonResponse::None => panic!("None value returned."),
                     };
                 println!(
@@ -152,7 +152,7 @@ fn main() {
                 .unwrap()
                 {
                     DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
-                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                     DaemonResponse::None => panic!("None value returned."),
                 };
                 println!(
@@ -172,7 +172,7 @@ fn main() {
                         .unwrap()
                     {
                         DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
-                        DaemonResponse::Error(e) => panic!(e.to_string()),
+                        DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                         DaemonResponse::None => panic!("None value returned."),
                     };
 
@@ -206,7 +206,7 @@ fn main() {
                 .unwrap()
                 {
                     DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
-                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                     DaemonResponse::None => panic!("None value returned."),
                 };
                 println!("{}",transfer_msg);
@@ -224,7 +224,7 @@ fn main() {
                 ))
                 .unwrap()
                 {
-                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                     _ => {}
                 };
                 println!("\nSwap complete from StateChain ID: {}.", statechain_id);
@@ -269,7 +269,7 @@ fn main() {
                 .unwrap()
                 {
                     DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
-                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                     DaemonResponse::None => panic!("None value returned."),
                 };
                 println!("\nStateChain with Id {} info: \n", statechain_id);
@@ -287,7 +287,7 @@ fn main() {
             let fee_info: StateEntityFeeInfoAPI =
                 match query_wallet_daemon(DaemonRequest::GetFeeInfo).unwrap() {
                     DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
-                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                     DaemonResponse::None => panic!("None value returned."),
                 };
             println!("State Entity fee info: \n\n{}", fee_info);
@@ -300,7 +300,7 @@ fn main() {
                 .unwrap()
                 {
                     DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
-                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                     DaemonResponse::None => panic!("None value returned."),
                 };
                 if recovery_info.len()==0 {
@@ -315,7 +315,7 @@ fn main() {
             let coins_info: CoinValueInfo =
                 match query_wallet_daemon(DaemonRequest::GetCoinsInfo).unwrap() {
                     DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
-                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                     DaemonResponse::None => panic!("None value returned."),
                 };
             println!("Coin amounts histogram: \n\n{:?}", coins_info);
@@ -323,7 +323,7 @@ fn main() {
             let swap_groups: HashMap<String,u64> =
                 match query_wallet_daemon(DaemonRequest::GetSwapGroups).unwrap() {
                     DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
-                    DaemonResponse::Error(e) => panic!(e.to_string()),
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                     DaemonResponse::None => panic!("None value returned."),
                 };
             println!("Swap group registrations: \n\n{:?}", swap_groups);
