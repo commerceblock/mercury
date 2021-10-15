@@ -54,6 +54,7 @@ mod tests {
 
         let key_res = wallet.gen_shared_key(&init_res.unwrap().id, &1000, solution.to_string());
         assert!(key_res.is_ok());
+        reset_data(&wallet.client_shim).unwrap();
     }
 
     #[test]
@@ -73,6 +74,7 @@ mod tests {
             "".to_string(),
         );
         assert!(err.is_err());
+        reset_data(&client_shim).unwrap();
     }
 
     #[test]
@@ -110,6 +112,7 @@ mod tests {
 
         println!("Shared wallet id: {:?} ", funding_txid);
         println!("Funding txid: {:?} ", funding_txid);
+        reset_data(&wallet.client_shim).unwrap();
     }
 
     // #[test]
@@ -140,6 +143,7 @@ mod tests {
             state_chain.chain.last().unwrap().data,
             deposit.5.to_string()
         );
+        reset_data(&wallet.client_shim).unwrap();
     }
 
     #[test]
@@ -211,6 +215,7 @@ mod tests {
             shared_key.proof_key.clone().unwrap(),
             receiver_addr.proof_key.to_string()
         );
+        reset_data(&wallets[0].client_shim).unwrap();
     }
 
     #[test]
@@ -319,6 +324,7 @@ mod tests {
             shared_key.proof_key.clone().unwrap(),
             receiver_addr.proof_key.to_string()
         );
+        reset_data(&wallets[0].client_shim).unwrap();
     }
 
     #[test]
@@ -449,6 +455,7 @@ mod tests {
             shared_key.proof_key.clone().unwrap(),
             receiver2_addr.proof_key.to_string()
         );
+        reset_data(&wallets[0].client_shim).unwrap();
     }
 
     #[test]
@@ -510,6 +517,7 @@ mod tests {
         // Try again after funds already withdrawn
         let err = state_entity::withdraw::withdraw(&mut wallet, shared_key_id);
         assert!(err.is_err());
+        reset_data(&wallet.client_shim).unwrap();
     }
 
     #[test]
@@ -579,6 +587,7 @@ mod tests {
             let err = state_entity::withdraw::withdraw(&mut wallet, sk_id);
             assert!(err.is_err());
         }
+        reset_data(&wallet.client_shim).unwrap();
     }
 
     #[test]
@@ -613,6 +622,7 @@ mod tests {
             shared_key.smt_proof.clone().unwrap().proof,
             shared_key_rebuilt.smt_proof.clone().unwrap().proof
         );
+        reset_data(&wallet.client_shim).unwrap();
     }
 }
 
@@ -671,5 +681,6 @@ mod tests {
 
         let err = state_entity::api::get_statechain(&wallet.client_shim, &invalid_scid);
         assert!(err.is_err());
+        reset_data(&wallet.client_shim).unwrap();
     }
 }

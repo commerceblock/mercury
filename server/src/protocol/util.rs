@@ -575,13 +575,15 @@ pub fn prepare_sign_tx(
     }
 }
 
-#[get("/test/reset-db", format = "json")]
+#[openapi]
+/// # Reset databases and in-RAM data if in testing mode
+#[get("/test/reset-db")]
 pub fn reset_test_dbs(sc_entity: State<SCE>) -> Result<Json<()>> {
     if sc_entity.config.testing_mode {
         match sc_entity.database.reset() {
-            Ok(res) => return {
+            Ok(_res) => {
                 sc_entity.reset_data()?;
-                Ok(Json(res))
+                return Ok(Json(()))
             },
             Err(e) => return Err(e),
         }

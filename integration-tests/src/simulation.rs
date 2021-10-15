@@ -42,6 +42,7 @@ pub fn run_simulation() {
             break;
         }
     }
+    reset_data(&wallets[0].client_shim).unwrap();
 }
 
 /// Generate random 2000 <= amount <= 20000

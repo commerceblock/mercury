@@ -455,7 +455,8 @@ pub fn batch_transfer_verify_amounts(
 }
 
 pub fn reset_data(client: &ClientShim) -> Result<()> {
-    state_entity::api::reset_data(client)
+    state_entity::api::reset_data(client)?;
+    Ok(())
 }
 
 pub fn start_server(port: Option<u16>, mode: Option<String>) -> thread::JoinHandle<SpawnError> {

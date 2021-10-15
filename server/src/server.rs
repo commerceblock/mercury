@@ -229,6 +229,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             util::get_recovery_data,
             util::get_transfer_batch_status,
             util::get_coin_info,
+            util::reset_test_dbs,
             ecdsa::first_message,
             ecdsa::second_message,
             ecdsa::sign_first,
@@ -263,6 +264,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             util::get_recovery_data,
             util::get_transfer_batch_status,
             util::get_coin_info,
+            util::reset_test_dbs,
             ecdsa::first_message,
             ecdsa::second_message,
             ecdsa::sign_first,
@@ -280,6 +282,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             withdraw::withdraw_init,
             withdraw::withdraw_confirm],
         Mode::Conductor => routes_with_openapi![
+            util::reset_test_dbs,
             conductor::poll_utxo,
             conductor::poll_swap,
             conductor::get_swap_info,
