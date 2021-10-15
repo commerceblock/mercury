@@ -581,7 +581,8 @@ pub fn reset_test_dbs(sc_entity: State<SCE>) -> Result<Json<()>> {
         match sc_entity.database.reset() {
             Ok(_res) => {
                 sc_entity.reset_data()?;
-                sc_entity.database.init(sc_entity.coin_value_info.as_ref(), sc_entity.user_ids.as_ref())?;
+                sc_entity.database.init(sc_entity.coin_value_info.as_ref(), 
+                    sc_entity.user_ids.as_ref())?;
                 return Ok(Json(()))
             },
             Err(e) => return Err(e),
@@ -592,6 +593,21 @@ pub fn reset_test_dbs(sc_entity: State<SCE>) -> Result<Json<()>> {
     )));
 }
 
+#[openapi]
+/// # Reset databases and in-RAM data if in testing mode
+#[get("/test/reset-inram-data")]
+pub fn reset_inram_data(sc_entity: State<SCE>) -> Result<Json<()>> {
+    if sc_entity.config.testing_mode {
+        sc_entity.reset_data()?;
+        sc_entity.database.init(sc_entity.coin_value_info.as_ref(), 
+                    sc_entity.user_ids.as_ref())?;
+        return Ok(Json(()));
+    };
+
+    return Err(SEError::Generic(String::from(
+        "Cannot reset in-ram data when not in testing mode.",
+    )));
+}
 
 
 // Utily functions for StateChainEntity to be used throughout codebase.

@@ -2,15 +2,11 @@
 #[cfg(not(feature = "mockdb"))]
 mod tests {
     use crate::*;
-
     use shared_lib::{commitment::verify_commitment, state_chain::StateChainSig};
-
     use bitcoin::PublicKey;
     use client_lib::state_entity;
     use std::thread::spawn;
     use std::{str::FromStr, thread, time::Duration};
-    use nix::unistd::Pid;
-    use nix::sys::signal::{self, Signal};
 
     /// Test batch transfer signature generation
     #[test]

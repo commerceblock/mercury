@@ -104,14 +104,18 @@ mod tests {
         assert_eq!(shared_key.smt_proof.clone().unwrap().proof, proof);
         assert_eq!(shared_key.proof_key.clone().unwrap(), proof_key);
 
-        println!("coins info...");
         let coins = state_entity::api::get_coins_info(&wallet.client_shim).unwrap();
-        println!("coins info done.");
 
         assert_eq!(coins.values.get(&10000).unwrap().get(),1);
 
         println!("Shared wallet id: {:?} ", funding_txid);
         println!("Funding txid: {:?} ", funding_txid);
+
+        //Confirm in-ram data recovery from database
+        reset_inram_data(&wallet.client_shim).unwrap();
+        let coins = state_entity::api::get_coins_info(&wallet.client_shim).unwrap();
+        assert_eq!(coins.values.get(&10000).unwrap().get(),1);
+        //Reset data
         reset_data(&wallet.client_shim).unwrap();
     }
 

@@ -86,7 +86,10 @@ pub fn reset_data(client_shim: &ClientShim) -> Result<()> {
     requests::get(client_shim, "test/reset-db")
 }
 
-
+/// Reset the state entity's database and in-memory data
+pub fn reset_inram_data(client_shim: &ClientShim) -> Result<()> {
+    requests::get(client_shim, "test/reset-inram-data")
+}
 
 #[cfg(test)]
 mod tests {

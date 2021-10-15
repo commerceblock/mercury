@@ -459,6 +459,11 @@ pub fn reset_data(client: &ClientShim) -> Result<()> {
     Ok(())
 }
 
+pub fn reset_inram_data(client: &ClientShim) -> Result<()> {
+    state_entity::api::reset_inram_data(client)?;
+    Ok(())
+}
+
 pub fn start_server(port: Option<u16>, mode: Option<String>) -> thread::JoinHandle<SpawnError> {
     PGDatabase::get_new().spawn_server(None, port, mode)
 }
