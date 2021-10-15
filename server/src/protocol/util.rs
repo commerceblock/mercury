@@ -583,6 +583,7 @@ pub fn reset_test_dbs(sc_entity: State<SCE>) -> Result<Json<()>> {
         match sc_entity.database.reset() {
             Ok(_res) => {
                 sc_entity.reset_data()?;
+                sc_entity.database.init(sc_entity.coin_value_info.as_ref(), sc_entity.user_ids.as_ref())?;
                 return Ok(Json(()))
             },
             Err(e) => return Err(e),

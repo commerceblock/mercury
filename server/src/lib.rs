@@ -262,7 +262,7 @@ pub trait Database {
     fn get_tx_withdraw(&self, user_id: Uuid) -> Result<Transaction>;
     fn update_tx_withdraw(&self, user_id: Uuid, tx: Transaction) -> Result<()>;
     fn reset(&self) -> Result<()>;
-    fn init(&mut self, coins_histo: &Mutex<CoinValueInfo>, user_ids: &Mutex<UserIDs>) -> Result<()>;
+    fn init(&self, coins_histo: &Mutex<CoinValueInfo>, user_ids: &Mutex<UserIDs>) -> Result<()>;
     fn get_ecdsa_master_key_input(&self, user_id: Uuid) -> Result<ECDSAMasterKeyInput>;
     fn update_public_master(&self, user_id: &Uuid, master_public: Party1Public) -> Result<()>;
     fn update_shared_pubkey(&self, user_id: Uuid, pubkey: GE) -> Result<()>;

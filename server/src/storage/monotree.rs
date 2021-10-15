@@ -717,7 +717,7 @@ impl Database for MemoryDB {
     fn reset(&self) -> crate::Result<()> {
         unimplemented!()
     }
-    fn init(&mut self, coins_histo: &Mutex<CoinValueInfo>, user_ids: &Mutex<UserIDs> ) -> crate::Result<()> {
+    fn init(&self, coins_histo: &Mutex<CoinValueInfo>, user_ids: &Mutex<UserIDs> ) -> crate::Result<()> {
         unimplemented!()
     }
     fn get_ecdsa_master_key_input(

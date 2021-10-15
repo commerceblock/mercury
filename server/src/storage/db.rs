@@ -668,7 +668,7 @@ impl PGDatabase {
 }
 
 impl Database for PGDatabase {
-    fn init(&mut self, coins_histo: &Mutex<CoinValueInfo>, user_ids: &Mutex<UserIDs>) -> Result<()> {
+    fn init(&self, coins_histo: &Mutex<CoinValueInfo>, user_ids: &Mutex<UserIDs>) -> Result<()> {
         self.make_tables()?;
         self.init_coins_histo(coins_histo)?;
         self.init_user_ids(user_ids)
