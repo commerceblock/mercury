@@ -735,7 +735,6 @@ impl Database for PGDatabase {
         let statement =
             dbr.prepare(&format!("SELECT amount,count(1) FROM {} GROUP BY amount", Table::StateChain.to_string(),))?;
         let rows = statement.query(&[])?;
-        println!("init coins histo - rows length: {}", rows.len());
         if rows.is_empty() {
             return Ok(());
         };
@@ -757,10 +756,8 @@ impl Database for PGDatabase {
         let statement =
             dbr.prepare(&format!("SELECT * FROM {}", Table::UserSession.to_string()))?;
         let rows = statement.query(&[])?;
-        println!("init user ids - rows length: {}", rows.len());
         for row in &rows {
             let id: Uuid = row.get_opt::<usize, Uuid>(0).unwrap().unwrap();
-            println!("init user ids - insert: {}", id);
             guard.insert(id);
         }
         Ok(())

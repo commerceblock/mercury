@@ -30,7 +30,7 @@ fn main() {
         if matches.is_present("new-address") {
             let address: String = match query_wallet_daemon(DaemonRequest::GenAddressBTC).unwrap() {
                 DaemonResponse::Value(val) => val,
-                DaemonResponse::Error(e) => panic!(e.to_string()),
+                DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                 DaemonResponse::None => panic!("None value returned."),
             };
 

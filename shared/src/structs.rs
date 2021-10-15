@@ -304,18 +304,15 @@ impl CoinValueInfo {
         let new_count = match self.values.get(amount){
             Some(c) => {
                 let c_new = c.get()+1;
-                println!("c:{}, c_new:{}", &c, &c_new);
                 c_new
             },
             None => {
-                println!("c:None, c_new:{}", 1);
                 1
             }
         };
         //.map_or(1, |c| c+1);
         self.values.insert(*amount, unsafe {NonZeroU64::new_unchecked(new_count)}); 
-        
-        println!("increment {}:{}", amount, self.values.get(amount).unwrap());
+    
     }
 
     pub fn decrement(
