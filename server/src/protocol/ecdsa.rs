@@ -70,9 +70,9 @@ impl Ecdsa for SCE {
     }
 
     fn first_message(&self, key_gen_msg1: KeyGenMsg1) -> Result<KeyGenReply1> {
+        self.check_user_auth(&key_gen_msg1.shared_key_id)?;
         self.check_rate("lockbox")?;
         let user_id = key_gen_msg1.shared_key_id;
-        self.check_user_auth(&user_id)?;
         let db = &self.database;
         
         // if deposit, verify VDF
@@ -228,9 +228,9 @@ impl Ecdsa for SCE {
     }
 
     fn sign_first(&self, sign_msg1: SignMsg1) -> Result<SignReply1> {
+        self.check_user_auth(&sign_msg1.shared_key_id)?;
         self.check_rate("lockbox")?;
         let user_id = sign_msg1.shared_key_id;
-        self.check_user_auth(&user_id)?;
 
         let sign_party_one_first_msg: party_one::EphKeyGenFirstMsg;
         let db = &self.database;
@@ -262,9 +262,9 @@ impl Ecdsa for SCE {
     }
 
     fn sign_second(&self, sign_msg2: SignMsg2) -> Result<Vec<Vec<u8>>> {
+        self.check_user_auth(&sign_msg2.shared_key_id)?;
         self.check_rate("lockbox")?;
         let user_id = sign_msg2.shared_key_id;
-        self.check_user_auth(&user_id)?;
         let db = &self.database;
 
         // Get validated sig hash for this user

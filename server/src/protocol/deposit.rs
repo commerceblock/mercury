@@ -7,6 +7,7 @@ use crate::server::DEPOSITS_COUNT;
 extern crate shared_lib;
 use crate::error::SEError;
 use crate::server::{StateChainEntity};
+use crate::protocol::util::Utilities;
 use crate::storage::Storage;
 use crate::Database;
 use shared_lib::{state_chain::*, structs::*, util::FEE};
@@ -50,6 +51,7 @@ pub trait Deposit {
 
 impl Deposit for SCE {
     fn deposit_init(&self, deposit_msg1: DepositMsg1) -> Result<UserID> {
+        self.check_rate("deposit_init")?;
         // Generate shared wallet ID (user ID)
         let user_id = Uuid::new_v4();
 
@@ -90,9 +92,10 @@ impl Deposit for SCE {
     }
 
     fn deposit_confirm(&self, deposit_msg2: DepositMsg2) -> Result<StatechainID> {
+        self.check_rate("deposit_confirm")?;
         // let shared_key_id = deposit_msg2.shared_key_id.clone();
+        self.check_user_auth(&deposit_msg2.shared_key_id)?;
         let user_id = deposit_msg2.shared_key_id;
-        self.check_user_auth(&user_id)?;
 
         // Get back up tx and proof key
         let (tx_backup, proof_key) = self

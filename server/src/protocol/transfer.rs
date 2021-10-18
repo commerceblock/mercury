@@ -88,8 +88,8 @@ pub trait Transfer {
 
 impl Transfer for SCE {
     fn transfer_sender(&self, transfer_msg1: TransferMsg1) -> Result<TransferMsg2> {
+        self.check_user_auth(&transfer_msg1.shared_key_id)?;
         let user_id = transfer_msg1.shared_key_id;
-        self.check_user_auth(&user_id)?;
 
         debug!("TRANSFER: Sender Side. Shared Key ID: {}", user_id);
 

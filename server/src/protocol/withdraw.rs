@@ -89,11 +89,14 @@ impl Withdraw for SCE {
             return Err(SEError::Generic("incorrect number of statechain signatures in withdraw/init request".to_string()));
         }
        
+        for user_id in withdraw_msg1.shared_key_ids.iter()
+        {
+            self.check_user_auth(&user_id)?;
+        }
+
         for (user_id, statechain_sig) in 
             withdraw_msg1.shared_key_ids.iter().zip(withdraw_msg1.statechain_sigs.iter())
         {
-            self.check_user_auth(&user_id)?;
-
             info!("WITHDRAW: Init. Shared Key ID: {}", user_id);
 
             let statechain_id = self.database.get_statechain_id(*user_id)?;
