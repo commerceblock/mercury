@@ -54,6 +54,7 @@ mod tests {
 
         let key_res = wallet.gen_shared_key(&init_res.unwrap().id, &1000, solution.to_string());
         assert!(key_res.is_ok());
+        reset_data(&wallet.client_shim).unwrap();
     }
 
     #[test]
@@ -73,6 +74,7 @@ mod tests {
             "".to_string(),
         );
         assert!(err.is_err());
+        reset_data(&client_shim).unwrap();
     }
 
     #[test]
@@ -104,10 +106,17 @@ mod tests {
 
         let coins = state_entity::api::get_coins_info(&wallet.client_shim).unwrap();
 
-        assert_eq!(*coins.values.get(&10000).unwrap(),1);
+        assert_eq!(coins.values.get(&10000).unwrap().get(),1);
 
         println!("Shared wallet id: {:?} ", funding_txid);
         println!("Funding txid: {:?} ", funding_txid);
+
+        //Confirm in-ram data recovery from database
+        reset_inram_data(&wallet.client_shim).unwrap();
+        let coins = state_entity::api::get_coins_info(&wallet.client_shim).unwrap();
+        assert_eq!(coins.values.get(&10000).unwrap().get(),1);
+        //Reset data
+        reset_data(&wallet.client_shim).unwrap();
     }
 
     // #[test]
@@ -138,6 +147,7 @@ mod tests {
             state_chain.chain.last().unwrap().data,
             deposit.5.to_string()
         );
+        reset_data(&wallet.client_shim).unwrap();
     }
 
     #[test]
@@ -209,6 +219,7 @@ mod tests {
             shared_key.proof_key.clone().unwrap(),
             receiver_addr.proof_key.to_string()
         );
+        reset_data(&wallets[0].client_shim).unwrap();
     }
 
     #[test]
@@ -317,6 +328,7 @@ mod tests {
             shared_key.proof_key.clone().unwrap(),
             receiver_addr.proof_key.to_string()
         );
+        reset_data(&wallets[0].client_shim).unwrap();
     }
 
     #[test]
@@ -447,6 +459,7 @@ mod tests {
             shared_key.proof_key.clone().unwrap(),
             receiver2_addr.proof_key.to_string()
         );
+        reset_data(&wallets[0].client_shim).unwrap();
     }
 
     #[test]
@@ -472,7 +485,10 @@ mod tests {
         assert!(state_entity::withdraw::withdraw(&mut wallet, &Uuid::new_v4()).is_err());
 
         // Check withdraw method completes without Err
+
+        println!("running withdraw...");
         run_withdraw(&mut wallet, statechain_id);
+        println!("withdraw complete.");
         
         // Check marked spent in wallet
         assert!(!wallet.get_shared_key(shared_key_id).unwrap().unspent);
@@ -505,9 +521,11 @@ mod tests {
         // Try again after funds already withdrawn
         let err = state_entity::withdraw::withdraw(&mut wallet, shared_key_id);
         assert!(err.is_err());
+        reset_data(&wallet.client_shim).unwrap();
     }
 
     #[test]
+    #[serial]
     fn test_batch_withdraw() {
         time_test!();
         let _handle = start_server(None, None);
@@ -573,6 +591,7 @@ mod tests {
             let err = state_entity::withdraw::withdraw(&mut wallet, sk_id);
             assert!(err.is_err());
         }
+        reset_data(&wallet.client_shim).unwrap();
     }
 
     #[test]
@@ -607,6 +626,7 @@ mod tests {
             shared_key.smt_proof.clone().unwrap().proof,
             shared_key_rebuilt.smt_proof.clone().unwrap().proof
         );
+        reset_data(&wallet.client_shim).unwrap();
     }
 }
 
@@ -644,10 +664,10 @@ mod tests {
             ))
         });
         db.expect_create_user_session()
-            .returning(|_user_id, _auth, _proof_key, _challenge| Ok(()));
+            .returning(|_user_id, _auth, _proof_key, _challenge, _user_ids| Ok(()));
         db.expect_get_user_auth()
-            .returning(|_user_id| Ok(Uuid::new_v4()));
-        //Key generation not completed for this ID yet
+            .returning(|_user_id| Ok(String::from("user_auth")));
+            //Key generation not completed for this ID yet
         db.expect_get_ecdsa_master().returning(|_user_id| Ok(None));
         db.expect_update_keygen_first_msg()
             .returning(|_user_id, _fm, _cw, _ec_kp| Ok(()));
@@ -665,5 +685,6 @@ mod tests {
 
         let err = state_entity::api::get_statechain(&wallet.client_shim, &invalid_scid);
         assert!(err.is_err());
+        reset_data(&wallet.client_shim).unwrap();
     }
 }

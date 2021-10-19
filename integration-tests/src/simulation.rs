@@ -2,10 +2,6 @@
 //!
 //! Test spawns a server and randomly performs deposits, transfers, withdrawals and batch-transfers.
 
-extern crate bitcoin;
-extern crate server_lib;
-extern crate shared_lib;
-
 use crate::*;
 use client_lib::wallet::wallet::Wallet;
 use rand::Rng;
@@ -44,6 +40,7 @@ pub fn run_simulation() {
             break;
         }
     }
+    reset_data(&wallets[0].client_shim).unwrap();
 }
 
 /// Generate random 2000 <= amount <= 20000

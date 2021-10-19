@@ -2,13 +2,7 @@
 #[cfg(not(feature = "mockdb"))]
 mod tests {
     use crate::*;
-    extern crate bitcoin;
-    extern crate client_lib;
-    extern crate server_lib;
-    extern crate shared_lib;
-
     use shared_lib::{commitment::verify_commitment, state_chain::StateChainSig};
-
     use bitcoin::PublicKey;
     use client_lib::state_entity;
     use std::thread::spawn;
@@ -19,6 +13,7 @@ mod tests {
     #[serial]
     fn test_batch_sigs() {
         let _handle = start_server(None, None);
+        
 
         let mut wallet = gen_wallet(None);
         let num_state_chains = 3;
@@ -112,6 +107,7 @@ mod tests {
                 .contains("Signture's purpose is not valid for batch transfer.")),
             _ => assert!(false),
         }
+        reset_data(&wallet.client_shim).unwrap();
     }
 
     /// Perform batch transfer with tests and checks throughout
@@ -231,6 +227,7 @@ mod tests {
             &nonces[0]
         )
         .is_err());
+        reset_data(&wallets[0].client_shim).unwrap();
     }
 
     /// *** THIS TEST REQUIRES batch_lifetime SERVER SETTING TO BE SET TO 5 ***
@@ -429,6 +426,7 @@ mod tests {
             Err(e) => assert!(e.to_string().contains("State Chain locked for")),
             _ => assert!(false),
         };
+        reset_data(&wallets[0].client_shim).unwrap();
     }
 
     #[test]
@@ -483,6 +481,7 @@ mod tests {
             i = i + 1;
         }
         println!("(Swaps Took: {})", TimeFormat(start.elapsed()));
+        reset_data(&wallets[0].client_shim).unwrap();
     }
 
     #[test]
@@ -540,5 +539,6 @@ mod tests {
             i = i + 1;
         }
         println!("(Swaps Took: {})", TimeFormat(start.elapsed()));
+        reset_data(&wallets[0].client_shim).unwrap();
     }
 }

@@ -31,9 +31,10 @@ use once_cell::sync::Lazy;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 use std::collections::HashMap;
-use crate::error::SEError;
-use std::convert::TryInto;
 use url::Url;
+use std::collections::HashSet;
+use std::default::Default;
+use governor::{Quota, RateLimiter, clock::DefaultClock, state::keyed::DashMapStateStore};
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -54,6 +55,8 @@ pub static REG_SWAP_UTXOS: Lazy<IntCounterVec> = Lazy::new(|| {
 });
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+pub type UserIDs = HashSet::<Uuid>;
 
 #[derive(Debug, Clone)]
 pub struct Endpoints {
@@ -100,9 +103,12 @@ pub struct StateChainEntity<
 > {
     pub config: Config,
     pub database: T,
+    pub coin_value_info: Arc<Mutex<CoinValueInfo>>,
+    pub user_ids: Arc<Mutex<UserIDs>>,
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
     pub scheduler: Option<Arc<Mutex<Scheduler>>>,
     pub lockbox: Option<Lockbox>,
+    pub rate_limiter: Option<Arc<RateLimiter<String, DashMapStateStore<String> , DefaultClock> >>
 }
 
 impl<
@@ -110,6 +116,7 @@ impl<
         D: Database + MonotreeDatabase + Send + Sync + 'static,
     > StateChainEntity<T, D>
 {
+
     pub fn load(mut db: T, mut db_smt: D, config: Option<Config>) -> Result<StateChainEntity<T, D>> {
         // Get config as defaults, Settings.toml and env vars
         let config_rs = config.unwrap_or(Config::load()?);
@@ -145,12 +152,18 @@ impl<
             Mode::Core => (init_lb(&config_rs), None)
         };
 
+        //Construct a keyed rate limiter.
+        let rate_limiter = config_rs.rate_limit.map(|r| Arc::new(RateLimiter::dashmap(Quota::per_second(r))));
+
         let sce = Self {
             config: config_rs,
             database: db,
+            coin_value_info: Arc::new(Mutex::new(Default::default())),
+            user_ids: Arc::new(Mutex::new(Default::default())),
             smt: Arc::new(Mutex::new(smt)),
             scheduler,
             lockbox,
+            rate_limiter
         };
 
         match &sce.scheduler {
@@ -209,6 +222,8 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             util::get_recovery_data,
             util::get_transfer_batch_status,
             util::get_coin_info,
+            util::reset_test_dbs,
+            util::reset_inram_data,
             ecdsa::first_message,
             ecdsa::second_message,
             ecdsa::sign_first,
@@ -243,6 +258,8 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             util::get_recovery_data,
             util::get_transfer_batch_status,
             util::get_coin_info,
+            util::reset_test_dbs,
+            util::reset_inram_data,
             ecdsa::first_message,
             ecdsa::second_message,
             ecdsa::sign_first,
@@ -260,6 +277,8 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             withdraw::withdraw_init,
             withdraw::withdraw_confirm],
         Mode::Conductor => routes_with_openapi![
+            util::reset_test_dbs,
+            util::reset_inram_data,
             conductor::poll_utxo,
             conductor::poll_swap,
             conductor::get_swap_info,
@@ -287,14 +306,18 @@ pub fn get_server<
     set_logging_config(&sc_entity.config.log_file);
 
     // Initialise DBs
-    sc_entity.database.init()?;
     if sc_entity.config.testing_mode {
         info!("Server running in testing mode.");
         // reset dbs
         sc_entity.database.reset()?;
-        sc_entity.database.init()?;
     }
-
+    let guard_coins_mutex: &Mutex::<CoinValueInfo> = sc_entity.coin_value_info.as_ref();
+    //let mut guard_coins: &mut CoinValueInfo = guard_coins_mutex.lock()?.deref_mut();
+    let guard_ids_mutex: &Mutex::<HashSet::<Uuid>> = sc_entity.user_ids.as_ref();
+    //let mut guard_ids = guard_ids_mutex.lock()?.deref_mut();
+    sc_entity.database.init(guard_coins_mutex, guard_ids_mutex)?;
+    drop(guard_coins_mutex);
+    drop(guard_ids_mutex);
     match mainstay_config {
         Some(c) => sc_entity.config.mainstay = Some(c),
         None => (),
@@ -495,7 +518,6 @@ mock! {
     }
     trait Utilities {
         fn get_fees(&self) -> util::Result<StateEntityFeeInfoAPI>;
-        fn get_coin_info(&self) -> CoinValueInfo;
         /// API: Generates sparse merkle tree inclusion proof for some key in a tree with some root.
         fn get_smt_proof(
             &self,
@@ -511,6 +533,7 @@ mock! {
         ) -> util::Result<Vec<RecoveryDataMsg>>;
         fn get_lockbox_url(&self, user_id: &Uuid
         ) -> util::Result<Option<(Url, usize)>>;
+        fn check_rate(&self, key: &str) -> storage::Result<()>;
     }
     trait Withdraw{
         fn verify_statechain_sig(&self,
@@ -528,6 +551,7 @@ mock! {
         ) -> withdraw::Result<Vec<Vec<Vec<u8>>>>;
     }
     trait Storage{
+        fn reset_data(&self) -> storage::Result<()>;
         fn update_smt(&self, funding_txid: &String, proof_key: &String)
             -> storage::Result<(Option<storage::Root>, storage::Root)>;
         fn get_confirmed_smt_root(&self) -> storage::Result<Option<storage::Root>>;
@@ -542,7 +566,7 @@ mock! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_endpoints() {
         let urls: Vec<Url> = vec![];

@@ -10,8 +10,8 @@ use shared_lib::mainstay::MainstayConfig;
 use std::env;
 use std::str::FromStr;
 use std::vec::Vec;
-use uuid::Uuid;
-use url::Url;
+use std::num::NonZeroU32;
+
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")] 
@@ -99,7 +99,7 @@ pub struct RocketConfig {
     /// Rocket address
     pub address: String,
     /// Rocket port
-    pub port: u16,
+    pub port: u16
 }
 
 impl Default for RocketConfig {
@@ -107,7 +107,7 @@ impl Default for RocketConfig {
         RocketConfig {
             keep_alive: 100,
             address: "0.0.0.0".to_string(),
-            port: 8000,
+            port: 8000
         }
     }
 }
@@ -154,7 +154,9 @@ pub struct Config {
     /// Rocket config
     pub rocket: RocketConfig,
     /// Conductor config
-    pub conductor: ConductorConfig
+    pub conductor: ConductorConfig,
+    /// Rate limit (per second) for certain API calls - must be non-zero
+    pub rate_limit: Option<NonZeroU32>
 }
 
 impl Default for Config {
@@ -180,6 +182,7 @@ impl Default for Config {
             mainstay: Some(MainstayConfig::default()),
             rocket: RocketConfig::default(),
             conductor: ConductorConfig::default(),
+            rate_limit: None,
         }
     }
 }
@@ -286,6 +289,7 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use url::Url;
     
     #[test]
     fn test_deserialize_lockbox() {

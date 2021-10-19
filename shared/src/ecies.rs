@@ -197,7 +197,7 @@ mod tests {
             Ok(_) => assert!(false, "decryption should have failed"),
             Err(e) => match e.downcast_ref::<ECIESError>() {
                 Some(_) => assert!(true),
-                None => assert!(false, format!("wrong error: {}", e)),
+                None => assert!(false, "wrong error: {}", e),
             },
         }
     }

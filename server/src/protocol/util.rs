@@ -36,7 +36,8 @@ use uuid::Uuid;
 use bitcoin::OutPoint;
 use bitcoin::Transaction;
 use curv::GE;
-use crate::config::Config;
+use std::ops::Deref;
+
 
 const MAX_LOCKTIME: u32 = 500000000; // bitcoin tx nlocktime cutoff
 
@@ -88,11 +89,10 @@ pub trait Utilities {
     /// The request includes the public proof key and an authenticating signature
     fn get_recovery_data(&self, recovery_request: Vec<RecoveryRequest>) -> Result<Vec<RecoveryDataMsg>>;
 
-    // get amount histogram of statecoins
-    fn get_coin_info(&self) -> CoinValueInfo;
-
     // get lockbox url
     fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<(Url,usize)>>;
+
+    fn check_rate(&self, key: &str) -> Result<()>;
 }
 
 impl Utilities for SCE {
@@ -100,7 +100,7 @@ impl Utilities for SCE {
         let fee_address_vec: Vec<&str> = self.config.fee_address.split(",").collect();
         Ok(StateEntityFeeInfoAPI {
             address: fee_address_vec[0].to_string().clone(),
-            deposit: self.config.fee_deposit,
+            deposit: self.config.fee_deposit as i64,
             withdraw: self.config.fee_withdraw,
             interval: self.config.lh_decrement,
             initlock: self.config.lockheight_init,
@@ -386,7 +386,6 @@ impl Utilities for SCE {
                     // add unsigned transaction to backup store
                     // (this ensures that incompleted swaps also decrement the required locktime)
                     self.database.update_backup_tx(&statechain_id, tx.clone())?;
-
                 }
 
                 let sig_hash = get_sighash(
@@ -446,10 +445,6 @@ impl Utilities for SCE {
         return Ok(recovery_data);
     }
 
-    fn get_coin_info(&self) -> CoinValueInfo {
-        self.database.get_coins_histogram()
-    }
-
     fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<(Url,usize)>> {
         let db = &self.database;
 
@@ -472,6 +467,17 @@ impl Utilities for SCE {
             None => Ok(None),
         }
     }
+
+    fn check_rate(&self, key: &str) -> Result<()> {
+        // If rate_limiter is 'None' the result is Ok. Otherwise, check the rate for 'key'.
+        match &self.rate_limiter {
+            Some(r) => {
+                r.check_key(&String::from(key))?;
+                Ok(())
+            },
+            None => Ok(())
+        }
+    }
 }
 
 #[openapi]
@@ -488,7 +494,8 @@ pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
 /// # Get the current statecoin amount histogram
 #[get("/info/coins", format = "json")]
 pub fn get_coin_info(sc_entity: State<SCE>) -> Result<Json<CoinValueInfo>> {
-    Ok(Json(sc_entity.get_coin_info()))
+    let guard = sc_entity.coin_value_info.as_ref().lock()?;
+    Ok(Json(guard.deref().clone()))
 }
 
 #[openapi]
@@ -566,11 +573,18 @@ pub fn prepare_sign_tx(
     }
 }
 
-#[post("/test/reset-db", format = "json")]
+#[openapi]
+/// # Reset databases and in-RAM data if in testing mode
+#[get("/test/reset-db")]
 pub fn reset_test_dbs(sc_entity: State<SCE>) -> Result<Json<()>> {
     if sc_entity.config.testing_mode {
         match sc_entity.database.reset() {
-            Ok(res) => return Ok(Json(res)),
+            Ok(_res) => {
+                sc_entity.reset_data()?;
+                sc_entity.database.init(sc_entity.coin_value_info.as_ref(), 
+                    sc_entity.user_ids.as_ref())?;
+                return Ok(Json(()))
+            },
             Err(e) => return Err(e),
         }
     }
@@ -579,6 +593,21 @@ pub fn reset_test_dbs(sc_entity: State<SCE>) -> Result<Json<()>> {
     )));
 }
 
+#[openapi]
+/// # Reset databases and in-RAM data if in testing mode
+#[get("/test/reset-inram-data")]
+pub fn reset_inram_data(sc_entity: State<SCE>) -> Result<Json<()>> {
+    if sc_entity.config.testing_mode {
+        sc_entity.reset_data()?;
+        sc_entity.database.init(sc_entity.coin_value_info.as_ref(), 
+                    sc_entity.user_ids.as_ref())?;
+        return Ok(Json(()));
+    };
+
+    return Err(SEError::Generic(String::from(
+        "Cannot reset in-ram data when not in testing mode.",
+    )));
+}
 
 
 // Utily functions for StateChainEntity to be used throughout codebase.
@@ -652,10 +681,18 @@ impl SCE {
     /// Check if user has passed authentication.
     pub fn check_user_auth(&self, user_id: &Uuid) -> Result<()> {
         // check authorisation id is in DB (and TOOD: check password?)
-        if let Err(_) = self.database.get_user_auth(*user_id) {
-            return Err(SEError::AuthError);
+        let mut guard = self.user_ids.as_ref().lock()?;
+        match guard.contains(user_id){
+            true => Ok(()),
+            //Update the user ids set in a rate-limited manner
+            false => {
+                let _auth = self.check_rate("check_user_auth")
+                            .and_then(|_| Ok(self.database.get_user_auth(user_id)))
+                            .map_err(|_| SEError::AuthError)?;
+                guard.insert(*user_id);
+                Ok(())
+            }
         }
-        Ok(())
     }
 
     pub fn get_transfer_batch_status(&self, batch_id: Uuid) -> Result<TransferBatchDataAPI> {
@@ -723,6 +760,14 @@ impl SCE {
 impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 'static> Storage
     for StateChainEntity<T, D>
 {
+    fn reset_data(&self) -> Result<()>{
+        let mut guard_coins_mutex = self.coin_value_info.as_ref().lock()?;
+        let mut guard_ids_mutex = self.user_ids.as_ref().lock()?;
+        guard_coins_mutex.clear();
+        guard_ids_mutex.clear();
+        Ok(())
+    }
+
     /// Update the database and the mainstay slot with the SMT root, if applicable
     fn update_root(&self, root: &Root) -> Result<i64> {
         let db = &self.database;
@@ -1048,12 +1093,14 @@ pub mod mocks {
 pub mod tests {
     use super::*;
     use crate::shared_lib::mainstay;
-    use crate::{structs::StateChainAmount, MockDatabase, server::Endpoints};
+    use crate::{structs::StateChainAmount, MockDatabase};
     use monotree::database::{Database as monotreeDatabase, MemoryDB};
     use std::convert::TryInto;
     use std::str::FromStr;
     use bitcoin::Transaction;
-
+    use std::num::NonZeroU32;
+    use crate::config::Config;
+    
     // Useful data structs for tests throughout codebase
     pub static BACKUP_TX_NOT_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
     pub static BACKUP_TX_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,68,2,32,45,42,91,77,252,143,55,65,154,96,191,149,204,131,88,79,80,161,231,209,234,229,217,100,28,99,48,148,136,194,204,98,2,32,90,111,183,68,74,24,75,120,179,80,20,183,60,198,127,106,102,64,37,193,174,226,199,118,237,35,96,236,45,94,203,49,1],[2,242,131,110,175,215,21,123,219,179,199,144,85,14,163,42,19,197,97,249,41,130,243,139,15,17,51,185,147,228,100,122,213]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
@@ -1063,14 +1110,11 @@ pub mod tests {
     pub static PARTY2PUBLIC: &str = "{\"q\":{\"x\":\"f8308498a5b5996eb7c410fb7ada7f3524d604b45b247cc4d13e5a32c3763908\",\"y\":\"7e41091fd5ab1138d1a3cdf41b43c82a064839a6b82b251be2be70099b642d1a\"},\"p1\":{\"x\":\"701e7d08608e6065b8f19f7cd867bcd7c5c4a11290e51187210a66713349c76c\",\"y\":\"10f76cae4eac6727bec6ae239de37d806a4877bc418f9fadaad0fd379cb11e73\"},\"p2\":{\"x\":\"caff57b3e214231182b2ba729079422887527dec2c2be1af03eb9a28be046fbb\",\"y\":\"94d4d2624a6be1e5fccf22ea5d7d2294a65f86b23642e7107c5523bb383d2612\"},\"paillier_pub\":{\"n\":\"11489233870088042333010221250016305472224248130131837344400358635737478519468920848276451747026121985401781804607266395846806728547165860151830628936151241253052105217375620729553123605998218501591757218904947955026013349855548130232876481464163645763380508660165838175358408923868455078398162478065282146744074902115770410655628975593804546170315851709066735895285416399351986223748741323752676766246912115655411869835426209804163120117240537098699118426250380831687194901410283437954378683229249501222250355118886953166922692541953136499596437296944964919863277847025337779172484000271289374153321801582770169915217\"},\"c_key\":\"13acbe9791ae6136f0d3700bad8cbe723ed2676e33d9f080122283a3a5838e3418d9ae3f61cc5e3b033ec71979f339c87e2da410c46a3a6238e40fc403799b5b7855bf529c381bd80288f5002f62a460cc005ec71e85c7d0eda2133245a857fe414c8653f0248016545618e2d53f466e3808edfe15774fb32ffeafc98dc08dd9eaca2e5411ae22bd4dad358bffadb51e82d2f99404ff73db8c473a2483133863aeaf6ffccd455fe4ba0966f90e85ea02083962d15779215941396676d90a0ce99a09adaa064956f506ca40d18ba91a7f9826a2e82050fb3b569790b5642ac45e39d9dfb63f8c975c30090f9eceaca387129539eaebfcedc17d2e49f0bd029e3591ac30e3db26139368b1423cf058e2128978411518e87c2d3c106a91c16de80895ad7f928a9a40c6d5aac356bd2966b3bf98c77f616f04329caecc895d13d16d8193e9f0bfe866c86a2eee3b2b0beb95478d4c216e00f8a9712618599d176ad253e59e9e27743f1e61a710bb9a0ae989226900ef809acb17e11f9f068bdb35fd7a767560e912da3aa98cd9d529b3d993e360d73f19adf830599f71ca139f6e17014302dce8a40401276d3a7e3dda04ef4b344a7dc4cb94c106c346e389ab7e089b97aa1e3f1680d4b8eeb62d405ab3a4e827b93dd15074e1dfd74244a9b4857017818b63504399c98fc02d0b3af135a0d7ac4f9de9a7cd47fdbe40cb3a6185b6\"}";
     pub static SHAREDPUBLIC: &str = "{\"x\":\"f8308498a5b5996eb7c410fb7ada7f3524d604b45b247cc4d13e5a32c3763908\",\"y\":\"7e41091fd5ab1138d1a3cdf41b43c82a064839a6b82b251be2be70099b642d1a\"}";
 
-    pub fn test_sc_entity(db: MockDatabase, lockbox_url: Option<String>) -> SCE {
+    pub fn test_sc_entity(db: MockDatabase, lockbox_url: Option<String>, rate_limit: Option<NonZeroU32>) -> SCE {
         let mut config = Config::load().unwrap();
-        match lockbox_url {
-            Some(v) => {
-                config.lockbox=Some(v);
-            }, 
-            None => {config.lockbox=None;}
-        };
+        config.lockbox = lockbox_url;
+        config.rate_limit = rate_limit;
+
         let mut sc_entity = SCE::load(db, MemoryDB::new(""),Some(config)).unwrap();
         sc_entity.config.testing_mode = true;
         sc_entity.config.mainstay = Some(mainstay::MainstayConfig::mock_from_url(&test_url()));
@@ -1096,7 +1140,7 @@ pub mod tests {
         db.expect_get_confirmed_smt_root()
             .returning(|| Ok(Some(Root::from_random())));
 
-        let sc_entity = test_sc_entity(db, None);
+        let sc_entity = test_sc_entity(db, None, None);
 
         //No commitments initially
         let _m = mocks::ms::commitment_proof_not_found();
@@ -1165,7 +1209,7 @@ pub mod tests {
         db.expect_root_update().returning(|_x| Ok(1));
         db.expect_get_confirmed_smt_root()
             .returning(|| Ok(Some(Root::from_random())));
-        let sc_entity = test_sc_entity(db, None);
+        let sc_entity = test_sc_entity(db, None, None);
 
         //Mainstay post commitment mock
         let _m = mocks::ms::post_commitment().create();
@@ -1238,7 +1282,7 @@ pub mod tests {
             Ok(Some(SHAREDPUBLIC.to_string()))
         });
 
-        let sc_entity = test_sc_entity(db, None);
+        let sc_entity = test_sc_entity(db, None, None);
 
         // get_recovery invalid public key
         let recover_msg = vec!(RecoveryRequest {

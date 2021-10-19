@@ -15,6 +15,7 @@ extern crate monotree;
 extern crate client_lib;
 extern crate server_lib;
 extern crate shared_lib;
+extern crate nix;
 
 #[cfg(test)]
 extern crate mockito;
@@ -145,8 +146,8 @@ impl SpawnServer for MockDatabase {
     fn spawn_server(
         self,
         mainstay_config: Option<mainstay::MainstayConfig>,
-        port: Option<u16>,
-        mode: Option<String>
+        _port: Option<u16>,
+        _mode: Option<String>
     ) -> thread::JoinHandle<SpawnError> {
         // Set enviroment variable to testing_mode=true to override Settings.toml
         env::set_var("MERC_TESTING_MODE", "true");
@@ -451,6 +452,16 @@ pub fn batch_transfer_verify_amounts(
         // check amount of state chain at index is correctß
         assert!(bals[index.unwrap()].confirmed == amounts[swap_map[i].0])
     }
+}
+
+pub fn reset_data(client: &ClientShim) -> Result<()> {
+    state_entity::api::reset_data(client)?;
+    Ok(())
+}
+
+pub fn reset_inram_data(client: &ClientShim) -> Result<()> {
+    state_entity::api::reset_inram_data(client)?;
+    Ok(())
 }
 
 pub fn start_server(port: Option<u16>, mode: Option<String>) -> thread::JoinHandle<SpawnError> {

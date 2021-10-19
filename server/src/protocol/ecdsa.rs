@@ -70,10 +70,10 @@ impl Ecdsa for SCE {
     }
 
     fn first_message(&self, key_gen_msg1: KeyGenMsg1) -> Result<KeyGenReply1> {
+        self.check_user_auth(&key_gen_msg1.shared_key_id)?;
+        self.check_rate("lockbox")?;
         let user_id = key_gen_msg1.shared_key_id;
-        self.check_user_auth(&user_id)?;
         let db = &self.database;
-        let config = &self.config;
         
         // if deposit, verify VDF
         if (key_gen_msg1.protocol == Protocol::Deposit) {
@@ -160,13 +160,14 @@ impl Ecdsa for SCE {
     }
 
     fn second_message(&self, key_gen_msg2: KeyGenMsg2) -> Result<KeyGenReply2> {
+        self.check_rate("lockbox")?;
         let kg_party_one_second_msg: party1::KeyGenParty1Message2;
         let db = &self.database;
         let user_id = key_gen_msg2.shared_key_id;
 
         // call lockbox
         match &self.lockbox {
-            Some(l) => {
+            Some(_) => {
                 let lockbox_url: Url = match self.get_lockbox_url(&user_id)?{
                     Some(l) => l.0,
                     None => return Err(SEError::Generic(format!("Lockbox index not found in database for user_id: {}", &user_id)))
@@ -227,9 +228,9 @@ impl Ecdsa for SCE {
     }
 
     fn sign_first(&self, sign_msg1: SignMsg1) -> Result<SignReply1> {
-
+        self.check_user_auth(&sign_msg1.shared_key_id)?;
+        self.check_rate("lockbox")?;
         let user_id = sign_msg1.shared_key_id;
-        self.check_user_auth(&user_id)?;
 
         let sign_party_one_first_msg: party_one::EphKeyGenFirstMsg;
         let db = &self.database;
@@ -261,9 +262,9 @@ impl Ecdsa for SCE {
     }
 
     fn sign_second(&self, sign_msg2: SignMsg2) -> Result<Vec<Vec<u8>>> {
-
+        self.check_user_auth(&sign_msg2.shared_key_id)?;
+        self.check_rate("lockbox")?;
         let user_id = sign_msg2.shared_key_id;
-        self.check_user_auth(&user_id)?;
         let db = &self.database;
 
         // Get validated sig hash for this user
@@ -292,7 +293,7 @@ impl Ecdsa for SCE {
         let mut ws: Vec<Vec<u8>>;
 
         match &self.lockbox {
-        Some(l) => {
+        Some(_) => {
             let lockbox_url: Url = match self.get_lockbox_url(&user_id)?{
                 Some(l) => l.0,
                 None => return Err(SEError::Generic(format!("Lockbox index not found in database for user_id: {}", &user_id)))
@@ -454,14 +455,15 @@ pub mod tests {
         let challenge: String = "cc9391e5b30bfc533bafc5c7fa8d4af4".to_string();
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().returning(|_, _, _, _| Ok(()));
-        db.expect_get_user_auth().returning(move |_| Ok(user_id));
+        db.expect_create_user_session().returning(|_, _, _, _, _| Ok(()));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
         db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
         db.expect_update_public_master().returning(|_,_| Ok(()));
         db.expect_get_challenge().returning(move |_| Ok(challenge.clone()));
 
-        let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()));
+        let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None);
 
         let kg_first_msg = party_one::KeyGenFirstMsg { pk_commitment: BigInt::from(0), zk_pok_commitment: BigInt::from(1) };
 
@@ -530,8 +532,9 @@ pub mod tests {
         let tx_backup: Transaction = serde_json::from_str(&BACKUP_TX_NOT_SIGNED).unwrap();
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().returning(|_, _, _, _| Ok(()));
-        db.expect_get_user_auth().returning(move |_| Ok(user_id));
+        db.expect_create_user_session().returning(|_, _, _, _, _| Ok(()));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
         db.expect_get_user_backup_tx().returning(move |_| Ok(tx_backup.clone()));
         db.expect_update_user_backup_tx().returning(|_, _| Ok(()));
@@ -542,7 +545,7 @@ pub mod tests {
         db.expect_get_sighash().returning(move |_| Ok(sig_hash));
         db.expect_update_shared_pubkey().returning(|_,_| Ok(()));
 
-        let mut sc_entity = test_sc_entity(db, Some(mockito::server_url()));
+        let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None);
 
         let (eph_key_gen_first_message_party_two, _, _) =
             MasterKey2::sign_first_message();
