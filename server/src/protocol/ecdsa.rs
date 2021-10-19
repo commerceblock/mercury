@@ -76,7 +76,7 @@ impl Ecdsa for SCE {
         let db = &self.database;
         
         // if deposit, verify VDF
-        if (key_gen_msg1.protocol == Protocol::Deposit) {
+        if (key_gen_msg1.protocol == Protocol::Deposit && self.config.deposit_pow) {
             let mut hasher = Sha3_256::new();
             let challenge = db.get_challenge(&user_id)?;
             let solution: String = match key_gen_msg1.solution {
