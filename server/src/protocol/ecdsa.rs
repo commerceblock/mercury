@@ -76,24 +76,26 @@ impl Ecdsa for SCE {
         let db = &self.database;
         
         // if deposit, verify VDF
-        if (key_gen_msg1.protocol == Protocol::Deposit && self.config.deposit_pow) {
-            let mut hasher = Sha3_256::new();
-            let challenge = db.get_challenge(&user_id)?;
-            let solution: String = match key_gen_msg1.solution {
-                Some(ref s) => s.to_string(),
-                None => return Err(SEError::Generic(String::from("PoW solution missing on deposit")))
-            };
-            hasher.input(&format!("{}:{}", challenge, solution).as_bytes());
-            let result = hex::encode(hasher.result_reset());
-            let difficulty = self.config.difficulty.clone() as usize;
-            if (result[..difficulty] != String::from_utf8(vec![b'0'; difficulty]).unwrap()) {
-                return Err(SEError::Generic(String::from("PoW solution not valid")))
-            }
-        // else check confirmed            
-        } else {
-            let statechain_id = db.get_statechain_id(user_id.clone())?;
-            if (!db.is_confirmed(&statechain_id)?) {
-                return Err(SEError::Generic(String::from("Statecoin not confirmed")))
+        if (self.config.deposit_pow) {
+            if (key_gen_msg1.protocol == Protocol::Deposit) {
+                let mut hasher = Sha3_256::new();
+                let challenge = db.get_challenge(&user_id)?;
+                let solution: String = match key_gen_msg1.solution {
+                    Some(ref s) => s.to_string(),
+                    None => return Err(SEError::Generic(String::from("PoW solution missing on deposit")))
+                };
+                hasher.input(&format!("{}:{}", challenge, solution).as_bytes());
+                let result = hex::encode(hasher.result_reset());
+                let difficulty = self.config.difficulty.clone() as usize;
+                if (result[..difficulty] != String::from_utf8(vec![b'0'; difficulty]).unwrap()) {
+                    return Err(SEError::Generic(String::from("PoW solution not valid")))
+                }
+            // else check confirmed            
+            } else {
+                let statechain_id = db.get_statechain_id(user_id.clone())?;
+                if (!db.is_confirmed(&statechain_id)?) {
+                    return Err(SEError::Generic(String::from("Statecoin not confirmed")))
+                };
             };
         };
 
