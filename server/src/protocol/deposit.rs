@@ -51,7 +51,6 @@ pub trait Deposit {
 
 impl Deposit for SCE {
     fn deposit_init(&self, deposit_msg1: DepositMsg1) -> Result<UserID> {
-        debug!("deposit_init...");
         self.check_rate("deposit_init")?;
         // Generate shared wallet ID (user ID)
         let user_id = Uuid::new_v4();
@@ -72,8 +71,6 @@ impl Deposit for SCE {
         let mut rng = rand::thread_rng();
         let challenge_bytes = rng.gen::<[u8; 16]>();
         let challenge = hex::encode(challenge_bytes);
-
-        debug!("create user session...");
 
         // Create DB entry for newly generated ID signalling that user has passed some
         // verification. For now use ID as 'password' to interact with state entity

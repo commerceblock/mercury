@@ -681,13 +681,12 @@ impl SCE {
     /// Check if user has passed authentication.
     pub fn check_user_auth(&self, user_id: &Uuid) -> Result<()> {
         // check authorisation id is in DB (and TOOD: check password?)
-        debug!("check user auth...");
+        
         let mut guard = self.user_ids.as_ref().lock()?;
         match guard.contains(user_id){
             true => Ok(()),
             //Update the user ids set in a rate-limited manner
             false => {
-                debug!("id not in memory - check database for id: {}", user_id);
                 let _auth = self.check_rate("check_user_auth")
                             .and_then(|_| Ok(self.database.get_user_auth(user_id)))
                             .map_err(|_| SEError::AuthError)?;
