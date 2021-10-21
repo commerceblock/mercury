@@ -162,6 +162,7 @@ impl Ecdsa for SCE {
     }
 
     fn second_message(&self, key_gen_msg2: KeyGenMsg2) -> Result<KeyGenReply2> {
+        self.check_user_auth(&key_gen_msg2.shared_key_id)?;
         self.check_rate("lockbox")?;
         let kg_party_one_second_msg: party1::KeyGenParty1Message2;
         let db = &self.database;
