@@ -681,7 +681,6 @@ impl SCE {
     /// Check if user has passed authentication.
     pub fn check_user_auth(&self, user_id: &Uuid) -> Result<()> {
         // check authorisation id is in DB (and TOOD: check password?)
-        
         let mut guard = self.user_ids.as_ref().lock()?;
         match guard.contains(user_id){
             true => Ok(()),

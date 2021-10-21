@@ -51,10 +51,7 @@ pub trait Deposit {
 
 impl Deposit for SCE {
     fn deposit_init(&self, deposit_msg1: DepositMsg1) -> Result<UserID> {
-        self.check_rate("deposit_init")?;
-        // Generate shared wallet ID (user ID)
-        let user_id = Uuid::new_v4();
-
+        
         // if Verification/PoW/authoriation failed {
         //      warn!("Failed authorisation.")
         //      Err(SEError::AuthError)
@@ -66,6 +63,9 @@ impl Deposit for SCE {
                 "Proof key not in correct format.",
             )));
         };
+
+        // Generate shared wallet ID (user ID)
+        let user_id = Uuid::new_v4();
 
         // generate vdf challenge
         let mut rng = rand::thread_rng();
@@ -92,7 +92,6 @@ impl Deposit for SCE {
     }
 
     fn deposit_confirm(&self, deposit_msg2: DepositMsg2) -> Result<StatechainID> {
-        self.check_rate("deposit_confirm")?;
         // let shared_key_id = deposit_msg2.shared_key_id.clone();
         self.check_user_auth(&deposit_msg2.shared_key_id)?;
         let user_id = deposit_msg2.shared_key_id;
