@@ -51,7 +51,7 @@ pub trait Deposit {
 
 impl Deposit for SCE {
     fn deposit_init(&self, deposit_msg1: DepositMsg1) -> Result<UserID> {
-        
+        self.check_rate("deposit_init")?;
         // if Verification/PoW/authoriation failed {
         //      warn!("Failed authorisation.")
         //      Err(SEError::AuthError)

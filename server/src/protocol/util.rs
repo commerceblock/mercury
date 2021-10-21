@@ -472,7 +472,8 @@ impl Utilities for SCE {
         // If rate_limiter is 'None' the result is Ok. Otherwise, check the rate for 'key'.
         match &self.rate_limiter {
             Some(r) => {
-                r.check_key(&String::from(key))?;
+                r.check_key(&String::from(key))
+                    .map_err(|e| SEError::RateLimitError(format!("{} for key {}",SEError::from(e), key)))?;
                 Ok(())
             },
             None => Ok(())
