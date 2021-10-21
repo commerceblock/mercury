@@ -499,7 +499,7 @@ dependencies = [
 
 [[package]]
 name = "client"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "base64 0.12.3",
  "bech32",
@@ -3925,7 +3925,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "0.2.18"
+version = "0.2.19"
 dependencies = [
  "bisetmap",
  "bitcoin",
@@ -4035,7 +4035,7 @@ dependencies = [
 
 [[package]]
 name = "shared"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "arrayvec",
  "base64 0.12.3",
@@ -4301,7 +4301,7 @@ dependencies = [
 
 [[package]]
 name = "tests"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bitcoin",
  "client",
