@@ -162,4 +162,6 @@ pub trait Storage {
 
     fn get_statechain(&self, statechain_id: &Uuid);
 
+    //Reset in-RAM data
+    fn reset_data(&self) -> storage::Result<()>;
 }

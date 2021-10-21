@@ -155,4 +155,7 @@ pub trait Storage {
 
     //Update the list of punished state chains
     //fn update_punished(&self, punished: &Vec<Uuid>);
+
+     //Reset the in-RAM data
+     fn reset_data(&self) -> Result<()>;
 }

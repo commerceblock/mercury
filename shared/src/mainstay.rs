@@ -1026,7 +1026,7 @@ mod tests {
 
         match random_hash.attest(&config) {
             Ok(()) => assert!(true),
-            Err(e) => assert!(false, format!("error: {}", e)),
+            Err(e) => assert!(false, "error: {}", e),
         }
     }
 
@@ -1211,10 +1211,10 @@ mod tests {
         match test_get_proof_from_commitment(
             &Commitment::from_hash(&monotree::utils::random_hash()),
         ) {
-            Ok(_) => assert!(false, format!("expected {}", exp_err)),
+            Ok(_) => assert!(false, "expected {}", exp_err),
             Err(e) => match e.downcast_ref::<MainstayAPIError>() {
-                Some(e_ms) => assert!(e_ms == exp_err, format!("expected {}", exp_err)),
-                None => assert!(false, format!("expected {}", exp_err)),
+                Some(e_ms) => assert!(e_ms == exp_err, "expected {}", exp_err),
+                None => assert!(false, "expected {}", exp_err),
             },
         };
     }
@@ -1279,7 +1279,7 @@ mod tests {
     fn test_commitment_to_from_str() {
         let com1 = Commitment::from_hash(&monotree::utils::random_hash());
         let com2 = Commitment::from_str(&com1.to_string()).unwrap();
-        assert!(com1 == com2, format!("{} does not equal {}", com1, com2));
+        assert!(com1 == com2, "{} does not equal {}", com1, com2);
     }
 
     #[test]
@@ -1307,7 +1307,7 @@ mod tests {
 
         match CommitmentInfo::from_latest(config) {
             Ok(ci) => assert!(ci.verify(), "invalid commitment info"),
-            Err(e) => assert!(false, e.to_string()),
+            Err(e) => assert!(false, "{}", e.to_string()),
         };
     }
 }

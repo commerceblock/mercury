@@ -1,6 +1,6 @@
 [package]
 name = "server"
-version = "0.2.18"
+version = "0.2.19"
 authors = [
 	"Lawrence Deacon <lawrence.deacon@gmail.com>",
   "Tomos <tomos@commerceblock.com",
@@ -58,6 +58,8 @@ url = { version = "2.2.2", features = ["serde"] }
 rand = "0.8.4"
 sha3 = "0.8.2"
 digest = "0.8.1"
+governor = "0.3.2"
+nonzero_ext = "0.3.0"
 
 [dev-dependencies]
 mockito = "0.27.0"

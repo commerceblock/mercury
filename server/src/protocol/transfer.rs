@@ -15,7 +15,7 @@ use bitcoin::network::constants::Network;
 
 use crate::error::SEError;
 use crate::Database;
-use crate::{server::{StateChainEntity, Endpoints}, storage::Storage};
+use crate::{server::StateChainEntity, storage::Storage};
 use super::requests::post_lb;
 use rocket_okapi::openapi;
 
@@ -88,8 +88,8 @@ pub trait Transfer {
 
 impl Transfer for SCE {
     fn transfer_sender(&self, transfer_msg1: TransferMsg1) -> Result<TransferMsg2> {
+        self.check_user_auth(&transfer_msg1.shared_key_id)?;
         let user_id = transfer_msg1.shared_key_id;
-        self.check_user_auth(&user_id)?;
 
         debug!("TRANSFER: Sender Side. Shared Key ID: {}", user_id);
 
@@ -163,7 +163,8 @@ impl Transfer for SCE {
     }
 
     fn transfer_receiver(&self, mut transfer_msg4: TransferMsg4) -> Result<TransferMsg5> {
-
+        self.check_rate("lockbox")?;
+        
         let user_id = transfer_msg4.shared_key_id;
         let statechain_id = transfer_msg4.statechain_id;
 
@@ -299,6 +300,9 @@ impl Transfer for SCE {
     /// This function is called immediately in the regular transfer case or after confirmation of atomic
     /// transfers completion in the batch transfer case.
     fn transfer_finalize(&self, finalized_data: &TransferFinalizeData) -> Result<()> {
+      
+        self.check_rate("lockbox")?;
+              
         let statechain_id = finalized_data.statechain_id;
 
         info!("TRANSFER_FINALIZE: State Chain ID: {}", statechain_id);
@@ -325,6 +329,7 @@ impl Transfer for SCE {
             &new_user_id,
             &statechain_id,
             finalized_data.to_owned(),
+            self.user_ids.clone()   
         )?;
 
         //lockbox finalise and delete key
@@ -534,7 +539,7 @@ mod tests {
             .returning(move |_| Ok(pubkey.to_string()));
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth()
-            .returning(move |_| Ok(shared_key_id));
+           .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_statechain_id()
             .with(predicate::eq(shared_key_id))
             .returning(move |_| Ok(statechain_id));
@@ -576,7 +581,7 @@ mod tests {
         db.expect_update_transfer_msg().returning(|_, _| Ok(()));
         db.expect_set_confirmed().returning(|_| Ok(()));
 
-        let sc_entity = test_sc_entity(db, None);
+        let sc_entity = test_sc_entity(db, None, None);
 
         // user does not own State Chain
         let mut msg_1_wrong_shared_key_id = transfer_msg_1.clone();
@@ -622,7 +627,7 @@ mod tests {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth()
-            .returning(move |_| Ok(shared_key_id));
+           .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_transfer_data()
             .with(predicate::eq(statechain_id))
             .returning(move |_| {
@@ -660,7 +665,7 @@ mod tests {
         db.expect_update_statechain_owner()
             .returning(|_, _, _| Ok(()));
         db.expect_transfer_init_user_session()
-            .returning(|_, _, _| Ok(()));
+            .returning(|_, _, _, _| Ok(()));
         db.expect_update_backup_tx().returning(|_, _| Ok(()));
         db.expect_remove_transfer_data().returning(|_| Ok(()));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
@@ -701,7 +706,7 @@ mod tests {
         db.expect_update_finalize_batch_data()
             .returning(|_, _| Ok(()));
 
-        let sc_entity = test_sc_entity(db, None);
+        let sc_entity = test_sc_entity(db, None, None);
         let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
 
         // Input data to transfer_receiver
@@ -766,7 +771,7 @@ mod tests {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth()
-            .returning(move |_| Ok(shared_key_id));
+           .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_transfer_data()
             .with(predicate::eq(statechain_id))
             .returning(move |_| {
@@ -806,7 +811,7 @@ mod tests {
         db.expect_update_statechain_owner()
             .returning(|_, _, _| Ok(()));
         db.expect_transfer_init_user_session()
-            .returning(|_, _, _| Ok(()));
+            .returning(|_, _, _, _| Ok(()));
         db.expect_update_backup_tx().returning(|_, _| Ok(()));
         db.expect_remove_transfer_data().returning(|_| Ok(()));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
@@ -838,7 +843,7 @@ mod tests {
         db.expect_update_finalize_batch_data()
             .returning(|_, _| Ok(()));
 
-        let sc_entity = test_sc_entity(db, Some(mockito::server_url()));
+        let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None);
         let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
 
         // simulate lockbox secret operations

@@ -81,6 +81,16 @@ pub fn get_transfer_batch_status(
     requests::get(client_shim, &format!("info/transfer-batch/{}", batch_id))
 }
 
+/// Reset the state entity's database and in-memory data
+pub fn reset_data(client_shim: &ClientShim) -> Result<()> {
+    requests::get(client_shim, "test/reset-db")
+}
+
+/// Reset the state entity's database and in-memory data
+pub fn reset_inram_data(client_shim: &ClientShim) -> Result<()> {
+    requests::get(client_shim, "test/reset-inram-data")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,3 +115,4 @@ mod tests {
         //assert_eq!(test_string, "test string".to_string());
     }
 }
+

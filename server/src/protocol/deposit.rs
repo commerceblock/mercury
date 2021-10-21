@@ -7,6 +7,7 @@ use crate::server::DEPOSITS_COUNT;
 extern crate shared_lib;
 use crate::error::SEError;
 use crate::server::{StateChainEntity};
+use crate::protocol::util::Utilities;
 use crate::storage::Storage;
 use crate::Database;
 use shared_lib::{state_chain::*, structs::*, util::FEE};
@@ -50,9 +51,7 @@ pub trait Deposit {
 
 impl Deposit for SCE {
     fn deposit_init(&self, deposit_msg1: DepositMsg1) -> Result<UserID> {
-        // Generate shared wallet ID (user ID)
-        let user_id = Uuid::new_v4();
-
+        self.check_rate("deposit_init")?;
         // if Verification/PoW/authoriation failed {
         //      warn!("Failed authorisation.")
         //      Err(SEError::AuthError)
@@ -65,6 +64,9 @@ impl Deposit for SCE {
             )));
         };
 
+        // Generate shared wallet ID (user ID)
+        let user_id = Uuid::new_v4();
+
         // generate vdf challenge
         let mut rng = rand::thread_rng();
         let challenge_bytes = rng.gen::<[u8; 16]>();
@@ -74,7 +76,7 @@ impl Deposit for SCE {
         // verification. For now use ID as 'password' to interact with state entity
         // unsolved_vdf saved for verification at keygen first
         self.database
-            .create_user_session(&user_id, &deposit_msg1.auth, &deposit_msg1.proof_key, &challenge)?;
+            .create_user_session(&user_id, &deposit_msg1.auth, &deposit_msg1.proof_key, &challenge, self.user_ids.clone())?;
 
         info!(
             "DEPOSIT: Protocol initiated. User ID generated: {}",
@@ -91,8 +93,8 @@ impl Deposit for SCE {
 
     fn deposit_confirm(&self, deposit_msg2: DepositMsg2) -> Result<StatechainID> {
         // let shared_key_id = deposit_msg2.shared_key_id.clone();
+        self.check_user_auth(&deposit_msg2.shared_key_id)?;
         let user_id = deposit_msg2.shared_key_id;
-        self.check_user_auth(&user_id)?;
 
         // Get back up tx and proof key
         let (tx_backup, proof_key) = self
@@ -120,7 +122,7 @@ impl Deposit for SCE {
 
         // Insert into StateChain table
         self.database
-            .create_statechain(&statechain_id, &user_id, &state_chain, &amount)?;
+            .create_statechain(&statechain_id, &user_id, &state_chain, &amount, self.coin_value_info.clone())?;
 
         // set the shared public key
         let shared_pubkey = self.database.get_shared_pubkey(user_id.clone())?;
@@ -204,9 +206,9 @@ pub mod tests {
     fn test_deposit_init() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().returning(|_, _, _, _| Ok(()));
+        db.expect_create_user_session().returning(|_, _, _, _, _| Ok(()));
 
-        let sc_entity = test_sc_entity(db, None);
+        let sc_entity = test_sc_entity(db, None, None);
 
         // Invalid proof key
         match sc_entity.deposit_init(DepositMsg1 {
@@ -247,7 +249,8 @@ pub mod tests {
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_get_user_auth().returning(move |_| Ok(user_id));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
         db.expect_get_root().returning(|_| Ok(None));
         db.expect_root_update().returning(|_| Ok(1));
@@ -258,14 +261,14 @@ pub mod tests {
         // Second time return signed back up tx
         db.expect_get_backup_transaction_and_proof_key()
             .returning(move |_| Ok((tx_backup_signed.clone(), proof_key.clone())));
-        db.expect_create_statechain().returning(|_, _, _, _| Ok(()));
+        db.expect_create_statechain().returning(|_, _, _, _, _| Ok(()));
         db.expect_create_backup_transaction()
             .returning(|_, _| Ok(()));
         db.expect_update_statechain_id().returning(|_, _| Ok(()));
         db.expect_get_shared_pubkey().returning(|_| Ok(Some("".to_string())));
         db.expect_set_shared_pubkey().returning(|_,_| Ok(()));
 
-        let sc_entity = test_sc_entity(db, None);
+        let sc_entity = test_sc_entity(db, None, None);
 
         // Backup tx not signed error
         match sc_entity.deposit_confirm(DepositMsg2 {
@@ -274,7 +277,7 @@ pub mod tests {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e
                 .to_string()
-                .contains("Signed Back up transaction not found.")),
+                .contains("Signed Back up transaction not found."), "{}", e.to_string()),
         }
 
         // Clean protocol run
