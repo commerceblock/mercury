@@ -30,7 +30,7 @@ use rocket_contrib::json::Json;
 use std::str::FromStr;
 use uuid::Uuid;
 use url::Url;
-use crate::protocol::util::Utilities;
+use crate::protocol::util::{Utilities, RateLimiter};
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -163,7 +163,6 @@ impl Transfer for SCE {
     }
 
     fn transfer_receiver(&self, mut transfer_msg4: TransferMsg4) -> Result<TransferMsg5> {
-        self.check_rate("lockbox")?;
         
         let user_id = transfer_msg4.shared_key_id;
         let statechain_id = transfer_msg4.statechain_id;
@@ -300,8 +299,6 @@ impl Transfer for SCE {
     /// This function is called immediately in the regular transfer case or after confirmation of atomic
     /// transfers completion in the batch transfer case.
     fn transfer_finalize(&self, finalized_data: &TransferFinalizeData) -> Result<()> {
-      
-        self.check_rate("lockbox")?;
               
         let statechain_id = finalized_data.statechain_id;
 
@@ -416,6 +413,7 @@ pub fn transfer_sender(
     sc_entity: State<SCE>,
     transfer_msg1: Json<TransferMsg1>,
 ) -> Result<Json<TransferMsg2>> {
+    sc_entity.check_rate_fast("transfer")?;
     match sc_entity.transfer_sender(transfer_msg1.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -429,6 +427,7 @@ pub fn transfer_get_pubkey(
     sc_entity: State<SCE>,
     user_id: Json<UserID>,
 ) -> Result<Json<S1PubKey>> {
+    sc_entity.check_rate_fast("transfer")?;
     match sc_entity.transfer_get_pubkey(user_id.id) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -442,6 +441,7 @@ pub fn transfer_receiver(
     sc_entity: State<SCE>,
     transfer_msg4: Json<TransferMsg4>,
 ) -> Result<Json<TransferMsg5>> {
+    sc_entity.check_rate_fast("transfer")?;
     match sc_entity.transfer_receiver(transfer_msg4.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -455,6 +455,7 @@ pub fn transfer_update_msg(
     sc_entity: State<SCE>,
     transfer_msg3: Json<TransferMsg3>,
 ) -> Result<Json<()>> {
+    sc_entity.check_rate_fast("transfer")?;
     match sc_entity.transfer_update_msg(transfer_msg3.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -468,6 +469,7 @@ pub fn transfer_get_msg(
     sc_entity: State<SCE>,
     statechain_id: Json<StatechainID>,
 ) -> Result<Json<TransferMsg3>> {
+    sc_entity.check_rate_fast("transfer")?;
     match sc_entity.transfer_get_msg(statechain_id.id) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -481,6 +483,7 @@ pub fn transfer_get_msg_addr(
     sc_entity: State<SCE>,
     receive_addr: String,
 ) -> Result<Json<Vec<TransferMsg3>>> {
+    sc_entity.check_rate_fast("info")?;
     match sc_entity.transfer_get_msg_addr(receive_addr) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -581,7 +584,7 @@ mod tests {
         db.expect_update_transfer_msg().returning(|_, _| Ok(()));
         db.expect_set_confirmed().returning(|_| Ok(()));
 
-        let sc_entity = test_sc_entity(db, None, None);
+        let sc_entity = test_sc_entity(db, None, None, None, None);
 
         // user does not own State Chain
         let mut msg_1_wrong_shared_key_id = transfer_msg_1.clone();
@@ -706,7 +709,7 @@ mod tests {
         db.expect_update_finalize_batch_data()
             .returning(|_, _| Ok(()));
 
-        let sc_entity = test_sc_entity(db, None, None);
+        let sc_entity = test_sc_entity(db, None, None, None, None);
         let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
 
         // Input data to transfer_receiver
@@ -843,7 +846,7 @@ mod tests {
         db.expect_update_finalize_batch_data()
             .returning(|_, _| Ok(()));
 
-        let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None);
+        let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None, None, None);
         let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
 
         // simulate lockbox secret operations

@@ -3,7 +3,7 @@ pub use crate::{error::SEError, Result};
 use rocket::State;
 use cfg_if::cfg_if;
 use crate::server::StateChainEntity;
-use crate::protocol::util::Utilities;
+use crate::protocol::util::RateLimiter;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -19,24 +19,19 @@ cfg_if! {
 }
 
 #[get("/ping")]
-pub fn ping() -> Status {
+pub fn ping(sc_entity: State<SCE>) -> Result<Status> {
     // TODO: Add logic for health check
-    Status::Ok
-}
-
-#[get("/ping/rate_limited")]
-pub fn ping_rate_limited(sc_entity: State<SCE>) -> Result<Status> {
-    sc_entity.ping_rate_limited()?;
+    sc_entity.ping()?;
     Ok(Status::Ok)
 }
 
 pub trait Ping {
-    fn ping_rate_limited(&self) -> Result<()>;
+    fn ping(&self) -> Result<()>;
 }
 
 impl Ping for SCE {
-    fn ping_rate_limited(&self) -> Result<()> {
-        self.check_rate("ping")?;
+    fn ping(&self) -> Result<()> {
+        self.check_rate_fast("info")?;
         Ok(())
     }
 }
@@ -49,16 +44,16 @@ pub mod tests {
     use std::num::NonZeroU32;
 
     #[test]
-    fn test_ping_rate_limited() {
+    fn test_ping() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         //db.expect_create_user_session().returning(|_, _, _, _| Ok(()));
         
         let rate_limit = NonZeroU32::new(1);
 
-        let sc_entity = test_sc_entity(db, None, rate_limit);
-        assert_eq!(sc_entity.ping_rate_limited().unwrap(), ());
-        match sc_entity.ping_rate_limited() {
+        let sc_entity = test_sc_entity(db, None, rate_limit, rate_limit, rate_limit);
+        assert_eq!(sc_entity.ping().unwrap(), ());
+        match sc_entity.ping() {
             Err(SEError::RateLimitError(ref _message)) => {
                 ()
             },
@@ -66,6 +61,6 @@ pub mod tests {
         }
 
         thread::sleep(Duration::from_millis(1000u64 / (rate_limit.unwrap().get() as u64) + 1u64));
-        assert_eq!(sc_entity.ping_rate_limited().unwrap(), ());
+        assert_eq!(sc_entity.ping().unwrap(), ());
     }
 }
