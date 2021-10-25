@@ -51,7 +51,6 @@ pub trait Deposit {
 
 impl Deposit for SCE {
     fn deposit_init(&self, deposit_msg1: DepositMsg1) -> Result<UserID> {
-        self.check_rate_fast("deposit_init")?;
         // if Verification/PoW/authoriation failed {
         //      warn!("Failed authorisation.")
         //      Err(SEError::AuthError)
@@ -173,7 +172,7 @@ impl Deposit for SCE {
 /// # Initiate a statechain deposit and generate a shared key ID
 #[post("/deposit/init", format = "json", data = "<deposit_msg1>")]
 pub fn deposit_init(sc_entity: State<SCE>, deposit_msg1: Json<DepositMsg1>) -> Result<Json<UserID>> {
-    sc_entity.check_rate_fast("deposit")?;
+    sc_entity.check_rate_slow("deposit_init")?;
     match sc_entity.deposit_init(deposit_msg1.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -187,7 +186,7 @@ pub fn deposit_confirm(
     sc_entity: State<SCE>,
     deposit_msg2: Json<DepositMsg2>,
 ) -> Result<Json<StatechainID>> {
-    sc_entity.check_rate_fast("deposit")?;
+    sc_entity.check_rate_fast("deposit_confirm")?;
     match sc_entity.deposit_confirm(deposit_msg2.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
