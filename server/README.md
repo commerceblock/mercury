@@ -37,7 +37,9 @@ The server can be run in one of 3 modes by selecting the `MERC_MODE` environment
 | DB_USER | String | Database user name |
 | DB_PASS | String | Database password |
 | DB_DATABASE | String | Database name |
-| RATE_LIMIT | int (non-zero) | The rate limit (per second) applied to some API calls (methods that use \"lockbox\") |
+| RATE_LIMIT_SLOW | int (non-zero) | The slow rate limit (per second) applied to some API calls |
+| RATE_LIMIT_FAST | int (non-zero) | The fast rate limit (per second) applied to some API calls |
+| RATE_LIMIT_ID | int (non-zero) | The rate limit (per second) applied to API calls that check user-id for each user-id |
 
 ### Launching the server
 ```bash
