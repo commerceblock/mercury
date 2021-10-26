@@ -35,6 +35,8 @@ use url::Url;
 use std::collections::HashSet;
 use std::default::Default;
 use governor::{Quota, RateLimiter, clock::DefaultClock, state::keyed::DashMapStateStore};
+use std::sync::atomic::{AtomicBool, Ordering};
+use signal_hook::{flag, consts::{signal::*, TERM_SIGNALS}, iterator::Signals};
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -108,7 +110,7 @@ pub struct StateChainEntity<
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
     pub scheduler: Option<Arc<Mutex<Scheduler>>>,
     pub lockbox: Option<Lockbox>,
-    pub rate_limiter: Option<Arc<RateLimiter<String, DashMapStateStore<String> , DefaultClock> >>
+    pub rate_limiter: Option<Arc<RateLimiter<String, DashMapStateStore<String> , DefaultClock> >>,
 }
 
 impl<
@@ -167,18 +169,34 @@ impl<
         };
 
         match &sce.scheduler {
-            Some(s) => {Self::start_conductor_thread(s.clone());},
+            Some(s) => {
+                Self::start_conductor_thread(s.clone());
+            },
             None => ()
         }
 
         Ok(sce)
     }
 
-    pub fn start_conductor_thread(scheduler: Arc<Mutex<Scheduler>>) -> std::thread::JoinHandle<()> {
+    pub fn start_conductor_thread(scheduler: Arc<Mutex<Scheduler>>) -> 
+        std::thread::JoinHandle<()>
+    {
+        let term = Arc::new(AtomicBool::new(false));
+        let shutdown_ready = Arc::new(AtomicBool::new(false));
+        for sig in TERM_SIGNALS {
+            flag::register(*sig, Arc::clone(&term)).unwrap();
+            flag::register_conditional_shutdown(*sig, 0, Arc::clone(&shutdown_ready)).unwrap();
+        }
         std::thread::spawn(move || loop {
             let mut guard = scheduler.lock().unwrap();
+            if Arc::clone(&term).load(Ordering::Relaxed) {
+                guard.request_shutdown();
+            }
             if let Err(e) = guard.update_swap_info() {
                 error!("{}", &e.to_string());
+            }
+            if guard.shutdown_ready(){
+                Arc::clone(&shutdown_ready).store(true, Ordering::Relaxed);
             }
             drop(guard);
             std::thread::sleep(std::time::Duration::from_secs(10));
