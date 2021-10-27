@@ -190,6 +190,7 @@ impl<
         let term = Arc::new(AtomicBool::new(false));
         let shutdown_ready = Arc::new(AtomicBool::new(false));
     
+        
         for sig in TERM_SIGNALS {
             flag::register(*sig, Arc::clone(&term)).unwrap();
             flag::register_conditional_shutdown(*sig, 0, Arc::clone(&shutdown_ready)).unwrap();
@@ -212,6 +213,7 @@ impl<
                     _ => ()
                 };
                 Arc::clone(&shutdown_ready).store(true, Ordering::Relaxed);
+                signal_hook::low_level::raise(signal_hook::consts::TERM_SIGNALS[0]).expect("failed to raise TERM signal");
             }
             drop(guard);
             std::thread::sleep(std::time::Duration::from_secs(10));
