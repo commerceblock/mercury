@@ -36,7 +36,7 @@ use std::collections::HashSet;
 use std::default::Default;
 use governor::{Quota, clock::DefaultClock, state::keyed::DashMapStateStore};
 use std::sync::atomic::{AtomicBool, Ordering};
-use signal_hook::{flag, consts::{signal::*, TERM_SIGNALS}, iterator::Signals};
+use signal_hook::{flag, consts::TERM_SIGNALS};
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -175,7 +175,7 @@ impl<
 
         match &sce.scheduler {
             Some(s) => {
-                Self::start_conductor_thread(s.clone());
+                Self::start_conductor_thread(s.clone(), sce.config.mode);
             },
             None => ()
         }
@@ -183,12 +183,13 @@ impl<
         Ok(sce)
     }
 
-    pub fn start_conductor_thread(scheduler: Arc<Mutex<Scheduler>>) -> 
+    pub fn start_conductor_thread(scheduler: Arc<Mutex<Scheduler>>, mode: Mode) -> 
         std::thread::JoinHandle<()>
     {
         
         let term = Arc::new(AtomicBool::new(false));
         let shutdown_ready = Arc::new(AtomicBool::new(false));
+    
         for sig in TERM_SIGNALS {
             flag::register(*sig, Arc::clone(&term)).unwrap();
             flag::register_conditional_shutdown(*sig, 0, Arc::clone(&shutdown_ready)).unwrap();
@@ -203,6 +204,13 @@ impl<
                 error!("{}", &e.to_string());
             }
             if guard.shutdown_ready(){
+                // Swap coordination complete - allow a grace period for 
+                // completion of transfers (if using mercury/conductor combined 
+                // server), then execute shutdown
+                match mode {
+                    Mode::Both => thread::sleep(std::time::Duration::new(180, 0)),
+                    _ => ()
+                };
                 Arc::clone(&shutdown_ready).store(true, Ordering::Relaxed);
             }
             drop(guard);

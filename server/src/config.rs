@@ -13,7 +13,7 @@ use std::vec::Vec;
 use std::num::NonZeroU32;
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[serde(rename_all = "snake_case")] 
 pub enum Mode {
     Both,
