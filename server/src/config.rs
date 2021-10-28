@@ -156,7 +156,11 @@ pub struct Config {
     /// Conductor config
     pub conductor: ConductorConfig,
     /// Rate limit (per second) for certain API calls - must be non-zero
-    pub rate_limit: Option<NonZeroU32>,
+    pub rate_limit_slow: Option<NonZeroU32>,
+    /// Rate limit (per second) for certain API calls - must be non-zero
+    pub rate_limit_fast: Option<NonZeroU32>,
+    /// Rate limit (per second) for certain API calls - must be non-zero
+    pub rate_limit_id: Option<NonZeroU32>,
     /// Wether to check the deposit proof of work challenge
     pub deposit_pow: bool
 }
@@ -184,7 +188,9 @@ impl Default for Config {
             mainstay: Some(MainstayConfig::default()),
             rocket: RocketConfig::default(),
             conductor: ConductorConfig::default(),
-            rate_limit: None,
+            rate_limit_slow: None,
+            rate_limit_fast: None,
+            rate_limit_id: None,
             deposit_pow: true,
         }
     }

@@ -5,7 +5,7 @@
 pub use super::super::Result;
 extern crate shared_lib;
 use crate::structs::StateChainOwner;
-use crate::server::WITHDRAWALS_COUNT;
+use crate::{protocol::util::RateLimiter, server::WITHDRAWALS_COUNT};
 use shared_lib::{state_chain::*, structs::*};
 
 use rocket::State;
@@ -195,6 +195,7 @@ impl Withdraw for SCE {
 /// # Initiate the withdrawal process: provide signed statechain
 #[post("/withdraw/init", format = "json", data = "<withdraw_msg1>")]
 pub fn withdraw_init(sc_entity: State<SCE>, withdraw_msg1: Json<WithdrawMsg1>) -> Result<Json<()>> {
+    sc_entity.check_rate_fast("withdraw")?;
     match sc_entity.withdraw_init(withdraw_msg1.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -208,6 +209,7 @@ pub fn withdraw_confirm(
     sc_entity: State<SCE>,
     withdraw_msg2: Json<WithdrawMsg2>,
 ) -> Result<Json<Vec<Vec<Vec<u8>>>>> {
+    sc_entity.check_rate_fast("withdraw")?;
     match sc_entity.withdraw_confirm(withdraw_msg2.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -280,7 +282,7 @@ mod tests {
             });
         db.expect_update_withdraw_sc_sig().returning(|_, _| Ok(()));
 
-        let sc_entity = test_sc_entity(db, None, None);
+        let sc_entity = test_sc_entity(db, None, None, None, None);
 
         // user does not own State Chain
         let mut msg_1_wrong_shared_key = withdraw_msg_1.clone();
@@ -347,7 +349,7 @@ mod tests {
         db.expect_root_update().returning(|_| Ok(1));
         db.expect_remove_backup_tx().returning(|_| Ok(()));
 
-        let sc_entity = test_sc_entity(db, None, None);
+        let sc_entity = test_sc_entity(db, None, None, None, None);
         let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
 
         // Ensure backup tx has been signed

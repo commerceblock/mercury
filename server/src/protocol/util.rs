@@ -91,8 +91,6 @@ pub trait Utilities {
 
     // get lockbox url
     fn get_lockbox_url(&self, user_id: &Uuid) -> Result<Option<(Url,usize)>>;
-
-    fn check_rate(&self, key: &str) -> Result<()>;
 }
 
 impl Utilities for SCE {
@@ -468,12 +466,47 @@ impl Utilities for SCE {
         }
     }
 
-    fn check_rate(&self, key: &str) -> Result<()> {
+}
+
+pub trait RateLimiter{
+    fn check_rate_slow<T:'static+Into<String>>(&self, key: T) -> Result<()>;
+    fn check_rate_fast<T:'static+Into<String>>(&self, key: T) -> Result<()>;
+    fn check_rate_id(&self, key: &Uuid) -> Result<()>;
+}
+
+impl RateLimiter for SCE {
+    fn check_rate_slow<T:'static+Into<String>>(&self, key: T) -> Result<()> {
         // If rate_limiter is 'None' the result is Ok. Otherwise, check the rate for 'key'.
-        match &self.rate_limiter {
+
+       match &self.rate_limiter_slow {
             Some(r) => {
-                r.check_key(&String::from(key))
-                    .map_err(|e| SEError::RateLimitError(format!("{} for key {}",SEError::from(e), key)))?;
+                let key_str: &String = &key.into();
+                r.check_key(key_str)
+                    .map_err(|e| SEError::RateLimitError(format!("{} for key {} - slow",SEError::from(e), key_str)))?;
+
+               Ok(())
+            },
+            None => Ok(())
+        }
+    }
+
+    fn check_rate_fast<T:'static+Into<String>>(&self, key: T) -> Result<()> {
+        match &self.rate_limiter_fast {
+            Some(r) => {
+                let key_str: &String = &key.into();
+                r.check_key(key_str)
+                    .map_err(|e| SEError::RateLimitError(format!("{} for key {} - fast",SEError::from(e), key_str)))?;
+                Ok(())
+            },
+            None => Ok(())
+        }
+    }
+
+    fn check_rate_id(&self, key: &Uuid) -> Result<()> {
+        match &self.rate_limiter_id {
+            Some(r) => {
+                r.check_key(key)
+                    .map_err(|e| SEError::RateLimitError(format!("{} for key {} - id",SEError::from(e), key)))?;
                 Ok(())
             },
             None => Ok(())
@@ -495,6 +528,7 @@ pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
 /// # Get the current statecoin amount histogram
 #[get("/info/coins", format = "json")]
 pub fn get_coin_info(sc_entity: State<SCE>) -> Result<Json<CoinValueInfo>> {
+    sc_entity.check_rate_fast("info")?;
     let guard = sc_entity.coin_value_info.as_ref().lock()?;
     Ok(Json(guard.deref().clone()))
 }
@@ -506,6 +540,7 @@ pub fn get_statechain(
     sc_entity: State<SCE>,
     statechain_id: String,
 ) -> Result<Json<StateChainDataAPI>> {
+    sc_entity.check_rate_fast("info")?;
     match sc_entity.get_statechain_data_api(Uuid::from_str(&statechain_id).unwrap()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -516,6 +551,7 @@ pub fn get_statechain(
 /// # Get the current Sparse Merkle Tree commitment root
 #[get("/info/root", format = "json")]
 pub fn get_smt_root(sc_entity: State<SCE>) -> Result<Json<Option<Root>>> {
+    sc_entity.check_rate_fast("info")?;
     match sc_entity.get_smt_root() {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -529,6 +565,7 @@ pub fn get_smt_proof(
     sc_entity: State<SCE>,
     smt_proof_msg: Json<SmtProofMsgAPI>,
 ) -> Result<Json<Option<Proof>>> {
+    sc_entity.check_rate_fast("info")?;
     match sc_entity.get_smt_proof(smt_proof_msg.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -542,6 +579,7 @@ pub fn get_transfer_batch_status(
     sc_entity: State<SCE>,
     batch_id: String,
 ) -> Result<Json<TransferBatchDataAPI>> {
+    sc_entity.check_rate_fast("info")?;
     match sc_entity.get_transfer_batch_status(Uuid::from_str(&batch_id).unwrap()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -555,6 +593,7 @@ pub fn get_recovery_data(
     sc_entity: State<SCE>,
     request_recovery_data: Json<Vec<RecoveryRequest>>,
 ) -> Result<Json<Vec<RecoveryDataMsg>>> {
+    sc_entity.check_rate_fast("info")?;
     match sc_entity.get_recovery_data(request_recovery_data.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -568,6 +607,7 @@ pub fn prepare_sign_tx(
     sc_entity: State<SCE>,
     prepare_sign_msg: Json<PrepareSignTxMsg>,
 ) -> Result<Json<()>> {
+    sc_entity.check_rate_fast("info")?;
     match sc_entity.prepare_sign_tx(prepare_sign_msg.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -578,6 +618,7 @@ pub fn prepare_sign_tx(
 /// # Reset databases and in-RAM data if in testing mode
 #[get("/test/reset-db")]
 pub fn reset_test_dbs(sc_entity: State<SCE>) -> Result<Json<()>> {
+    sc_entity.check_rate_fast("reset-db")?;
     if sc_entity.config.testing_mode {
         match sc_entity.database.reset() {
             Ok(_res) => {
@@ -598,6 +639,7 @@ pub fn reset_test_dbs(sc_entity: State<SCE>) -> Result<Json<()>> {
 /// # Reset databases and in-RAM data if in testing mode
 #[get("/test/reset-inram-data")]
 pub fn reset_inram_data(sc_entity: State<SCE>) -> Result<Json<()>> {
+    sc_entity.check_rate_fast("reset-inram-data")?;
     if sc_entity.config.testing_mode {
         sc_entity.reset_data()?;
         sc_entity.database.init(sc_entity.coin_value_info.as_ref(), 
@@ -684,10 +726,13 @@ impl SCE {
         // check authorisation id is in DB (and TOOD: check password?)
         let mut guard = self.user_ids.as_ref().lock()?;
         match guard.contains(user_id){
-            true => Ok(()),
+            true => {
+                // rate limit by user id
+                self.check_rate_id(user_id)
+            },
             //Update the user ids set in a rate-limited manner
             false => {
-                let _auth = self.check_rate("check_user_auth")
+                let _auth = self.check_rate_fast("check_user_auth")
                             .and_then(|_| Ok(self.database.get_user_auth(user_id)))
                             .map_err(|_| SEError::AuthError)?;
                 guard.insert(*user_id);
@@ -1111,10 +1156,17 @@ pub mod tests {
     pub static PARTY2PUBLIC: &str = "{\"q\":{\"x\":\"f8308498a5b5996eb7c410fb7ada7f3524d604b45b247cc4d13e5a32c3763908\",\"y\":\"7e41091fd5ab1138d1a3cdf41b43c82a064839a6b82b251be2be70099b642d1a\"},\"p1\":{\"x\":\"701e7d08608e6065b8f19f7cd867bcd7c5c4a11290e51187210a66713349c76c\",\"y\":\"10f76cae4eac6727bec6ae239de37d806a4877bc418f9fadaad0fd379cb11e73\"},\"p2\":{\"x\":\"caff57b3e214231182b2ba729079422887527dec2c2be1af03eb9a28be046fbb\",\"y\":\"94d4d2624a6be1e5fccf22ea5d7d2294a65f86b23642e7107c5523bb383d2612\"},\"paillier_pub\":{\"n\":\"11489233870088042333010221250016305472224248130131837344400358635737478519468920848276451747026121985401781804607266395846806728547165860151830628936151241253052105217375620729553123605998218501591757218904947955026013349855548130232876481464163645763380508660165838175358408923868455078398162478065282146744074902115770410655628975593804546170315851709066735895285416399351986223748741323752676766246912115655411869835426209804163120117240537098699118426250380831687194901410283437954378683229249501222250355118886953166922692541953136499596437296944964919863277847025337779172484000271289374153321801582770169915217\"},\"c_key\":\"13acbe9791ae6136f0d3700bad8cbe723ed2676e33d9f080122283a3a5838e3418d9ae3f61cc5e3b033ec71979f339c87e2da410c46a3a6238e40fc403799b5b7855bf529c381bd80288f5002f62a460cc005ec71e85c7d0eda2133245a857fe414c8653f0248016545618e2d53f466e3808edfe15774fb32ffeafc98dc08dd9eaca2e5411ae22bd4dad358bffadb51e82d2f99404ff73db8c473a2483133863aeaf6ffccd455fe4ba0966f90e85ea02083962d15779215941396676d90a0ce99a09adaa064956f506ca40d18ba91a7f9826a2e82050fb3b569790b5642ac45e39d9dfb63f8c975c30090f9eceaca387129539eaebfcedc17d2e49f0bd029e3591ac30e3db26139368b1423cf058e2128978411518e87c2d3c106a91c16de80895ad7f928a9a40c6d5aac356bd2966b3bf98c77f616f04329caecc895d13d16d8193e9f0bfe866c86a2eee3b2b0beb95478d4c216e00f8a9712618599d176ad253e59e9e27743f1e61a710bb9a0ae989226900ef809acb17e11f9f068bdb35fd7a767560e912da3aa98cd9d529b3d993e360d73f19adf830599f71ca139f6e17014302dce8a40401276d3a7e3dda04ef4b344a7dc4cb94c106c346e389ab7e089b97aa1e3f1680d4b8eeb62d405ab3a4e827b93dd15074e1dfd74244a9b4857017818b63504399c98fc02d0b3af135a0d7ac4f9de9a7cd47fdbe40cb3a6185b6\"}";
     pub static SHAREDPUBLIC: &str = "{\"x\":\"f8308498a5b5996eb7c410fb7ada7f3524d604b45b247cc4d13e5a32c3763908\",\"y\":\"7e41091fd5ab1138d1a3cdf41b43c82a064839a6b82b251be2be70099b642d1a\"}";
 
-    pub fn test_sc_entity(db: MockDatabase, lockbox_url: Option<String>, rate_limit: Option<NonZeroU32>) -> SCE {
+    pub fn test_sc_entity(db: MockDatabase, 
+            lockbox_url: Option<String>, 
+            rate_limit_slow: Option<NonZeroU32>,
+            rate_limit_fast: Option<NonZeroU32>,
+            rate_limit_id: Option<NonZeroU32>
+    ) -> SCE {
         let mut config = Config::load().unwrap();
         config.lockbox = lockbox_url;
-        config.rate_limit = rate_limit;
+        config.rate_limit_slow = rate_limit_slow;
+        config.rate_limit_fast = rate_limit_fast;
+        config.rate_limit_id = rate_limit_id;
 
         let mut sc_entity = SCE::load(db, MemoryDB::new(""),Some(config)).unwrap();
         sc_entity.config.testing_mode = true;
@@ -1141,7 +1193,7 @@ pub mod tests {
         db.expect_get_confirmed_smt_root()
             .returning(|| Ok(Some(Root::from_random())));
 
-        let sc_entity = test_sc_entity(db, None, None);
+        let sc_entity = test_sc_entity(db, None, None, None, None);
 
         //No commitments initially
         let _m = mocks::ms::commitment_proof_not_found();
@@ -1210,7 +1262,7 @@ pub mod tests {
         db.expect_root_update().returning(|_x| Ok(1));
         db.expect_get_confirmed_smt_root()
             .returning(|| Ok(Some(Root::from_random())));
-        let sc_entity = test_sc_entity(db, None, None);
+        let sc_entity = test_sc_entity(db, None, None, None, None);
 
         //Mainstay post commitment mock
         let _m = mocks::ms::post_commitment().create();
@@ -1283,7 +1335,7 @@ pub mod tests {
             Ok(Some(SHAREDPUBLIC.to_string()))
         });
 
-        let sc_entity = test_sc_entity(db, None, None);
+        let sc_entity = test_sc_entity(db, None, None, None, None);
 
         // get_recovery invalid public key
         let recover_msg = vec!(RecoveryRequest {
