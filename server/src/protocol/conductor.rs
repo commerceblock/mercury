@@ -673,7 +673,7 @@ impl Scheduler {
     }
 
     pub fn shutdown_ready(&self) -> bool {
-       self.shutdown_requested &! self.swaps_ongoing()
+       self.shutdown_requested && !self.swaps_ongoing()
     }
 
     pub fn swaps_ongoing(&self) -> bool {
