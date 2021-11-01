@@ -518,6 +518,7 @@ impl RateLimiter for SCE {
 /// # Get statechain entity operating information
 #[get("/info/fee", format = "json")]
 pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
+    sc_entity.check_rate_fast("info")?;
     match sc_entity.get_fees() {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
