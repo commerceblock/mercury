@@ -201,7 +201,7 @@ impl fmt::Display for SEError {
             SEError::TryAgain(ref e) => write!(f, "Error: try again: {}", e),
             SEError::TransferBatchEnded(ref e) => write!(f, "Error: Transfer batch ended. {}", e),
             SEError::LockboxError(ref e) => write!(f, "Lockbox Error: {}", e),
-            SEError::RateLimitError(ref e) => write!(f, "Not available until {} due to a rate limitation.", e),
+            SEError::RateLimitError(ref e) => write!(f, "Error: Not available until {} due to rate limit", e),
         }
     }
 }

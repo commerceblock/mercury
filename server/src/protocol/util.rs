@@ -482,7 +482,7 @@ impl RateLimiter for SCE {
             Some(r) => {
                 let key_str: &String = &key.into();
                 r.check_key(key_str)
-                    .map_err(|e| SEError::RateLimitError(format!("{} for key {} - slow",SEError::from(e), key_str)))?;
+                    .map_err(|e| SEError::RateLimitError(format!("{} for key {} (slow limiter) ",SEError::from(e), key_str)))?;
 
                Ok(())
             },
@@ -495,7 +495,7 @@ impl RateLimiter for SCE {
             Some(r) => {
                 let key_str: &String = &key.into();
                 r.check_key(key_str)
-                    .map_err(|e| SEError::RateLimitError(format!("{} for key {} - fast",SEError::from(e), key_str)))?;
+                    .map_err(|e| SEError::RateLimitError(format!("{} for key {} (fast limiter) ",SEError::from(e), key_str)))?;
                 Ok(())
             },
             None => Ok(())
@@ -506,7 +506,7 @@ impl RateLimiter for SCE {
         match &self.rate_limiter_id {
             Some(r) => {
                 r.check_key(key)
-                    .map_err(|e| SEError::RateLimitError(format!("{} for key {} - id",SEError::from(e), key)))?;
+                    .map_err(|e| SEError::RateLimitError(format!("{} for key {} (id limiter) ",SEError::from(e), key)))?;
                 Ok(())
             },
             None => Ok(())
@@ -518,6 +518,7 @@ impl RateLimiter for SCE {
 /// # Get statechain entity operating information
 #[get("/info/fee", format = "json")]
 pub fn get_fees(sc_entity: State<SCE>) -> Result<Json<StateEntityFeeInfoAPI>> {
+    sc_entity.check_rate_fast("info")?;
     match sc_entity.get_fees() {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
