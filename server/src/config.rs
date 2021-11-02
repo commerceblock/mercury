@@ -13,7 +13,7 @@ use std::vec::Vec;
 use std::num::NonZeroU32;
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[serde(rename_all = "snake_case")] 
 pub enum Mode {
     Both,
@@ -34,7 +34,9 @@ pub struct ConductorConfig {
     /// The time waited after a group is started until the swap begins
     pub daily_epochs: u32,
     /// The max swap size
-    pub max_swap_size: u32
+    pub max_swap_size: u32,
+    /// The shutdown grace period in seconds after ongoing swaps have completed
+    pub grace_period: u32
 }
 
 impl Default for ConductorConfig {
@@ -45,6 +47,7 @@ impl Default for ConductorConfig {
             punishment_duration: 300,
             daily_epochs: 240,
             max_swap_size: 5,
+            grace_period: 180
         }
     }
 }
@@ -156,7 +159,11 @@ pub struct Config {
     /// Conductor config
     pub conductor: ConductorConfig,
     /// Rate limit (per second) for certain API calls - must be non-zero
-    pub rate_limit: Option<NonZeroU32>,
+    pub rate_limit_slow: Option<NonZeroU32>,
+    /// Rate limit (per second) for certain API calls - must be non-zero
+    pub rate_limit_fast: Option<NonZeroU32>,
+    /// Rate limit (per second) for certain API calls - must be non-zero
+    pub rate_limit_id: Option<NonZeroU32>,
     /// Wether to check the deposit proof of work challenge
     pub deposit_pow: bool
 }
@@ -184,7 +191,9 @@ impl Default for Config {
             mainstay: Some(MainstayConfig::default()),
             rocket: RocketConfig::default(),
             conductor: ConductorConfig::default(),
-            rate_limit: None,
+            rate_limit_slow: None,
+            rate_limit_fast: None,
+            rate_limit_id: None,
             deposit_pow: true,
         }
     }
@@ -272,6 +281,10 @@ impl Config {
 
         if let Ok(v) = env::var("MERC_GROUP_TIMEOUT") {
             let _ = conf_rs.set("conductor.group_timeout", v)?;
+        }
+
+        if let Ok(v) = env::var("MERC_CONDUCTOR_GRACE_PERIOD") {
+            let _ = conf_rs.set("conductor.grace_period", v)?;
         }
 
         // Type checks

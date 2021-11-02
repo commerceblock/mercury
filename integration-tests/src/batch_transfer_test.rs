@@ -432,7 +432,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_swap() {
-        let _handle = start_server(None, None);
+        let handle = start_server(None, None);
 
         let num_state_chains: u64 = 3;
         let amount: u64 = 10000; // = u64::from_str(&format!("10000")).unwrap();

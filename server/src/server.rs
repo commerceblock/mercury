@@ -34,7 +34,9 @@ use std::collections::HashMap;
 use url::Url;
 use std::collections::HashSet;
 use std::default::Default;
-use governor::{Quota, RateLimiter, clock::DefaultClock, state::keyed::DashMapStateStore};
+use governor::{Quota, clock::DefaultClock, state::keyed::DashMapStateStore};
+use std::sync::atomic::{AtomicBool, Ordering};
+use signal_hook::{flag, consts::TERM_SIGNALS, SigId};
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -108,7 +110,9 @@ pub struct StateChainEntity<
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
     pub scheduler: Option<Arc<Mutex<Scheduler>>>,
     pub lockbox: Option<Lockbox>,
-    pub rate_limiter: Option<Arc<RateLimiter<String, DashMapStateStore<String> , DefaultClock> >>
+    pub rate_limiter_slow: Option<Arc<governor::RateLimiter<String, DashMapStateStore<String> , DefaultClock> >>,
+    pub rate_limiter_fast: Option<Arc<governor::RateLimiter<String, DashMapStateStore<String> , DefaultClock> >>,
+    pub rate_limiter_id: Option<Arc<governor::RateLimiter<Uuid, DashMapStateStore<Uuid> , DefaultClock> >>
 }
 
 impl<
@@ -152,8 +156,9 @@ impl<
             Mode::Core => (init_lb(&config_rs), None)
         };
 
-        //Construct a keyed rate limiter.
-        let rate_limiter = config_rs.rate_limit.map(|r| Arc::new(RateLimiter::dashmap(Quota::per_second(r))));
+        let rate_limiter_slow = config_rs.rate_limit_slow.map(|r| Arc::new(governor::RateLimiter::dashmap(Quota::per_second(r))));
+        let rate_limiter_fast = config_rs.rate_limit_fast.map(|r| Arc::new(governor::RateLimiter::dashmap(Quota::per_second(r))));
+        let rate_limiter_id = config_rs.rate_limit_id.map(|r| Arc::new(governor::RateLimiter::dashmap(Quota::per_second(r))));
 
         let sce = Self {
             config: config_rs,
@@ -163,22 +168,53 @@ impl<
             smt: Arc::new(Mutex::new(smt)),
             scheduler,
             lockbox,
-            rate_limiter
+            rate_limiter_slow,
+            rate_limiter_fast,
+            rate_limiter_id
         };
 
         match &sce.scheduler {
-            Some(s) => {Self::start_conductor_thread(s.clone());},
+            Some(s) => {
+                Self::start_conductor_thread(s.clone(), sce.config.mode, sce.config.conductor.grace_period);
+            },
             None => ()
         }
 
         Ok(sce)
     }
 
-    pub fn start_conductor_thread(scheduler: Arc<Mutex<Scheduler>>) -> std::thread::JoinHandle<()> {
+    pub fn start_conductor_thread(scheduler: Arc<Mutex<Scheduler>>, mode: Mode, grace_period: u32) -> 
+        std::thread::JoinHandle<()>
+    {
+        let term = Arc::new(AtomicBool::new(false));
+        let shutdown_ready = Arc::new(AtomicBool::new(false));
+
+        for sig in TERM_SIGNALS {
+            flag::register(*sig, Arc::clone(&term)).unwrap();
+            flag::register_conditional_default(*sig, Arc::clone(&shutdown_ready)).unwrap();
+        }
+        
         std::thread::spawn(move || loop {
             let mut guard = scheduler.lock().unwrap();
+            if Arc::clone(&term).load(Ordering::Relaxed) {
+                info!("TERM signal received - requesting conductor shutdown");
+                guard.request_shutdown();
+            }
             if let Err(e) = guard.update_swap_info() {
                 error!("{}", &e.to_string());
+            }
+            if guard.shutdown_ready(){
+                // Swap coordination complete - allow a grace period for 
+                // completion of transfers (if using mercury/conductor combined 
+                // server), then execute shutdown
+                info!("conductor ready for shutdown - waiting for grace period {}s", &grace_period);
+                match mode {
+                    Mode::Both => thread::sleep(std::time::Duration::new(grace_period as u64, 0)),
+                    _ => ()
+                };
+                info!("grace period over - terminating");
+                Arc::clone(&shutdown_ready).store(true, Ordering::Relaxed);
+                signal_hook::low_level::raise(signal_hook::consts::TERM_SIGNALS[0]).expect("failed to raise TERM signal");
             }
             drop(guard);
             std::thread::sleep(std::time::Duration::from_secs(10));
@@ -428,7 +464,7 @@ use crate::protocol::deposit::Deposit;
 use crate::protocol::ecdsa::Ecdsa;
 use crate::protocol::transfer::{Transfer, TransferFinalizeData};
 use crate::protocol::transfer_batch::BatchTransfer;
-use crate::protocol::util::{Proof, Utilities};
+use crate::protocol::util::{Proof, Utilities, RateLimiter};
 use crate::protocol::withdraw::Withdraw;
 use crate::storage;
 use crate::storage::Storage;
@@ -533,7 +569,11 @@ mock! {
         ) -> util::Result<Vec<RecoveryDataMsg>>;
         fn get_lockbox_url(&self, user_id: &Uuid
         ) -> util::Result<Option<(Url, usize)>>;
-        fn check_rate(&self, key: &str) -> storage::Result<()>;
+    }
+    trait RateLimiter{
+        fn check_rate_slow<T:'static+Into<String>>(&self, key: T) -> storage::Result<()>;
+        fn check_rate_fast<T:'static+Into<String>>(&self, key: T) -> storage::Result<()>;
+        fn check_rate_id(&self, key: &Uuid) -> storage::Result<()>;
     }
     trait Withdraw{
         fn verify_statechain_sig(&self,

@@ -38,6 +38,7 @@ use rocket_okapi::JsonSchema;
 use schemars;
 use bitcoin::secp256k1::Signature;
 use chrono::{NaiveDateTime, Utc, Duration,Timelike};
+use crate::protocol::util::RateLimiter;
 
 const MIN_AMOUNT: u64 = 100000; // bitcoin tx nlocktime cutoff
 const SECONDS_DAY: u32 = 86400;
@@ -150,10 +151,6 @@ pub struct Scheduler {
     swap_id_map: HashMap<Uuid, Uuid>,
     //A map of swap id to swap info
     swap_info_map: HashMap<Uuid, SwapInfo>,
-    //swap id to swap status
-    status_map: BisetMap<Uuid, SwapStatus>,
-    //swap id to time out
-    time_out_map: BisetMap<Uuid, u64>,
     //A map of state chain id to poll_utxo timeout
     poll_timeout_map: HashMap<Uuid, NaiveDateTime>,
     //A map of state swap id to swap timeout
@@ -166,6 +163,7 @@ pub struct Scheduler {
     bst_sig_map: HashMap<Uuid, HashMap<Uuid, BlindedSpendSignature>>,
     //map of swap_id to transfer batch sigs
     tb_sig_map: HashMap<Uuid, HashSet<StateChainSig>>,
+    shutdown_requested: bool,
 }
 
 impl Scheduler {
@@ -183,14 +181,13 @@ impl Scheduler {
             group_info_map: HashMap::<SwapGroup, GroupStatus>::new(),
             swap_id_map: HashMap::<Uuid, Uuid>::new(),
             swap_info_map: HashMap::<Uuid, SwapInfo>::new(),
-            status_map: BisetMap::<Uuid, SwapStatus>::new(),
-            time_out_map: BisetMap::<Uuid, u64>::new(),
             poll_timeout_map: HashMap::<Uuid, NaiveDateTime>::new(),
             swap_timeout_map: HashMap::<Uuid, NaiveDateTime>::new(),
             out_addr_map: HashMap::new(),
             bst_e_prime_map: HashMap::new(),
             bst_sig_map: HashMap::new(),
             tb_sig_map: HashMap::new(),
+            shutdown_requested: false,
         }
     }
 
@@ -347,10 +344,6 @@ impl Scheduler {
         for id in &swap_info.swap_token.statechain_ids {
             self.register_swap_id(id, swap_id);
         }
-        self.status_map
-            .insert(swap_id.to_owned(), swap_info.status.to_owned());
-        self.time_out_map
-            .insert(swap_id.to_owned(), swap_info.swap_token.time_out);
     }
 
     pub fn remove_swap_info(&mut self, swap_id: &Uuid) -> Option<SwapInfo> {
@@ -363,9 +356,6 @@ impl Scheduler {
                 let swap_id = &i.swap_token.id;
                 self.swap_info_map.remove(swap_id);
                 self.out_addr_map.remove(swap_id);
-                self.status_map.insert(swap_id.to_owned(), i.status);
-                self.time_out_map
-                    .insert(swap_id.to_owned(), i.swap_token.time_out);
                 self.bst_e_prime_map.remove(swap_id);
                 self.bst_sig_map.remove(swap_id);
                 self.swap_timeout_map.remove(swap_id);
@@ -678,6 +668,23 @@ impl Scheduler {
         self.update_swaps()
     }
 
+    pub fn request_shutdown(&mut self) {
+        self.shutdown_requested = true;
+    }
+
+    pub fn shutdown_ready(&self) -> bool {
+       self.shutdown_requested && !self.swaps_ongoing()
+    }
+
+    pub fn swaps_ongoing(&self) -> bool {
+        for value in self.swap_info_map.values() {
+            if value.status != SwapStatus::End {
+                return true;
+            }
+        }
+        false
+    }
+
     pub fn get_blinded_spend_signature(
         &self,
         swap_id: &Uuid,
@@ -797,6 +804,10 @@ impl Conductor for SCE {
     }
 
     fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> Result<()> {
+        let mut guard = self.scheduler.as_ref().expect("scheduler is None").lock()?;
+        if guard.shutdown_requested {
+            return Err(SEError::SwapError(String::from("unable to register for swap - conductor is shutting down - please try later")));
+        }
         let sig = &register_utxo_msg.signature;
         let key_id = &register_utxo_msg.statechain_id;
         let swap_size = &register_utxo_msg.swap_size;
@@ -804,7 +815,6 @@ impl Conductor for SCE {
         let _ = self.verify_statechain_sig(key_id, sig, None)?;
         let sc_amount = self.database.get_statechain_amount(*key_id)?;
         let amount: u64 = sc_amount.amount as u64;
-        let mut guard = self.scheduler.as_ref().expect("scheduler is None").lock()?;
         let _res = match guard.register_amount_swap_size(key_id, amount, *swap_size) {
             Ok(_res) => return Ok(()),
             Err(err) => return Err(err),
@@ -1058,6 +1068,7 @@ impl Conductor for SCE {
 /// # Poll conductor for the status of a specified registered statecoin ID
 #[post("/swap/poll/utxo", format = "json", data = "<statechain_id>")]
 pub fn poll_utxo(sc_entity: State<SCE>, statechain_id: Json<StatechainID>) -> Result<Json<SwapID>> {
+    sc_entity.check_rate_fast("swap")?;
     match sc_entity.poll_utxo(&statechain_id.id) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -1068,6 +1079,7 @@ pub fn poll_utxo(sc_entity: State<SCE>, statechain_id: Json<StatechainID>) -> Re
 /// # Poll conductor for the status of a specified swap ID
 #[post("/swap/poll/swap", format = "json", data = "<swap_id>")]
 pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<SwapID>) -> Result<Json<Option<SwapStatus>>> {
+    sc_entity.check_rate_fast("swap")?;
     match sc_entity.poll_swap(&swap_id.id.unwrap()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -1078,6 +1090,7 @@ pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<SwapID>) -> Result<Json<Op
 /// # Get information a specified swap ID
 #[post("/swap/info", format = "json", data = "<swap_id>")]
 pub fn get_swap_info(sc_entity: State<SCE>, swap_id: Json<SwapID>) -> Result<Json<Option<SwapInfo>>> {
+    sc_entity.check_rate_fast("swap")?;
     match sc_entity.get_swap_info(&swap_id.id.unwrap()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -1091,6 +1104,7 @@ pub fn get_blinded_spend_signature(
     sc_entity: State<SCE>,
     bst_msg: Json<BSTMsg>,
 ) -> Result<Json<BlindedSpendSignature>> {
+    sc_entity.check_rate_fast("swap")?;
     let bst_msg = bst_msg.into_inner();
     let swap_uuid = &Uuid::from_str(&bst_msg.swap_id)?;
     let statechain_uuid = &Uuid::from_str(&bst_msg.statechain_id)?;
@@ -1106,6 +1120,7 @@ pub fn register_utxo(
     sc_entity: State<SCE>,
     register_utxo_msg: Json<RegisterUtxo>,
 ) -> Result<Json<()>> {
+    sc_entity.check_rate_fast("swap")?;
     match sc_entity.register_utxo(&register_utxo_msg.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -1119,6 +1134,7 @@ pub fn deregister_utxo(
     sc_entity: State<SCE>,
     statechain_id: Json<StatechainID>,
 ) -> Result<Json<()>> {
+    sc_entity.check_rate_fast("swap")?;
     match sc_entity.deregister_utxo(&statechain_id.id) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -1131,6 +1147,7 @@ pub fn deregister_utxo(
 /// # Phase 1 of coinswap: Participants sign SwapToken and provide a statechain address and e_prime for blind spend token.
 #[post("/swap/first", format = "json", data = "<swap_msg1>")]
 pub fn swap_first_message(sc_entity: State<SCE>, swap_msg1: Json<SwapMsg1>) -> Result<Json<()>> {
+    sc_entity.check_rate_fast("swap")?;
     match sc_entity.swap_first_message(&swap_msg1.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -1144,6 +1161,7 @@ pub fn swap_second_message(
     sc_entity: State<SCE>,
     swap_msg2: Json<SwapMsg2>,
 ) -> Result<Json<(SCEAddress)>> {
+    sc_entity.check_rate_fast("swap")?;
     match sc_entity.swap_second_message(&swap_msg2.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -1156,6 +1174,7 @@ pub fn swap_second_message(
 pub fn get_group_info(
     sc_entity: State<SCE>,
     ) -> Result<Json<(HashMap<SwapGroup,GroupStatus>)>> {
+    sc_entity.check_rate_fast("swap")?;
     match sc_entity.get_group_info() {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -1264,14 +1283,13 @@ mod tests {
             group_info_map: HashMap::<SwapGroup,GroupStatus>::new(),
             swap_id_map: HashMap::<Uuid, Uuid>::new(),
             swap_info_map: HashMap::<Uuid, SwapInfo>::new(),
-            status_map: BisetMap::<Uuid, SwapStatus>::new(),
-            time_out_map: BisetMap::<Uuid, u64>::new(),
             poll_timeout_map,
             swap_timeout_map,
             out_addr_map: HashMap::new(),
             bst_e_prime_map: HashMap::new(),
             bst_sig_map: HashMap::new(),
             tb_sig_map: HashMap::new(),
+            shutdown_requested: false,
         }
     }
 
@@ -1294,8 +1312,6 @@ mod tests {
         scheduler.update_swap_info().unwrap();
         assert_eq!(scheduler.swap_id_map.len(), 7);
         assert_eq!(scheduler.swap_info_map.len(), 2);
-        assert_eq!(scheduler.status_map.len(), 2);
-        assert_eq!(scheduler.time_out_map.len(), 2);
 
         //Regsiter a new request for the amount 5, but require 6 to be in the swap
         scheduler.register_amount_swap_size(&Uuid::new_v4(), 5, 6).unwrap();
@@ -1303,8 +1319,6 @@ mod tests {
         scheduler.update_swap_info().unwrap();
         assert_eq!(scheduler.swap_id_map.len(), 7);
         assert_eq!(scheduler.swap_info_map.len(), 2);
-        assert_eq!(scheduler.status_map.len(), 2);
-        assert_eq!(scheduler.time_out_map.len(), 2);
         assert_eq!(scheduler.statechain_amount_map.len(),5);
 
         //Wait for newly registered statechains to time out
@@ -1329,8 +1343,6 @@ mod tests {
         scheduler.update_swap_info().unwrap();
         assert_eq!(scheduler.swap_id_map.len(), 13);
         assert_eq!(scheduler.swap_info_map.len(), 3);
-        assert_eq!(scheduler.status_map.len(), 3);
-        assert_eq!(scheduler.time_out_map.len(), 3);
 
         //Look up the swap for sc_id
         let swap_id = scheduler.get_swap_id(&sc_id).expect("expected swap id");
@@ -1369,7 +1381,7 @@ mod tests {
     fn test_poll_utxo() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        let mut sc_entity = test_sc_entity(db, None, None);
+        let mut sc_entity = test_sc_entity(db, None, None, None, None);
         sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
 
         let utxo_not_in_swap = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d4").unwrap();
@@ -1404,7 +1416,7 @@ mod tests {
 
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        let mut sc_entity = test_sc_entity(db, None, None);
+        let mut sc_entity = test_sc_entity(db, None, None, None, None);
         sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
         let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         guard.update_swap_info().unwrap();
@@ -1472,7 +1484,7 @@ mod tests {
         db.expect_get_statechain_amount()
             .returning(move |_| Ok(statechain_amount.clone()));
 
-        let mut sc_entity = test_sc_entity(db, None, None);
+        let mut sc_entity = test_sc_entity(db, None, None, None, None);
         sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
 
         // Try invalid signature for proof key
@@ -1567,7 +1579,7 @@ mod tests {
                 .returning(move |_| Ok(statechain2.clone()));
         }
 
-        let mut sc_entity = test_sc_entity(db, None, None);
+        let mut sc_entity = test_sc_entity(db, None, None, None, None);
         sc_entity.scheduler = Some(Arc::new(Mutex::new(scheduler)));
 
         let mut swap_token_no_sc = swap_token.clone();
@@ -1682,7 +1694,7 @@ mod tests {
     fn test_get_blinded_spend_token() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        let mut sc_entity = test_sc_entity(db, None, None);
+        let mut sc_entity = test_sc_entity(db, None, None, None, None);
         sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
         let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         guard.update_swap_info().unwrap();
@@ -1752,7 +1764,7 @@ mod tests {
     fn test_swap_second_message() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        let mut sc_entity = test_sc_entity(db, None, None);
+        let mut sc_entity = test_sc_entity(db, None, None, None, None);
         sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
         let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         guard.update_swap_info().unwrap();
@@ -1885,7 +1897,7 @@ mod tests {
     fn test_get_address_from_blinded_spend_token() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        let mut sc_entity = test_sc_entity(db, None, None);
+        let mut sc_entity = test_sc_entity(db, None, None, None, None);
         sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
         let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         guard.update_swap_info().unwrap();
@@ -2142,5 +2154,42 @@ mod tests {
             })
         });
         conductor
+    }
+
+    #[test]
+    fn test_get_swaps_ongoing() {
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        let mut sc_entity = test_sc_entity(db, None, None, None, None);
+        sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
+        let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
+        
+        assert!(guard.swaps_ongoing() == false);
+        assert!(guard.shutdown_requested == false);
+        assert!(guard.shutdown_ready() == false);
+        
+        guard.update_swap_info().unwrap();
+
+        assert!(guard.swaps_ongoing() == true);
+        assert!(guard.shutdown_requested == false);
+        assert!(guard.shutdown_ready() == false);
+
+        guard.request_shutdown();
+
+        assert!(guard.swaps_ongoing() == true);
+        assert!(guard.shutdown_requested == true);
+        assert!(guard.shutdown_ready() == false);
+
+        for val in guard.swap_info_map.values_mut(){
+            val.status = SwapStatus::End;
+        }
+
+        assert!(guard.swaps_ongoing() == false);
+        assert!(guard.shutdown_requested == true);
+        assert!(guard.shutdown_ready() == true);
+
+        guard.shutdown_requested = false;
+        assert!(guard.swaps_ongoing() == false);
+        assert!(guard.shutdown_ready() == false);
     }
 }

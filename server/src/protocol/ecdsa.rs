@@ -26,7 +26,7 @@ use rocket_okapi::openapi;
 use url::Url;
 use sha3::Sha3_256;
 use digest::Digest;
-use crate::protocol::util::Utilities;
+use crate::protocol::util::{Utilities, RateLimiter};
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -71,7 +71,6 @@ impl Ecdsa for SCE {
 
     fn first_message(&self, key_gen_msg1: KeyGenMsg1) -> Result<KeyGenReply1> {
         self.check_user_auth(&key_gen_msg1.shared_key_id)?;
-        self.check_rate("lockbox")?;
         let user_id = key_gen_msg1.shared_key_id;
         let db = &self.database;
         
@@ -163,7 +162,6 @@ impl Ecdsa for SCE {
 
     fn second_message(&self, key_gen_msg2: KeyGenMsg2) -> Result<KeyGenReply2> {
         self.check_user_auth(&key_gen_msg2.shared_key_id)?;
-        self.check_rate("lockbox")?;
         let kg_party_one_second_msg: party1::KeyGenParty1Message2;
         let db = &self.database;
         let user_id = key_gen_msg2.shared_key_id;
@@ -232,7 +230,6 @@ impl Ecdsa for SCE {
 
     fn sign_first(&self, sign_msg1: SignMsg1) -> Result<SignReply1> {
         self.check_user_auth(&sign_msg1.shared_key_id)?;
-        self.check_rate("lockbox")?;
         let user_id = sign_msg1.shared_key_id;
 
         let sign_party_one_first_msg: party_one::EphKeyGenFirstMsg;
@@ -266,7 +263,6 @@ impl Ecdsa for SCE {
 
     fn sign_second(&self, sign_msg2: SignMsg2) -> Result<Vec<Vec<u8>>> {
         self.check_user_auth(&sign_msg2.shared_key_id)?;
-        self.check_rate("lockbox")?;
         let user_id = sign_msg2.shared_key_id;
         let db = &self.database;
 
@@ -395,6 +391,7 @@ pub fn first_message(
     sc_entity: State<SCE>,
     key_gen_msg1: Json<KeyGenMsg1>,
 ) -> Result<Json<KeyGenReply1>> {
+    sc_entity.check_rate_slow("ecdsa")?;
     match sc_entity.first_message(key_gen_msg1.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -408,6 +405,7 @@ pub fn second_message(
     sc_entity: State<SCE>,
     key_gen_msg2: Json<KeyGenMsg2>,
 ) -> Result<Json<KeyGenReply2>> {
+    sc_entity.check_rate_slow("ecdsa")?;
     match sc_entity.second_message(key_gen_msg2.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -421,6 +419,7 @@ pub fn sign_first(
     sc_entity: State<SCE>,
     sign_msg1: Json<SignMsg1>,
 ) -> Result<Json<SignReply1>> {
+    sc_entity.check_rate_slow("ecdsa")?;
     match sc_entity.sign_first(sign_msg1.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -431,6 +430,7 @@ pub fn sign_first(
 /// # Second round of the 2P-ECDSA signing protocol: signature generation and verification
 #[post("/ecdsa/sign/second", format = "json", data = "<sign_msg2>")]
 pub fn sign_second(sc_entity: State<SCE>, sign_msg2: Json<SignMsg2>) -> Result<Json<Vec<Vec<u8>>>> {
+    sc_entity.check_rate_slow("ecdsa")?;
     match sc_entity.sign_second(sign_msg2.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -466,7 +466,7 @@ pub mod tests {
         db.expect_update_public_master().returning(|_,_| Ok(()));
         db.expect_get_challenge().returning(move |_| Ok(challenge.clone()));
 
-        let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None);
+        let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None, None, None);
 
         let kg_first_msg = party_one::KeyGenFirstMsg { pk_commitment: BigInt::from(0), zk_pok_commitment: BigInt::from(1) };
 
@@ -548,7 +548,7 @@ pub mod tests {
         db.expect_get_sighash().returning(move |_| Ok(sig_hash));
         db.expect_update_shared_pubkey().returning(|_,_| Ok(()));
 
-        let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None);
+        let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None, None, None);
 
         let (eph_key_gen_first_message_party_two, _, _) =
             MasterKey2::sign_first_message();
