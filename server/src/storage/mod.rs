@@ -122,6 +122,9 @@ pub trait Storage {
     //Returns locked until time, owner id, state chain
     fn get_statechain_data_api(&self, statechain_id: Uuid) -> Result<StateChainDataAPI>;
 
+    //Returns locked until time, owner id, state chain
+    fn get_owner_id(&self, statechain_id: Uuid) -> Result<OwnerID>;
+
     //fn authorise_withdrawal(&self, user_id: &Uuid, signature: StateChainSig) -> Result<()>;
 
     // /withdraw/confirm
