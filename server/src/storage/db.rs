@@ -1047,6 +1047,10 @@ impl Database for PGDatabase {
         self.get_1::<Uuid>(user_id, Table::UserSession, vec![Column::StateChainId])
     }
 
+    fn get_owner_id(&self, statechain_id: Uuid) -> Result<Uuid> {
+        self.get_1::<Uuid>(statechain_id, Table::StateChain, vec![Column::OwnerId])
+    }
+
     fn get_user_auth(&self, user_id: &Uuid) -> Result<String> {
         self.get_1::<String>(*user_id, Table::UserSession, vec![Column::Authentication])
     }
