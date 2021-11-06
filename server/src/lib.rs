@@ -132,6 +132,7 @@ pub trait Database {
     /// Find the latest confirmed root
     fn get_confirmed_smt_root(&self) -> Result<Option<Root>>;
     fn get_statechain_id(&self, user_id: Uuid) -> Result<Uuid>;
+    fn get_owner_id(&self, statechain_id: Uuid) -> Result<Uuid>;
     fn get_user_auth(&self, user_id: &Uuid) -> Result<String>;
     fn is_confirmed(&self, statechain_id: &Uuid) -> Result<bool>;
     fn set_confirmed(&self, statechain_id: &Uuid) -> Result<()>;

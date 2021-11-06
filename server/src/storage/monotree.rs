@@ -392,6 +392,9 @@ impl Database for MemoryDB {
     fn get_statechain_id(&self, _user_id: uuid::Uuid) -> crate::Result<uuid::Uuid> {
         unimplemented!()
     }
+    fn get_owner_id(&self, _statechain_id: uuid::Uuid) -> crate::Result<uuid::Uuid> {
+        unimplemented!()
+    }    
     fn get_user_auth(&self, _user_id: &uuid::Uuid) -> crate::Result<String> {
         unimplemented!()
     }
