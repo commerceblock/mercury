@@ -161,6 +161,7 @@ pub trait Storage {
     fn update_punished(&self, punished: &Vec<Uuid>);
 
     fn get_statechain(&self, statechain_id: &Uuid);
+    fn get_owner_id(&self, statechain_id: &Uuid);    
 
     //Reset in-RAM data
     fn reset_data(&self) -> storage::Result<()>;
