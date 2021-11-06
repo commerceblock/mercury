@@ -734,6 +734,13 @@ pub struct TransferMsg5 {
     pub s2_pub: GE,
 }
 
+/// State Entity -> Receiver
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct OwnerID {
+    #[schemars(with = "UuidDef")]
+    pub shared_key_id: Uuid,
+}
+
 /// Conductor -> StateEntity
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct TransferBatchInitMsg {
