@@ -549,6 +549,20 @@ pub fn get_statechain(
 }
 
 #[openapi]
+/// # Get current statechain information for specified statechain ID
+#[get("/info/owner/<statechain_id>", format = "json")]
+pub fn get_owner_id(
+    sc_entity: State<SCE>,
+    statechain_id: String,
+) -> Result<Json<OwnerID>> {
+    sc_entity.check_rate_fast("info")?;
+    match sc_entity.get_owner_id(Uuid::from_str(&statechain_id).unwrap()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
 /// # Get the current Sparse Merkle Tree commitment root
 #[get("/info/root", format = "json")]
 pub fn get_smt_root(sc_entity: State<SCE>) -> Result<Json<Option<Root>>> {
@@ -1042,6 +1056,16 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
             locktime: tx_backup.lock_time,
         }});
     }
+
+    fn get_owner_id(&self, statechain_id: Uuid) -> Result<OwnerID> {
+        //let statechain_id = Uuid::from_str(&statechain_id).unwrap();
+
+        let new_user_id = self.database.get_owner_id(statechain_id)?;
+
+        return Ok({OwnerID {
+            shared_key_id: new_user_id,
+        }});
+    }   
 
     //fn authorise_withdrawal(&self, user_id: &Uuid, signature: StateChainSig) -> Result<()>;
 
