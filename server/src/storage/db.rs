@@ -1481,7 +1481,7 @@ impl Database for PGDatabase {
         Ok(s2)
     }
 
-    fn update_keygen_first_msg(
+    fn update_keygen_first_msg_and_witness(
         &self,
         user_id: &Uuid,
         key_gen_first_msg: &party_one::KeyGenFirstMsg,
@@ -1506,6 +1506,32 @@ impl Database for PGDatabase {
         )?;
 
         Ok(())
+    }
+
+
+  fn update_keygen_first_msg(
+        &self,
+        user_id: &Uuid,
+        key_gen_first_msg: &party_one::KeyGenFirstMsg
+    ) -> Result<()> {
+        self.update(
+            user_id,
+            Table::Ecdsa,
+            vec![
+                Column::KeyGenFirstMsg,
+            ],
+            vec![
+                &Self::ser(key_gen_first_msg.to_owned())?,
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn get_keygen_first_msg(
+        &self,
+        user_id: &Uuid
+    ) -> Result<party_one::KeyGenFirstMsg> {
+        Self::deser(self.get_1(*user_id, Table::Ecdsa, vec![Column::KeyGenFirstMsg])?)
     }
 
     fn update_keygen_second_msg(

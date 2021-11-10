@@ -120,8 +120,22 @@ impl Ecdsa for SCE {
         match &lockbox_url {
         Some(l) => {
                 let path: &str = "ecdsa/keygen/first";
-                let (_id, key_gen_first_msg): (Uuid, party_one::KeyGenFirstMsg) = post_lb(l, path, &key_gen_msg1)?;
-                kg_first_msg = key_gen_first_msg;
+                kg_first_msg = 
+                    match post_lb(l, path, &key_gen_msg1){
+                        Err(e) => {
+                            if e.to_string().contains("Key Generation already completed for ID") {
+                                db.get_keygen_first_msg(&user_id)?
+                            } else {
+                                return Err(e)
+                            }
+                        },
+                        Ok(r) => {
+                            // We should proceed with the keygen even if the database update fails
+                            // as the lockbox database has already been updated.
+                            let _update_kg1_result = db.update_keygen_first_msg(&user_id, &r);
+                            r
+                        }
+                    };
         },
         None => {
             // Create new entry in ecdsa table if key not already in table.
@@ -154,7 +168,7 @@ impl Ecdsa for SCE {
                     MasterKey1::key_gen_first_message_predefined(s2)
                 };
 
-            db.update_keygen_first_msg(&user_id, &key_gen_first_msg, comm_witness, ec_key_pair)?;
+            db.update_keygen_first_msg_and_witness(&user_id, &key_gen_first_msg, comm_witness, ec_key_pair)?;
             kg_first_msg = key_gen_first_msg;
         }};
         Ok(KeyGenReply1 {user_id: user_id, msg: kg_first_msg } )
