@@ -27,7 +27,7 @@ use governor::{NotUntil, clock::{QuantaInstant}};
 
 
 /// State Entity library specific errors
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
 pub enum SEError {
     /// Generic error from string error message
     Generic(String),
@@ -162,7 +162,7 @@ impl From<NotUntil<'_, QuantaInstant>>
 
 
 /// DB error types
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
 pub enum DBErrorType {
     /// No identifier
     NoDataForID,

@@ -70,17 +70,15 @@ impl Ecdsa for SCE {
     }
 
     fn first_message(&self, key_gen_msg1: KeyGenMsg1) -> Result<KeyGenReply1> {
-        println!("check user auth...");
+        
         self.check_user_auth(&key_gen_msg1.shared_key_id)?;
-        println!("finished check user auth.");
+        
         let user_id = key_gen_msg1.shared_key_id;
         let db = &self.database;
         
         // if deposit, verify VDF
-        println!("deposit pow...");
         if (self.config.deposit_pow) {
             if (key_gen_msg1.protocol == Protocol::Deposit) {
-                println!("deposit...");
                 let mut hasher = Sha3_256::new();
                 let challenge = db.get_challenge(&user_id)?;
                 let solution: String = match key_gen_msg1.solution {
@@ -95,7 +93,6 @@ impl Ecdsa for SCE {
                 }
             // else check confirmed            
             } else {
-                println!("transfer...");
                 let statechain_id = db.get_statechain_id(user_id.clone())?;
                 if (!db.is_confirmed(&statechain_id)?) {
                     return Err(SEError::Generic(String::from("Statecoin not confirmed")))
@@ -104,16 +101,13 @@ impl Ecdsa for SCE {
         };
 
         let kg_first_msg;
-        println!("lockbox url...");
         let lockbox_url: Option<Url> = match self.get_lockbox_url(&user_id)?{
             Some(l) => Some(l.0),
             None => match &self.lockbox {
                 Some(l) => {
                     match l.endpoint.select(&user_id){
                         Some((l,i)) => {
-                            println!("update lockbox index...");
                             db.update_lockbox_index(&user_id, &i)?;
-                            println!("update lockbox index finished.");
                             Some(l.to_owned())
                         },
                         None => return Err(SEError::Generic(String::from("No active lockbox urls specified")))
@@ -127,26 +121,23 @@ impl Ecdsa for SCE {
         match &lockbox_url {
         Some(l) => {
                 let path: &str = "ecdsa/keygen/first";
-                println!("keygen first...");
-                kg_first_msg = 
-                    match post_lb(l, path, &key_gen_msg1){
+                let result: Result<(Uuid, party_one::KeyGenFirstMsg)> = post_lb(l, path, &key_gen_msg1);
+                match result{        
                         Err(e) => {
-                            println!("keygen first error.");
                             if e.to_string().contains("Key Generation already completed for ID") {
-                                println!("get keygen first message..");
-                                db.get_keygen_first_msg(&user_id)?
+                                kg_first_msg = match db.get_keygen_first_msg(&user_id){
+                                    Ok(r) => r,
+                                    Err(dberr) => return Err(SEError::Generic(format!("{} and {}", &e, &dberr)))
+                                }
                             } else {
-                                println!("lockbox error");
                                 return Err(e)
                             }
                         },
                         Ok(r) => {
                             // We should proceed with the keygen even if the database update fails
                             // as the lockbox database has already been updated.
-                            println!("update keygen first message..");
-                            let _update_kg1_result = db.update_keygen_first_msg(&user_id, &r);
-                            println!("finished update keygen first message.");
-                            r
+                            kg_first_msg=r.1;
+                            let _update_kg1_result = db.update_keygen_first_msg(&r.0, &kg_first_msg);
                         }
                     };
         },
@@ -500,17 +491,21 @@ pub mod tests {
 
         let serialized_m1 = serde_json::to_string(&(&user_id,&kg_first_msg)).unwrap();
 
+        
+
         let _m_1 = mockito::mock("POST", "/ecdsa/keygen/first")
           .with_header("content-type", "application/json")
           .with_body(serialized_m1)
           .create();
 
+    
+
         let pow_solution: String = "3423".to_string();
 
         let kg_msg_1 = KeyGenMsg1 { shared_key_id: user_id, protocol: Protocol::Deposit, solution: Some(pow_solution)};
-        println!("first message...");
+        
         let return_msg = sc_entity.first_message(kg_msg_1).unwrap();
-        println!("first message complete.");
+        
         assert_eq!(kg_first_msg.pk_commitment,return_msg.msg.pk_commitment);
         assert_eq!(kg_first_msg.zk_pok_commitment,return_msg.msg.zk_pok_commitment);
 
@@ -522,7 +517,7 @@ pub mod tests {
                     "secret_share":"eddb897ad33e4fef8b71bd4b6eab7e6f3c6acfe8d6346989389706e4c2331be6"
                 }
             "#;
-        println!("ser key pair");
+        
         let ec_key_pair: party_one::EcKeyPair = serde_json::from_str(&json.to_string()).unwrap();
 
         let comm_witness = party_one::CommWitness {
@@ -531,7 +526,7 @@ pub mod tests {
             public_share: ECPoint::generator(),
             d_log_proof: d_log_proof.clone(),
         };
-        println!("key gen second");
+        
         let (kg_party_one_second_message, _, _): (
             party1::KeyGenParty1Message2,
             party_one::PaillierKeyPair,
@@ -541,7 +536,7 @@ pub mod tests {
             &ec_key_pair,
             &d_log_proof,
         );
-        println!("serialized m2");
+        
         let serialized_m2 = serde_json::to_string(&kg_party_one_second_message).unwrap();
 
         let _m_2 = mockito::mock("POST", "/ecdsa/keygen/second")
@@ -550,11 +545,145 @@ pub mod tests {
           .create();
 
         let kg_msg_2 = KeyGenMsg2 { shared_key_id: user_id, dlog_proof: d_log_proof};
-        println!("second message");
+        
         let return_msg = sc_entity.second_message(kg_msg_2).unwrap();
 
         assert_eq!(kg_party_one_second_message.c_key,return_msg.msg.c_key);
 
+    }
+
+    #[test]
+    fn test_keygen_lockbox_kg1_completed() {
+        let user_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let challenge: String = "cc9391e5b30bfc533bafc5c7fa8d4af4".to_string();
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_create_user_session().returning(|_, _, _, _, _| Ok(()));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
+        db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
+
+        let kg_first_msg = party_one::KeyGenFirstMsg { pk_commitment: BigInt::from(0), zk_pok_commitment: BigInt::from(1) };
+        
+        let kgm1_clone = kg_first_msg.clone();
+
+        db.expect_get_keygen_first_msg().returning(move |_| Ok(kgm1_clone.clone()));
+        db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
+        db.expect_update_public_master().returning(|_,_| Ok(()));
+        db.expect_get_challenge().returning(move |_| Ok(challenge.clone()));
+
+        let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None, None, None);
+
+        
+
+        let serialized_m1_err = serde_json::to_string(&SEError::LockboxError(format!("Key Generation already completed for ID {}", &user_id))).unwrap();
+        
+        let _m_1 = mockito::mock("POST", "/ecdsa/keygen/first")
+          .with_header("content-type", "application/json")
+          .with_body(serialized_m1_err)
+          .create();
+
+    
+
+        let pow_solution: String = "3423".to_string();
+
+        let kg_msg_1 = KeyGenMsg1 { shared_key_id: user_id, protocol: Protocol::Deposit, solution: Some(pow_solution)};
+        
+                
+        let return_msg = sc_entity.first_message(kg_msg_1).unwrap();
+        
+        assert_eq!(kg_first_msg.pk_commitment,return_msg.msg.pk_commitment);
+        assert_eq!(kg_first_msg.zk_pok_commitment,return_msg.msg.zk_pok_commitment);
+
+        let secret_share: FE = ECScalar::new_random();
+        let d_log_proof = DLogProof::prove(&secret_share);
+        let json = r#"
+                {
+                    "public_share":{"x":"de6822e27f1223c9a8200408fa002c612c3635d801ea6c3315789f8cf3e3fe29","y":"e3231aca5034eb8bd5271b728a516720088a69e124ccbd982003c50b474bb22a"},
+                    "secret_share":"eddb897ad33e4fef8b71bd4b6eab7e6f3c6acfe8d6346989389706e4c2331be6"
+                }
+            "#;
+        
+        let ec_key_pair: party_one::EcKeyPair = serde_json::from_str(&json.to_string()).unwrap();
+
+        let comm_witness = party_one::CommWitness {
+            pk_commitment_blind_factor: BigInt::from(0),
+            zk_pok_blind_factor: BigInt::from(1),
+            public_share: ECPoint::generator(),
+            d_log_proof: d_log_proof.clone(),
+        };
+        
+        let (kg_party_one_second_message, _, _): (
+            party1::KeyGenParty1Message2,
+            party_one::PaillierKeyPair,
+            party_one::Party1Private,
+        ) = MasterKey1::key_gen_second_message(
+            comm_witness,
+            &ec_key_pair,
+            &d_log_proof,
+        );
+        
+        let serialized_m2 = serde_json::to_string(&kg_party_one_second_message).unwrap();
+
+        let _m_2 = mockito::mock("POST", "/ecdsa/keygen/second")
+          .with_header("content-type", "application/json")
+          .with_body(serialized_m2)
+          .create();
+
+        let kg_msg_2 = KeyGenMsg2 { shared_key_id: user_id, dlog_proof: d_log_proof};
+        
+        let return_msg = sc_entity.second_message(kg_msg_2).unwrap();
+
+        assert_eq!(kg_party_one_second_message.c_key,return_msg.msg.c_key);
+
+    }
+
+    #[test]
+    fn test_keygen_lockbox_kg1_completed_db_fail() {
+        let user_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let challenge: String = "cc9391e5b30bfc533bafc5c7fa8d4af4".to_string();
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_create_user_session().returning(|_, _, _, _, _| Ok(()));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
+        db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
+
+        let kg_first_msg_err = SEError::DBError(
+            crate::error::DBErrorType::NoDataForID,
+            "item not found".to_string());
+        let kgm1_clone = kg_first_msg_err.clone();
+
+        db.expect_get_keygen_first_msg().returning(move |_| Err(kgm1_clone.clone()));
+        db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
+        db.expect_update_public_master().returning(|_,_| Ok(()));
+        db.expect_get_challenge().returning(move |_| Ok(challenge.clone()));
+
+        let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None, None, None);
+
+        
+
+        let serialized_m1_err = serde_json::to_string(&SEError::LockboxError(format!("Key Generation already completed for ID {}", &user_id))).unwrap();
+        
+        let _m_1 = mockito::mock("POST", "/ecdsa/keygen/first")
+          .with_header("content-type", "application/json")
+          .with_body(serialized_m1_err.clone())
+          .create();
+
+    
+
+        let pow_solution: String = "3423".to_string();
+
+        let kg_msg_1 = KeyGenMsg1 { shared_key_id: user_id, protocol: Protocol::Deposit, solution: Some(pow_solution)};
+        
+        match sc_entity.first_message(kg_msg_1){
+            Ok(_) => assert!(false, "Expected error."),
+            Err(e) => {
+                assert!(e.to_string().contains(&serialized_m1_err));
+                assert!(e.to_string().contains(&kg_first_msg_err.clone().to_string()));
+            }
+        }
+        
     }
 
     #[test]

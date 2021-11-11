@@ -90,7 +90,7 @@ impl Table {
     }
 }
 
-#[derive(Debug, Deserialize, JsonSchema, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone, Copy)]
 pub enum Column {
     Data,
     Complete,
