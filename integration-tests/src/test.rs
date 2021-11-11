@@ -707,6 +707,8 @@ mod tests {
             .returning(|_user_id, _auth, _proof_key, _challenge, _user_ids| Ok(()));
         db.expect_get_user_auth()
             .returning(|_user_id| Ok(String::from("user_auth")));
+        db.expect_init_ecdsa()
+            .returning(|_user_id| Ok(0));
         db.expect_update_keygen_first_msg()
             .returning(|_user_id, _fm| Ok(()));
             //Key generation not completed for this ID yet

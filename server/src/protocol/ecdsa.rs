@@ -137,7 +137,8 @@ impl Ecdsa for SCE {
                             // We should proceed with the keygen even if the database update fails
                             // as the lockbox database has already been updated.
                             kg_first_msg=r.1;
-                            let _update_kg1_result = db.update_keygen_first_msg(&r.0, &kg_first_msg);
+                            let _ = db.init_ecdsa(&user_id);
+                            let _ = db.update_keygen_first_msg(&r.0, &kg_first_msg);
                         }
                     };
         },
@@ -480,6 +481,7 @@ pub mod tests {
         db.expect_get_user_auth()
            .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
+        db.expect_init_ecdsa().returning(|_user_id| Ok(0));
         db.expect_update_keygen_first_msg().returning(|_,_| Ok(()));
         db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
         db.expect_update_public_master().returning(|_,_| Ok(()));
