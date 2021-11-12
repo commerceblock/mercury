@@ -1080,18 +1080,19 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
 
         let statecoin = state_chain.chain.get_tip()?;
 
-        let first_state = state_chain.chain.get_head()?;
-
-        if first_state.is_some() {
-            if first_state.unwrap().purpose == String::from("WITHDRAW") {
-                return Ok({StateCoinDataAPI {
-                    amount: state_chain.amount as u64,
-                    utxo: OutPoint::null(),
-                    statecoin: statecoin.to_owned(),
-                    locktime: 0 as u32,
-                }});
-            }
-        }
+        match state_chain.chain.get_first()?.next_state {
+            Some(state) => {
+                if state.purpose == String::from("WITHDRAW") {
+                    return Ok({StateCoinDataAPI {
+                        amount: state_chain.amount as u64,
+                        utxo: OutPoint::null(),
+                        statecoin: statecoin.to_owned(),
+                        locktime: 0 as u32,
+                    }});
+                }
+            },
+            None => ()
+        };
         
         let tx_backup = self.database.get_backup_transaction(statechain_id)?;
 

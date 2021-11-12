@@ -152,6 +152,26 @@ mod tests {
 
     #[test]
     #[serial]
+    fn test_get_statecoin() {
+        time_test!();
+        let _handle = start_server(None, None);
+        let mut wallet = gen_wallet(None);
+
+        let err = state_entity::api::get_statecoin(&wallet.client_shim, &Uuid::new_v4());
+        assert!(err.is_err());
+        let deposit = run_deposit(&mut wallet, &10000);
+
+        let state_coin =
+            state_entity::api::get_statecoin(&wallet.client_shim, &deposit.1.clone()).unwrap();
+        assert_eq!(
+            state_coin.statecoin.data,
+            deposit.5.to_string()
+        );
+        reset_data(&wallet.client_shim).unwrap();
+    }
+
+    #[test]
+    #[serial]
     fn test_transfer() {
         time_test!();
         let _handle = start_server(None, None);
