@@ -4,7 +4,9 @@
 
 use super::super::Result;
 use shared_lib::structs::{
-    SmtProofMsgAPI, StateChainDataAPI, StateEntityFeeInfoAPI, TransferBatchDataAPI, RecoveryDataMsg, RecoveryRequest, CoinValueInfo
+    SmtProofMsgAPI, StateChainDataAPI, StateEntityFeeInfoAPI, 
+    TransferBatchDataAPI, RecoveryDataMsg, RecoveryRequest, 
+    CoinValueInfo, StateCoinDataAPI
 };
 use shared_lib::Root;
 
@@ -36,6 +38,14 @@ pub fn get_statechain(
     statechain_id: &Uuid,
 ) -> Result<StateChainDataAPI> {
     requests::get(client_shim, &format!("info/statechain/{}", statechain_id))
+}
+
+/// Get statecoin (statechain tip) by statechain ID
+pub fn get_statecoin(
+    client_shim: &ClientShim,
+    statechain_id: &Uuid,
+) -> Result<StateCoinDataAPI> {
+    requests::get(client_shim, &format!("info/statecoin/{}", statechain_id))
 }
 
 /// Get state chain by ID

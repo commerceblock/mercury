@@ -6,7 +6,7 @@ use super::super::Result;
 
 use crate::error::{CError, WalletErrorType};
 use crate::state_entity::{
-    api::{get_statechain, get_transfer_batch_status},
+    api::{get_statecoin, get_transfer_batch_status},
     transfer,
 };
 use crate::wallet::wallet::Wallet;
@@ -27,12 +27,11 @@ use uuid::Uuid;
 // with swap_size participants
 pub fn swap_register_utxo(wallet: &Wallet, statechain_id: &Uuid, swap_size: &u64) -> Result<()> {
     // First sign state chain
-    let statechain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &statechain_id)?;
-    let state_chain = statechain_data.chain;
+    let statecoin_data: StateCoinDataAPI = get_statecoin(&wallet.client_shim, &statechain_id)?;
     // Get proof key for signing
     let proof_key_derivation = &wallet
         .se_proof_keys
-        .get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap())
+        .get_key_derivation(&PublicKey::from_str(&statecoin_data.statecoin.data).unwrap())
         .ok_or(CError::WalletError(WalletErrorType::KeyNotFound))?;
     let statechain_sig = StateChainSig::new(
         &proof_key_derivation.private_key.key,
@@ -76,10 +75,9 @@ pub fn swap_first_message(
 ) -> Result<BSTRequestorData> {
     let swap_token = swap_info.swap_token.clone();
 
-    let statechain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &statechain_id)?;
-    let state_chain = statechain_data.chain;
-
-    let proof_pub_key = match PublicKey::from_str(&state_chain.last().unwrap().data) {
+    let statecoin_data: StateCoinDataAPI = get_statecoin(&wallet.client_shim, &statechain_id)?;
+    
+    let proof_pub_key = match PublicKey::from_str(&statecoin_data.statecoin.data) {
         Ok(v) => v,
         Err(e) => return Err(CError::SwapError(e.to_string())),
     };

@@ -144,7 +144,7 @@ mod tests {
         let state_chain =
             state_entity::api::get_statechain(&wallet.client_shim, &deposit.1.clone()).unwrap();
         assert_eq!(
-            state_chain.chain.last().unwrap().data,
+            state_chain.get_tip().unwrap().data,
             deposit.5.to_string()
         );
         reset_data(&wallet.client_shim).unwrap();
@@ -201,7 +201,7 @@ mod tests {
             state_entity::api::get_statechain(&wallets[0].client_shim, &statechain_id).unwrap();
         assert_eq!(state_chain.chain.len(), 2);
         assert_eq!(
-            state_chain.chain.last().unwrap().data.to_string(),
+            state_chain.get_tip().unwrap().data.to_string(),
             receiver_addr.proof_key.to_string()
         );
 
@@ -310,7 +310,7 @@ mod tests {
             state_entity::api::get_statechain(&wallets[0].client_shim, &statechain_id).unwrap();
         assert_eq!(state_chain.chain.len(), 2);
         assert_eq!(
-            state_chain.chain.last().unwrap().data.to_string(),
+            state_chain.get_tip().unwrap().data.to_string(),
             receiver_addr.proof_key.to_string()
         );
 
@@ -441,7 +441,7 @@ mod tests {
             receiver1_addr.proof_key.to_string()
         );
         assert_eq!(
-            state_chain.chain.last().unwrap().data.to_string(),
+            state_chain.get_tip().unwrap().data.to_string(),
             receiver2_addr.proof_key.to_string()
         );
 
