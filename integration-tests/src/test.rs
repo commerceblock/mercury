@@ -184,7 +184,27 @@ mod tests {
         let state_chain =
             state_entity::api::get_statechain(&wallet.client_shim, &deposit.1.clone()).unwrap();
         assert_eq!(
-            state_chain.chain.last().unwrap().data,
+            state_chain.get_tip().unwrap().data,
+            deposit.5.to_string()
+        );
+        reset_data(&wallet.client_shim).unwrap();
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_statecoin() {
+        time_test!();
+        let _handle = start_server(None, None);
+        let mut wallet = gen_wallet(None);
+
+        let err = state_entity::api::get_statecoin(&wallet.client_shim, &Uuid::new_v4());
+        assert!(err.is_err());
+        let deposit = run_deposit(&mut wallet, &10000);
+
+        let state_coin =
+            state_entity::api::get_statecoin(&wallet.client_shim, &deposit.1.clone()).unwrap();
+        assert_eq!(
+            state_coin.statecoin.data,
             deposit.5.to_string()
         );
         reset_data(&wallet.client_shim).unwrap();
@@ -241,7 +261,7 @@ mod tests {
             state_entity::api::get_statechain(&wallets[0].client_shim, &statechain_id).unwrap();
         assert_eq!(state_chain.chain.len(), 2);
         assert_eq!(
-            state_chain.chain.last().unwrap().data.to_string(),
+            state_chain.get_tip().unwrap().data.to_string(),
             receiver_addr.proof_key.to_string()
         );
 
@@ -350,7 +370,7 @@ mod tests {
             state_entity::api::get_statechain(&wallets[0].client_shim, &statechain_id).unwrap();
         assert_eq!(state_chain.chain.len(), 2);
         assert_eq!(
-            state_chain.chain.last().unwrap().data.to_string(),
+            state_chain.get_tip().unwrap().data.to_string(),
             receiver_addr.proof_key.to_string()
         );
 
@@ -481,7 +501,7 @@ mod tests {
             receiver1_addr.proof_key.to_string()
         );
         assert_eq!(
-            state_chain.chain.last().unwrap().data.to_string(),
+            state_chain.get_tip().unwrap().data.to_string(),
             receiver2_addr.proof_key.to_string()
         );
 
