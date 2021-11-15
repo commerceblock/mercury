@@ -340,7 +340,7 @@ impl CoinValueInfo {
 
 // schema dummy struct for outpoint
 /// Bitcoin UTXO Outpoint
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 #[schemars(remote = "OutPoint")]
 #[schemars(example = "Self::example")]
 pub struct OutPointDef {
@@ -562,12 +562,25 @@ pub struct KeyGenReply2 {
     pub msg: party1::KeyGenParty1Message2,
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[schemars(example = "Self::example")]
 pub struct KeyGenReply1 {
     #[schemars(with = "UuidDef")]
     pub user_id: Uuid,
     #[schemars(with = "KeyGenFirstMsgDef")]
     pub msg: party_one::KeyGenFirstMsg,
+}
+
+impl KeyGenReply1 {
+    pub fn example() -> Self {
+        Self{
+            user_id: Uuid::default(),
+            msg: party_one::KeyGenFirstMsg{
+                    pk_commitment: BigInt::one(),
+                    zk_pok_commitment: BigInt::one(),
+                }
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]

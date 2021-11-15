@@ -36,7 +36,7 @@ use std::collections::HashSet;
 use std::default::Default;
 use governor::{Quota, clock::DefaultClock, state::keyed::DashMapStateStore};
 use std::sync::atomic::{AtomicBool, Ordering};
-use signal_hook::{flag, consts::TERM_SIGNALS, SigId};
+use signal_hook::{flag, consts::TERM_SIGNALS};
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {

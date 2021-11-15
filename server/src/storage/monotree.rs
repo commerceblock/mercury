@@ -577,13 +577,20 @@ impl Database for MemoryDB {
     fn get_ecdsa_s2(&self, _user_id: uuid::Uuid) -> crate::Result<curv::FE> {
         unimplemented!()
     }
-    fn update_keygen_first_msg(
+    fn update_keygen_first_msg_and_witness(
         &self,
         _user_id: &uuid::Uuid,
         _key_gen_first_msg: &crate::protocol::ecdsa::party_one::KeyGenFirstMsg,
         _comm_witness: crate::protocol::ecdsa::party_one::CommWitness,
         _ec_key_pair: crate::protocol::ecdsa::party_one::EcKeyPair,
     ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn update_keygen_first_msg(
+        &self,
+        _user_id: &uuid::Uuid,
+        _key_gen_first_msg: &crate::protocol::ecdsa::party_one::KeyGenFirstMsg
+    ) -> crate::Result<()>{
         unimplemented!()
     }
     fn update_keygen_second_msg(
@@ -596,6 +603,12 @@ impl Database for MemoryDB {
         unimplemented!()
     }
     fn init_ecdsa(&self, _user_id: &uuid::Uuid) -> crate::Result<u64> {
+        unimplemented!()
+    }
+    fn get_keygen_first_msg(
+        &self,
+        _user_id: &uuid::Uuid
+    ) -> crate::Result<crate::protocol::ecdsa::party_one::KeyGenFirstMsg>{
         unimplemented!()
     }
     fn get_ecdsa_party_1_private(
