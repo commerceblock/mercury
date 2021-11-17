@@ -549,6 +549,20 @@ pub fn get_statechain(
 }
 
 #[openapi]
+/// # Get current statecoin (statechain tip) information for specified statechain ID
+#[get("/info/statecoin/<statechain_id>", format = "json")]
+pub fn get_statecoin(
+    sc_entity: State<SCE>,
+    statechain_id: String,
+) -> Result<Json<StateCoinDataAPI>> {
+    sc_entity.check_rate_fast("info")?;
+    match sc_entity.get_statecoin_data_api(Uuid::from_str(&statechain_id).unwrap()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
 /// # Get current statechain information for specified statechain ID
 #[get("/info/owner/<statechain_id>", format = "json")]
 pub fn get_owner_id(
@@ -1034,7 +1048,10 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
 
         let state_chain = self.database.get_statechain_amount(statechain_id)?;
 
-        let state = state_chain.chain.chain.get(0).unwrap().next_state.clone();
+        let state = match state_chain.chain.chain.get(0){
+            Some(s) => s.next_state.clone(),
+            None => return Err(SEError::Generic(format!("statechain with id {} is empty", &statechain_id)))
+        };
 
         if state.is_some() {
                 if state.unwrap().purpose == String::from("WITHDRAW") {
@@ -1056,6 +1073,37 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
             locktime: tx_backup.lock_time,
         }});
     }
+
+    fn get_statecoin_data_api(&self, statechain_id: Uuid) -> Result<StateCoinDataAPI> {
+
+        let state_chain = self.database.get_statechain_amount(statechain_id)?;
+
+        let statecoin = state_chain.chain.get_tip()?;
+
+        match state_chain.chain.get_first()?.next_state {
+            Some(state) => {
+                if state.purpose == String::from("WITHDRAW") {
+                    return Ok({StateCoinDataAPI {
+                        amount: state_chain.amount as u64,
+                        utxo: OutPoint::null(),
+                        statecoin: statecoin.to_owned(),
+                        locktime: 0 as u32,
+                    }});
+                }
+            },
+            None => ()
+        };
+        
+        let tx_backup = self.database.get_backup_transaction(statechain_id)?;
+
+        return Ok({StateCoinDataAPI {
+            amount: state_chain.amount as u64,
+            utxo: tx_backup.input.get(0).unwrap().previous_output,
+            statecoin: statecoin.to_owned(),
+            locktime: tx_backup.lock_time,
+        }});
+    }
+
 
     fn get_owner_id(&self, statechain_id: Uuid) -> Result<OwnerID> {
         //let statechain_id = Uuid::from_str(&statechain_id).unwrap();

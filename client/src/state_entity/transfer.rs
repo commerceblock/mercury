@@ -20,7 +20,7 @@ use super::super::Result;
 
 use crate::error::{CError, WalletErrorType};
 use crate::state_entity::{
-    api::{get_smt_proof, get_smt_root, get_statechain, get_statechain_fee_info},
+    api::{get_smt_proof, get_smt_root, get_statecoin, get_statechain, get_statechain_fee_info},
     util::{cosign_tx_input, verify_statechain_smt},
 };
 use crate::wallet::{key_paths::funding_txid_to_int, wallet::Wallet};
@@ -55,12 +55,12 @@ pub fn transfer_sender(
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
 
     // First sign state chain
-    let statechain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &statechain_id)?;
-    let state_chain = statechain_data.chain;
+    let statecoin_data: StateCoinDataAPI = get_statecoin(&wallet.client_shim, &statechain_id)?;
+    
     // Get proof key for signing
     let proof_key_derivation = wallet
         .se_proof_keys
-        .get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap());
+        .get_key_derivation(&PublicKey::from_str(&statecoin_data.statecoin.data).unwrap());
     let statechain_sig = StateChainSig::new(
         &proof_key_derivation
             .ok_or(CError::WalletError(WalletErrorType::KeyNotFound))?
@@ -95,7 +95,7 @@ pub fn transfer_sender(
     };
     prepare_sign_msg.proof_key = Some(receiver_addr.proof_key.clone().to_string());
     //set updated decremented locktime
-    tx.lock_time = statechain_data.locktime - se_fee_info.interval;
+    tx.lock_time = statecoin_data.locktime - se_fee_info.interval;
     prepare_sign_msg.tx_hex = transaction_serialise(&tx);
 
     // Sign new back up tx
@@ -223,7 +223,7 @@ pub fn transfer_receiver(
     // TODO
 
     // Verify state chain represents this address as new owner
-    let prev_owner_proof_key = statechain_data.chain.last().unwrap().data.clone();
+    let prev_owner_proof_key = statechain_data.get_tip()?.data.clone();
     transfer_msg3
         .statechain_sig
         .verify(&prev_owner_proof_key)?;
@@ -400,12 +400,12 @@ pub fn transfer_batch_sign(
     batch_id: &Uuid,
 ) -> Result<StateChainSig> {
     // First sign state chain
-    let statechain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &statechain_id)?;
-    let state_chain = statechain_data.chain;
+    let statecoin_data: StateCoinDataAPI = get_statecoin(&wallet.client_shim, &statechain_id)?;
+    
     // Get proof key for signing
     let proof_key_derivation = wallet
         .se_proof_keys
-        .get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap());
+        .get_key_derivation(&PublicKey::from_str(&statecoin_data.statecoin.data).unwrap());
 
     match StateChainSig::new_transfer_batch_sig(
         &proof_key_derivation.unwrap().private_key.key,

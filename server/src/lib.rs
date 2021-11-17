@@ -203,12 +203,17 @@ pub trait Database {
         user_id: Uuid,
     ) -> Result<(party_one::CommWitness, party_one::EcKeyPair)>;
     fn get_ecdsa_s2(&self, user_id: Uuid) -> Result<FE>;
-    fn update_keygen_first_msg(
+    fn update_keygen_first_msg_and_witness(
         &self,
         user_id: &Uuid,
         key_gen_first_msg: &party_one::KeyGenFirstMsg,
         comm_witness: party_one::CommWitness,
         ec_key_pair: party_one::EcKeyPair,
+    ) -> Result<()>;
+    fn update_keygen_first_msg(
+        &self,
+        user_id: &Uuid,
+        key_gen_first_msg: &party_one::KeyGenFirstMsg
     ) -> Result<()>;
     fn update_keygen_second_msg(
         &self,
@@ -218,6 +223,7 @@ pub trait Database {
         party_one_private: party_one::Party1Private,
     ) -> Result<()>;
     fn init_ecdsa(&self, user_id: &Uuid) -> Result<u64>;
+    fn get_keygen_first_msg(&self,user_id: &Uuid) -> Result<party_one::KeyGenFirstMsg>;
     fn get_ecdsa_party_1_private(&self, user_id: Uuid) -> Result<party_one::Party1Private>;
     fn get_ecdsa_keypair(&self, user_id: Uuid) -> Result<ECDSAKeypair>;
     fn update_punished(&self, batch_id: &Uuid, punished_state_chains: Vec<Uuid>) -> Result<()>;

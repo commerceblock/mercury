@@ -412,6 +412,11 @@ impl Wallet {
 
     /// create new 2P-ECDSA key with state entity
     pub fn gen_shared_key(&mut self, id: &Uuid, value: &u64, solution: String) -> Result<&SharedKey> {
+        self.gen_shared_key_rep_kg1(id, value, solution, 0)
+    }
+
+     /// create new 2P-ECDSA key with state entity
+     pub fn gen_shared_key_rep_kg1(&mut self, id: &Uuid, value: &u64, solution: String, kg1_reps: u32) -> Result<&SharedKey> {
         let key_share_pub = self.se_key_shares.get_new_key()?;
         let key_share_priv = self
             .se_key_shares
@@ -420,13 +425,14 @@ impl Wallet {
             .private_key
             .key;
 
-        let shared_key = SharedKey::new(
+        let shared_key = SharedKey::new_repeat_kg1(
             id,
             &self.client_shim,
             &key_share_priv,
             value,
             Protocol::Deposit,
             solution,
+            kg1_reps
         )?;
         self.shared_keys.push(shared_key);
         Ok(self.shared_keys.last().unwrap())
@@ -439,16 +445,28 @@ impl Wallet {
         secret_key: &SecretKey,
         value: &u64,
     ) -> Result<()> {
-        self.shared_keys.push(SharedKey::new(
-            id,
-            &self.client_shim,
-            secret_key,
-            value,
-            Protocol::Transfer,
-            "".to_string(),
-        )?);
-        Ok(())
+       self.gen_shared_key_fixed_secret_key_rep_kg1(id, secret_key, value, 0)
     }
+
+        /// create new 2P-ECDSA key with pre-definfed private key
+        pub fn gen_shared_key_fixed_secret_key_rep_kg1(
+            &mut self,
+            id: &Uuid,
+            secret_key: &SecretKey,
+            value: &u64,
+            rep_kg1: u32
+        ) -> Result<()> {
+            self.shared_keys.push(SharedKey::new_repeat_kg1(
+                id,
+                &self.client_shim,
+                secret_key,
+                value,
+                Protocol::Transfer,
+                "".to_string(),
+                rep_kg1
+            )?);
+            Ok(())
+        }
 
     /// Get shared key by id. Return None if no shared key with given id.
     pub fn get_shared_key(&self, id: &Uuid) -> Result<&SharedKey> {

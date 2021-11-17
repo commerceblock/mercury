@@ -36,7 +36,7 @@ use std::collections::HashSet;
 use std::default::Default;
 use governor::{Quota, clock::DefaultClock, state::keyed::DashMapStateStore};
 use std::sync::atomic::{AtomicBool, Ordering};
-use signal_hook::{flag, consts::TERM_SIGNALS, SigId};
+use signal_hook::{flag, consts::TERM_SIGNALS};
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -251,6 +251,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
     match mode {
         Mode::Both => routes_with_openapi![
             util::get_statechain,
+            util::get_statecoin,
             util::get_owner_id,
             util::get_smt_root,
             util::get_smt_proof,
@@ -288,6 +289,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             conductor::get_group_info],
         Mode::Core => routes_with_openapi![
             util::get_statechain,
+            util::get_statecoin,
             util::get_owner_id,
             util::get_smt_root,
             util::get_smt_proof,
@@ -601,6 +603,7 @@ mock! {
         fn get_root(&self, id: i64) -> storage::Result<Option<storage::Root>>;
         fn update_root(&self, root: &storage::Root) -> storage::Result<i64>;
         fn get_statechain_data_api(&self,statechain_id: Uuid) -> storage::Result<StateChainDataAPI>;
+        fn get_statecoin_data_api(&self, statechain_id: Uuid) -> storage::Result<StateCoinDataAPI>;
         fn get_statechain(&self, statechain_id: Uuid) -> storage::Result<storage::StateChain>;
         fn get_owner_id(&self, statechain_id: Uuid) -> storage::Result<OwnerID>;
     }

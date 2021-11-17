@@ -83,10 +83,10 @@ mod tests {
             let statechain_data =
                 state_entity::api::get_statechain(&wallet.client_shim, &statechain_ids[0])
                     .unwrap();
-            let state_chain = statechain_data.chain;
+            
             // Get proof key for signing
             let proof_key_derivation = wallet.se_proof_keys.get_key_derivation(
-                &PublicKey::from_str(&state_chain.last().unwrap().data).unwrap(),
+                &PublicKey::from_str(&statechain_data.get_tip().unwrap().data).unwrap(),
             );
             let statechain_sig = StateChainSig::new(
                 &proof_key_derivation.unwrap().private_key.key,
@@ -432,7 +432,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_swap() {
-        let handle = start_server(None, None);
+        let _handle = start_server(None, None);
 
         let num_state_chains: u64 = 3;
         let amount: u64 = 10000; // = u64::from_str(&format!("10000")).unwrap();

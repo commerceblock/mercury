@@ -833,8 +833,8 @@ impl Conductor for SCE {
     }
 
     fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> Result<()> {
-        let state_chain = self.get_statechain(swap_msg1.statechain_id)?.chain;
-        let proof_key_str = &state_chain.last().unwrap().data.clone();
+        let state_chain = self.get_statechain(swap_msg1.statechain_id)?;
+        let proof_key_str = &state_chain.get_tip()?.data.clone();
         let proof_key = bitcoin::secp256k1::PublicKey::from_str(&proof_key_str)?;
 
         //let proof_key = &swap_msg1.address.proof_key;

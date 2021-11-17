@@ -340,7 +340,7 @@ impl CoinValueInfo {
 
 // schema dummy struct for outpoint
 /// Bitcoin UTXO Outpoint
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 #[schemars(remote = "OutPoint")]
 #[schemars(example = "Self::example")]
 pub struct OutPointDef {
@@ -382,6 +382,42 @@ impl StateChainDataAPI {
             utxo: OutPoint::null(),
             amount: 1000000,
             chain: vec![State::example()],
+            locktime: 712903,
+        }
+    }
+
+    pub fn get_tip(&self) -> super::Result<State> {
+        Ok(self
+            .chain
+            .last()
+            .ok_or(SharedLibError::Generic(String::from("StateChain empty")))?
+            .clone())
+    }
+}
+
+// /info/statecoin return struct
+/// Statechain tip data
+/// This struct is returned containing the statecoin (statechain tip) of the specified statechain ID
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[schemars(example = "Self::example")]
+pub struct StateCoinDataAPI {
+    /// The statecoin UTXO OutPoint
+    #[schemars(with = "OutPointDef")]
+    pub utxo: OutPoint,
+    /// The value of the statecoin (in satoshis)
+    pub amount: u64,
+    /// The tip of the statechain of owner proof keys and signatures
+    pub statecoin: State,
+    /// The current owner nLocktime
+    pub locktime: u32,  // the curent owner nlocktime
+}
+
+impl StateCoinDataAPI {
+    pub fn example() -> Self{
+        Self{
+            utxo: OutPoint::null(),
+            amount: 1000000,
+            statecoin: State::example(),
             locktime: 712903,
         }
     }
@@ -562,12 +598,25 @@ pub struct KeyGenReply2 {
     pub msg: party1::KeyGenParty1Message2,
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[schemars(example = "Self::example")]
 pub struct KeyGenReply1 {
     #[schemars(with = "UuidDef")]
     pub user_id: Uuid,
     #[schemars(with = "KeyGenFirstMsgDef")]
     pub msg: party_one::KeyGenFirstMsg,
+}
+
+impl KeyGenReply1 {
+    pub fn example() -> Self {
+        Self{
+            user_id: Uuid::default(),
+            msg: party_one::KeyGenFirstMsg{
+                    pk_commitment: BigInt::one(),
+                    zk_pok_commitment: BigInt::one(),
+                }
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]

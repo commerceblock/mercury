@@ -57,6 +57,14 @@ impl StateChain {
             .clone())
     }
 
+    pub fn get_first(&self) -> Result<State> {
+        Ok(self
+            .chain
+            .first()
+            .ok_or(SharedLibError::Generic(String::from("StateChain empty")))?
+            .clone())
+    }
+
     pub fn add(&mut self, statechain_sig: StateChainSig) -> Result<()> {
         let mut tip = self.get_tip()?;
 

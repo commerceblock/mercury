@@ -59,6 +59,44 @@ mod tests {
 
     #[test]
     #[serial]
+    fn test_gen_shared_key_repeat_keygen_1() {
+        time_test!();
+        let _ = start_server(None, None);
+        let mut wallet = gen_wallet(None);
+        let proof_key = wallet.se_proof_keys.get_new_key().unwrap();
+        let init_res =
+            client_lib::state_entity::deposit::session_init(&mut wallet, &proof_key.to_string());
+        assert!(init_res.is_ok());
+
+        // generate solution for the VDF challenge
+        let challenge = match init_res.clone().unwrap().challenge {
+            Some(c) => c,
+            None => return,
+        };
+
+        let difficulty = 4 as usize;
+        let mut counter = 0;
+        let zeros = String::from_utf8(vec![b'0'; difficulty]).unwrap();
+        let mut hasher = Sha3_256::new();
+        loop {
+            hasher.input(&format!("{}:{:x}", challenge, counter).as_bytes());
+            let result = hex::encode(hasher.result_reset());
+            if result[..difficulty] == zeros {
+                break;
+            };
+            counter += 1
+        }
+
+        let solution = format!("{:x}", counter);
+
+        let key_res = wallet.gen_shared_key_rep_kg1(&init_res.unwrap().id, &1000, solution.to_string(), 10);
+        assert!(key_res.is_ok());
+        reset_data(&wallet.client_shim).unwrap();
+    }
+
+
+    #[test]
+    #[serial]
     fn test_failed_auth() {
         time_test!();
         let _handle = start_server(None, None);
@@ -67,9 +105,11 @@ mod tests {
         let invalid_key = Uuid::new_v4();
         let err = ecdsa::get_master_key(
             &invalid_key,
-            &client_shim,
+
+           &client_shim,
             &secret_key,
-            &1000,
+
+           &1000,
             Protocol::Deposit,
             "".to_string(),
         );
@@ -144,7 +184,27 @@ mod tests {
         let state_chain =
             state_entity::api::get_statechain(&wallet.client_shim, &deposit.1.clone()).unwrap();
         assert_eq!(
-            state_chain.chain.last().unwrap().data,
+            state_chain.get_tip().unwrap().data,
+            deposit.5.to_string()
+        );
+        reset_data(&wallet.client_shim).unwrap();
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_statecoin() {
+        time_test!();
+        let _handle = start_server(None, None);
+        let mut wallet = gen_wallet(None);
+
+        let err = state_entity::api::get_statecoin(&wallet.client_shim, &Uuid::new_v4());
+        assert!(err.is_err());
+        let deposit = run_deposit(&mut wallet, &10000);
+
+        let state_coin =
+            state_entity::api::get_statecoin(&wallet.client_shim, &deposit.1.clone()).unwrap();
+        assert_eq!(
+            state_coin.statecoin.data,
             deposit.5.to_string()
         );
         reset_data(&wallet.client_shim).unwrap();
@@ -201,7 +261,7 @@ mod tests {
             state_entity::api::get_statechain(&wallets[0].client_shim, &statechain_id).unwrap();
         assert_eq!(state_chain.chain.len(), 2);
         assert_eq!(
-            state_chain.chain.last().unwrap().data.to_string(),
+            state_chain.get_tip().unwrap().data.to_string(),
             receiver_addr.proof_key.to_string()
         );
 
@@ -310,7 +370,7 @@ mod tests {
             state_entity::api::get_statechain(&wallets[0].client_shim, &statechain_id).unwrap();
         assert_eq!(state_chain.chain.len(), 2);
         assert_eq!(
-            state_chain.chain.last().unwrap().data.to_string(),
+            state_chain.get_tip().unwrap().data.to_string(),
             receiver_addr.proof_key.to_string()
         );
 
@@ -441,7 +501,7 @@ mod tests {
             receiver1_addr.proof_key.to_string()
         );
         assert_eq!(
-            state_chain.chain.last().unwrap().data.to_string(),
+            state_chain.get_tip().unwrap().data.to_string(),
             receiver2_addr.proof_key.to_string()
         );
 
@@ -667,11 +727,15 @@ mod tests {
             .returning(|_user_id, _auth, _proof_key, _challenge, _user_ids| Ok(()));
         db.expect_get_user_auth()
             .returning(|_user_id| Ok(String::from("user_auth")));
+        db.expect_init_ecdsa()
+            .returning(|_user_id| Ok(0));
+        db.expect_update_keygen_first_msg()
+            .returning(|_user_id, _fm| Ok(()));
             //Key generation not completed for this ID yet
         db.expect_get_ecdsa_master().returning(|_user_id| Ok(None));
-        db.expect_update_keygen_first_msg()
+        db.expect_update_keygen_first_msg_and_witness()
             .returning(|_user_id, _fm, _cw, _ec_kp| Ok(()));
-
+        
         let (_key_gen_first_msg, comm_witness, ec_key_pair) =
             server_lib::protocol::ecdsa::MasterKey1::key_gen_first_message();
 
