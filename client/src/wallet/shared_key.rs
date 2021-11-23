@@ -42,9 +42,21 @@ impl SharedKey {
         protocol: Protocol,
         solution: String,
     ) -> Result<SharedKey> {
+        Self::new_repeat_kg1(id, client_shim, secret_key, value, protocol, solution, 0)
+    }
+
+    pub fn new_repeat_kg1(
+        id: &Uuid,
+        client_shim: &ClientShim,
+        secret_key: &SecretKey,
+        value: &u64,
+        protocol: Protocol,
+        solution: String,
+        kg1_reps: u32
+    ) -> Result<SharedKey> {
         let mut key_share_priv: FE = ECScalar::zero(); // convert to curv lib
         key_share_priv.set_element(*secret_key);
-        ecdsa::get_master_key(id, client_shim, &key_share_priv, value, protocol, solution)
+        ecdsa::get_master_key_repeat_kg1(id, client_shim, &key_share_priv, value, protocol, solution, kg1_reps)
     }
 
     pub fn add_proof_data(

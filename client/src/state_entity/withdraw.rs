@@ -12,11 +12,11 @@ use super::super::Result;
 extern crate shared_lib;
 use shared_lib::{
     state_chain::StateChainSig,
-    structs::{PrepareSignTxMsg, Protocol, StateChainDataAPI, WithdrawMsg1, WithdrawMsg2},
+    structs::{PrepareSignTxMsg, Protocol, StateCoinDataAPI, WithdrawMsg1, WithdrawMsg2},
     util::{transaction_serialise, tx_withdraw_build},
 };
 
-use super::api::{get_statechain, get_statechain_fee_info};
+use super::api::{get_statechain, get_statecoin, get_statechain_fee_info};
 use crate::error::{CError, WalletErrorType};
 use crate::state_entity::util::cosign_tx_input;
 use crate::utilities::requests;
@@ -54,17 +54,16 @@ pub fn batch_withdraw(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>) -> Result
         }
     
         // Sign state chain
-        let statechain_data: StateChainDataAPI = get_statechain(&wallet.client_shim, &statechain_id)?;
-        if statechain_data.amount == 0 {
+        let statecoin_data: StateCoinDataAPI = get_statecoin(&wallet.client_shim, &statechain_id)?;
+        if statecoin_data.amount == 0 {
             return Err(CError::StateEntityError(String::from(
                 "Withdraw: StateChain is already withdrawn.",
             )));
         }
-        let state_chain = statechain_data.chain;
         // get proof key for signing
         let proof_key_derivation = wallet
             .se_proof_keys
-            .get_key_derivation(&PublicKey::from_str(&state_chain.last().unwrap().data).unwrap())
+            .get_key_derivation(&PublicKey::from_str(&statecoin_data.statecoin.data).unwrap())
             .ok_or(CError::WalletError(WalletErrorType::KeyNotFound));
         let statechain_sig = StateChainSig::new(
             &proof_key_derivation.unwrap().private_key.key,

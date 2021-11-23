@@ -16,17 +16,38 @@ pub fn get_master_key(
     secret_key: &FE,
     value: &u64,
     protocol: Protocol,
-    solution: String,
+    solution: String
 ) -> Result<SharedKey> {
-    let key_gen_reply_1: KeyGenReply1  = requests::postb(
-        client_shim,
-        &format!("{}/first", KG_PATH_PRE),
-        KeyGenMsg1 {
-            shared_key_id: *shared_key_id,
-            protocol, 
-            solution: Some(solution)
-        },
-    )?;
+    get_master_key_repeat_kg1(shared_key_id, 
+        client_shim, secret_key, value, protocol, solution, 0)
+}
+
+pub fn get_master_key_repeat_kg1(
+    shared_key_id: &Uuid,
+    client_shim: &ClientShim,
+    secret_key: &FE,
+    value: &u64,
+    protocol: Protocol,
+    solution: String,
+    kg1_reps: u32
+) -> Result<SharedKey> {
+    let mut key_gen_reply_1: KeyGenReply1;
+    let mut n_reps = 0;
+    loop {
+        key_gen_reply_1 = requests::postb(
+            client_shim,
+            &format!("{}/first", KG_PATH_PRE),
+            KeyGenMsg1 {
+                shared_key_id: *shared_key_id,
+                protocol, 
+                solution: Some(solution.clone())
+            },
+        )?;
+        n_reps = n_reps + 1;
+        if n_reps > kg1_reps {
+            break;
+        }
+    }
 
     let (kg_party_two_first_message, kg_ec_key_pair_party2) =
         MasterKey2::key_gen_first_message_predefined(secret_key);

@@ -83,10 +83,10 @@ mod tests {
             let statechain_data =
                 state_entity::api::get_statechain(&wallet.client_shim, &statechain_ids[0])
                     .unwrap();
-            let state_chain = statechain_data.chain;
+            
             // Get proof key for signing
             let proof_key_derivation = wallet.se_proof_keys.get_key_derivation(
-                &PublicKey::from_str(&state_chain.last().unwrap().data).unwrap(),
+                &PublicKey::from_str(&statechain_data.get_tip().unwrap().data).unwrap(),
             );
             let statechain_sig = StateChainSig::new(
                 &proof_key_derivation.unwrap().private_key.key,
