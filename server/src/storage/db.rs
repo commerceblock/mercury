@@ -1089,6 +1089,7 @@ impl Database for PGDatabase {
             vec![Column::Amount, Column::Chain],
         )?;
         let state_chain: StateChain = Self::deser(state_chain_str)?;
+        state_chain.check_non_zero_length()?;
 
         Ok(StateChainAmount {
             chain: state_chain,
@@ -1130,6 +1131,7 @@ impl Database for PGDatabase {
         amount: &i64,
         coins_histo: Arc<Mutex<CoinValueInfo>>
     ) -> Result<()> {
+        state_chain.check_non_zero_length()?;
         let mut guard = coins_histo.as_ref().lock()?;
         self.insert(statechain_id, Table::StateChain)?;
         self.update(
@@ -1160,6 +1162,7 @@ impl Database for PGDatabase {
             vec![Column::Amount, Column::Chain],
         )?;
         let state_chain: StateChain = Self::deser(state_chain_str)?;
+        state_chain.check_non_zero_length()?;
         Ok(state_chain)
     }
 
@@ -1678,6 +1681,7 @@ impl Database for PGDatabase {
         )?;
 
         let chain: StateChain = Self::deser(state_chain_str)?;
+        chain.check_non_zero_length()?;
         Ok(StateChainOwner {
             locked_until,
             owner_id,

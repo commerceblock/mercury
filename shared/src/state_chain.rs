@@ -44,7 +44,7 @@ impl TryFrom<&Vec<State>> for StateChain {
     type Error = SharedLibError;
     fn try_from(chain: &Vec<State>) -> Result<Self> {
         if chain.is_empty() {
-            return Err(SharedLibError::FormatError("StateChain must be of finite length".to_string()))
+            return Err(SharedLibError::FormatError("StateChain cannot be of zero length".to_string()))
         }
         Ok(Self{ chain: chain.to_owned() })
     }
@@ -54,7 +54,7 @@ impl TryFrom<Vec<State>> for StateChain {
     type Error = SharedLibError;
     fn try_from(chain: Vec<State>) -> Result<Self> {
         if chain.is_empty() {
-            return Err(SharedLibError::FormatError("StateChain must be of finite length".to_string()))
+            return Err(SharedLibError::FormatError("StateChain cannot be of zero length".to_string()))
         }
         Ok(Self{ chain })
     }
@@ -99,6 +99,12 @@ impl StateChain {
             data: statechain_sig.data.clone(),
             next_state: None,
         }))
+    }
+
+    pub fn check_non_zero_length(&self) -> Result<()> {
+        self.chain.last().map(|_| ()).
+            ok_or(SharedLibError::FormatError(
+                "StateChain cannot be of zero length".to_string()))
     }
 
     pub fn example() -> Self{
