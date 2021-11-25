@@ -688,6 +688,7 @@ mod tests {
         );
         reset_data(&wallet.client_shim).unwrap();
     }
+
 }
 
 #[cfg(feature = "mockdb")]
@@ -751,4 +752,5 @@ mod tests {
         assert!(err.is_err());
         reset_data(&wallet.client_shim).unwrap();
     }
+
 }

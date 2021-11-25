@@ -402,13 +402,25 @@ impl PGDatabase {
     #[allow(dead_code)]
     /// Drop all DB tables and Schemas.
     fn drop_tables(&self) -> Result<()> {
-        let _ = self.database_w()?.execute(
+        //statechainentity schema may not exist
+        match self.database_w()?.execute(
             &format!(
                 "
             DROP SCHEMA statechainentity CASCADE;",
             ),
             &[],
-        )?;
+        ){
+            Ok(_) => (),
+            Err(e) => {
+                let es = e.to_string();
+                if es.find("database error").is_some() && 
+                    es.find("does not exist").is_some() {
+                        ()    
+                } else {
+                    return Err(e.into())
+                } 
+            }
+        };
         let _ = self.database_w()?.execute(
             &format!(
                 "
@@ -722,9 +734,10 @@ impl Database for PGDatabase {
     }
 
     fn reset(&self) -> Result<()> {
-        // truncate all postgres tables
-        self.truncate_tables()?;
-        self.drop_tables()?;
+        info!("Resetting database");
+        // truncate all postgres tables    
+        let _ = self.truncate_tables();
+        let _ = self.drop_tables();
         Ok(())
     }
 

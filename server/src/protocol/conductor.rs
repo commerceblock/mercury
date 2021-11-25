@@ -295,7 +295,7 @@ impl Scheduler {
         //Only register if id not already in swap map
         let in_swap = self.swap_id_map.get(&statechain_id);
         if (!in_swap.is_none()) {
-            return Err(SEError::SwapError(format!("Statecoin in swap: {:?}", in_swap.unwrap())));
+            return Err(SEError::SwapError(format!("Statecoin not found in swap: {:?}", &statechain_id)));
         };
         //If there was an amout already registered for this state chain id then
         //remove it from the inverse table before updating
@@ -991,7 +991,10 @@ impl Conductor for SCE {
             } else if claimed_nonce_assignments_num == 1 {
                 // SCEAddress already claimed for this nonce. Return the address.
                 info!("CONDUTOR: swap_second_message re-completed for claimed nonce {:?} of Swap ID: {}", claimed_nonce, swap_id);
-                return Ok(claimed_nonce_sce_addrs_vec.get(0).unwrap().clone());
+                return Ok(claimed_nonce_sce_addrs_vec.get(0).
+                    ok_or(SEError::SwapError(
+                    "swap_second_message: claimed_nonce_sce_addrs_vec is empty".to_string()))?
+                    .clone());
             }
             // Otherwise add to the first SCEAddress in sce_address_bisetmap without a claimed_nonce
             let unclaimed_addr_list = sce_address_bisetmap.rev_get(&None); // get list all SCEAddress's without a claimed_nonce
@@ -1000,7 +1003,9 @@ impl Conductor for SCE {
                     "swap_second_message: All SCEAddresses have been claimed.".to_string(),
                 ));
             }
-            let addr = unclaimed_addr_list.get(0).unwrap().clone();
+            let addr = unclaimed_addr_list.get(0).
+                unwrap().
+                clone();
             sce_address_bisetmap.insert(addr.clone(), claimed_nonce);
             sce_address_bisetmap.remove(&addr, &None);
 
@@ -1056,7 +1061,11 @@ impl Conductor for SCE {
             return Err(SEError::SwapError("get_address_from_blinded_spend_token: claimed_nonce assigned to more than one SCEAddress".to_string()));
         } else if claimed_nonce_assignments_num == 1 {
             // Return the address.
-            return Ok(claimed_nonce_sce_addrs_vec.get(0).unwrap().clone());
+            return Ok(claimed_nonce_sce_addrs_vec.get(0).
+                        ok_or(SEError::SwapError(
+                            "get_address_from_blinded_spend_token: 
+                            claimed_nonce_sce_addrs_vec is empty".to_string()))?.
+                    clone());
         }
         return Err(SEError::SwapError(
             "No SCEAddress claimed for this Blinded Spent Token.".to_string(),
@@ -1080,7 +1089,7 @@ pub fn poll_utxo(sc_entity: State<SCE>, statechain_id: Json<StatechainID>) -> Re
 #[post("/swap/poll/swap", format = "json", data = "<swap_id>")]
 pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<SwapID>) -> Result<Json<Option<SwapStatus>>> {
     sc_entity.check_rate_fast("swap")?;
-    match sc_entity.poll_swap(&swap_id.id.unwrap()) {
+    match sc_entity.poll_swap(&swap_id.id.ok_or("poll_swap: swap_id.id is None".to_string())?) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -1091,7 +1100,8 @@ pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<SwapID>) -> Result<Json<Op
 #[post("/swap/info", format = "json", data = "<swap_id>")]
 pub fn get_swap_info(sc_entity: State<SCE>, swap_id: Json<SwapID>) -> Result<Json<Option<SwapInfo>>> {
     sc_entity.check_rate_fast("swap")?;
-    match sc_entity.get_swap_info(&swap_id.id.unwrap()) {
+    match sc_entity.get_swap_info(
+        &swap_id.id.ok_or("poll_swap: swap_id.id is None".to_string())?) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
