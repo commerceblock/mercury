@@ -199,19 +199,6 @@ pub mod tests {
             .unwrap()
             .execute(&format!("TRUNCATE {};", table_name), &[]).
                 expect("monotree - expected to truncate table");
-            /*
-            {
-                Ok(_) => (),
-                Err(e) => {
-                    let es = e.to_string();
-                    if es.find("database error").is_some() && es.find("does not exist").is_some() {
-                        ()    
-                    } else {
-                        return Err(e)
-                    } 
-                }
-            };
-            */
         // set PGDatabaseSMT table name to testing table
         db.smt.table_name = table_name;
         Monotree {
