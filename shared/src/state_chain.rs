@@ -30,13 +30,34 @@ use std::sync::{Arc, Mutex};
 use std::{convert::TryInto, panic::AssertUnwindSafe, str::FromStr};
 use uuid::Uuid;
 use rocket_okapi::JsonSchema;
+use std::convert::TryFrom;
 
 /// A list of States in which each State signs for the next State.
 #[derive(Serialize, Deserialize, JsonSchema, Debug, PartialEq, Clone)]
 #[schemars(example = "Self::example")]
 pub struct StateChain {
     /// chain of transitory key history
-    pub chain: Vec<State>,
+    chain: Vec<State>,
+}
+
+impl TryFrom<&Vec<State>> for StateChain {
+    type Error = SharedLibError;
+    fn try_from(chain: &Vec<State>) -> Result<Self> {
+        if chain.is_empty() {
+            return Err(SharedLibError::FormatError("StateChain must be of finite length".to_string()))
+        }
+        Ok(Self{ chain: chain.to_owned() })
+    }
+}
+
+impl TryFrom<Vec<State>> for StateChain {
+    type Error = SharedLibError;
+    fn try_from(chain: Vec<State>) -> Result<Self> {
+        if chain.is_empty() {
+            return Err(SharedLibError::FormatError("StateChain must be of finite length".to_string()))
+        }
+        Ok(Self{ chain })
+    }
 }
 
 impl StateChain {
@@ -49,37 +70,33 @@ impl StateChain {
         }
     }
 
-    pub fn get_tip(&self) -> Result<State> {
-        Ok(self
-            .chain
-            .last()
-            .ok_or(SharedLibError::Generic(String::from("StateChain empty")))?
-            .clone())
+    pub fn get_chain(&self) -> &Vec<State> {
+        &self.chain
     }
 
-    pub fn get_first(&self) -> Result<State> {
-        Ok(self
-            .chain
-            .first()
-            .ok_or(SharedLibError::Generic(String::from("StateChain empty")))?
-            .clone())
+    pub fn get_tip(&self) -> &State {
+        self.chain.last().expect("expect StateChain to not be empty")
     }
 
-    pub fn add(&mut self, statechain_sig: StateChainSig) -> Result<()> {
-        let mut tip = self.get_tip()?;
+    pub fn get_mut_tip(&mut self) -> &mut State {
+        self.chain.last_mut().expect("expect StateChain to not be empty")
+    }
 
+    pub fn get_first(&self) -> &State {
+        self.chain.first().expect("expect StateChain to not be empty")
+    }
+
+    pub fn add(&mut self, statechain_sig: &StateChainSig) -> Result<()> {
         // verify previous state has signature and signs for new proof_key
-        let prev_proof_key = tip.data.clone();
-        statechain_sig.verify(&prev_proof_key)?;
+        let prev_proof_key: &String = &self.get_tip().data;
+        statechain_sig.verify(prev_proof_key)?;
 
         // add sig to current tip
-        tip.next_state = Some(statechain_sig.clone());
-        self.chain.pop();
-        self.chain.push(tip);
+        self.get_mut_tip().next_state = Some(statechain_sig.clone());
 
         // add new tip to chain
         Ok(self.chain.push(State {
-            data: statechain_sig.data,
+            data: statechain_sig.data.clone(),
             next_state: None,
         }))
     }
@@ -312,12 +329,27 @@ mod tests {
         .unwrap();
 
         // add to state chain
-        let _ = state_chain.add(new_state_sig.clone());
+        let _ = state_chain.add(&new_state_sig);
         assert_eq!(state_chain.chain.len(), 2);
 
         // try add again (signature no longer valid for proof key "03b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3")
-        let fail = state_chain.add(new_state_sig);
+        let fail = state_chain.add(&new_state_sig);
         assert!(fail.is_err());
+    }
+
+    #[test]
+    fn test_convert_to_state_chain() {
+        let sc1 = StateChain::example();
+        let sc2 = sc1.get_chain().try_into().unwrap();
+        assert!(&sc1 == &sc2, "expect converted from reference and original StateChain to be equal");
+
+        let sc3 = sc1.get_chain().to_owned().try_into().unwrap();
+        assert!(&sc1 == &sc3, "expect converted and original StateChain to be equal");
+
+        let empty_vec: Vec<State> = vec![];
+        assert!(empty_vec.is_empty());
+        let sc_fail: Result<StateChain> = empty_vec.try_into();
+        assert!(sc_fail.is_err());
     }
 
     #[test]

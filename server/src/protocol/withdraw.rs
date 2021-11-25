@@ -79,8 +79,8 @@ impl Withdraw for SCE {
         };
 
         // Verify StateChainSig
-        let prev_proof_key = sco.chain.get_tip()?.data;
-        statechain_sig.verify(&prev_proof_key)?;
+        let prev_proof_key = &sco.chain.get_tip().data;
+        statechain_sig.verify(prev_proof_key)?;
         Ok(sco)
     }
 
@@ -141,7 +141,7 @@ impl Withdraw for SCE {
             // Get statechain and update with final StateChainSig
             let mut state_chain: StateChain = self.database.get_statechain(wcd.statechain_id)?;
 
-            state_chain.add(wcd.withdraw_sc_sig.to_owned())?;
+            state_chain.add(&wcd.withdraw_sc_sig)?;
 
             self.database
                 .update_statechain_amount(&wcd.statechain_id, state_chain, 0, self.coin_value_info.clone())?;

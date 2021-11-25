@@ -19,6 +19,7 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use std::str::FromStr;
 use uuid::Uuid;
+use std::convert::TryInto;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -81,8 +82,8 @@ impl BatchTransfer for SCE {
             let sco = self.database.get_statechain_owner(statechain_id)?;
 
             // Verify sigs
-            let proof_key = sco.chain.get_tip()?.data;
-            sig.verify(&proof_key)?;
+            let proof_key = &sco.chain.get_tip().data;
+            sig.verify(proof_key)?;
 
             // Ensure state chains are all available
             is_locked(sco.locked_until)?;
@@ -389,10 +390,8 @@ mod tests {
                 next_state: None,
             });
 
-            let statechain = StateChain {
-                chain: chain.clone(),
-            };
-
+            let statechain: StateChain = chain.try_into().expect("expected Vec<State> to convert to StateChain"); 
+            
             db.expect_get_statechain()
                 .returning(move |_| (Ok(statechain.clone())));
         }

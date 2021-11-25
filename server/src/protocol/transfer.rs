@@ -307,7 +307,7 @@ impl Transfer for SCE {
         // Update state chain
         let mut state_chain: StateChain = self.database.get_statechain(statechain_id)?;
 
-        state_chain.add(finalized_data.statechain_sig.to_owned())?;
+        state_chain.add(&finalized_data.statechain_sig)?;
 
         let new_user_id = finalized_data.new_shared_key_id;
 
@@ -364,9 +364,7 @@ impl Transfer for SCE {
                 .txid
                 .to_string(),
             &state_chain
-                .chain
-                .last()
-                .ok_or(SEError::Generic(String::from("StateChain empty")))?
+                .get_tip()
                 .data
                 .clone(),
         )?;
