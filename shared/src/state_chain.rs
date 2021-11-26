@@ -33,30 +33,71 @@ use rocket_okapi::JsonSchema;
 use std::convert::TryFrom;
 
 /// A list of States in which each State signs for the next State.
-#[derive(Serialize, Deserialize, JsonSchema, Debug, PartialEq, Clone)]
+/// On initialization the struct is always checked to have
+/// non-zero chain length. The struct cannot be deserialized
+/// but can be converted from a StateChainUnchecked which 
+/// can be. The length check is enforced on conversion.
+#[derive(Serialize, JsonSchema, Debug, PartialEq, Clone)]
 #[schemars(example = "Self::example")]
 pub struct StateChain {
     /// chain of transitory key history
     chain: Vec<State>,
 }
 
+/// A struct with the same struct as StateChain that can be
+/// deserialized and has public member variables
+#[derive(Serialize, Deserialize, JsonSchema, Debug, PartialEq, Clone)]
+#[schemars(example = "Self::example")]
+pub struct StateChainUnchecked {
+    /// chain of transitory key history
+    chain: Vec<State>,
+}
+
+impl StateChainUnchecked {
+    pub fn example() -> Self{
+        Self{
+            chain: vec![State::example()],
+        }
+    }
+
+    pub fn get_chain(&self) -> &Vec<State> {
+        &self.chain
+    }
+}
+
+impl TryFrom<&StateChainUnchecked> for StateChain {
+    type Error = SharedLibError;
+    fn try_from(chain: &StateChainUnchecked) -> Result<Self> {
+        let result = Self{ chain: chain.get_chain().to_owned() };
+        StateChain::check_length(&result)?;
+        Ok(result)
+    }
+}
+
+impl TryFrom<StateChainUnchecked> for StateChain {
+    type Error = SharedLibError;
+    fn try_from(chain: StateChainUnchecked) -> Result<Self> {
+        let result = Self{ chain: chain.get_chain().to_owned() };
+        StateChain::check_length(&result)?;
+        Ok(result)
+    }
+}
+
 impl TryFrom<&Vec<State>> for StateChain {
     type Error = SharedLibError;
     fn try_from(chain: &Vec<State>) -> Result<Self> {
-        if chain.is_empty() {
-            return Err(SharedLibError::FormatError("StateChain cannot be of zero length".to_string()))
-        }
-        Ok(Self{ chain: chain.to_owned() })
+        let result = Self{ chain: chain.to_owned() };
+        StateChain::check_length(&result)?;
+        Ok(result)
     }
 }
 
 impl TryFrom<Vec<State>> for StateChain {
     type Error = SharedLibError;
     fn try_from(chain: Vec<State>) -> Result<Self> {
-        if chain.is_empty() {
-            return Err(SharedLibError::FormatError("StateChain cannot be of zero length".to_string()))
-        }
-        Ok(Self{ chain })
+        let result = Self{ chain: chain.to_owned() };
+        StateChain::check_length(&result)?;
+        Ok(result)
     }
 }
 
@@ -101,17 +142,20 @@ impl StateChain {
         }))
     }
 
-    pub fn check_non_zero_length(&self) -> Result<()> {
-        self.chain.last().map(|_| ()).
-            ok_or(SharedLibError::FormatError(
-                "StateChain cannot be of zero length".to_string()))
-    }
-
     pub fn example() -> Self{
         Self{
             chain: vec![State::example()],
         }
     }
+
+    fn check_length(chain: &Self) -> Result<()> {
+        match chain.get_chain().is_empty(){
+            true => Err(SharedLibError::FormatError(
+                "StateChain cannot be of zero length".to_string())),
+            false => Ok(())
+        }
+    }
+
 }
 
 pub fn get_time_now() -> NaiveDateTime {

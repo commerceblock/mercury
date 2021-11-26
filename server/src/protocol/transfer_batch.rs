@@ -19,7 +19,6 @@ use rocket::State;
 use rocket_contrib::json::Json;
 use std::str::FromStr;
 use uuid::Uuid;
-use std::convert::TryInto;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -256,6 +255,7 @@ mod tests {
     use shared_lib::state_chain::State as SCState;
     use std::collections::{HashMap, HashSet};
     use crate::error::DBErrorType;
+    use std::convert::TryInto;
 
     // Useful data structs for transfer batch protocol.
     /// Batch id and Signatures for statechains to take part in batch-transfer

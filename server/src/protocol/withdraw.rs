@@ -232,6 +232,7 @@ mod tests {
     use mockall::predicate;
     use std::str::FromStr;
     use uuid::Uuid;
+    use std::convert::TryInto;
 
     // Data from a run of transfer protocol.
     static WITHDRAW_MSG_1: &str = "{\"shared_key_ids\":[\"ad8cb891-ce91-447d-9192-bd105f3de602\"],\"statechain_sigs\":[{\"purpose\":\"WITHDRAW\",\"data\":\"bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8\",\"sig\":\"304402201abaa7f64b50e8a75ca840a2be6317b501e3b5b5abd057465c165c9b872799f4022000d8e36734857237cab323c7244dd5249295b51905b43bf4e93396b58317d872\"}]}";
@@ -268,7 +269,7 @@ mod tests {
                 Ok(StateChainOwner {
                     locked_until: Utc::now().naive_utc() + Duration::seconds(5),
                     owner_id: shared_key_id,
-                    chain: serde_json::from_str::<StateChain>(STATE_CHAIN).unwrap(),
+                    chain: serde_json::from_str::<StateChainUnchecked>(STATE_CHAIN).unwrap().try_into().unwrap(),
                 })
             });
         db.expect_get_statechain_owner()
@@ -277,7 +278,7 @@ mod tests {
                 Ok(StateChainOwner {
                     locked_until: Utc::now().naive_utc(),
                     owner_id: shared_key_id,
-                    chain: serde_json::from_str::<StateChain>(STATE_CHAIN).unwrap(),
+                    chain: serde_json::from_str::<StateChainUnchecked>(STATE_CHAIN).unwrap().try_into().unwrap(),
                 })
             });
         db.expect_update_withdraw_sc_sig().returning(|_, _| Ok(()));
@@ -340,7 +341,7 @@ mod tests {
             })
         });
         db.expect_get_statechain()
-            .returning(move |_| Ok(serde_json::from_str::<StateChain>(STATE_CHAIN).unwrap()));
+            .returning(move |_| Ok(serde_json::from_str::<StateChainUnchecked>(STATE_CHAIN).unwrap().try_into().unwrap()));
         db.expect_update_statechain_amount()
             .returning(|_, _, _, _| Ok(()));
         db.expect_remove_statechain_id().returning(|_| Ok(()));

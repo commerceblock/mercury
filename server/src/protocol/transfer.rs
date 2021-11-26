@@ -506,6 +506,7 @@ mod tests {
     use serde_json;
     use bitcoin::Transaction;
     use crate::shared_lib::util::transaction_serialise;
+    use std::convert::TryInto;
 
     // Data from a run of transfer protocol.
     // static TRANSFER_MSG_1: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"}}";
@@ -566,7 +567,7 @@ mod tests {
                 Ok(StateChainOwner {
                     locked_until: Utc::now().naive_utc() + Duration::seconds(5),
                     owner_id: shared_key_id,
-                    chain: serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap(),
+                    chain: serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap().try_into().unwrap(),
                 })
             });
         db.expect_get_statechain_owner()
@@ -575,7 +576,7 @@ mod tests {
                 Ok(StateChainOwner {
                     locked_until: Utc::now().naive_utc(),
                     owner_id: shared_key_id,
-                    chain: serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap(),
+                    chain: serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap().try_into().unwrap(),
                 })
             });
         db.expect_create_transfer().returning(|_, _, _| Ok(()));
@@ -651,7 +652,7 @@ mod tests {
                 })
             });
         db.expect_get_statechain().returning(move |_| {
-            Ok(serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap())
+            Ok(serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap().try_into().unwrap())
         });
         db.expect_get_statechain_owner() //Lockbox update
         .with(predicate::eq(statechain_id))
@@ -659,7 +660,7 @@ mod tests {
             Ok(StateChainOwner {
                 locked_until: Utc::now().naive_utc(),
                 owner_id: shared_key_id,
-                chain: serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap(),
+                chain: serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap().try_into().unwrap(),
             })
         });
         db.expect_get_lockbox_index().returning(|_| Ok(None));
@@ -795,7 +796,7 @@ mod tests {
                 })
             });
         db.expect_get_statechain().returning(move |_| {
-            Ok(serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap())
+            Ok(serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap().try_into().unwrap())
         });
 
         db.expect_get_statechain_owner() //Lockbox update
@@ -804,7 +805,7 @@ mod tests {
             Ok(StateChainOwner {
                 locked_until: Utc::now().naive_utc(),
                 owner_id: shared_key_id,
-                chain: serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap(),
+                chain: serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap().try_into().unwrap(),
             })
         });
         db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));

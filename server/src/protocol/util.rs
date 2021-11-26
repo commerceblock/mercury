@@ -1386,7 +1386,7 @@ pub mod tests {
         });
         db.expect_get_statechain_amount().returning(move |_| {
             Ok(StateChainAmount {
-                chain: serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap(),
+                chain: serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap().try_into().unwrap(),
                 amount: 10000,
             })
         });

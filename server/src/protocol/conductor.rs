@@ -39,7 +39,6 @@ use schemars;
 use bitcoin::secp256k1::Signature;
 use chrono::{NaiveDateTime, Utc, Duration,Timelike};
 use crate::protocol::util::RateLimiter;
-use std::convert::TryInto;
 
 const MIN_AMOUNT: u64 = 100000; // bitcoin tx nlocktime cutoff
 const SECONDS_DAY: u32 = 86400;
@@ -1201,6 +1200,7 @@ mod tests {
     use std::collections::HashSet;
     use std::str::FromStr;
     use std::{thread, time::Duration};
+    use std::convert::TryInto;
 
     #[test]
     fn test_swap_token_sig_verify() {
