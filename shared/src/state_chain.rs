@@ -53,24 +53,15 @@ pub struct StateChainUnchecked {
 }
 
 impl StateChainUnchecked {
-    pub fn get_chain(&self) -> &Vec<State> {
-        &self.chain
-    }
-}
-
-impl TryFrom<&StateChainUnchecked> for StateChain {
-    type Error = SharedLibError;
-    fn try_from(chain: &StateChainUnchecked) -> Result<Self> {
-        let result = Self{ chain: chain.get_chain().to_owned() };
-        StateChain::check_length(&result)?;
-        Ok(result)
+    pub fn get_chain(self) -> Vec<State> {
+        self.chain
     }
 }
 
 impl TryFrom<StateChainUnchecked> for StateChain {
     type Error = SharedLibError;
     fn try_from(chain: StateChainUnchecked) -> Result<Self> {
-        let result = Self{ chain: chain.get_chain().to_owned() };
+        let result = Self{ chain: chain.get_chain() };
         StateChain::check_length(&result)?;
         Ok(result)
     }
@@ -354,8 +345,8 @@ mod tests {
     use monotree::database::MemoryDB;
     static STATE_1: &str = "{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}";
     static STATE_2: &str = "{\"data\":\"126ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}";
-    static STATE_CHAIN_1: &str = &format!("{{\"chain\":[{}]}}",STATE_1);
-    static STATE_CHAIN_2: &str = &format!("{{\"chain\":[{},{}]}}",STATE_1,STATE_2);
+    static STATE_CHAIN_1: &str = "{\"chain\":[{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}]}";
+    static STATE_CHAIN_2: &str = "{\"chain\":[{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null},{\"data\":\"126ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}]}";
     static EMPTY_STATE_CHAIN_UNCHECKED: &str = "{\"chain\":[]}";
 
     #[test]
@@ -402,18 +393,22 @@ mod tests {
 
     #[test]
     fn test_state_chain_unchecked() {
-        let sc1: StateChain = serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN_1)
+        let s1: State = serde_json::from_str(STATE_1).expect("failed to deserialise State");
+        let s2: State = serde_json::from_str(STATE_2).expect("failed to deserialise State");
+
+        let sc_empty: Result<StateChain> = serde_json::from_str::<StateChainUnchecked>(EMPTY_STATE_CHAIN_UNCHECKED).
+            expect("failed to deserialise StateChainUnchecked").try_into();
+        assert!(sc_empty.is_err());
+
+        let sc1: StateChain = serde_json::from_str::<StateChainUnchecked>(STATE_CHAIN_1)
             .expect("failed to deserialise StateChainUnchecked")
             .try_into()
-            .expect("failed to convert StateChainUnchecked to StateChain");
+            .expect("failed to convert");
 
-        let sc2: StateChain = serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN_2)
+        let sc2: StateChain = serde_json::from_str::<StateChainUnchecked>(STATE_CHAIN_2)
             .expect("failed to deserialise StateChainUnchecked")
             .try_into()
-            .expect("failed to convert StateChainUnchecked to StateChain");
-
-        let s1: State = serde_json::from_str(&STATE_1).expect("failed to deserialise STATE_1");
-        let s2: State = serde_json::from_str(&STATE_2).expect("failed to deserialise STATE_1");
+            .expect("failed to convert");
 
         assert_eq!(&s1, sc2.get_first(), "StateChain get_first incorrect");
         assert_eq!(&s2, sc2.get_tip(), "StateChain get_tip incorrect");
