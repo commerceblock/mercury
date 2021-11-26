@@ -110,6 +110,7 @@ impl SpawnServer for PGDatabase {
     ) -> thread::JoinHandle<SpawnError> {
         // Set enviroment variable to testing_mode=true to override Settings.toml
         env::set_var("MERC_TESTING_MODE", "true");
+        env::set_var("MERC_CONDUCTOR_GRACE_PERIOD", "0");
         match port {
             Some(p) => env::set_var("MERC_ROCKET_PORT", &p.to_string()[..]),
             None => ()

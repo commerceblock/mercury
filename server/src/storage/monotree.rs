@@ -195,10 +195,10 @@ pub mod tests {
                 &[],
             )
             .unwrap();
-        db.database_w()
+        let _ = db.database_w()
             .unwrap()
-            .execute(&format!("TRUNCATE {};", table_name), &[])
-            .unwrap();
+            .execute(&format!("TRUNCATE {};", table_name), &[]).
+                expect("monotree - expected to truncate table");
         // set PGDatabaseSMT table name to testing table
         db.smt.table_name = table_name;
         Monotree {

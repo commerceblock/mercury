@@ -235,7 +235,7 @@ mod tests {
         let client = Client::new(server::get_server(Some(mainstay_config)).unwrap()).expect("valid rocket instance");
 
         let mut response = client
-            .post("/info/fee")
+            .get("/info/fee")
             .header(ContentType::JSON)
             .dispatch();
 
