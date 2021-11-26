@@ -46,20 +46,13 @@ pub struct StateChain {
 
 /// A struct with the same struct as StateChain that can be
 /// deserialized and has public member variables
-#[derive(Serialize, Deserialize, JsonSchema, Debug, PartialEq, Clone)]
-#[schemars(example = "Self::example")]
+#[derive(Deserialize, Debug, PartialEq, Clone)]
 pub struct StateChainUnchecked {
     /// chain of transitory key history
     chain: Vec<State>,
 }
 
 impl StateChainUnchecked {
-    pub fn example() -> Self{
-        Self{
-            chain: vec![State::example()],
-        }
-    }
-
     pub fn get_chain(&self) -> &Vec<State> {
         &self.chain
     }
@@ -359,6 +352,11 @@ mod tests {
     use super::*;
     use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
     use monotree::database::MemoryDB;
+    static STATE_1: &str = "{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}";
+    static STATE_2: &str = "{\"data\":\"126ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}";
+    static STATE_CHAIN_1: &str = &format!("{{\"chain\":[{}]}}",STATE_1);
+    static STATE_CHAIN_2: &str = &format!("{{\"chain\":[{},{}]}}",STATE_1,STATE_2);
+    static EMPTY_STATE_CHAIN_UNCHECKED: &str = "{\"chain\":[]}";
 
     #[test]
     fn test_add_to_state_chain() {
@@ -400,6 +398,28 @@ mod tests {
         assert!(empty_vec.is_empty());
         let sc_fail: Result<StateChain> = empty_vec.try_into();
         assert!(sc_fail.is_err());
+    }
+
+    #[test]
+    fn test_state_chain_unchecked() {
+        let sc1: StateChain = serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN_1)
+            .expect("failed to deserialise StateChainUnchecked")
+            .try_into()
+            .expect("failed to convert StateChainUnchecked to StateChain");
+
+        let sc2: StateChain = serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN_2)
+            .expect("failed to deserialise StateChainUnchecked")
+            .try_into()
+            .expect("failed to convert StateChainUnchecked to StateChain");
+
+        let s1: State = serde_json::from_str(&STATE_1).expect("failed to deserialise STATE_1");
+        let s2: State = serde_json::from_str(&STATE_2).expect("failed to deserialise STATE_1");
+
+        assert_eq!(&s1, sc2.get_first(), "StateChain get_first incorrect");
+        assert_eq!(&s2, sc2.get_tip(), "StateChain get_tip incorrect");
+
+        assert!(serde_json::to_string(&sc1).expect("failed to serialize") == STATE_CHAIN_1.to_string());
+        assert!(serde_json::to_string(&sc2).expect("failed to serialize") == STATE_CHAIN_2.to_string());
     }
 
     #[test]
