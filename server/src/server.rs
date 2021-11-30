@@ -35,8 +35,6 @@ use url::Url;
 use std::collections::HashSet;
 use std::default::Default;
 use governor::{Quota, clock::DefaultClock, state::keyed::DashMapStateStore};
-use std::sync::atomic::{AtomicBool, Ordering};
-use signal_hook::{flag, consts::TERM_SIGNALS};
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -173,52 +171,7 @@ impl<
             rate_limiter_id
         };
 
-        match &sce.scheduler {
-            Some(s) => {
-                Self::start_conductor_thread(s.clone(), sce.config.mode, sce.config.conductor.grace_period);
-            },
-            None => ()
-        }
-
         Ok(sce)
-    }
-
-    pub fn start_conductor_thread(scheduler: Arc<Mutex<Scheduler>>, mode: Mode, grace_period: u32) -> 
-        std::thread::JoinHandle<()>
-    {
-        let term = Arc::new(AtomicBool::new(false));
-        let shutdown_ready = Arc::new(AtomicBool::new(false));
-
-        for sig in TERM_SIGNALS {
-            flag::register(*sig, Arc::clone(&term)).unwrap();
-            flag::register_conditional_default(*sig, Arc::clone(&shutdown_ready)).unwrap();
-        }
-        
-        std::thread::spawn(move || loop {
-            let mut guard = scheduler.lock().unwrap();
-            if Arc::clone(&term).load(Ordering::Relaxed) {
-                info!("TERM signal received - requesting conductor shutdown");
-                guard.request_shutdown();
-            }
-            if let Err(e) = guard.update_swap_info() {
-                error!("{}", &e.to_string());
-            }
-            if guard.shutdown_ready(){
-                // Swap coordination complete - allow a grace period for 
-                // completion of transfers (if using mercury/conductor combined 
-                // server), then execute shutdown
-                info!("conductor ready for shutdown - waiting for grace period {}s", &grace_period);
-                match mode {
-                    Mode::Both => thread::sleep(std::time::Duration::new(grace_period as u64, 0)),
-                    _ => ()
-                };
-                info!("grace period over - terminating");
-                Arc::clone(&shutdown_ready).store(true, Ordering::Relaxed);
-                signal_hook::low_level::raise(signal_hook::consts::TERM_SIGNALS[0]).expect("failed to raise TERM signal");
-            }
-            drop(guard);
-            std::thread::sleep(std::time::Duration::from_secs(10));
-        })
     }
 }
 
@@ -519,6 +472,7 @@ mock! {
         fn get_group_info(&self) -> conductor::Result<HashMap<SwapGroup,GroupStatus>>;
         fn get_blinded_spend_signature(&self, swap_id: &Uuid, statechain_id: &Uuid) -> conductor::Result<BlindedSpendSignature>;
         fn get_address_from_blinded_spend_token(&self, bst: &BlindedSpendToken) -> conductor::Result<SCEAddress>;
+        fn update_swap_info(&self) -> conductor::Result<bool>;
     }
 
     trait Transfer {
