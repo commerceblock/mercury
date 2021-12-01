@@ -390,12 +390,18 @@ impl Utilities for SCE {
                 if prepare_sign_msg.protocol == Protocol::Deposit {
                     // check if there is an existing backup transaction (from a previous deposit confirm)
                     // if there is: verify that the locktime of the new tx is the same and the destination address
-                    let locktime = match self.database.get_user_backup_tx(user_id.clone()) {
-                        Ok(old_tx) => old_tx.lock_time as u32,
-                        Err(_) => 0 as u32
+                    let locktime: Option<u32> = match self.database.get_user_backup_tx(user_id.clone()) {
+                        Ok(old_tx) => Some(old_tx.lock_time as u32),
+                        Err(e) => { 
+                        if (e.to_string().contains("No data for identifier")) {
+                            None
+                        } else {
+                            return Err(SEError::Generic(String::from("DBError",)));                            
+                            }
+                        }
                     };
 
-                    if ((locktime == 0 as u32) || locktime == tx.lock_time as u32) {
+                    if (locktime.is_none() || locktime == Some(tx.lock_time as u32)) {
                         self.database.update_user_backup_tx(&user_id, tx.clone())?;
                     } else {
                         return Err(SEError::Generic(String::from(
