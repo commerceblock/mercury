@@ -386,6 +386,30 @@ impl Utilities for SCE {
                     self.database.update_backup_tx(&statechain_id, tx.clone())?;
                 }
 
+                // Only in deposit case add backup tx to UserSession
+                if prepare_sign_msg.protocol == Protocol::Deposit {
+                    // check if there is an existing backup transaction (from a previous deposit confirm)
+                    // if there is: verify that the locktime of the new tx is the same and the destination address
+                    let locktime: Option<u32> = match self.database.get_user_backup_tx(user_id.clone()) {
+                        Ok(old_tx) => Some(old_tx.lock_time as u32),
+                        Err(e) => { 
+                        if (e.to_string().contains("No data for identifier")) {
+                            None
+                        } else {
+                            return Err(SEError::Generic(String::from("DBError",)));                            
+                            }
+                        }
+                    };
+
+                    if (locktime.is_none() || locktime == Some(tx.lock_time as u32)) {
+                        self.database.update_user_backup_tx(&user_id, tx.clone())?;
+                    } else {
+                        return Err(SEError::Generic(String::from(
+                            "Replacement backup tx locktime not correct.",
+                        )));
+                    }
+                }
+
                 let sig_hash = get_sighash(
                     &tx,
                     &0,
@@ -395,12 +419,6 @@ impl Utilities for SCE {
                 );
 
                 self.database.update_sighash(&user_id, sig_hash)?;
-
-                // Only in deposit case add backup tx to UserSession
-                if prepare_sign_msg.protocol == Protocol::Deposit {
-                    self.database
-                        .update_user_backup_tx(&user_id, tx)?;
-                }
 
                 info!(
                     "DEPOSIT: Backup tx ready for signing. Shared Key ID: {}.",
