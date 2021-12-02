@@ -81,8 +81,8 @@ impl BatchTransfer for SCE {
             let sco = self.database.get_statechain_owner(statechain_id)?;
 
             // Verify sigs
-            let proof_key = sco.chain.get_tip()?.data;
-            sig.verify(&proof_key)?;
+            let proof_key = &sco.chain.get_tip().data;
+            sig.verify(proof_key)?;
 
             // Ensure state chains are all available
             is_locked(sco.locked_until)?;
@@ -255,6 +255,7 @@ mod tests {
     use shared_lib::state_chain::State as SCState;
     use std::collections::{HashMap, HashSet};
     use crate::error::DBErrorType;
+    use std::convert::TryInto;
 
     // Useful data structs for transfer batch protocol.
     /// Batch id and Signatures for statechains to take part in batch-transfer
@@ -389,10 +390,8 @@ mod tests {
                 next_state: None,
             });
 
-            let statechain = StateChain {
-                chain: chain.clone(),
-            };
-
+            let statechain: StateChain = chain.try_into().expect("expected Vec<State> to convert to StateChain"); 
+            
             db.expect_get_statechain()
                 .returning(move |_| (Ok(statechain.clone())));
         }

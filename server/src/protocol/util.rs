@@ -1048,17 +1048,14 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
 
         let state_chain = self.database.get_statechain_amount(statechain_id)?;
 
-        let state = match state_chain.chain.chain.get(0){
-            Some(s) => s.next_state.clone(),
-            None => return Err(SEError::Generic(format!("statechain with id {} is empty", &statechain_id)))
-        };
+        let state = state_chain.chain.get_first().next_state.clone();
 
         if state.is_some() {
                 if state.unwrap().purpose == String::from("WITHDRAW") {
                     return Ok({StateChainDataAPI {
                         amount: state_chain.amount as u64,
                         utxo: OutPoint::null(),
-                        chain: state_chain.chain.chain,
+                        chain: state_chain.chain.get_chain().clone(),
                         locktime: 0 as u32,
                     }});
                 }
@@ -1069,7 +1066,7 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
         return Ok({StateChainDataAPI {
             amount: state_chain.amount as u64,
             utxo: tx_backup.input.get(0).unwrap().previous_output,
-            chain: state_chain.chain.chain,
+            chain: state_chain.chain.get_chain().clone(),
             locktime: tx_backup.lock_time,
         }});
     }
@@ -1078,9 +1075,9 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
 
         let state_chain = self.database.get_statechain_amount(statechain_id)?;
 
-        let statecoin = state_chain.chain.get_tip()?;
+        let statecoin = state_chain.chain.get_tip();
 
-        match state_chain.chain.get_first()?.next_state {
+        match &state_chain.chain.get_first().next_state {
             Some(state) => {
                 if state.purpose == String::from("WITHDRAW") {
                     return Ok({StateCoinDataAPI {
@@ -1389,7 +1386,7 @@ pub mod tests {
         });
         db.expect_get_statechain_amount().returning(move |_| {
             Ok(StateChainAmount {
-                chain: serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap(),
+                chain: serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap().try_into().unwrap(),
                 amount: 10000,
             })
         });

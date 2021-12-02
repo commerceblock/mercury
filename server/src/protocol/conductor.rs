@@ -834,7 +834,7 @@ impl Conductor for SCE {
 
     fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> Result<()> {
         let state_chain = self.get_statechain(swap_msg1.statechain_id)?;
-        let proof_key_str = &state_chain.get_tip()?.data.clone();
+        let proof_key_str = &state_chain.get_tip().data;
         let proof_key = bitcoin::secp256k1::PublicKey::from_str(&proof_key_str)?;
 
         //let proof_key = &swap_msg1.address.proof_key;
@@ -1210,6 +1210,7 @@ mod tests {
     use std::collections::HashSet;
     use std::str::FromStr;
     use std::{thread, time::Duration};
+    use std::convert::TryInto;
 
     #[test]
     fn test_swap_token_sig_verify() {
@@ -1473,9 +1474,7 @@ mod tests {
             next_state: None,
         });
 
-        let statechain = StateChain {
-            chain: chain.clone(),
-        };
+        let statechain: StateChain = chain.try_into().expect("expected Vec<State> to convert to StateChain");
         let statechain_2 = statechain.clone();
 
         db.expect_get_statechain_owner().returning(move |_| {
@@ -1569,9 +1568,7 @@ mod tests {
                 data: proof_key_vec.last().unwrap().to_string(),
                 next_state: None,
             });
-            let statechain = StateChain {
-                chain: chain.clone(),
-            };
+            let statechain: StateChain = chain.try_into().expect("expected Vec<State> to convert to StateChain");
             let statechain2 = statechain.clone();
 
             db.expect_get_statechain_owner()

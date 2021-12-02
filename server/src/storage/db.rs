@@ -1101,7 +1101,8 @@ impl Database for PGDatabase {
             Table::StateChain,
             vec![Column::Amount, Column::Chain],
         )?;
-        let state_chain: StateChain = Self::deser(state_chain_str)?;
+        let state_chain: StateChain = 
+            Self::deser::<StateChainUnchecked>(state_chain_str)?.try_into()?;
 
         Ok(StateChainAmount {
             chain: state_chain,
@@ -1172,7 +1173,8 @@ impl Database for PGDatabase {
             Table::StateChain,
             vec![Column::Amount, Column::Chain],
         )?;
-        let state_chain: StateChain = Self::deser(state_chain_str)?;
+        let state_chain: StateChain = 
+            Self::deser::<StateChainUnchecked>(state_chain_str)?.try_into()?;
         Ok(state_chain)
     }
 
@@ -1690,7 +1692,8 @@ impl Database for PGDatabase {
             vec![Column::LockedUntil, Column::OwnerId, Column::Chain],
         )?;
 
-        let chain: StateChain = Self::deser(state_chain_str)?;
+        let chain: StateChain = 
+            Self::deser::<StateChainUnchecked>(state_chain_str)?.try_into()?;
         Ok(StateChainOwner {
             locked_until,
             owner_id,
