@@ -35,8 +35,6 @@ pub struct ConductorConfig {
     pub daily_epochs: u32,
     /// The max swap size
     pub max_swap_size: u32,
-    /// The shutdown grace period in seconds after ongoing swaps have completed
-    pub grace_period: u32
 }
 
 impl Default for ConductorConfig {
@@ -47,7 +45,6 @@ impl Default for ConductorConfig {
             punishment_duration: 300,
             daily_epochs: 240,
             max_swap_size: 5,
-            grace_period: 180
         }
     }
 }
@@ -281,10 +278,6 @@ impl Config {
 
         if let Ok(v) = env::var("MERC_GROUP_TIMEOUT") {
             let _ = conf_rs.set("conductor.group_timeout", v)?;
-        }
-
-        if let Ok(v) = env::var("MERC_CONDUCTOR_GRACE_PERIOD") {
-            let _ = conf_rs.set("conductor.grace_period", v)?;
         }
 
         // Type checks

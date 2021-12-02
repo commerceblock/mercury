@@ -386,6 +386,30 @@ impl Utilities for SCE {
                     self.database.update_backup_tx(&statechain_id, tx.clone())?;
                 }
 
+                // Only in deposit case add backup tx to UserSession
+                if prepare_sign_msg.protocol == Protocol::Deposit {
+                    // check if there is an existing backup transaction (from a previous deposit confirm)
+                    // if there is: verify that the locktime of the new tx is the same and the destination address
+                    let locktime: Option<u32> = match self.database.get_user_backup_tx(user_id.clone()) {
+                        Ok(old_tx) => Some(old_tx.lock_time as u32),
+                        Err(e) => { 
+                        if (e.to_string().contains("No data for identifier")) {
+                            None
+                        } else {
+                            return Err(SEError::Generic(String::from("DBError",)));                            
+                            }
+                        }
+                    };
+
+                    if (locktime.is_none() || locktime == Some(tx.lock_time as u32)) {
+                        self.database.update_user_backup_tx(&user_id, tx.clone())?;
+                    } else {
+                        return Err(SEError::Generic(String::from(
+                            "Replacement backup tx locktime not correct.",
+                        )));
+                    }
+                }
+
                 let sig_hash = get_sighash(
                     &tx,
                     &0,
@@ -395,12 +419,6 @@ impl Utilities for SCE {
                 );
 
                 self.database.update_sighash(&user_id, sig_hash)?;
-
-                // Only in deposit case add backup tx to UserSession
-                if prepare_sign_msg.protocol == Protocol::Deposit {
-                    self.database
-                        .update_user_backup_tx(&user_id, tx)?;
-                }
 
                 info!(
                     "DEPOSIT: Backup tx ready for signing. Shared Key ID: {}.",
@@ -1048,17 +1066,14 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
 
         let state_chain = self.database.get_statechain_amount(statechain_id)?;
 
-        let state = match state_chain.chain.chain.get(0){
-            Some(s) => s.next_state.clone(),
-            None => return Err(SEError::Generic(format!("statechain with id {} is empty", &statechain_id)))
-        };
+        let state = state_chain.chain.get_first().next_state.clone();
 
         if state.is_some() {
                 if state.unwrap().purpose == String::from("WITHDRAW") {
                     return Ok({StateChainDataAPI {
                         amount: state_chain.amount as u64,
                         utxo: OutPoint::null(),
-                        chain: state_chain.chain.chain,
+                        chain: state_chain.chain.get_chain().clone(),
                         locktime: 0 as u32,
                     }});
                 }
@@ -1069,7 +1084,7 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
         return Ok({StateChainDataAPI {
             amount: state_chain.amount as u64,
             utxo: tx_backup.input.get(0).unwrap().previous_output,
-            chain: state_chain.chain.chain,
+            chain: state_chain.chain.get_chain().clone(),
             locktime: tx_backup.lock_time,
         }});
     }
@@ -1078,9 +1093,9 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
 
         let state_chain = self.database.get_statechain_amount(statechain_id)?;
 
-        let statecoin = state_chain.chain.get_tip()?;
+        let statecoin = state_chain.chain.get_tip();
 
-        match state_chain.chain.get_first()?.next_state {
+        match &state_chain.chain.get_first().next_state {
             Some(state) => {
                 if state.purpose == String::from("WITHDRAW") {
                     return Ok({StateCoinDataAPI {
@@ -1389,7 +1404,7 @@ pub mod tests {
         });
         db.expect_get_statechain_amount().returning(move |_| {
             Ok(StateChainAmount {
-                chain: serde_json::from_str::<StateChain>(&STATE_CHAIN.to_string()).unwrap(),
+                chain: serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap().try_into().unwrap(),
                 amount: 10000,
             })
         });

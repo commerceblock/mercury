@@ -129,6 +129,8 @@ pub trait Conductor {
 
     // Get map of values/sizes to registrations
     fn get_group_info(&self) -> Result<HashMap<SwapGroup,GroupStatus>>;
+
+    fn update_swap_info(&self) -> Result<bool>;
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -832,9 +834,19 @@ impl Conductor for SCE {
         Ok(guard.group_info_map.clone())
     }
 
+    fn update_swap_info(&self) -> Result<bool>{
+        if self.check_rate_slow("update_swap_info").is_ok() {
+            let mut guard = self.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
+            guard.update_swap_info()?;
+            drop(guard);
+            return Ok(true)
+        }
+        return Ok(false)
+    }
+    
     fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> Result<()> {
         let state_chain = self.get_statechain(swap_msg1.statechain_id)?;
-        let proof_key_str = &state_chain.get_tip()?.data.clone();
+        let proof_key_str = &state_chain.get_tip().data;
         let proof_key = bitcoin::secp256k1::PublicKey::from_str(&proof_key_str)?;
 
         //let proof_key = &swap_msg1.address.proof_key;
@@ -1078,6 +1090,7 @@ impl Conductor for SCE {
 #[post("/swap/poll/utxo", format = "json", data = "<statechain_id>")]
 pub fn poll_utxo(sc_entity: State<SCE>, statechain_id: Json<StatechainID>) -> Result<Json<SwapID>> {
     sc_entity.check_rate_fast("swap")?;
+    sc_entity.update_swap_info()?;
     match sc_entity.poll_utxo(&statechain_id.id) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -1089,6 +1102,7 @@ pub fn poll_utxo(sc_entity: State<SCE>, statechain_id: Json<StatechainID>) -> Re
 #[post("/swap/poll/swap", format = "json", data = "<swap_id>")]
 pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<SwapID>) -> Result<Json<Option<SwapStatus>>> {
     sc_entity.check_rate_fast("swap")?;
+    sc_entity.update_swap_info()?;
     match sc_entity.poll_swap(&swap_id.id.ok_or("poll_swap: swap_id.id is None".to_string())?) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -1100,6 +1114,7 @@ pub fn poll_swap(sc_entity: State<SCE>, swap_id: Json<SwapID>) -> Result<Json<Op
 #[post("/swap/info", format = "json", data = "<swap_id>")]
 pub fn get_swap_info(sc_entity: State<SCE>, swap_id: Json<SwapID>) -> Result<Json<Option<SwapInfo>>> {
     sc_entity.check_rate_fast("swap")?;
+    sc_entity.update_swap_info()?;
     match sc_entity.get_swap_info(
         &swap_id.id.ok_or("poll_swap: swap_id.id is None".to_string())?) {
         Ok(res) => return Ok(Json(res)),
@@ -1118,9 +1133,11 @@ pub fn get_blinded_spend_signature(
     let bst_msg = bst_msg.into_inner();
     let swap_uuid = &Uuid::from_str(&bst_msg.swap_id)?;
     let statechain_uuid = &Uuid::from_str(&bst_msg.statechain_id)?;
-    sc_entity
+    let result = sc_entity
         .get_blinded_spend_signature(swap_uuid, statechain_uuid)
-        .map(|x| Json(x))
+        .map(|x| Json(x));
+    let _ = sc_entity.update_swap_info();
+    return result
 }
 
 #[openapi]
@@ -1132,7 +1149,10 @@ pub fn register_utxo(
 ) -> Result<Json<()>> {
     sc_entity.check_rate_fast("swap")?;
     match sc_entity.register_utxo(&register_utxo_msg.into_inner()) {
-        Ok(res) => return Ok(Json(res)),
+        Ok(res) => {
+            let _ = sc_entity.update_swap_info();
+            return Ok(Json(res))
+        },
         Err(e) => return Err(e),
     }
 }
@@ -1146,7 +1166,10 @@ pub fn deregister_utxo(
 ) -> Result<Json<()>> {
     sc_entity.check_rate_fast("swap")?;
     match sc_entity.deregister_utxo(&statechain_id.id) {
-        Ok(res) => return Ok(Json(res)),
+        Ok(res) => {
+            let _ = sc_entity.update_swap_info();
+            return Ok(Json(res))
+        },
         Err(e) => return Err(e),
     }
 }
@@ -1159,7 +1182,10 @@ pub fn deregister_utxo(
 pub fn swap_first_message(sc_entity: State<SCE>, swap_msg1: Json<SwapMsg1>) -> Result<Json<()>> {
     sc_entity.check_rate_fast("swap")?;
     match sc_entity.swap_first_message(&swap_msg1.into_inner()) {
-        Ok(res) => return Ok(Json(res)),
+        Ok(res) => {
+            let _ = sc_entity.update_swap_info();    
+            return Ok(Json(res))
+        },
         Err(e) => return Err(e),
     }
 }
@@ -1173,7 +1199,10 @@ pub fn swap_second_message(
 ) -> Result<Json<(SCEAddress)>> {
     sc_entity.check_rate_fast("swap")?;
     match sc_entity.swap_second_message(&swap_msg2.into_inner()) {
-        Ok(res) => return Ok(Json(res)),
+        Ok(res) => {
+            let _ = sc_entity.update_swap_info();
+            return Ok(Json(res))
+        },
         Err(e) => return Err(e),
     }
 }
@@ -1185,6 +1214,7 @@ pub fn get_group_info(
     sc_entity: State<SCE>,
     ) -> Result<Json<(HashMap<SwapGroup,GroupStatus>)>> {
     sc_entity.check_rate_fast("swap")?;
+    sc_entity.update_swap_info()?;
     match sc_entity.get_group_info() {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
@@ -1210,6 +1240,7 @@ mod tests {
     use std::collections::HashSet;
     use std::str::FromStr;
     use std::{thread, time::Duration};
+    use std::convert::TryInto;
 
     #[test]
     fn test_swap_token_sig_verify() {
@@ -1473,9 +1504,7 @@ mod tests {
             next_state: None,
         });
 
-        let statechain = StateChain {
-            chain: chain.clone(),
-        };
+        let statechain: StateChain = chain.try_into().expect("expected Vec<State> to convert to StateChain");
         let statechain_2 = statechain.clone();
 
         db.expect_get_statechain_owner().returning(move |_| {
@@ -1569,9 +1598,7 @@ mod tests {
                 data: proof_key_vec.last().unwrap().to_string(),
                 next_state: None,
             });
-            let statechain = StateChain {
-                chain: chain.clone(),
-            };
+            let statechain: StateChain = chain.try_into().expect("expected Vec<State> to convert to StateChain");
             let statechain2 = statechain.clone();
 
             db.expect_get_statechain_owner()

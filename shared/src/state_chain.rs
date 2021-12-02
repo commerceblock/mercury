@@ -30,13 +30,59 @@ use std::sync::{Arc, Mutex};
 use std::{convert::TryInto, panic::AssertUnwindSafe, str::FromStr};
 use uuid::Uuid;
 use rocket_okapi::JsonSchema;
+use std::convert::TryFrom;
 
 /// A list of States in which each State signs for the next State.
-#[derive(Serialize, Deserialize, JsonSchema, Debug, PartialEq, Clone)]
+/// On initialization the struct is always checked to have
+/// non-zero chain length. The struct cannot be deserialized
+/// but can be converted from a StateChainUnchecked which 
+/// can be. The length check is enforced on conversion.
+#[derive(Serialize, JsonSchema, Debug, PartialEq, Clone)]
 #[schemars(example = "Self::example")]
 pub struct StateChain {
     /// chain of transitory key history
-    pub chain: Vec<State>,
+    chain: Vec<State>,
+}
+
+/// A struct with the same struct as StateChain that can be
+/// deserialized and has public member variables
+#[derive(Deserialize, Debug, PartialEq, Clone)]
+pub struct StateChainUnchecked {
+    /// chain of transitory key history
+    chain: Vec<State>,
+}
+
+impl StateChainUnchecked {
+    pub fn get_chain(self) -> Vec<State> {
+        self.chain
+    }
+}
+
+impl TryFrom<StateChainUnchecked> for StateChain {
+    type Error = SharedLibError;
+    fn try_from(chain: StateChainUnchecked) -> Result<Self> {
+        let result = Self{ chain: chain.get_chain() };
+        StateChain::check_length(&result)?;
+        Ok(result)
+    }
+}
+
+impl TryFrom<&Vec<State>> for StateChain {
+    type Error = SharedLibError;
+    fn try_from(chain: &Vec<State>) -> Result<Self> {
+        let result = Self{ chain: chain.to_owned() };
+        StateChain::check_length(&result)?;
+        Ok(result)
+    }
+}
+
+impl TryFrom<Vec<State>> for StateChain {
+    type Error = SharedLibError;
+    fn try_from(chain: Vec<State>) -> Result<Self> {
+        let result = Self{ chain: chain.to_owned() };
+        StateChain::check_length(&result)?;
+        Ok(result)
+    }
 }
 
 impl StateChain {
@@ -49,37 +95,33 @@ impl StateChain {
         }
     }
 
-    pub fn get_tip(&self) -> Result<State> {
-        Ok(self
-            .chain
-            .last()
-            .ok_or(SharedLibError::Generic(String::from("StateChain empty")))?
-            .clone())
+    pub fn get_chain(&self) -> &Vec<State> {
+        &self.chain
     }
 
-    pub fn get_first(&self) -> Result<State> {
-        Ok(self
-            .chain
-            .first()
-            .ok_or(SharedLibError::Generic(String::from("StateChain empty")))?
-            .clone())
+    pub fn get_tip(&self) -> &State {
+        self.chain.last().expect("expect StateChain to not be empty")
     }
 
-    pub fn add(&mut self, statechain_sig: StateChainSig) -> Result<()> {
-        let mut tip = self.get_tip()?;
+    pub fn get_mut_tip(&mut self) -> &mut State {
+        self.chain.last_mut().expect("expect StateChain to not be empty")
+    }
 
+    pub fn get_first(&self) -> &State {
+        self.chain.first().expect("expect StateChain to not be empty")
+    }
+
+    pub fn add(&mut self, statechain_sig: &StateChainSig) -> Result<()> {
         // verify previous state has signature and signs for new proof_key
-        let prev_proof_key = tip.data.clone();
-        statechain_sig.verify(&prev_proof_key)?;
+        let prev_proof_key: &String = &self.get_tip().data;
+        statechain_sig.verify(prev_proof_key)?;
 
         // add sig to current tip
-        tip.next_state = Some(statechain_sig.clone());
-        self.chain.pop();
-        self.chain.push(tip);
+        self.get_mut_tip().next_state = Some(statechain_sig.clone());
 
         // add new tip to chain
         Ok(self.chain.push(State {
-            data: statechain_sig.data,
+            data: statechain_sig.data.clone(),
             next_state: None,
         }))
     }
@@ -89,6 +131,15 @@ impl StateChain {
             chain: vec![State::example()],
         }
     }
+
+    fn check_length(chain: &Self) -> Result<()> {
+        match chain.get_chain().is_empty(){
+            true => Err(SharedLibError::FormatError(
+                "StateChain cannot be of zero length".to_string())),
+            false => Ok(())
+        }
+    }
+
 }
 
 pub fn get_time_now() -> NaiveDateTime {
@@ -292,6 +343,11 @@ mod tests {
     use super::*;
     use bitcoin::secp256k1::{PublicKey, Secp256k1, SecretKey};
     use monotree::database::MemoryDB;
+    static STATE_1: &str = "{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}";
+    static STATE_2: &str = "{\"data\":\"126ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}";
+    static STATE_CHAIN_1: &str = "{\"chain\":[{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}]}";
+    static STATE_CHAIN_2: &str = "{\"chain\":[{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null},{\"data\":\"126ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}]}";
+    static EMPTY_STATE_CHAIN_UNCHECKED: &str = "{\"chain\":[]}";
 
     #[test]
     fn test_add_to_state_chain() {
@@ -312,12 +368,53 @@ mod tests {
         .unwrap();
 
         // add to state chain
-        let _ = state_chain.add(new_state_sig.clone());
+        let _ = state_chain.add(&new_state_sig);
         assert_eq!(state_chain.chain.len(), 2);
 
         // try add again (signature no longer valid for proof key "03b971d624567214a2e9a53995ee7d4858d6355eb4e3863d9ac540085c8b2d12b3")
-        let fail = state_chain.add(new_state_sig);
+        let fail = state_chain.add(&new_state_sig);
         assert!(fail.is_err());
+    }
+
+    #[test]
+    fn test_convert_to_state_chain() {
+        let sc1 = StateChain::example();
+        let sc2 = sc1.get_chain().try_into().unwrap();
+        assert!(&sc1 == &sc2, "expect converted from reference and original StateChain to be equal");
+
+        let sc3 = sc1.get_chain().to_owned().try_into().unwrap();
+        assert!(&sc1 == &sc3, "expect converted and original StateChain to be equal");
+
+        let empty_vec: Vec<State> = vec![];
+        assert!(empty_vec.is_empty());
+        let sc_fail: Result<StateChain> = empty_vec.try_into();
+        assert!(sc_fail.is_err());
+    }
+
+    #[test]
+    fn test_state_chain_unchecked() {
+        let s1: State = serde_json::from_str(STATE_1).expect("failed to deserialise State");
+        let s2: State = serde_json::from_str(STATE_2).expect("failed to deserialise State");
+
+        let sc_empty: Result<StateChain> = serde_json::from_str::<StateChainUnchecked>(EMPTY_STATE_CHAIN_UNCHECKED).
+            expect("failed to deserialise StateChainUnchecked").try_into();
+        assert!(sc_empty.is_err());
+
+        let sc1: StateChain = serde_json::from_str::<StateChainUnchecked>(STATE_CHAIN_1)
+            .expect("failed to deserialise StateChainUnchecked")
+            .try_into()
+            .expect("failed to convert");
+
+        let sc2: StateChain = serde_json::from_str::<StateChainUnchecked>(STATE_CHAIN_2)
+            .expect("failed to deserialise StateChainUnchecked")
+            .try_into()
+            .expect("failed to convert");
+
+        assert_eq!(&s1, sc2.get_first(), "StateChain get_first incorrect");
+        assert_eq!(&s2, sc2.get_tip(), "StateChain get_tip incorrect");
+
+        assert!(serde_json::to_string(&sc1).expect("failed to serialize") == STATE_CHAIN_1.to_string());
+        assert!(serde_json::to_string(&sc2).expect("failed to serialize") == STATE_CHAIN_2.to_string());
     }
 
     #[test]
