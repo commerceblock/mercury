@@ -29,14 +29,14 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 /// Withdraw coins from state entity. Returns signed withdraw transaction, statechain_id and withdrawn amount.
-pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid) -> Result<(String, Uuid, u64)> {
+pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid, tx_fee: &u64) -> Result<(String, Uuid, u64)> {
     let vec_scid = vec![*statechain_id];
-    let resp = batch_withdraw(wallet, &vec_scid)?;
+    let resp = batch_withdraw(wallet, &vec_scid, tx_fee)?;
     Ok((resp.0, resp.1[0], resp.2))
 }
 
 /// Withdraw coins from state entity. Returns signed withdraw transaction, statechain_id and withdrawn amount.
-pub fn batch_withdraw(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>) -> Result<(String, Vec<Uuid>, u64)> {
+pub fn batch_withdraw(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>, tx_fee: &u64) -> Result<(String, Vec<Uuid>, u64)> {
     // Generate receiving address of withdrawn funds
     let rec_se_address = wallet.keys.get_new_address()?;
     
@@ -103,6 +103,7 @@ pub fn batch_withdraw(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>) -> Result
         &sc_infos,
         &rec_se_address,
         &se_fee_info,
+        tx_fee
     )?;
     
     // co-sign withdraw tx

@@ -16,7 +16,7 @@ mod tests {
     use curv::elliptic::curves::traits::ECScalar;
     use curv::FE;
     use self::time_test::time_test;
-    use shared_lib::util::transaction_deserialise;
+    use shared_lib::util::{transaction_deserialise, FEE};
     use self::sha3::Sha3_256;
     use self::digest::Digest;
 
@@ -542,7 +542,66 @@ mod tests {
         );
 
         // Try withdraw wrong key
-        assert!(state_entity::withdraw::withdraw(&mut wallet, &Uuid::new_v4()).is_err());
+        assert!(state_entity::withdraw::withdraw(&mut wallet, &Uuid::new_v4()).is_err(), &FEE);
+
+        // Check withdraw method completes without Err
+
+        println!("running withdraw...");
+        run_withdraw(&mut wallet, statechain_id, &FEE);
+        println!("withdraw complete.");
+        
+        // Check marked spent in wallet
+        assert!(!wallet.get_shared_key(shared_key_id).unwrap().unspent);
+
+        // Check state chain is updated
+        let state_chain =
+            state_entity::api::get_statechain(&wallet.client_shim, statechain_id).unwrap();
+        assert_eq!(state_chain.chain.len(), 2);
+
+        // Check chain data is address
+        assert!(state_chain
+            .chain
+            .last()
+            .unwrap()
+            .data
+            .contains(&String::from("bcrt")));
+        // Check purpose of state chain signature
+        assert_eq!(
+            state_chain
+                .chain
+                .get(0)
+                .unwrap()
+                .next_state
+                .clone()
+                .unwrap()
+                .purpose,
+            String::from("WITHDRAW")
+        );
+
+        // Try again after funds already withdrawn
+        let err = state_entity::withdraw::withdraw(&mut wallet, shared_key_id, &FEE);
+        assert!(err.is_err());
+        reset_data(&wallet.client_shim).unwrap();
+    }
+
+    #[test]
+    #[serial]
+    fn test_withdraw_rbf() {
+        time_test!();
+        let _handle = start_server(None, None);
+        let mut wallet = gen_wallet(None);
+
+        let deposit_resp = run_deposit(&mut wallet, &10000);
+        let shared_key_id = &deposit_resp.0;
+        let statechain_id = &deposit_resp.1;
+
+        assert!(wallet.get_shared_key(shared_key_id).unwrap().unspent);
+        assert!(
+            wallet
+                .get_shared_key_by_statechain_id(statechain_id)
+                .unwrap()
+                .unspent
+        );
 
         // Check withdraw method completes without Err
 
@@ -583,6 +642,7 @@ mod tests {
         assert!(err.is_err());
         reset_data(&wallet.client_shim).unwrap();
     }
+
 
     #[test]
     #[serial]

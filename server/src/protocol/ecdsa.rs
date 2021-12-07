@@ -308,7 +308,7 @@ impl Ecdsa for SCE {
             )));
         }
 
-        let mut ws: Vec<Vec<u8>>;
+        let ws: Vec<Vec<u8>>;
 
         match &self.lockbox {
         Some(_) => {

@@ -364,4 +364,111 @@ mod tests {
         // Expect successful run
         assert!(sc_entity.withdraw_confirm(withdraw_msg_2.clone()).is_ok());
     }
+
+    #[test]
+    fn itegration_test_withdraw_rbf_confirm() {
+        let withdraw_msg_1 = serde_json::from_str::<WithdrawMsg1>(WITHDRAW_MSG_1).unwrap();
+        let shared_key_id = withdraw_msg_1.shared_key_ids[0];
+        let statechain_id = Uuid::from_str(STATE_CHAIN_ID).unwrap();
+
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
+        db.expect_get_statechain_id()
+            .with(predicate::eq(shared_key_id))
+            .returning(move |_| Ok(statechain_id));
+        db.expect_get_statechain_owner()
+            .with(predicate::eq(statechain_id))
+            .returning(move |_| {
+                Ok(StateChainOwner {
+                    locked_until: Utc::now().naive_utc(),
+                    owner_id: shared_key_id,
+                    chain: serde_json::from_str::<StateChainUnchecked>(STATE_CHAIN).unwrap().try_into().unwrap(),
+                })
+            });
+        db.expect_update_withdraw_sc_sig().returning(|_, _| Ok(()));
+        //Repeat init (RBF)
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
+        db.expect_get_statechain_id()
+            .with(predicate::eq(shared_key_id))
+            .returning(move |_| Ok(statechain_id));
+        db.expect_get_statechain_owner()
+            .with(predicate::eq(statechain_id))
+            .returning(move |_| {
+                Ok(StateChainOwner {
+                    locked_until: Utc::now().naive_utc(),
+                    owner_id: shared_key_id,
+                    chain: serde_json::from_str::<StateChainUnchecked>(STATE_CHAIN).unwrap().try_into().unwrap(),
+                })
+            });
+        db.expect_update_withdraw_sc_sig().returning(|_, _| Ok(()));
+
+        let sc_entity = test_sc_entity(db, None, None, None, None);
+
+
+        // Expect successful run
+        assert!(sc_entity.withdraw_init(withdraw_msg_1.clone()).is_ok());
+
+        // Expect successful repeated run (replace by fee)
+        assert!(sc_entity.withdraw_init(withdraw_msg_1.clone()).is_ok());
+
+        let shared_key_ids = withdraw_msg_1.shared_key_ids;
+        let withdraw_msg_2 = WithdrawMsg2 {
+            shared_key_ids: shared_key_ids.clone(),
+            address: "bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8".to_string(),
+        };
+        let statechain_id = Uuid::from_str(STATE_CHAIN_ID).unwrap();
+
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
+        db.expect_get_withdraw_confirm_data()
+            .times(1)
+            .returning(move |_| {
+                Ok(WithdrawConfirmData {
+                    tx_withdraw: serde_json::from_str(&BACKUP_TX_NOT_SIGNED).unwrap(), // any tx is fine here
+                    withdraw_sc_sig: serde_json::from_str::<StateChainSig>(
+                        &STATE_CHAIN_SIG.to_string(),
+                    )
+                    .unwrap(),
+                    statechain_id,
+                })
+            });
+        db.expect_get_withdraw_confirm_data().returning(move |_| {
+            Ok(WithdrawConfirmData {
+                tx_withdraw: serde_json::from_str(&BACKUP_TX_SIGNED).unwrap(), // any tx is fine here
+                withdraw_sc_sig: serde_json::from_str::<StateChainSig>(
+                    &STATE_CHAIN_SIG.to_string(),
+                )
+                .unwrap(),
+                statechain_id,
+            })
+        });
+        db.expect_get_statechain()
+            .returning(move |_| Ok(serde_json::from_str::<StateChainUnchecked>(STATE_CHAIN).unwrap().try_into().unwrap()));
+        db.expect_update_statechain_amount()
+            .returning(|_, _, _, _| Ok(()));
+        db.expect_remove_statechain_id().returning(|_| Ok(()));
+        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
+        db.expect_get_root().returning(|_| Ok(None));
+        db.expect_root_update().returning(|_| Ok(1));
+        db.expect_remove_backup_tx().returning(|_| Ok(()));
+
+        let sc_entity = test_sc_entity(db, None, None, None, None);
+        let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
+
+        // Ensure backup tx has been signed
+        match sc_entity.withdraw_confirm(withdraw_msg_2.clone()) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e
+                .to_string()
+                .contains("Signed Back up transaction not found"), "{}", e),
+        }
+
+        // Expect successful run
+        assert!(sc_entity.withdraw_confirm(withdraw_msg_2.clone()).is_ok());
+    }
 }
