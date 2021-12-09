@@ -14,6 +14,7 @@ use rocket_contrib::json::Json;
 use crate::error::SEError;
 use crate::Database;
 use crate::{server::StateChainEntity, storage::Storage};
+use crate::structs::WithdrawConfirmData;
 use cfg_if::cfg_if;
 use uuid::Uuid;
 use rocket_okapi::openapi;
@@ -48,7 +49,12 @@ pub trait Withdraw {
     ///     - Update UserSession, StateChain and Sparse merkle tree
     ///     - Return withdraw tx signature
     fn withdraw_confirm(&self, withdraw_msg2: WithdrawMsg2) -> Result<Vec<Vec<Vec<u8>>>>;
-}
+
+
+    /// Get withdraw confirm data if signed for withdrawal
+    fn get_if_signed_for_withdrawal(&self, user_id: &Uuid) -> Result<WithdrawConfirmData>;
+
+}   
 
 impl Withdraw for SCE {
     //Returns the statechain owner id if the signature is correct
@@ -112,6 +118,7 @@ impl Withdraw for SCE {
             self.database
                 .update_withdraw_sc_sig(&user_id, statechain_sig.clone())?;
 
+
             info!(
                 "WITHDRAW: Authorised. Shared Key ID: {}. State Chain: {}",
                 user_id, statechain_id
@@ -119,6 +126,20 @@ impl Withdraw for SCE {
         }
 
         Ok(())
+    }
+
+    fn get_if_signed_for_withdrawal(&self, user_id: &Uuid) -> Result<WithdrawConfirmData> {
+         // Get withdraw data - Checking that withdraw tx and statechain signature exists
+         let wcd = self.database.get_withdraw_confirm_data(user_id.to_owned())?;
+
+         // Ensure withdraw tx has been signed. i,e, that prepare-sign-tx has been completed.
+         if wcd.tx_withdraw.input[0].witness.len() == 0 {
+             return Err(SEError::Generic(format!(
+                "Signed Back up transaction not found for userid: {} ", user_id
+             )));
+         }
+
+         Ok(wcd)
     }
 
     fn withdraw_confirm(&self, withdraw_msg2: WithdrawMsg2) -> Result<Vec<Vec<Vec<u8>>>> {
@@ -129,14 +150,8 @@ impl Withdraw for SCE {
             info!("WITHDRAW: Confirm. Shared Key ID: {}", user_id.to_string());
 
             // Get withdraw data - Checking that withdraw tx and statechain signature exists
-            let wcd = self.database.get_withdraw_confirm_data(user_id.to_owned())?;
-
-            // Ensure withdraw tx has been signed. i,e, that prepare-sign-tx has been completed.
-            if wcd.tx_withdraw.input[0].witness.len() == 0 {
-                return Err(SEError::Generic(format!(
-                   "Signed Back up transaction not found for userid: {}, {} in tx_withdraw",i, user_id
-                )));
-            }
+            let wcd = self.get_if_signed_for_withdrawal(user_id).map_err(|e| SEError::Generic(
+                format!("{} in withdraw_confirm {}", e, i)))?;
 
             // Get statechain and update with final StateChainSig
             let mut state_chain: StateChain = self.database.get_statechain(wcd.statechain_id)?;

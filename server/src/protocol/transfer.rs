@@ -30,7 +30,7 @@ use rocket_contrib::json::Json;
 use std::str::FromStr;
 use uuid::Uuid;
 use url::Url;
-use crate::protocol::util::{Utilities, RateLimiter};
+use crate::protocol::{util::{Utilities, RateLimiter}, withdraw::Withdraw};
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -90,8 +90,14 @@ impl Transfer for SCE {
     fn transfer_sender(&self, transfer_msg1: TransferMsg1) -> Result<TransferMsg2> {
         self.check_user_auth(&transfer_msg1.shared_key_id)?;
         let user_id = transfer_msg1.shared_key_id;
-
         debug!("TRANSFER: Sender Side. Shared Key ID: {}", user_id);
+
+        if(self.get_if_signed_for_withdrawal(&user_id).is_ok()) {
+            return Err(SEError::Generic(format!("transfer_sender - shared key id: {} is signed for withdrawal", &user_id)));
+        }
+
+
+
 
         // Get state_chain id
         let statechain_id = self.database.get_statechain_id(user_id)?;

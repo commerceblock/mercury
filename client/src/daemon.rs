@@ -21,6 +21,7 @@ use state_entity::api::{get_statechain, get_recovery_data, get_swaps_group_info,
 use uuid::Uuid;
 use wallet::wallet::{DEFAULT_TEST_WALLET_LOC, ElectrumxBox, DEFAULT_WALLET_LOC};
 use crate::utilities::encoding;
+use shared_lib::util::FEE;
 
 /// Example request object
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -234,7 +235,7 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                     DaemonRequest::Withdraw(statechain_id) => {
                         debug!("Daemon: Withdraw");
                         let deposit_res =
-                            state_entity::withdraw::withdraw(&mut wallet, &statechain_id);
+                            state_entity::withdraw::withdraw(&mut wallet, &statechain_id, &FEE);
                         wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(deposit_res))
                     }
