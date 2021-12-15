@@ -11,7 +11,7 @@ use shared_lib::{state_chain::*, structs::*};
 use rocket::State;
 use rocket_contrib::json::Json;
 
-use crate::error::SEError;
+use crate::error::{SEError, DBErrorType};
 use crate::Database;
 use crate::{server::StateChainEntity, storage::Storage};
 use crate::structs::WithdrawConfirmData;
@@ -52,7 +52,7 @@ pub trait Withdraw {
 
 
     /// Get withdraw confirm data if signed for withdrawal
-    fn get_if_signed_for_withdrawal(&self, user_id: &Uuid) -> Result<WithdrawConfirmData>;
+    fn get_if_signed_for_withdrawal(&self, user_id: &Uuid) -> Result<Option<WithdrawConfirmData>>;
 
 }   
 
@@ -128,18 +128,23 @@ impl Withdraw for SCE {
         Ok(())
     }
 
-    fn get_if_signed_for_withdrawal(&self, user_id: &Uuid) -> Result<WithdrawConfirmData> {
+    fn get_if_signed_for_withdrawal(&self, user_id: &Uuid) -> Result<Option<WithdrawConfirmData>> {
          // Get withdraw data - Checking that withdraw tx and statechain signature exists
-         let wcd = self.database.get_withdraw_confirm_data(user_id.to_owned())?;
-
-         // Ensure withdraw tx has been signed. i,e, that prepare-sign-tx has been completed.
-         if wcd.tx_withdraw.input[0].witness.len() == 0 {
-             return Err(SEError::Generic(format!(
-                "Signed Back up transaction not found for userid: {} ", user_id
-             )));
+         match self.database.get_withdraw_confirm_data(user_id.to_owned()){
+             Ok(wcd) => {
+                 // Ensure withdraw tx has been signed. i,e, that prepare-sign-tx has been completed.
+                if wcd.tx_withdraw.input[0].witness.len() == 0 {
+                    return Ok(None)
+                } 
+                Ok(Some(wcd))
+             },
+             Err(e) => {
+                if(format!("{}",e).contains("DB Error: No data for identifier.")){
+                    return Ok(None) 
+                }   
+                Err(e)
+             }
          }
-
-         Ok(wcd)
     }
 
     fn withdraw_confirm(&self, withdraw_msg2: WithdrawMsg2) -> Result<Vec<Vec<Vec<u8>>>> {
@@ -150,8 +155,11 @@ impl Withdraw for SCE {
             info!("WITHDRAW: Confirm. Shared Key ID: {}", user_id.to_string());
 
             // Get withdraw data - Checking that withdraw tx and statechain signature exists
-            let wcd = self.get_if_signed_for_withdrawal(user_id).map_err(|e| SEError::Generic(
-                format!("{} in withdraw_confirm {}", e, i)))?;
+            let wcd = match self.get_if_signed_for_withdrawal(user_id).map_err(|e| SEError::Generic(
+                format!("{} in withdraw_confirm {}", e, i)))? {
+                Some(w) => w,
+                None => return Err(SEError::Generic(format!("Signed Back up transaction not found for user id {}", user_id))),
+            };
 
             // Get statechain and update with final StateChainSig
             let mut state_chain: StateChain = self.database.get_statechain(wcd.statechain_id)?;
@@ -256,7 +264,7 @@ mod tests {
     static STATE_CHAIN_SIG: &str = "{\"purpose\":\"WITHDRAW\",\"data\":\"bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8\",\"sig\":\"304402201abaa7f64b50e8a75ca840a2be6317b501e3b5b5abd057465c165c9b872799f4022000d8e36734857237cab323c7244dd5249295b51905b43bf4e93396b58317d872\"}";
 
     #[test]
-    fn itegration_test_withdraw_init() {
+    fn integration_test_withdraw_init() {
         let withdraw_msg_1 = serde_json::from_str::<WithdrawMsg1>(WITHDRAW_MSG_1).unwrap();
         let shared_key_id = withdraw_msg_1.shared_key_ids[0];
         let statechain_id = Uuid::from_str(STATE_CHAIN_ID).unwrap();
@@ -320,7 +328,7 @@ mod tests {
     }
 
     #[test]
-    fn itegration_test_withdraw_confirm() {
+    fn integration_test_withdraw_confirm() {
         let withdraw_msg_1 = serde_json::from_str::<WithdrawMsg1>(WITHDRAW_MSG_1).unwrap();
         let shared_key_ids = withdraw_msg_1.shared_key_ids;
         let withdraw_msg_2 = WithdrawMsg2 {
@@ -381,7 +389,7 @@ mod tests {
     }
 
     #[test]
-    fn itegration_test_withdraw_rbf_confirm() {
+    fn integration_test_withdraw_rbf_confirm() {
         let withdraw_msg_1 = serde_json::from_str::<WithdrawMsg1>(WITHDRAW_MSG_1).unwrap();
         let shared_key_id = withdraw_msg_1.shared_key_ids[0];
         let statechain_id = Uuid::from_str(STATE_CHAIN_ID).unwrap();

@@ -549,7 +549,7 @@ mock! {
         ) -> withdraw::Result<Vec<Vec<Vec<u8>>>>;
             /// Get withdraw confirm data if signed for withdrawal
         fn get_if_signed_for_withdrawal(&self, user_id: &Uuid) 
-            -> withdraw::Result<WithdrawConfirmData>;
+            -> withdraw::Result<Option<WithdrawConfirmData>>;
     }
     trait Storage{
         fn reset_data(&self) -> storage::Result<()>;

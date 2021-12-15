@@ -608,10 +608,6 @@ mod tests {
         // Check withdraw method completes without Err
         run_withdraw_init(&mut wallet, statechain_id, &(FEE-3));
 
-        
-        let shared_key = wallet
-            .get_shared_key_by_statechain_id(statechain_id)
-            .unwrap();
 
         let receiver_addr = wallet
         .get_new_state_entity_address()
