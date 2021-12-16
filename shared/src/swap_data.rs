@@ -99,6 +99,7 @@ pub struct RegisterUtxo {
     pub statechain_id: Uuid,
     pub signature: StateChainSig,
     pub swap_size: u64,
+    pub wallet_version: String,
 }
 
 #[derive(JsonSchema)]

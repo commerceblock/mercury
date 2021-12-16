@@ -102,6 +102,8 @@ impl Utilities for SCE {
             withdraw: self.config.fee_withdraw,
             interval: self.config.lh_decrement,
             initlock: self.config.lockheight_init,
+            wallet_version: self.config.wallet_version.clone(),
+            wallet_message: self.config.wallet_message.clone(),
         })
     }
 

@@ -143,6 +143,8 @@ pub struct Scheduler {
     daily_epochs: u32,
     //init swap group size,
     max_swap_size: u32,
+    //minimum wallet version number
+    wallet_requirement: f32,
     //State chain id to requested swap size map
     statechain_swap_size_map: BisetMap<Uuid, u64>,
     //A map of state chain registereds for swap to amount
@@ -178,6 +180,7 @@ impl Scheduler {
             group_timeout: 8,
             daily_epochs: config.daily_epochs.clone(),
             max_swap_size: config.max_swap_size.clone(),
+            wallet_requirement: config.swap_wallet_version.clone().parse().expect("invalid wallet version number"),
             statechain_swap_size_map: BisetMap::<Uuid, u64>::new(),
             statechain_amount_map: BisetMap::<Uuid, u64>::new(),
             group_info_map: HashMap::<SwapGroup, GroupStatus>::new(),
@@ -813,6 +816,12 @@ impl Conductor for SCE {
         let sig = &register_utxo_msg.signature;
         let key_id = &register_utxo_msg.statechain_id;
         let swap_size = &register_utxo_msg.swap_size;
+        let wall_version: f32 = register_utxo_msg.wallet_version.parse().expect("invalid wallet version number");
+
+        if wall_version < guard.wallet_requirement {
+            return Err(SEError::SwapError(String::from("Incompatible wallet version: please upgrade to latest version")));
+        }
+
         //Verify the signature
         let _ = self.verify_statechain_sig(key_id, sig, None)?;
         let sc_amount = self.database.get_statechain_amount(*key_id)?;
