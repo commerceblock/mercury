@@ -97,7 +97,7 @@ pub fn batch_withdraw_init(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>, tx_f
         )?;
         statechain_sigs.push(statechain_sig);
     }
-    println!("post withdraw/init...");
+    
     // Alert SE of desire of withdraw and receive authorisation if state chain signature verifies
     requests::postb(
         &wallet.client_shim,
@@ -113,7 +113,7 @@ pub fn batch_withdraw_init(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>, tx_f
     let mut total_amount = 0;
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
     
-    println!("sum amounts...");
+    
     for statechain_id in statechain_ids{
         // Get state chain info
         let sc_info = get_statechain(&wallet.client_shim, &statechain_id)?;
@@ -144,7 +144,7 @@ pub fn batch_withdraw_init(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>, tx_f
     };
     let witness: Vec<Vec<Vec<u8>>> = cosign_tx_input(wallet, &tx_w_prepare_sign_msg)?;
 
-    println!("sign transaction...");
+    
     let mut tx_withdraw_signed = tx_withdraw_unsigned.clone();
     tx_withdraw_signed.input[0].witness = witness[0].clone();
     
