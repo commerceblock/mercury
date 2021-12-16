@@ -29,14 +29,39 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 /// Withdraw coins from state entity. Returns signed withdraw transaction, statechain_id and withdrawn amount.
-pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid) -> Result<(String, Uuid, u64)> {
+pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid, tx_fee: &u64) 
+    -> Result<(String, Uuid, u64)> {
+    println!("running withdraw init...");
+    let (shared_key_id, address, tx_signed, amount) = withdraw_init(wallet, statechain_id, tx_fee)?;
+    println!("running withdraw confirm...");
+    let tx_id = withdraw_confirm(wallet, &shared_key_id, &address, &tx_signed)?;
+    Ok((tx_id, statechain_id.clone(), amount))
+}
+
+pub fn batch_withdraw(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>, tx_fee: &u64) 
+    -> Result<(String, Vec<Uuid>, u64)> {
+    let (shared_key_ids, address, tx_signed, amount) = batch_withdraw_init(wallet, statechain_ids, tx_fee)?;
+    let tx_id = batch_withdraw_confirm(wallet, &shared_key_ids, &address, &tx_signed)?;
+    Ok((tx_id, statechain_ids.clone(), amount))
+}
+
+pub fn withdraw_init(wallet: &mut Wallet, statechain_id: &Uuid, tx_fee: &u64) 
+    -> Result<(Uuid, bitcoin::Address, bitcoin::Transaction, u64)> {
     let vec_scid = vec![*statechain_id];
-    let resp = batch_withdraw(wallet, &vec_scid)?;
-    Ok((resp.0, resp.1[0], resp.2))
+    let (shared_key_ids, address, tx, amount) = batch_withdraw_init(wallet, &vec_scid, tx_fee)?;
+    Ok((shared_key_ids[0].clone(), address, tx, amount))
+}
+
+pub fn withdraw_confirm(wallet: &mut Wallet, shared_key_id: &Uuid, 
+    address: &bitcoin::Address, tx_signed: &bitcoin::Transaction) 
+    -> Result<String> {
+    let vec_shared_key_id = vec![*shared_key_id];
+    batch_withdraw_confirm(wallet, &vec_shared_key_id, address, tx_signed)
 }
 
 /// Withdraw coins from state entity. Returns signed withdraw transaction, statechain_id and withdrawn amount.
-pub fn batch_withdraw(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>) -> Result<(String, Vec<Uuid>, u64)> {
+pub fn batch_withdraw_init(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>, tx_fee: &u64) 
+    -> Result<(Vec<Uuid>, bitcoin::Address, bitcoin::Transaction, u64)> {
     // Generate receiving address of withdrawn funds
     let rec_se_address = wallet.keys.get_new_address()?;
     
@@ -72,6 +97,7 @@ pub fn batch_withdraw(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>) -> Result
         )?;
         statechain_sigs.push(statechain_sig);
     }
+    println!("post withdraw/init...");
     // Alert SE of desire of withdraw and receive authorisation if state chain signature verifies
     requests::postb(
         &wallet.client_shim,
@@ -87,6 +113,7 @@ pub fn batch_withdraw(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>) -> Result
     let mut total_amount = 0;
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
     
+    println!("sum amounts...");
     for statechain_id in statechain_ids{
         // Get state chain info
         let sc_info = get_statechain(&wallet.client_shim, &statechain_id)?;
@@ -103,6 +130,7 @@ pub fn batch_withdraw(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>) -> Result
         &sc_infos,
         &rec_se_address,
         &se_fee_info,
+        tx_fee
     )?;
     
     // co-sign withdraw tx
@@ -114,8 +142,18 @@ pub fn batch_withdraw(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>) -> Result
         input_amounts: amounts,
         proof_key: None,
     };
-    cosign_tx_input(wallet, &tx_w_prepare_sign_msg)?;
+    let witness: Vec<Vec<Vec<u8>>> = cosign_tx_input(wallet, &tx_w_prepare_sign_msg)?;
+
+    println!("sign transaction...");
+    let mut tx_withdraw_signed = tx_withdraw_unsigned.clone();
+    tx_withdraw_signed.input[0].witness = witness[0].clone();
     
+    Ok((shared_key_ids, rec_se_address, tx_withdraw_signed, total_amount - se_fee_info.withdraw))
+}
+ 
+pub fn batch_withdraw_confirm(wallet: &mut Wallet, shared_key_ids: &Vec<Uuid>, 
+    rec_se_address: &bitcoin::Address, tx_withdraw_signed: &bitcoin::Transaction) 
+    -> Result<String> {
     let witness: Vec<Vec<Vec<u8>>> = requests::postb(
         &wallet.client_shim,
         &format!("/withdraw/confirm"),
@@ -125,8 +163,7 @@ pub fn batch_withdraw(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>) -> Result
         },
     )?;
     
-    let mut tx_withdraw_signed = tx_withdraw_unsigned.clone();
-    tx_withdraw_signed.input[0].witness = witness[0].clone();
+    assert!(tx_withdraw_signed.input[0].witness == witness[0]);
 
     // Mark funds as withdrawn in wallet
     for shared_key_id in shared_key_ids
@@ -139,12 +176,8 @@ pub fn batch_withdraw(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>) -> Result
     let withdraw_txid = wallet
         .electrumx_client
         .instance
-        .broadcast_transaction(hex::encode(consensus::serialize(&tx_withdraw_signed)))?;
+        .broadcast_transaction(hex::encode(consensus::serialize(&tx_withdraw_signed.to_owned())))?;
     debug!("Withdraw: Withdrawal tx broadcast. txid: {}", withdraw_txid);
 
-    Ok((
-        withdraw_txid,
-        statechain_ids.to_owned(),
-        total_amount - se_fee_info.withdraw,
-    ))
+    Ok(withdraw_txid)
 }

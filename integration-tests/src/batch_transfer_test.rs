@@ -369,6 +369,7 @@ mod tests {
             match state_entity::withdraw::withdraw(
                 &mut wallets[i],
                 &deposits[i].1, // state chain id
+                &FEE,
             ) {
                 Err(e) => assert!(e.to_string().contains("State Chain locked for")),
                 _ => assert!(false),
@@ -408,6 +409,7 @@ mod tests {
         match state_entity::withdraw::withdraw(
             &mut wallets[0],
             &deposits[0].1, // state chain id
+            &FEE,
         ) {
             Err(e) => assert!(e.to_string().contains("State Chain locked for")),
             _ => assert!(false),
@@ -416,12 +418,14 @@ mod tests {
         assert!(state_entity::withdraw::withdraw(
             &mut wallets[1],
             &deposits[1].1, // state chain id
+            &FEE,
         )
         .is_ok());
 
         match state_entity::withdraw::withdraw(
             &mut wallets[2],
             &deposits[2].1, // state chain id
+            &FEE,
         ) {
             Err(e) => assert!(e.to_string().contains("State Chain locked for")),
             _ => assert!(false),
