@@ -1,7 +1,7 @@
 use super::protocol::conductor::Scheduler;
 use super::protocol::*;
 use crate::config::{Config, Mode};
-use crate::structs::StateChainOwner;
+use crate::structs::{StateChainOwner, WithdrawConfirmData};
 use crate::Database;
 use shared_lib::{mainstay, state_chain::StateChainSig, swap_data::*};
 
@@ -547,6 +547,9 @@ mock! {
             &self,
             withdraw_msg2: WithdrawMsg2,
         ) -> withdraw::Result<Vec<Vec<Vec<u8>>>>;
+            /// Get withdraw confirm data if signed for withdrawal
+        fn get_if_signed_for_withdrawal(&self, user_id: &Uuid) 
+            -> withdraw::Result<Option<WithdrawConfirmData>>;
     }
     trait Storage{
         fn reset_data(&self) -> storage::Result<()>;

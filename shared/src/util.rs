@@ -227,7 +227,8 @@ pub fn tx_backup_build(
 pub fn tx_withdraw_build(
     sc_infos: &Vec::<StateChainDataAPI>,
     rec_se_address: &Address,
-    se_fee_info: &StateEntityFeeInfoAPI
+    se_fee_info: &StateEntityFeeInfoAPI,
+    tx_fee: &u64
 ) -> Result<Transaction> {
     let mut txins = Vec::<TxIn>::new();
 
@@ -253,7 +254,7 @@ pub fn tx_withdraw_build(
 
     let fee = (amount*se_fee_info.withdraw) / 10000 as u64;
 
-    if fee + FEE >= amount {
+    if fee + tx_fee >= amount {
         return Err(SharedLibError::FormatError(String::from(
             "Not enough value to cover fees.",
         )));
@@ -267,7 +268,7 @@ pub fn tx_withdraw_build(
         output: vec![
             TxOut {
                 script_pubkey: rec_se_address.script_pubkey(),
-                value: amount - fee - FEE,
+                value: amount - fee - tx_fee,
             },
             TxOut {
                 script_pubkey: Address::from_str(&se_fee_info.address)?.script_pubkey(),

@@ -1,7 +1,7 @@
 
 [package]
 name = "shared"
-version = "0.2.5"
+version = "0.2.6"
 authors = [
 	"Lawrence Deacon <lawrence.deacon@gmail.com>",
   "Tomos <tomos@commerceblock.com"

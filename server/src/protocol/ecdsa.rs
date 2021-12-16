@@ -308,7 +308,7 @@ impl Ecdsa for SCE {
             )));
         }
 
-        let mut ws: Vec<Vec<u8>>;
+        let ws: Vec<Vec<u8>>;
 
         match &self.lockbox {
         Some(_) => {
@@ -386,8 +386,6 @@ impl Ecdsa for SCE {
                 // Store signed withdraw tx in UserSession DB object
                 db.update_tx_withdraw(user_id, tx)?;
                 info!("WITHDRAW: Tx signed and stored. User ID: {}", user_id);
-                // Do not return withdraw tx witness until /withdraw/confirm is complete
-                ws = vec![];
             }
             _ => {
                 // Store signed backup tx in UserSession DB object

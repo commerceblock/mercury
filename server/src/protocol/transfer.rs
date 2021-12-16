@@ -30,7 +30,7 @@ use rocket_contrib::json::Json;
 use std::str::FromStr;
 use uuid::Uuid;
 use url::Url;
-use crate::protocol::util::{Utilities, RateLimiter};
+use crate::protocol::{util::{Utilities, RateLimiter}, withdraw::Withdraw};
 
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
@@ -90,8 +90,14 @@ impl Transfer for SCE {
     fn transfer_sender(&self, transfer_msg1: TransferMsg1) -> Result<TransferMsg2> {
         self.check_user_auth(&transfer_msg1.shared_key_id)?;
         let user_id = transfer_msg1.shared_key_id;
-
         debug!("TRANSFER: Sender Side. Shared Key ID: {}", user_id);
+
+        if(self.get_if_signed_for_withdrawal(&user_id)?.is_some()) {
+            return Err(SEError::Generic(format!("transfer_sender - shared key id: {} is signed for withdrawal", &user_id)));
+        }
+
+
+
 
         // Get state_chain id
         let statechain_id = self.database.get_statechain_id(user_id)?;
@@ -507,6 +513,7 @@ mod tests {
     use bitcoin::Transaction;
     use crate::shared_lib::util::transaction_serialise;
     use std::convert::TryInto;
+    use crate::structs::WithdrawConfirmData;
 
     // Data from a run of transfer protocol.
     // static TRANSFER_MSG_1: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"}}";
@@ -517,7 +524,8 @@ mod tests {
     pub static PARTY_1_PRIVATE: &str = "{\"x1\":\"90dcad79e709cd0e9721ea530bdaae824f25d694f9141d44c34f8c45b83a619a\",\"paillier_priv\":{\"p\":\"114413871311317346857216248124398373253057789180865139463658909581309809925099684086705518674269955826879417786610662265699564218950421752552463442949710298739699236291018601890635623572620844010612962848524109675418307426543377258756575401823280458998724649947851944337182752344801543308408780339793598493911\",\"q\":\"143642110993616480789938157546368017212072711379036975069374679010429977311234473719247827342504091910445056259588213765288791327321051188553463176893894215343606711582011189827766980183694378516680292236218631062799658567268548617381466151102553381323573366960980002823730109177797219479930574386517898816387\"},\"c_key_randomness\":\"185cb997a51310b4d9b8d58db7b6c6bd401e92af0f310aa7d91421be8396ba2cd521225b4cefe13341a7a609f4c06a7632231fbbc2ee3d3e62387e13d62ca3e9ca43ab89da60a139177c309d86651d4283463d40c5b9cb842156ba0591d436743a4fcd34863df434f724a4f67b694904a6de829e8ab70b7c79930b7230b2bab65653ade92da15dd31d3a6a34227a323322868d84e162cffe4c731e8b5e83f0921c69d48ebe9c2fcbe976dd59ab38709cf76ae155f33916333938a22551aea66a2c2ccd40712d55b2d8f477354700d83f179010d6374971a9994dfe5d67bcc69ef07f48a5034b5e63953eed4ab15ac9d40162a9bb1c66c70fca85bd625cea4fc7\"}";
     pub static PARTY_2_PUBLIC: &str = "{\"x\":\"5220bc6ebcc83d0a1e4482ab1f2194cb69648100e8be78acde47ca56b996bd9e\",\"y\":\"8dfbb36ef76f2197598738329ffab7d3b3a06d80467db8e739c6b165abc20231\"}";
     static STATE_CHAIN: &str = "{\"chain\":[{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}]}";
-
+    static STATE_CHAIN_SIG: &str = "{\"purpose\":\"WITHDRAW\",\"data\":\"bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8\",\"sig\":\"304402201abaa7f64b50e8a75ca840a2be6317b501e3b5b5abd057465c165c9b872799f4022000d8e36734857237cab323c7244dd5249295b51905b43bf4e93396b58317d872\"}";
+    
     #[test]
     fn test_transfer_sender() {
         let transfer_msg_4 =
@@ -542,6 +550,19 @@ mod tests {
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth()
            .returning(|_user_id| Ok(String::from("user_auth")));
+
+           db.expect_get_withdraw_confirm_data()
+           .returning(move |_| {
+               Ok(WithdrawConfirmData {
+                   tx_withdraw: serde_json::from_str(&BACKUP_TX_NOT_SIGNED).unwrap(), // any tx is fine here
+                   withdraw_sc_sig: serde_json::from_str::<StateChainSig>(
+                       &STATE_CHAIN_SIG.to_string(),
+                   )
+                   .unwrap(),
+                   statechain_id,
+               })
+           });
+
         db.expect_get_statechain_id()
             .with(predicate::eq(shared_key_id))
             .returning(move |_| Ok(statechain_id));

@@ -34,6 +34,7 @@ use shared_lib::{
     mainstay,
     state_chain::StateChainSig,
     structs::{BatchData, PrepareSignTxMsg, SCEAddress},
+    util::FEE,
 };
 
 use std::env;
@@ -236,8 +237,30 @@ pub fn run_confirm_proofs(wallet: &mut Wallet) -> Vec<Uuid> {
 /// Run withdraw of shared key ID given
 pub fn run_withdraw(wallet: &mut Wallet, statechain_id: &Uuid) -> (String, Uuid, u64) {
     let start = Instant::now();
-    let resp = state_entity::withdraw::withdraw(wallet, &statechain_id).unwrap();
+    let resp = state_entity::withdraw::withdraw(wallet, &statechain_id, &FEE).unwrap();
     println!("(Withdraw Took: {})", TimeFormat(start.elapsed()));
+    
+    resp
+}
+
+/// Run withdraw init of shared key ID and fee given
+pub fn run_withdraw_init(wallet: &mut Wallet, statechain_id: &Uuid, fee: &u64) 
+    -> (Uuid,bitcoin::Address, bitcoin::Transaction, u64) {
+    let start = Instant::now();
+    let resp = state_entity::withdraw::withdraw_init(wallet, &statechain_id, fee).unwrap();
+    println!("(Withdraw Init Took: {})", TimeFormat(start.elapsed()));
+    
+    resp
+}
+
+/// Run withdraw confirm 
+pub fn run_withdraw_confirm(wallet: &mut Wallet, shared_key_id: &Uuid, 
+    address: &bitcoin::Address, tx_signed: &bitcoin::Transaction) 
+    -> String {
+    let start = Instant::now();
+    let resp = state_entity::withdraw::withdraw_confirm(wallet, shared_key_id,
+        address, tx_signed).unwrap();
+    println!("(Withdraw Init Took: {})", TimeFormat(start.elapsed()));
     
     resp
 }
@@ -245,7 +268,7 @@ pub fn run_withdraw(wallet: &mut Wallet, statechain_id: &Uuid) -> (String, Uuid,
 /// Run withdraw of shared key IDs given
 pub fn run_batch_withdraw(wallet: &mut Wallet, statechain_ids: &Vec::<Uuid>) -> (String, Vec::<Uuid>, u64) {
     let start = Instant::now();
-    let resp = state_entity::withdraw::batch_withdraw(wallet, statechain_ids).unwrap();
+    let resp = state_entity::withdraw::batch_withdraw(wallet, statechain_ids, &FEE).unwrap();
     println!("(Withdraw Took: {})", TimeFormat(start.elapsed()));
     
     resp
