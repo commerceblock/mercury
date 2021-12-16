@@ -11,7 +11,7 @@ use shared_lib::{state_chain::*, structs::*};
 use rocket::State;
 use rocket_contrib::json::Json;
 
-use crate::error::{SEError, DBErrorType};
+use crate::error::SEError;
 use crate::Database;
 use crate::{server::StateChainEntity, storage::Storage};
 use crate::structs::WithdrawConfirmData;
