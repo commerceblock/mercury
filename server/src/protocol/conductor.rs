@@ -39,6 +39,7 @@ use schemars;
 use bitcoin::secp256k1::Signature;
 use chrono::{NaiveDateTime, Utc, Duration,Timelike};
 use crate::protocol::util::RateLimiter;
+use versions::Versioning;
 
 const MIN_AMOUNT: u64 = 100000; // bitcoin tx nlocktime cutoff
 const SECONDS_DAY: u32 = 86400;
@@ -144,7 +145,7 @@ pub struct Scheduler {
     //init swap group size,
     max_swap_size: u32,
     //minimum wallet version number
-    wallet_requirement: f32,
+    wallet_requirement: String,
     //State chain id to requested swap size map
     statechain_swap_size_map: BisetMap<Uuid, u64>,
     //A map of state chain registereds for swap to amount
@@ -180,7 +181,7 @@ impl Scheduler {
             group_timeout: 8,
             daily_epochs: config.daily_epochs.clone(),
             max_swap_size: config.max_swap_size.clone(),
-            wallet_requirement: config.swap_wallet_version.clone().parse().expect("invalid wallet version number"),
+            wallet_requirement: config.swap_wallet_version.clone(),
             statechain_swap_size_map: BisetMap::<Uuid, u64>::new(),
             statechain_amount_map: BisetMap::<Uuid, u64>::new(),
             group_info_map: HashMap::<SwapGroup, GroupStatus>::new(),
@@ -816,9 +817,11 @@ impl Conductor for SCE {
         let sig = &register_utxo_msg.signature;
         let key_id = &register_utxo_msg.statechain_id;
         let swap_size = &register_utxo_msg.swap_size;
-        let wall_version: f32 = register_utxo_msg.wallet_version.parse().expect("invalid wallet version number");
 
-        if wall_version < guard.wallet_requirement {
+        let wall_version = Versioning::new(&register_utxo_msg.wallet_version).expect("invalid wallet version number");
+        let req_version = Versioning::new(&guard.wallet_requirement).expect("invalid wallet version number");
+
+        if wall_version < req_version {
             return Err(SEError::SwapError(String::from("Incompatible wallet version: please upgrade to latest version")));
         }
 
@@ -1308,6 +1311,7 @@ mod tests {
         let now: NaiveDateTime = Utc::now().naive_utc();
         let t = now + chrono::Duration::seconds(utxo_timeout as i64);
         let t_swap = now + chrono::Duration::seconds(group_timeout as i64);
+        let wallet_requirement: String = "0.4.66".to_string();
 
 
         let statechain_swap_size_map = BisetMap::new();
@@ -1328,6 +1332,7 @@ mod tests {
             group_timeout,
             daily_epochs,
             max_swap_size,
+            wallet_requirement,
             statechain_swap_size_map,
             statechain_amount_map,
             group_info_map: HashMap::<SwapGroup,GroupStatus>::new(),
@@ -1546,6 +1551,7 @@ mod tests {
             statechain_id,
             signature: invalid_signature,
             swap_size: 10,
+            wallet_version: "0.4.66".to_string()
         }) {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(
@@ -1562,6 +1568,7 @@ mod tests {
                 statechain_id,
                 signature: signature,
                 swap_size: 10,
+                wallet_version: "0.4.66".to_string()
             })
             .is_ok());
 
@@ -2022,10 +2029,12 @@ mod tests {
             StateChainSig::new(&proof_key_priv, &"SWAP".to_string(), &proof_key.to_string())
                 .unwrap();
         let swap_size: u64 = 10;
+        let wallet_version: String = "0.4.66".to_string();
         let _ = conductor.register_utxo(&RegisterUtxo {
             statechain_id,
             signature,
             swap_size,
+            wallet_version,
         });
 
         // Poll status of UTXO until a swap_id is returned signaling that utxo is involved in a swap.
