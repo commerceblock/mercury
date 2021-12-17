@@ -108,6 +108,10 @@ pub struct StateEntityFeeInfoAPI {
     pub interval: u32,   // locktime decrement interval in blocks
     /// The initial nLocktime from the current blockheight for the first backup
     pub initlock: u32,   // inital backup locktime
+    /// The minumum wallet version required
+    pub wallet_version: String,
+    /// Message to display to all wallet users on startup
+    pub wallet_message: String,
 }
 
 impl StateEntityFeeInfoAPI{
@@ -118,6 +122,8 @@ impl StateEntityFeeInfoAPI{
             withdraw: 300,
             interval: 144,
             initlock: 14400,
+            wallet_version: "0.4.65".to_string(),
+            wallet_message: "Warning".to_string(),
         }
     }
 }

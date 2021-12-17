@@ -35,6 +35,8 @@ pub struct ConductorConfig {
     pub daily_epochs: u32,
     /// The max swap size
     pub max_swap_size: u32,
+    /// Minimum wallet version for swaps
+    pub swap_wallet_version: String,
 }
 
 impl Default for ConductorConfig {
@@ -45,6 +47,7 @@ impl Default for ConductorConfig {
             punishment_duration: 300,
             daily_epochs: 240,
             max_swap_size: 5,
+            swap_wallet_version: "0.4.66".to_string(),
         }
     }
 }
@@ -161,8 +164,12 @@ pub struct Config {
     pub rate_limit_fast: Option<NonZeroU32>,
     /// Rate limit (per second) for certain API calls - must be non-zero
     pub rate_limit_id: Option<NonZeroU32>,
-    /// Wether to check the deposit proof of work challenge
-    pub deposit_pow: bool
+    /// Whether to check the deposit proof of work challenge
+    pub deposit_pow: bool,
+    /// Minimum wallet version required
+    pub wallet_version: String,
+    /// Server message for wallet users
+    pub wallet_message: String,
 }
 
 impl Default for Config {
@@ -192,6 +199,8 @@ impl Default for Config {
             rate_limit_fast: None,
             rate_limit_id: None,
             deposit_pow: true,
+            wallet_version: "0.4.66".to_string(),
+            wallet_message: "".to_string(),
         }
     }
 }
