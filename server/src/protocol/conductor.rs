@@ -146,6 +146,8 @@ pub struct Scheduler {
     max_swap_size: u32,
     //minimum wallet version number
     wallet_requirement: String,
+    //punished coins with expiry time
+    punishment_map: HashMap<Uuid, NaiveDateTime>,
     //State chain id to requested swap size map
     statechain_swap_size_map: BisetMap<Uuid, u64>,
     //A map of state chain registereds for swap to amount
@@ -182,6 +184,7 @@ impl Scheduler {
             daily_epochs: config.daily_epochs.clone(),
             max_swap_size: config.max_swap_size.clone(),
             wallet_requirement: config.swap_wallet_version.clone(),
+            punishment_map: HashMap::<Uuid, NaiveDateTime>::new(),
             statechain_swap_size_map: BisetMap::<Uuid, u64>::new(),
             statechain_amount_map: BisetMap::<Uuid, u64>::new(),
             group_info_map: HashMap::<SwapGroup, GroupStatus>::new(),
@@ -548,6 +551,19 @@ impl Scheduler {
                 match Self::get_swap_timeout(&self.swap_timeout_map, &swap_info.swap_token.id) {
                     Some(true) => (),
                     _ => {
+
+
+
+
+
+
+//////// CHECK FOR BLAME HERE AND ADD TO PUNISHMENT LIST
+
+
+
+
+
+
                         remove_list.push_back(swap_info.swap_token.id);
                         continue;
                     }
