@@ -38,6 +38,7 @@ pub fn transfer_sender(
     wallet: &mut Wallet,
     statechain_id: &Uuid,
     receiver_addr: SCEAddress,
+    batch_id: Option<Uuid>
 ) -> Result<TransferMsg3> {
     // Get required shared key data
     let shared_key_id;
@@ -77,6 +78,7 @@ pub fn transfer_sender(
         &TransferMsg1 {
             shared_key_id: shared_key_id.to_owned(),
             statechain_sig: statechain_sig.clone(),
+            batch_id: batch_id,
         },
     )?;
 

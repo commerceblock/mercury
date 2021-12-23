@@ -696,6 +696,8 @@ pub struct TransferMsg1 {
     #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
     pub statechain_sig: StateChainSig,
+    #[schemars(with = "UuidDef")]
+    pub batch_id: Option<Uuid>,
 }
 
 #[derive(JsonSchema)]

@@ -130,6 +130,7 @@ pub enum Column {
     StateChainSig,
     X1,
     TransferMsg,
+    BatchId,
 
     // TransferBatch
     // Id,
@@ -332,6 +333,7 @@ impl PGDatabase {
                 x1 varchar,
                 transfermsg varchar,
                 proofkey varchar,
+                batchid uuid,
                 PRIMARY KEY (id)
             );",
                 Table::Transfer.to_string(),
@@ -1296,20 +1298,35 @@ impl Database for PGDatabase {
         statechain_id: &Uuid,
         statechain_sig: &StateChainSig,
         x1: &FE,
+        batch_id: Option<Uuid>
     ) -> Result<()> {
         // Create Transfer table entry
         if(!self.transfer_is_completed(statechain_id.clone())) {
             self.insert(&statechain_id, Table::Transfer)?;
         }
-        self.update(
-            statechain_id,
-            Table::Transfer,
-            vec![Column::StateChainSig, Column::X1],
-            vec![
-                &Self::ser(statechain_sig.to_owned())?,
-                &Self::ser(x1.to_owned())?,
-            ],
-        )
+        if batch_id.is_some() {
+            self.update(
+                statechain_id,
+                Table::Transfer,
+                vec![Column::StateChainSig, Column::X1, Column::BatchId],
+                vec![
+                    &Self::ser(statechain_sig.to_owned())?,
+                    &Self::ser(x1.to_owned())?,
+                    &batch_id.unwrap().to_owned(),
+                ],
+            )
+        } else {
+            self.update(
+                statechain_id,
+                Table::Transfer,
+                vec![Column::StateChainSig, Column::X1, Column::BatchId],
+                vec![
+                    &Self::ser(statechain_sig.to_owned())?,
+                    &Self::ser(x1.to_owned())?,
+                    &None::<Uuid>
+                ],
+            )
+        }
     }
 
     fn update_transfer_msg(&self, statechain_id: &Uuid, msg: &TransferMsg3) -> Result<()> {
@@ -1372,10 +1389,10 @@ impl Database for PGDatabase {
     }
 
     fn get_transfer_data(&self, statechain_id: Uuid) -> Result<TransferData> {
-        let (statechain_id, statechain_sig_str, x1_str) = self.get_3::<Uuid, String, String>(
+        let (statechain_id, statechain_sig_str, x1_str, batch_id) = self.get_4::<Uuid, String, String, Option<Uuid>>(
             statechain_id,
             Table::Transfer,
-            vec![Column::Id, Column::StateChainSig, Column::X1],
+            vec![Column::Id, Column::StateChainSig, Column::X1, Column::BatchId],
         )?;
 
         let statechain_sig: StateChainSig = Self::deser(statechain_sig_str)?;
@@ -1385,6 +1402,7 @@ impl Database for PGDatabase {
             statechain_id,
             statechain_sig,
             x1,
+            batch_id,
         });
     }
 

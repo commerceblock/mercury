@@ -289,6 +289,7 @@ pub fn run_transfer(
         &mut wallets[sender_index],
         statechain_id,
         receiver_addr.clone(),
+        None
     )
     .unwrap();
 
@@ -331,6 +332,7 @@ pub fn run_transfer_with_commitment(
         &mut wallets[sender_index],
         sender_statechain_id,
         receiver_addr.clone(),
+        Some(batch_id.clone())
     )
     .unwrap();
 
@@ -342,6 +344,16 @@ pub fn run_transfer_with_commitment(
     }
 
     let (commitment, nonce) = make_commitment(&commitment_data);
+
+    // check that we cannot run transfer_receiver without batch data
+    match state_entity::transfer::transfer_receiver(
+        &mut wallets[receiver_index],
+        &mut tranfer_sender_resp.clone(),
+        &None
+        ) {
+        Err(e) => assert!(e.to_string().contains("Expect receive in batch ID")),
+        _ => assert!(false),
+    }
 
     let transfer_finalized_data = state_entity::transfer::transfer_receiver(
         &mut wallets[receiver_index],
