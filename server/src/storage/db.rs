@@ -1312,17 +1312,18 @@ impl Database for PGDatabase {
                 vec![
                     &Self::ser(statechain_sig.to_owned())?,
                     &Self::ser(x1.to_owned())?,
-                    &Self::ser(batch_id.unwrap().to_owned())?,
+                    &batch_id.unwrap().to_owned(),
                 ],
             )
         } else {
             self.update(
                 statechain_id,
                 Table::Transfer,
-                vec![Column::StateChainSig, Column::X1],
+                vec![Column::StateChainSig, Column::X1, Column::BatchId],
                 vec![
                     &Self::ser(statechain_sig.to_owned())?,
                     &Self::ser(x1.to_owned())?,
+                    &None::<Uuid>
                 ],
             )
         }

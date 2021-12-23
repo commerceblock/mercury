@@ -191,6 +191,7 @@ mod tests {
             &mut wallets[0],
             &statechain_ids[0],
             receiver_addr.clone(),
+            Some(batch_id.clone()),
         ) {
             Err(e) => {
                 assert!(e.to_string().contains("State Chain not owned by User ID:"));
@@ -360,6 +361,7 @@ mod tests {
                 &mut wallets[i],
                 &deposits[i].1, // state chain id
                 receiver_addr.clone(),
+                Some(batch_id.clone())
             ) {
                 Err(e) => {
                     assert!(e.to_string().contains("State Chain locked for"));

@@ -312,6 +312,7 @@ mod tests {
             &mut wallets[0],
             &statechain_id,
             receiver_addr.clone(),
+            None
         )
         .unwrap();
 
@@ -325,6 +326,7 @@ mod tests {
             &mut wallets[0],
             &statechain_id,
             receiver_addr.clone(),
+            None
         )
         .unwrap();
 
@@ -618,6 +620,7 @@ mod tests {
             &mut wallet,
             statechain_id,
             receiver_addr.clone(),
+            None
         );
         assert!(send_result.is_err() && format!("{:?}",send_result)
         .contains("is signed for withdrawal"));
