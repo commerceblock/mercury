@@ -38,6 +38,7 @@ pub fn transfer_sender(
     wallet: &mut Wallet,
     statechain_id: &Uuid,
     receiver_addr: SCEAddress,
+    batch_id: Option<Uuid>
 ) -> Result<TransferMsg3> {
     // Get required shared key data
     let shared_key_id;
@@ -77,6 +78,7 @@ pub fn transfer_sender(
         &TransferMsg1 {
             shared_key_id: shared_key_id.to_owned(),
             statechain_sig: statechain_sig.clone(),
+            batch_id: batch_id,
         },
     )?;
 
@@ -172,6 +174,16 @@ pub fn transfer_receiver(
     wallet: &mut Wallet,
     transfer_msg3: &mut TransferMsg3,
     batch_data: &Option<BatchData>,
+) -> Result<TransferFinalizeData> {
+    transfer_receiver_repeat_keygen(wallet,transfer_msg3,batch_data,0)
+}
+
+/// Receiver side of Transfer protocol.
+pub fn transfer_receiver_repeat_keygen(
+    wallet: &mut Wallet,
+    transfer_msg3: &mut TransferMsg3,
+    batch_data: &Option<BatchData>,
+    keygen1_reps: u32
 ) -> Result<TransferFinalizeData> {
     //Decrypt the message on receipt
     match wallet.decrypt(transfer_msg3) {
@@ -308,7 +320,7 @@ pub fn transfer_receiver(
     tx_backup_psm.shared_key_ids = vec![transfer_msg5.new_shared_key_id.clone()];
 
     // Data to update wallet with transfer. Should only be applied after StateEntity has finalized.
-    let finalize_data = TransferFinalizeData {
+    let mut finalize_data = TransferFinalizeData {
         new_shared_key_id: transfer_msg5.new_shared_key_id,
         o2,
         s2_pub: transfer_msg5.s2_pub,
@@ -321,7 +333,7 @@ pub fn transfer_receiver(
     // In batch case this step is performed once all other transfers in the batch are complete.
     if batch_data.is_none() {
         // Finalize protocol run by generating new shared key and updating wallet.
-        transfer_receiver_finalize(wallet, finalize_data.clone())?;
+        transfer_receiver_finalize_repeat_keygen(wallet, &mut finalize_data, keygen1_reps)?;
     }
 
     Ok(finalize_data)
@@ -345,11 +357,21 @@ pub fn transfer_receiver_finalize(
     wallet: &mut Wallet,
     mut finalize_data: TransferFinalizeData,
 ) -> Result<()> {
+    transfer_receiver_finalize_repeat_keygen(wallet, &mut finalize_data, 0)
+} 
+
+
+pub fn transfer_receiver_finalize_repeat_keygen(
+    wallet: &mut Wallet,
+    mut finalize_data: &mut TransferFinalizeData,
+    keygen1_reps: u32
+) -> Result<()> {
     // Make shared key with new private share
-    wallet.gen_shared_key_fixed_secret_key(
+    wallet.gen_shared_key_fixed_secret_key_repeat_keygen(
         &finalize_data.new_shared_key_id,
         &finalize_data.o2.get_element(),
         &finalize_data.statechain_data.amount,
+        keygen1_reps
     )?;
 
     // shared pk

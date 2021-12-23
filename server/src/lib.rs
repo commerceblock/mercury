@@ -184,6 +184,7 @@ pub trait Database {
         statechain_id: &Uuid,
         statechain_sig: &StateChainSig,
         x1: &FE,
+        batch_id: Option<Uuid>
     ) -> Result<()>;
     fn update_transfer_msg(&self, statechain_id: &Uuid, msg: &TransferMsg3) -> Result<()>;
     fn get_transfer_msg(&self, statechain_id: &Uuid) -> Result<TransferMsg3>;
@@ -324,6 +325,7 @@ pub mod structs {
         pub statechain_id: Uuid,
         pub statechain_sig: StateChainSig,
         pub x1: FE,
+        pub batch_id: Option<Uuid>,
     }
 
     pub struct ECDSAKeypair {

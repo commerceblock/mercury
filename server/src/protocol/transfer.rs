@@ -96,9 +96,6 @@ impl Transfer for SCE {
             return Err(SEError::Generic(format!("transfer_sender - shared key id: {} is signed for withdrawal", &user_id)));
         }
 
-
-
-
         // Get state_chain id
         let statechain_id = self.database.get_statechain_id(user_id)?;
 
@@ -128,7 +125,7 @@ impl Transfer for SCE {
         let x1_ser = FESer::from_fe(&x1);
 
         self.database
-            .create_transfer(&statechain_id, &transfer_msg1.statechain_sig, &x1)?;
+            .create_transfer(&statechain_id, &transfer_msg1.statechain_sig, &x1, transfer_msg1.batch_id)?;
 
         info!(
             "TRANSFER: Sender side complete. Previous shared key ID: {}. State Chain ID: {}",
@@ -182,6 +179,24 @@ impl Transfer for SCE {
                 "State chain siganture provided does not match state chain at id {}",
                 statechain_id
             )));
+        }
+
+        // Check if batch transfer and batch ID matches
+        if td.batch_id.is_some() {
+            if transfer_msg4.batch_data.is_some() {
+                let batch_id = transfer_msg4.batch_data.clone().unwrap().id;
+                if batch_id != td.batch_id.unwrap() {
+                    return Err(SEError::Generic(format!(
+                        "Incorrect batch ID for receive. Expected {}",
+                        td.batch_id.unwrap()
+                    )));                
+                }
+            } else {
+                return Err(SEError::Generic(format!(
+                    "Expect receive in batch ID {}",
+                    td.batch_id.unwrap()
+                )));
+            }
         }
 
         let s2: FE;
@@ -541,6 +556,7 @@ mod tests {
         let transfer_msg_1 = TransferMsg1 {
             shared_key_id,
             statechain_sig,
+            batch_id: None
         };
 
         let mut db = MockDatabase::new();
@@ -600,7 +616,7 @@ mod tests {
                     chain: serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap().try_into().unwrap(),
                 })
             });
-        db.expect_create_transfer().returning(|_, _, _| Ok(()));
+        db.expect_create_transfer().returning(|_, _, _, _| Ok(()));
         db.expect_update_transfer_msg().returning(|_, _| Ok(()));
         db.expect_set_confirmed().returning(|_| Ok(()));
 
@@ -662,6 +678,7 @@ mod tests {
                     .unwrap()
                     .statechain_sig,
                     x1,
+                    batch_id: None
                 })
             });
         db.expect_get_ecdsa_keypair()
@@ -806,6 +823,7 @@ mod tests {
                     .unwrap()
                     .statechain_sig,
                     x1,
+                    batch_id: None
                 })
             });
         db.expect_get_ecdsa_keypair()

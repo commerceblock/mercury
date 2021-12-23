@@ -246,6 +246,7 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                             &mut wallet,
                             &statechain_id,
                             sce_address,
+                            None
                         );
                         let encoded_message = encoding::encode_message(transfer_sender_resp.unwrap());
                         wallet.save();
@@ -264,6 +265,7 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                                 &mut wallet,
                                 &statechain_ids[0],
                                 sce_address,
+                                None
                             );
                             encoded_message = encoding::encode_message(transfer_sender_resp.unwrap()).unwrap();
                             wallet.save();

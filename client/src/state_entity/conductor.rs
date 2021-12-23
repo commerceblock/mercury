@@ -46,6 +46,7 @@ pub fn swap_register_utxo(wallet: &Wallet, statechain_id: &Uuid, swap_size: &u64
             statechain_id: statechain_id.to_owned(),
             signature: statechain_sig,
             swap_size: swap_size.to_owned(),
+            wallet_version: "0.4.66".to_string(),
         },
     )
 }
@@ -279,7 +280,7 @@ pub fn do_swap(
         thread::sleep(time::Duration::from_secs(3));
     }
 
-    let _ = transfer::transfer_sender(&mut wallet, statechain_id, receiver_addr)?;
+    let _ = transfer::transfer_sender(&mut wallet, statechain_id, receiver_addr, Some(swap_id.clone()) )?;
 
     let mut commitment_data = statechain_id.to_string();
     let mut sorted_sc_ids = info.swap_token.statechain_ids.clone();

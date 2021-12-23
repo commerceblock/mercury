@@ -512,6 +512,7 @@ impl Database for MemoryDB {
         _statechain_id: &uuid::Uuid,
         _statechain_sig: &shared_lib::state_chain::StateChainSig,
         _x1: &curv::FE,
+        _batch_id: Option<uuid::Uuid>
     ) -> crate::Result<()> {
         unimplemented!()
     }
