@@ -281,7 +281,21 @@ pub fn run_transfer(
     sender_index: usize,
     receiver_index: usize,
     receiver_addr: &SCEAddress,
+    statechain_id: &Uuid
+) -> Uuid {
+    run_transfer_repeat_keygen(wallets, sender_index, receiver_index,
+        receiver_addr, statechain_id, 0)
+}
+
+/// Run a transfer between two wallets. Input vector of wallets with sender and receiver indexes in vector.
+/// Return new shared key id.
+pub fn run_transfer_repeat_keygen(
+    wallets: &mut Vec<Wallet>,
+    sender_index: usize,
+    receiver_index: usize,
+    receiver_addr: &SCEAddress,
     statechain_id: &Uuid,
+    keygen_1_reps: u32
 ) -> Uuid {
 
     let start = Instant::now();
@@ -296,10 +310,11 @@ pub fn run_transfer(
 
     assert_eq!(tranfer_sender_resp,transfer_msg.unwrap()[0]);
 
-    let tfd = state_entity::transfer::transfer_receiver(
+    let tfd = state_entity::transfer::transfer_receiver_repeat_keygen(
         &mut wallets[receiver_index],
         &mut tranfer_sender_resp,
         &None,
+        keygen_1_reps
     )
     .unwrap();
     let new_shared_key_id = tfd.new_shared_key_id;
@@ -308,6 +323,7 @@ pub fn run_transfer(
 
     return new_shared_key_id;
 }
+
 
 /// Run a transfer with commitments between two wallets. Input vector of wallets with sender and receiver indexes in vector.
 /// Return new shared key id, commitments and nonces.

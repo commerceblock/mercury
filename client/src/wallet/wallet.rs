@@ -412,11 +412,11 @@ impl Wallet {
 
     /// create new 2P-ECDSA key with state entity
     pub fn gen_shared_key(&mut self, id: &Uuid, value: &u64, solution: String) -> Result<&SharedKey> {
-        self.gen_shared_key_rep_kg1(id, value, solution, 0)
+        self.gen_shared_key_repeat_keygen(id, value, solution, 0)
     }
 
      /// create new 2P-ECDSA key with state entity
-     pub fn gen_shared_key_rep_kg1(&mut self, id: &Uuid, value: &u64, solution: String, kg1_reps: u32) -> Result<&SharedKey> {
+     pub fn gen_shared_key_repeat_keygen(&mut self, id: &Uuid, value: &u64, solution: String, kg1_reps: u32) -> Result<&SharedKey> {
         let key_share_pub = self.se_key_shares.get_new_key()?;
         let key_share_priv = self
             .se_key_shares
@@ -425,7 +425,7 @@ impl Wallet {
             .private_key
             .key;
 
-        let shared_key = SharedKey::new_repeat_kg1(
+        let shared_key = SharedKey::new_repeat_keygen(
             id,
             &self.client_shim,
             &key_share_priv,
@@ -445,18 +445,18 @@ impl Wallet {
         secret_key: &SecretKey,
         value: &u64,
     ) -> Result<()> {
-       self.gen_shared_key_fixed_secret_key_rep_kg1(id, secret_key, value, 0)
+       self.gen_shared_key_fixed_secret_key_repeat_keygen(id, secret_key, value, 0)
     }
 
         /// create new 2P-ECDSA key with pre-definfed private key
-        pub fn gen_shared_key_fixed_secret_key_rep_kg1(
+        pub fn gen_shared_key_fixed_secret_key_repeat_keygen(
             &mut self,
             id: &Uuid,
             secret_key: &SecretKey,
             value: &u64,
             rep_kg1: u32
         ) -> Result<()> {
-            self.shared_keys.push(SharedKey::new_repeat_kg1(
+            self.shared_keys.push(SharedKey::new_repeat_keygen(
                 id,
                 &self.client_shim,
                 secret_key,

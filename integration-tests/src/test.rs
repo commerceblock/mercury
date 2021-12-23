@@ -59,7 +59,7 @@ mod tests {
 
     #[test]
     #[serial]
-    fn test_gen_shared_key_repeat_keygen_1() {
+    fn test_gen_shared_key_repeat_keygen() {
         time_test!();
         let _ = start_server(None, None);
         let mut wallet = gen_wallet(None);
@@ -89,11 +89,10 @@ mod tests {
 
         let solution = format!("{:x}", counter);
 
-        let key_res = wallet.gen_shared_key_rep_kg1(&init_res.unwrap().id, &1000, solution.to_string(), 10);
+        let key_res = wallet.gen_shared_key_repeat_keygen(&init_res.unwrap().id, &1000, solution.to_string(), 10);
         assert!(key_res.is_ok());
         reset_data(&wallet.client_shim).unwrap();
     }
-
 
     #[test]
     #[serial]
@@ -230,6 +229,78 @@ mod tests {
             .unwrap();
 
         let new_shared_key_id = run_transfer(&mut wallets, 0, 1, &receiver_addr, &statechain_id);
+
+        // check shared keys have the same master public key
+        assert_eq!(
+            wallets[0]
+                .get_shared_key(shared_key_id)
+                .unwrap()
+                .share
+                .public
+                .q,
+            wallets[1]
+                .get_shared_key(&new_shared_key_id)
+                .unwrap()
+                .share
+                .public
+                .q
+        );
+
+        // check shared key is marked spent in sender and unspent in receiver
+        assert!(!wallets[0].get_shared_key(shared_key_id).unwrap().unspent);
+        assert!(
+            wallets[1]
+                .get_shared_key(&new_shared_key_id)
+                .unwrap()
+                .unspent
+        );
+
+        // check state chain is updated
+        let state_chain =
+            state_entity::api::get_statechain(&wallets[0].client_shim, &statechain_id).unwrap();
+        assert_eq!(state_chain.chain.len(), 2);
+        assert_eq!(
+            state_chain.get_tip().unwrap().data.to_string(),
+            receiver_addr.proof_key.to_string()
+        );
+
+        // Get SMT inclusion proof and verify
+        let root = state_entity::api::get_smt_root(&wallets[1].client_shim)
+            .unwrap()
+            .unwrap();
+        let proof = state_entity::api::get_smt_proof(&wallets[1].client_shim, &root, &funding_txid)
+            .unwrap();
+        // Ensure wallet's shared key is updated with proof info
+        let shared_key = wallets[1].get_shared_key(&new_shared_key_id).unwrap();
+        assert_eq!(shared_key.smt_proof.clone().unwrap().root, root);
+        assert_eq!(shared_key.smt_proof.clone().unwrap().proof, proof);
+        assert_eq!(
+            shared_key.proof_key.clone().unwrap(),
+            receiver_addr.proof_key.to_string()
+        );
+        reset_data(&wallets[0].client_shim).unwrap();
+    }
+
+    #[test]
+    #[serial]
+    fn test_transfer_repeat_keygen() {
+        time_test!();
+        let _handle = start_server(None, None);
+        let mut wallets = vec![];
+        wallets.push(gen_wallet_with_deposit(10000)); // sender
+        wallets.push(gen_wallet(None)); // receiver
+
+        // Get state chain owned by wallet
+        let state_chains_info = wallets[0].get_state_chains_info().unwrap();
+        let shared_key_id = state_chains_info.0.last().unwrap();
+        let (statechain_id, funding_txid, _, _, _) =
+            wallets[0].get_shared_key_info(shared_key_id).unwrap();
+
+        let receiver_addr = wallets[1]
+            .get_new_state_entity_address()
+            .unwrap();
+
+        let new_shared_key_id = run_transfer_repeat_keygen(&mut wallets, 0, 1, &receiver_addr, &statechain_id, 10);
 
         // check shared keys have the same master public key
         assert_eq!(

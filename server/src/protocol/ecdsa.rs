@@ -147,13 +147,11 @@ impl Ecdsa for SCE {
             match db.get_ecdsa_master(user_id) {
                 Ok(data) => match data {
                     Some(_) => {
-          
                         kg_first_msg = match db.get_keygen_first_msg(&user_id){
                             Ok(r) => r,
                             Err(dberr) => return Err(SEError::Generic(format!(" Key Generation already completed for ID {} and {}", &user_id, &dberr)))
                         };
                         return Ok(KeyGenReply1 {user_id: user_id, msg: kg_first_msg } )
-
                     }
                     None => {} // Key exists but key gen not complete. Carry on without writing user_id.
                 },
