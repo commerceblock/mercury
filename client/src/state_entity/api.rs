@@ -48,7 +48,7 @@ pub fn get_statecoin(
     requests::get(client_shim, &format!("info/statecoin/{}", statechain_id))
 }
 
-/// Get state chain by ID
+/// Get recovery data by pubkey
 pub fn get_recovery_data(
     client_shim: &ClientShim,
     pubkey_hex: &str,
@@ -57,6 +57,23 @@ pub fn get_recovery_data(
             key: pubkey_hex.to_string(),
             sig: "".to_string(),
         });
+    requests::postb(client_shim, &format!("info/recover/"), recovery_request)
+}
+
+/// Get recovery data by vec of pubkeys
+pub fn get_recovery_data_vec(
+    client_shim: &ClientShim,
+    pubkey_hex: &Vec<String>,
+) -> Result<Vec<RecoveryDataMsg>> {
+    let mut recovery_request = vec![];
+    
+    for pk in pubkey_hex{
+        recovery_request.push(RecoveryRequest {
+            key: pk.to_string(),
+            sig: "".to_string(),
+        });
+    }
+
     requests::postb(client_shim, &format!("info/recover/"), recovery_request)
 }
 
