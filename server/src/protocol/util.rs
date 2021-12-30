@@ -445,10 +445,17 @@ impl Utilities for SCE {
                     Err(_) => continue
                 };
 
-                let mut master_key: Party1Public = serde_json::from_str(&self.database.get_public_master(statecoin.0)?.unwrap()).map_err(|e| e.to_string())?;
-                let shared_public: GE = serde_json::from_str(&self.database.get_statecoin_pubkey(statecoin.1)?.unwrap()).map_err(|e| e.to_string())?;
-                master_key.q = shared_public;
-                let public = serde_json::to_string(&master_key).map_err(|e| e.to_string())?;
+                let public = match self.database.get_public_master(statecoin.0)?{
+                    Some(pm) => {
+                        let mut master_key: Party1Public = serde_json::from_str(&pm).map_err(|e| e.to_string())?;
+                        let shared_public: GE = serde_json::from_str(&self.database.get_statecoin_pubkey(statecoin.1)?.unwrap()).map_err(|e| e.to_string())?;
+                        master_key.q = shared_public;
+                        serde_json::to_string(&master_key).map_err(|e| e.to_string())?
+                    },
+                    None => {
+                        "None".to_string()
+                    }
+                };
 
                 recovery_data.push(RecoveryDataMsg {
                     shared_key_id: statecoin.0,
@@ -1415,11 +1422,75 @@ pub mod tests {
                 &BACKUP_TX_SIGNED.to_string(),
             ).unwrap())
         });
-        db.expect_get_ecdsa_master().returning(move |_| {
-            Ok(Some(MASTER_KEY.to_string()))
-        });
         db.expect_get_public_master().returning(move |_| {
             Ok(Some(PARTY2PUBLIC.to_string()))
+        });
+        db.expect_get_statecoin_pubkey().returning(move |_| {
+            Ok(Some(SHAREDPUBLIC.to_string()))
+        });
+
+        let sc_entity = test_sc_entity(db, None, None, None, None);
+
+        // get_recovery invalid public key
+        let recover_msg = vec!(RecoveryRequest {
+            key: "0297901882fc1601c3ea2b5326c4e635455b5451573c619782502894df69e24548".to_string(),
+            sig: "".to_string(),
+        },RecoveryRequest {
+            key: "".to_string(),
+            sig: "".to_string(),
+        });
+
+        let recovery_return = sc_entity.get_recovery_data(recover_msg).unwrap();
+        assert_eq!(recovery_return.len(), 1);
+        assert_eq!(recovery_data.shared_key_id, recovery_return[0].shared_key_id);
+        assert_eq!(recovery_data.statechain_id, recovery_return[0].statechain_id);
+        assert_eq!(recovery_data.tx_hex,recovery_return[0].tx_hex);
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_recovery_data_no_shared_key_data() {
+        let user_id = Uuid::new_v4();
+        let statechain_id = Uuid::new_v4();
+        let tx_backup = serde_json::from_str::<Transaction>(
+                            &BACKUP_TX_SIGNED.to_string(),
+                        ).unwrap();
+        let amount = 1000;
+
+        let recovery_data = RecoveryDataMsg {
+            shared_key_id: user_id,
+            statechain_id,
+            amount,
+            tx_hex: transaction_serialise(&tx_backup),
+            proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
+            shared_key_data: "None".to_string(),
+        };
+
+
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_recovery_data().returning(move |key| {
+            // return error to simulate no statecoin for key
+            if key.len() == 0 {
+                return Err(SEError::Generic("error".to_string()));
+            }
+            Ok(vec![(user_id,statechain_id,serde_json::from_str::<Transaction>(
+                &BACKUP_TX_SIGNED.to_string(),
+            ).unwrap())])
+        });
+        db.expect_get_statechain_amount().returning(move |_| {
+            Ok(StateChainAmount {
+                chain: serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap().try_into().unwrap(),
+                amount: 10000,
+            })
+        });
+        db.expect_get_backup_transaction().returning(move |_| {
+            Ok(serde_json::from_str::<Transaction>(
+                &BACKUP_TX_SIGNED.to_string(),
+            ).unwrap())
+        });
+        db.expect_get_public_master().returning(move |_| {
+            Ok(None)
         });
         db.expect_get_statecoin_pubkey().returning(move |_| {
             Ok(Some(SHAREDPUBLIC.to_string()))

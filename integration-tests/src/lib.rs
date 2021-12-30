@@ -1,6 +1,7 @@
 pub mod batch_transfer_test;
 pub mod simulation;
 pub mod test;
+pub mod recovery;
 
 extern crate bitcoin;
 extern crate floating_duration;
@@ -224,6 +225,7 @@ pub fn run_deposit(
     resp
 }
 
+
 /// Run confirm_proofs on a wallet
 /// Returns Vec<shared_key_id> of the shared keys that remain unconfirmed
 pub fn run_confirm_proofs(wallet: &mut Wallet) -> Vec<Uuid> {
@@ -324,6 +326,8 @@ pub fn run_transfer_repeat_keygen(
 
     return new_shared_key_id;
 }
+
+
 
 
 /// Run a transfer with commitments between two wallets. Input vector of wallets with sender and receiver indexes in vector.
