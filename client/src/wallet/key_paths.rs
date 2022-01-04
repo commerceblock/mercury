@@ -150,6 +150,19 @@ impl KeyPathWithAddresses {
         }
     }
 
+    /// Get pubkey derivation information
+    pub fn get_pubkey_derivation(&self, pubkey: &bitcoin::PublicKey) -> Result<Option<KeyDerivation>> {
+        let address = &bitcoin::Address::p2wpkh(
+            &pubkey,
+            self.ext_priv_key.network,
+        )?;
+        Ok(
+            match self.addresses_derivation_map.get(&address.to_string()) {
+            Some(entry) => Some(*entry),
+            None => None,
+        })
+    }
+
     /// Return all addresses derived by this parent key.
     pub fn get_all_addresses(&self) -> Vec<bitcoin::Address> {
         let mut addrs = Vec::new();
@@ -165,6 +178,7 @@ pub struct KeyPath {
     pub last_derived_pos: u32,
     pub ext_priv_key: ExtendedPrivKey,
     pub key_derivation_map: HashMap<PublicKey, KeyDerivation>,
+    pub addresses_derivation_map: HashMap<String, PublicKey>,
 }
 
 impl KeyPath {
@@ -173,6 +187,7 @@ impl KeyPath {
             last_derived_pos: 0,
             ext_priv_key,
             key_derivation_map: HashMap::new(),
+            addresses_derivation_map: HashMap::new()
         }
     }
 
@@ -192,10 +207,18 @@ impl KeyPath {
         let new_ext_pub_key = ExtendedPubKey::from_private(&secp, &new_ext_priv_key);
 
         self.last_derived_pos += 1;
+        
         self.key_derivation_map.insert(
             new_ext_pub_key.public_key,
             KeyDerivation::new(self.last_derived_pos, new_ext_priv_key.private_key, None),
         );
+
+        let address = &bitcoin::Address::p2wpkh(
+            &new_ext_pub_key.public_key,
+            self.ext_priv_key.network,
+        )?;
+
+        self.addresses_derivation_map.insert(address.to_string(), new_ext_pub_key.public_key);
 
         Ok(new_ext_pub_key.public_key)
     }
@@ -211,6 +234,14 @@ impl KeyPath {
             new_ext_pub_key.public_key,
             KeyDerivation::new(self.last_derived_pos, new_ext_priv_key.private_key, None),
         );
+        
+        let address = &bitcoin::Address::p2wpkh(
+            &new_ext_pub_key.public_key,
+            self.ext_priv_key.network,
+        )?;
+
+        self.addresses_derivation_map.insert(address.to_string(), new_ext_pub_key.public_key);
+
 
         Ok((new_ext_pub_key.public_key, new_ext_priv_key.private_key))
     }
@@ -242,6 +273,13 @@ impl KeyPath {
             KeyDerivation::new(child_id, new_ext_priv_key.private_key, None),
         );
 
+        let address = &bitcoin::Address::p2wpkh(
+            &new_ext_pub_key.public_key,
+            self.ext_priv_key.network,
+        )?;
+
+        self.addresses_derivation_map.insert(address.to_string(), new_ext_pub_key.public_key);
+
         match maybe_o2 {
             None => (),
             Some(v) => {
@@ -255,6 +293,24 @@ impl KeyPath {
     /// Get corresponding private key for a public key. Return None if key not derived in this path (at least not yet).
     pub fn get_key_derivation(&self, public_key: &PublicKey) -> Option<KeyDerivation> {
         match self.key_derivation_map.get(public_key) {
+            Some(entry) => {
+                let mut full_derivation = entry.clone();
+                full_derivation.public_key = Some(public_key.clone());
+                Some(full_derivation)
+            }
+            None => None,
+        }
+    }
+
+     /// Get corresponding private key for a public key. Return None if key not derived in this path (at least not yet).
+     pub fn get_key_derivation_address(&self, address: &String) -> Option<KeyDerivation> {
+        let public_key = match self.addresses_derivation_map.get(address) {
+            Some(entry) => {
+                entry.clone()
+            }
+            None => return None,
+        };
+        match self.key_derivation_map.get(&public_key) {
             Some(entry) => {
                 let mut full_derivation = entry.clone();
                 full_derivation.public_key = Some(public_key.clone());

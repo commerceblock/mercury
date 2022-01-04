@@ -7,7 +7,8 @@ extern crate shared_lib;
 extern crate reqwest;
 use crate::server::TRANSFERS_COUNT;
 use super::transfer_batch::transfer_batch_is_ended;
-use shared_lib::{ecies, ecies::WalletDecryptable, ecies::SelfEncryptable, state_chain::*, structs::*, util::transaction_deserialise};
+use shared_lib::{ecies, ecies::WalletDecryptable, ecies::SelfEncryptable, 
+    state_chain::*, structs::*, util::transaction_deserialise};
 use bitcoin::secp256k1::key::SecretKey;
 use bitcoin::secp256k1::PublicKey;
 use bitcoin::util::key::PrivateKey;
@@ -32,6 +33,7 @@ use uuid::Uuid;
 use url::Url;
 use crate::protocol::{util::{Utilities, RateLimiter}, withdraw::Withdraw};
 
+
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
         use crate::MockDatabase;
@@ -43,16 +45,7 @@ cfg_if! {
     }
 }
 
-/// Struct holds data when transfer is complete but not yet finalized
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct TransferFinalizeData {
-    pub new_shared_key_id: Uuid,
-    pub statechain_id: Uuid,
-    pub statechain_sig: StateChainSig,
-    pub s2: FE,
-    pub new_tx_backup_hex: String,
-    pub batch_data: Option<BatchData>,
-}
+
 
 /// StateChain Transfer protocol trait
 pub trait Transfer {

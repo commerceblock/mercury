@@ -26,12 +26,118 @@ use crate::state_entity::{
 use crate::wallet::{key_paths::funding_txid_to_int, wallet::Wallet};
 use crate::{utilities::requests, ClientShim};
 use shared_lib::{ecies::WalletDecryptable, ecies::SelfEncryptable, state_chain::StateChainSig, structs::*, util::{transaction_serialise, transaction_deserialise}};
-
 use bitcoin::{Address, PublicKey};
 use curv::elliptic::curves::traits::{ECPoint, ECScalar};
 use curv::{FE, GE};
 use std::str::FromStr;
 use uuid::Uuid;
+use shared_lib::structs::TransferFinalizeData as TransferFinalizeDataAPI;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TransferFinalizeData {
+    pub new_shared_key_id: Uuid,
+    pub o2: FE,
+    pub s2_pub: GE,
+    pub statechain_data: StateChainDataAPI,
+    pub proof_key: String,
+    pub statechain_id: Uuid,
+    pub tx_backup_psm: PrepareSignTxMsg,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TransferFinalizeDataForRecovery {
+    pub new_shared_key_id: Uuid,
+    pub o2: FE,
+    pub statechain_data: StateChainDataAPI,
+    pub proof_key: String,
+    pub statechain_id: Uuid,
+    pub tx_backup_hex: String,
+}
+
+//Check that the transfer finalize data for recovery
+//corresponds to the transfer finalize data
+impl TransferFinalizeDataForRecovery {
+    pub fn compare(&self, tfd: &TransferFinalizeData)-> Result<()>{
+        if self.new_shared_key_id != tfd.new_shared_key_id {
+            return Err(CError::Generic(
+                format!(
+                    "new_shared_key_id: {}, {}", 
+                    self.new_shared_key_id, tfd.new_shared_key_id)))
+        }
+        if self.statechain_id != tfd.statechain_id {
+            return Err(CError::Generic(
+                format!(
+                    "statechain_id: {}, {}", 
+                    self.statechain_id, tfd.statechain_id)))
+        }
+        if self.tx_backup_hex != tfd.tx_backup_psm.tx_hex {
+            return Err(CError::Generic(
+                format!(
+                    "tx_backup_hex: {}, {}", 
+                    self.tx_backup_hex, tfd.tx_backup_psm.tx_hex)))
+        }
+        if self.proof_key != tfd.proof_key {
+            return Err(CError::Generic(
+                format!(
+                    "proof_key: {}, {}", 
+                    self.proof_key, tfd.proof_key)))
+        }
+        if self.o2 != tfd.o2 {
+            return Err(CError::Generic(
+                format!(
+                    "o2: {:#?}, {:#?}", 
+                    self.o2, tfd.o2)))
+        }
+        Ok(())
+    }
+}
+
+//Get the TransferFinalizeData from TransferFinalizeDataAPI, RocoveryData and the wallet
+pub fn get_transfer_finalize_data_for_recovery(wallet: &mut Wallet, 
+    tfd_api: &TransferFinalizeDataAPI,
+    recovery_data: &RecoveryDataMsg, proof_key: &String) -> Result<TransferFinalizeDataForRecovery>{
+ 
+    let statechain_data=get_statechain(&wallet.client_shim, &recovery_data.statechain_id).unwrap();
+    let funding_txid=&statechain_data.utxo.txid.to_string();
+    // generate o2 private key and corresponding 02 public key
+    let funding_txid_int = match funding_txid_to_int(funding_txid) {
+        Ok(r) => r,
+        Err(e) => {
+            return Err(CError::Generic(format!(
+                "Failed to get funding txid int from funding_txid: {:?} error: {}",
+                funding_txid,
+                e.to_string()
+            )))
+        }
+    };
+    let mut o2: FE = ECScalar::zero();
+    let _key_share_pub = match wallet
+        .se_key_shares
+        .get_new_key_encoded_id(funding_txid_int, Some(&mut o2))
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return Err(CError::Generic(format!(
+                "Failed to get new key encoded id from funding_txid_int: {} error: {}",
+                funding_txid_int,
+                e.to_string()
+            )))
+        }
+    };
+
+    if tfd_api.new_shared_key_id != recovery_data.shared_key_id {
+       return Err(CError::Generic(String::from("transfer finalize and recovery data shared keys do not match")));
+    }
+    Ok(
+        TransferFinalizeDataForRecovery{
+        new_shared_key_id: tfd_api.new_shared_key_id.to_owned(),
+        o2,
+        statechain_data,
+        proof_key: proof_key.to_owned(),
+        statechain_id: tfd_api.statechain_id.to_owned(),
+        tx_backup_hex: recovery_data.tx_hex.to_owned(),
+    })
+}
 
 /// Transfer coins to new Owner from this wallet
 pub fn transfer_sender(
@@ -337,17 +443,6 @@ pub fn transfer_receiver_repeat_keygen(
     }
 
     Ok(finalize_data)
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TransferFinalizeData {
-    pub new_shared_key_id: Uuid,
-    pub o2: FE,
-    pub s2_pub: GE,
-    pub statechain_data: StateChainDataAPI,
-    pub proof_key: String,
-    pub statechain_id: Uuid,
-    pub tx_backup_psm: PrepareSignTxMsg,
 }
 
 /// Finalize protocol run by generating new shared key and updating wallet.

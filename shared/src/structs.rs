@@ -368,7 +368,7 @@ impl OutPointDef{
 // /info/statechain return struct
 /// Statechain data
 /// This struct is returned containing the statechain of the specified statechain ID
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 #[schemars(example = "Self::example")]
 pub struct StateChainDataAPI {
     /// The statecoin UTXO OutPoint
@@ -817,8 +817,37 @@ pub struct TransferRevealNonce {
     pub nonce: [u8; 32],
 }
 
+/// Struct holds data when transfer is complete but not yet finalized
+#[derive(Serialize, Deserialize, Debug, Clone, JsonSchema, PartialEq)]
+#[schemars(example = "Self::example")]
+pub struct TransferFinalizeData {
+    #[schemars(with = "UuidDef")]
+    pub new_shared_key_id: Uuid,
+    #[schemars(with = "UuidDef")]
+    pub statechain_id: Uuid,
+    pub statechain_sig: StateChainSig,
+    #[schemars(with = "FEDef")]
+    pub s2: FE,
+    pub new_tx_backup_hex: String,
+    pub batch_data: Option<BatchData>,
+}
+
+impl TransferFinalizeData{
+    pub fn example() -> Self{
+        Self{
+            new_shared_key_id: Uuid::new_v4(), 
+            statechain_id: Uuid::new_v4(),
+            statechain_sig: StateChainSig::example(),
+            s2: FE::new_random(),
+            new_tx_backup_hex: "02000000000101ca878085da49c33eb9816c10e4056424e5e062689ea547ea91bb3aa840a3c5fb0000000000ffffffff02307500000000000016001412cc36c9533290c02f0c78f992df6e6ddfe50c8c0064f50500000000160014658fd2dc72e58168f3656fb632d63be54f80fbe4024730440220457cf52873ae5854859a7d48b39cb57eba880ea4011806e5058da7619f4c0fab02206303326f06bbebf7170b679ba787c856dec4b6462109bf66e1cb8dc087be7ebf012102a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe00000000".to_string(),
+            batch_data: None
+        }
+    }
+}
+
+
 /// Data present if transfer is part of an atomic batch transfer
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct BatchData {
     #[schemars(with = "UuidDef")]
     pub id: Uuid,
