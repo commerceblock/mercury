@@ -17,7 +17,7 @@ use shared_lib::{
 };
 pub use kms::ecdsa::two_party::Party1Public;
 
-use shared_lib::structs::Protocol;
+use shared_lib::structs::{Protocol, TransferFinalizeData};
 
 use rocket_okapi::openapi;
 use crate::error::{DBErrorType, SEError};
@@ -629,6 +629,20 @@ pub fn get_smt_proof(
 }
 
 #[openapi]
+/// # Get transfer finalize data for specified statechain ID
+#[get("/info/sc-transfer-finalize-data/<statechain_id>", format = "json")]
+pub fn get_sc_transfer_finalize_data(
+    sc_entity: State<SCE>,
+    statechain_id: String,
+) -> Result<Json<TransferFinalizeData>> {
+    sc_entity.check_rate_fast("info")?;
+    match sc_entity.get_sc_transfer_finalize_data(Uuid::from_str(&statechain_id).unwrap()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
 /// # Get batch transfer status and statecoin IDs for specified batch ID
 #[get("/info/transfer-batch/<batch_id>", format = "json")]
 pub fn get_transfer_batch_status(
@@ -1128,6 +1142,9 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
         }});
     }
 
+    fn get_sc_transfer_finalize_data(&self, statechain_id: Uuid)-> Result<TransferFinalizeData>{
+        self.database.get_sc_transfer_finalize_data(&statechain_id)
+    }
 
     fn get_owner_id(&self, statechain_id: Uuid) -> Result<OwnerID> {
         //let statechain_id = Uuid::from_str(&statechain_id).unwrap();
@@ -1512,5 +1529,24 @@ pub mod tests {
         assert_eq!(recovery_data.shared_key_id, recovery_return[0].shared_key_id);
         assert_eq!(recovery_data.statechain_id, recovery_return[0].statechain_id);
         assert_eq!(recovery_data.tx_hex,recovery_return[0].tx_hex);
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_sc_transfer_finalize_data() {
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        let statechain_id = Uuid::new_v4();
+        let mut data = TransferFinalizeData::example();
+        let mut db_data = data.clone();
+        data.statechain_id = statechain_id.clone();
+        db.expect_get_sc_transfer_finalize_data().returning(move |&statechain_id| {
+            db_data.statechain_id = statechain_id;
+            Ok(db_data.clone())});
+        
+
+        let sc_entity = test_sc_entity(db, None, None, None, None);
+
+        assert_eq!(sc_entity.get_sc_transfer_finalize_data(statechain_id).unwrap(), data);
     }
 }

@@ -215,6 +215,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             util::get_coin_info,
             util::reset_test_dbs,
             util::reset_inram_data,
+            util::get_sc_transfer_finalize_data,
             ecdsa::first_message,
             ecdsa::second_message,
             ecdsa::sign_first,
@@ -253,6 +254,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             util::get_coin_info,
             util::reset_test_dbs,
             util::reset_inram_data,
+            util::get_sc_transfer_finalize_data,
             ecdsa::first_message,
             ecdsa::second_message,
             ecdsa::sign_first,
@@ -419,7 +421,7 @@ pub fn get_postgres_url(
 use crate::protocol::conductor::Conductor;
 use crate::protocol::deposit::Deposit;
 use crate::protocol::ecdsa::Ecdsa;
-use crate::protocol::transfer::{Transfer, TransferFinalizeData};
+use crate::protocol::transfer::Transfer;
 use crate::protocol::transfer_batch::BatchTransfer;
 use crate::protocol::util::{Proof, Utilities, RateLimiter};
 use crate::protocol::withdraw::Withdraw;
@@ -561,6 +563,7 @@ mock! {
         fn update_root(&self, root: &storage::Root) -> storage::Result<i64>;
         fn get_statechain_data_api(&self,statechain_id: Uuid) -> storage::Result<StateChainDataAPI>;
         fn get_statecoin_data_api(&self, statechain_id: Uuid) -> storage::Result<StateCoinDataAPI>;
+        fn get_sc_transfer_finalize_data(&self, statechain_id: Uuid)-> storage::Result<TransferFinalizeData>;
         fn get_statechain(&self, statechain_id: Uuid) -> storage::Result<storage::StateChain>;
         fn get_owner_id(&self, statechain_id: Uuid) -> storage::Result<OwnerID>;
     }
