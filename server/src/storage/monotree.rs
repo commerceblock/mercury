@@ -6,7 +6,7 @@ use crate::PGDatabase;
 use monotree::database::{Database as MonotreeDatabase, MemCache, MemoryDB};
 use monotree::Errors;
 use std::collections::HashMap;
-use shared_lib::structs::CoinValueInfo;
+use shared_lib::structs::{CoinValueInfo,TransferFinalizeData};
 use crate::server::UserIDs;
 use std::sync::{Arc, Mutex};
 
@@ -651,18 +651,18 @@ impl Database for MemoryDB {
         unimplemented!()
     }
 
-    fn get_sc_finalize_batch_data(
+    fn get_sc_transfer_finalize_data(
         &self,
         _statechain_id: &uuid::Uuid
         
-    ) -> crate::Result<crate::protocol::transfer::TransferFinalizeData>{
+    ) -> crate::Result<TransferFinalizeData>{
         unimplemented!()
     }
 
     fn update_finalize_batch_data(
         &self,
         _batch_id: &uuid::Uuid,
-        _finalized_data: &crate::protocol::transfer::TransferFinalizeData,
+        _finalized_data: &TransferFinalizeData,
     ) -> crate::Result<()> {
         unimplemented!()
     }
@@ -699,7 +699,7 @@ impl Database for MemoryDB {
         &self,
         _new_user_id: &uuid::Uuid,
         _statechain_id: &uuid::Uuid,
-        _finalized_data: crate::protocol::transfer::TransferFinalizeData,
+        _finalized_data: TransferFinalizeData,
         _user_ids: Arc<Mutex<UserIDs>>
     ) -> crate::Result<()> {
         unimplemented!()

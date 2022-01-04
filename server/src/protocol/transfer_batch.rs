@@ -165,7 +165,7 @@ impl BatchTransfer for SCE {
         )?;
 
         // If state chain completed + commitment revealed then punishment can be removed from state chain
-        match self.database.get_sc_finalize_batch_data(&statechain_id){
+        match self.database.get_sc_transfer_finalize_data(&statechain_id){
             Ok(v) => {
                 //Check the data relatesd to this batch transfer
                 match v.batch_data {
@@ -244,7 +244,7 @@ mod tests {
     use super::*;
     use crate::MockDatabase;
     use crate::{
-        protocol::{transfer::TransferFinalizeData, util::tests::test_sc_entity},
+        protocol::{util::tests::test_sc_entity},
         structs::{StateChainOwner, TransferBatchData, TransferFinalizeBatchData},
     };
     use chrono::{Duration, Utc};
@@ -485,7 +485,7 @@ mod tests {
 
         db.expect_update_locked_until().returning(|_, _| Ok(()));
         db.expect_update_punished().returning(|_, _| Ok(()));
-        db.expect_get_sc_finalize_batch_data().returning(|_|
+        db.expect_get_sc_transfer_finalize_data().returning(|_|
             Err(SEError::DBError(
                 DBErrorType::NoDataForID, "no data".to_string())));
 
