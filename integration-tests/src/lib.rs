@@ -1,7 +1,6 @@
 pub mod batch_transfer_test;
 pub mod simulation;
 pub mod test;
-pub mod recovery;
 
 extern crate bitcoin;
 extern crate floating_duration;

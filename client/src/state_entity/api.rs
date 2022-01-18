@@ -6,7 +6,7 @@ use super::super::Result;
 use shared_lib::structs::{
     SmtProofMsgAPI, StateChainDataAPI, StateEntityFeeInfoAPI, 
     TransferBatchDataAPI, RecoveryDataMsg, RecoveryRequest, 
-    CoinValueInfo, StateCoinDataAPI
+    CoinValueInfo, StateCoinDataAPI, TransferFinalizeData
 };
 use shared_lib::Root;
 
@@ -75,6 +75,13 @@ pub fn get_recovery_data_vec(
     }
 
     requests::postb(client_shim, &format!("info/recover/"), recovery_request)
+}
+
+pub fn get_sc_transfer_finalize_data(
+    client_shim: &ClientShim,
+    statechain_id: &Uuid
+) -> Result<TransferFinalizeData> {
+    requests::get(client_shim, &format!("info/sc-transfer-finalize-data/{}",statechain_id))
 }
 
 /// Get state entity's sparse merkle tree root

@@ -6,7 +6,6 @@ use super::super::Result;
 use bitcoin::Transaction;
 pub type Hash = bitcoin::hashes::sha256d::Hash;
 
-use crate::protocol::transfer::TransferFinalizeData;
 use crate::server::{get_postgres_url, UserIDs};
 use crate::{
     error::{
@@ -27,7 +26,7 @@ use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
 use shared_lib::mainstay::CommitmentInfo;
 use shared_lib::state_chain::*;
-use shared_lib::structs::{TransferMsg3,CoinValueInfo};
+use shared_lib::structs::{TransferMsg3,CoinValueInfo,TransferFinalizeData};
 use shared_lib::Root;
 use shared_lib::util::transaction_deserialise;
 use rocket_okapi::JsonSchema;
@@ -1644,7 +1643,7 @@ impl Database for PGDatabase {
         let mut finalized_data_vec = vec![];
 
         for id in self.get_batch_transfer_statechain_ids(&batch_id)? {
-            match self.get_sc_finalize_batch_data(&id){
+            match self.get_sc_transfer_finalize_data(&id){
                 Ok(v) => {
                     //Check the batch id
                     match v.batch_data {
@@ -1685,7 +1684,7 @@ impl Database for PGDatabase {
         )
     }
 
-    fn get_sc_finalize_batch_data(
+    fn get_sc_transfer_finalize_data(
         &self,
         statechain_id: &Uuid
     ) -> Result<TransferFinalizeData> {
