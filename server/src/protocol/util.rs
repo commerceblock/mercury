@@ -25,6 +25,8 @@ use crate::storage::Storage;
 use crate::{server::StateChainEntity, Database};
 use cfg_if::cfg_if;
 
+use bitcoin::consensus;
+use bitcoin::Network;
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
 #[cfg(test)]
 use mockito::{mock, Matcher, Mock};
@@ -36,6 +38,7 @@ use uuid::Uuid;
 use bitcoin::OutPoint;
 use bitcoin::Transaction;
 use curv::GE;
+use curv::elliptic::curves::traits::ECPoint;
 use std::ops::Deref;
 
 
@@ -711,13 +714,22 @@ pub fn reset_inram_data(sc_entity: State<SCE>) -> Result<Json<()>> {
 
 // Utily functions for StateChainEntity to be used throughout codebase.
 impl SCE {
-    /// Query an Electrum Server for a transaction's confirmation status.
+    /// Query an Electrum Server for a transaction's confirmation status and address.
     /// Return Ok() if confirmed or Error if not within configured confirmation number.
-    pub fn verify_tx_confirmed(&self, txid: &String) -> Result<()> {
+    pub fn verify_tx_confirmed(&self, statechain_id: &Uuid) -> Result<()> {
 
         if self.config.required_confirmation == 0 {
             return Ok(());
         };
+
+        // Get back up tx and proof key
+        let tx_backup = self.database.get_backup_transaction(statechain_id.clone())?;
+        let txid = tx_backup.input[0].previous_output.txid.to_string();
+        let vout = tx_backup.input[0].previous_output.vout as usize;
+
+        // get statecoin amount
+        let sc_amount = self.database.get_statechain_amount(statechain_id.clone())?;
+        let amount: u64 = sc_amount.amount as u64;
 
         let mut electrum: Box<dyn Electrumx> = if self.config.testing_mode {
             Box::new(MockElectrum::new())
@@ -730,6 +742,15 @@ impl SCE {
             txid
         );
 
+        // GE shared pubkey
+        let shared_public: GE = serde_json::from_str(&self.database.get_statecoin_pubkey(statechain_id.clone())?.unwrap()).map_err(|e| e.to_string())?;
+        let pk = bitcoin::util::key::PublicKey {
+            compressed: true,
+            key: shared_public.get_element(),
+        };
+        let p_addr = bitcoin::Address::p2wpkh(&pk, self.config.network.parse::<Network>().unwrap()).unwrap().script_pubkey();
+
+        // get tx data from electrum server
         match electrum.get_transaction_conf_status(txid.clone(), false) {
             Ok(res) => {
                 // Check for tx confs. If none after 10*(block time) then return error.
@@ -743,8 +764,29 @@ impl SCE {
                         "Funding Transaction insufficient confirmations.",
                     )));
                 }
-                else {
-                    return Ok(());
+            }
+            Err(_) => {
+                return Err(SEError::Generic(String::from(
+                    "Funding Transaction not found.",
+                )));
+            }
+        }
+
+        // verify shared key is output address and amount
+        match electrum.get_transaction(txid.clone(), false) {
+            Ok(res) => {
+                let tx: Transaction = consensus::deserialize(&hex::decode(&res).unwrap()).unwrap();
+
+                if amount != tx.output[vout].value {
+                    return Err(SEError::Generic(String::from(
+                        "Funding Transaction has incorrect amount.",
+                    )));                    
+                } else if tx.output[vout].script_pubkey != p_addr {
+                    return Err(SEError::Generic(String::from(
+                        "Funding Transaction has incorrect public key script.",
+                    )));      
+                } else {
+                    return Ok(())
                 }
             }
             Err(_) => {
@@ -1252,6 +1294,8 @@ pub mod tests {
     pub static MASTER_KEY: &str = "{\"public\":{\"q\":{\"x\":\"f8308498a5b5996eb7c410fb7ada7f3524d604b45b247cc4d13e5a32c3763908\",\"y\":\"7e41091fd5ab1138d1a3cdf41b43c82a064839a6b82b251be2be70099b642d1a\"},\"p1\":{\"x\":\"701e7d08608e6065b8f19f7cd867bcd7c5c4a11290e51187210a66713349c76c\",\"y\":\"10f76cae4eac6727bec6ae239de37d806a4877bc418f9fadaad0fd379cb11e73\"},\"p2\":{\"x\":\"caff57b3e214231182b2ba729079422887527dec2c2be1af03eb9a28be046fbb\",\"y\":\"94d4d2624a6be1e5fccf22ea5d7d2294a65f86b23642e7107c5523bb383d2612\"},\"paillier_pub\":{\"n\":\"11489233870088042333010221250016305472224248130131837344400358635737478519468920848276451747026121985401781804607266395846806728547165860151830628936151241253052105217375620729553123605998218501591757218904947955026013349855548130232876481464163645763380508660165838175358408923868455078398162478065282146744074902115770410655628975593804546170315851709066735895285416399351986223748741323752676766246912115655411869835426209804163120117240537098699118426250380831687194901410283437954378683229249501222250355118886953166922692541953136499596437296944964919863277847025337779172484000271289374153321801582770169915217\"},\"c_key\":\"13acbe9791ae6136f0d3700bad8cbe723ed2676e33d9f080122283a3a5838e3418d9ae3f61cc5e3b033ec71979f339c87e2da410c46a3a6238e40fc403799b5b7855bf529c381bd80288f5002f62a460cc005ec71e85c7d0eda2133245a857fe414c8653f0248016545618e2d53f466e3808edfe15774fb32ffeafc98dc08dd9eaca2e5411ae22bd4dad358bffadb51e82d2f99404ff73db8c473a2483133863aeaf6ffccd455fe4ba0966f90e85ea02083962d15779215941396676d90a0ce99a09adaa064956f506ca40d18ba91a7f9826a2e82050fb3b569790b5642ac45e39d9dfb63f8c975c30090f9eceaca387129539eaebfcedc17d2e49f0bd029e3591ac30e3db26139368b1423cf058e2128978411518e87c2d3c106a91c16de80895ad7f928a9a40c6d5aac356bd2966b3bf98c77f616f04329caecc895d13d16d8193e9f0bfe866c86a2eee3b2b0beb95478d4c216e00f8a9712618599d176ad253e59e9e27743f1e61a710bb9a0ae989226900ef809acb17e11f9f068bdb35fd7a767560e912da3aa98cd9d529b3d993e360d73f19adf830599f71ca139f6e17014302dce8a40401276d3a7e3dda04ef4b344a7dc4cb94c106c346e389ab7e089b97aa1e3f1680d4b8eeb62d405ab3a4e827b93dd15074e1dfd74244a9b4857017818b63504399c98fc02d0b3af135a0d7ac4f9de9a7cd47fdbe40cb3a6185b6\"},\"private\":{\"x1\":\"7d40223e23d9be8a484f02c193f6d637ee920d22107bcc271315ecd7cf7bd417\",\"paillier_priv\":{\"p\":\"95968611635960852961029982396007186819172638068010828329449274935568627735159638229570155217385550521772837802209343399026212621624237395184543248204625051917248015126148738583692391387724379315739614056981768639631978130165718525707250385364943792301344169291673198185105717525805446423420947171964258675871\",\"q\":\"119718662948572417380116608786988393154649208452700228802334036347214087888515999164811204446322560182519144489173108609786997536166347774811155976446122754875172588386796176207110943485933259100127115436979944772204093241941218507628108172049881866436113901845596310515366261414462580028675547493957305267727\"},\"c_key_randomness\":\"2cca6bbfb2f111aaa52b33bd3320cff512f23010822687156ed81f231403d0c2ded58514221d81cd8185bf584efd79534e55b78da3766a18175121d0df84c098c442553513cda8646a81e36cd3bd853381678d6cba7adeb2dffc425e6209bf0ccd2a824d78d1fe8ad388d999c626cd1d0bad6e312fbdd06f219de1e7379e1b8c1f1c8bd50bcfc8acad0692f5028252e18ffe60268ecea8cf35343895d9f78e406ea9301f3392d6b78ea87884a710d548cad991571abe8264653e63dc30c4276b7fcfeb9783bc7e7f88b2d573e3de2d6fe4d3809c50866b820402925621a7bcae34d87914db54455ce5ffd189e2d0bb9032913e4be221eae1a22e31d5803cbc07\"},\"chain_code\":\"0\"}";
     pub static PARTY2PUBLIC: &str = "{\"q\":{\"x\":\"f8308498a5b5996eb7c410fb7ada7f3524d604b45b247cc4d13e5a32c3763908\",\"y\":\"7e41091fd5ab1138d1a3cdf41b43c82a064839a6b82b251be2be70099b642d1a\"},\"p1\":{\"x\":\"701e7d08608e6065b8f19f7cd867bcd7c5c4a11290e51187210a66713349c76c\",\"y\":\"10f76cae4eac6727bec6ae239de37d806a4877bc418f9fadaad0fd379cb11e73\"},\"p2\":{\"x\":\"caff57b3e214231182b2ba729079422887527dec2c2be1af03eb9a28be046fbb\",\"y\":\"94d4d2624a6be1e5fccf22ea5d7d2294a65f86b23642e7107c5523bb383d2612\"},\"paillier_pub\":{\"n\":\"11489233870088042333010221250016305472224248130131837344400358635737478519468920848276451747026121985401781804607266395846806728547165860151830628936151241253052105217375620729553123605998218501591757218904947955026013349855548130232876481464163645763380508660165838175358408923868455078398162478065282146744074902115770410655628975593804546170315851709066735895285416399351986223748741323752676766246912115655411869835426209804163120117240537098699118426250380831687194901410283437954378683229249501222250355118886953166922692541953136499596437296944964919863277847025337779172484000271289374153321801582770169915217\"},\"c_key\":\"13acbe9791ae6136f0d3700bad8cbe723ed2676e33d9f080122283a3a5838e3418d9ae3f61cc5e3b033ec71979f339c87e2da410c46a3a6238e40fc403799b5b7855bf529c381bd80288f5002f62a460cc005ec71e85c7d0eda2133245a857fe414c8653f0248016545618e2d53f466e3808edfe15774fb32ffeafc98dc08dd9eaca2e5411ae22bd4dad358bffadb51e82d2f99404ff73db8c473a2483133863aeaf6ffccd455fe4ba0966f90e85ea02083962d15779215941396676d90a0ce99a09adaa064956f506ca40d18ba91a7f9826a2e82050fb3b569790b5642ac45e39d9dfb63f8c975c30090f9eceaca387129539eaebfcedc17d2e49f0bd029e3591ac30e3db26139368b1423cf058e2128978411518e87c2d3c106a91c16de80895ad7f928a9a40c6d5aac356bd2966b3bf98c77f616f04329caecc895d13d16d8193e9f0bfe866c86a2eee3b2b0beb95478d4c216e00f8a9712618599d176ad253e59e9e27743f1e61a710bb9a0ae989226900ef809acb17e11f9f068bdb35fd7a767560e912da3aa98cd9d529b3d993e360d73f19adf830599f71ca139f6e17014302dce8a40401276d3a7e3dda04ef4b344a7dc4cb94c106c346e389ab7e089b97aa1e3f1680d4b8eeb62d405ab3a4e827b93dd15074e1dfd74244a9b4857017818b63504399c98fc02d0b3af135a0d7ac4f9de9a7cd47fdbe40cb3a6185b6\"}";
     pub static SHAREDPUBLIC: &str = "{\"x\":\"f8308498a5b5996eb7c410fb7ada7f3524d604b45b247cc4d13e5a32c3763908\",\"y\":\"7e41091fd5ab1138d1a3cdf41b43c82a064839a6b82b251be2be70099b642d1a\"}";
+    pub static SHAREDPUBLIC2: &str = "{\"x\":\"5922d902bc02956aac861f25cb3bc5d839879fbeed2818984143bff3a4eddc7\",\"y\":\"da7baea75521527df867f7ff3c996fc18732200f2445e879fbbcb662f7c835d4\"}";
+
 
     pub fn test_sc_entity(db: MockDatabase, 
             lockbox_url: Option<String>, 
@@ -1445,6 +1489,32 @@ pub mod tests {
         assert_eq!(recovery_data.shared_key_id, recovery_return[0].shared_key_id);
         assert_eq!(recovery_data.statechain_id, recovery_return[0].statechain_id);
         assert_eq!(recovery_data.tx_hex,recovery_return[0].tx_hex);
+    }
+
+    #[test]
+    #[serial]
+    fn test_verify_confirmed() {
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_statechain_amount().returning(move |_| {
+            Ok(StateChainAmount {
+                chain: serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap().try_into().unwrap(),
+                amount: 100000,
+            })
+        });
+        db.expect_get_backup_transaction().returning(move |_| {
+            Ok(serde_json::from_str::<Transaction>(
+                &BACKUP_TX_SIGNED.to_string(),
+            ).unwrap())
+        });
+        db.expect_get_statecoin_pubkey().returning(move |_| {
+            Ok(Some(SHAREDPUBLIC2.to_string()))
+        });
+
+        let sc_entity = test_sc_entity(db, None, None, None, None);
+        let statechain_id = Uuid::new_v4();
+
+        assert!(sc_entity.verify_tx_confirmed(&statechain_id).is_ok());
     }
 
     #[test]

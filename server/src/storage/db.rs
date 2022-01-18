@@ -747,7 +747,7 @@ impl Database for PGDatabase {
         let mut guard = coins_histo.lock()?;
         let dbr = self.database_r()?;
         let statement =
-            dbr.prepare(&format!("SELECT amount,count(1) FROM {} GROUP BY amount", Table::StateChain.to_string(),))?;
+            dbr.prepare(&format!("SELECT amount,count(CASE WHEN confirmed THEN 1 END) FROM {} GROUP BY amount", Table::StateChain.to_string(),))?;
         let rows = statement.query(&[])?;
         if rows.is_empty() {
             return Ok(());
