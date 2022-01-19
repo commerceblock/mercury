@@ -183,7 +183,7 @@ impl Default for Config {
             testing_mode: false,
             lockheight_init: 10000,
             lh_decrement: 100,
-            required_confirmation: 3,
+            required_confirmation: 0,
             fee_address: String::from("bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x,bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x"),
             fee_deposit: 40,
             fee_withdraw: 40,
