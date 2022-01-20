@@ -118,7 +118,7 @@ impl Deposit for SCE {
 
         // Insert into StateChain table
         self.database
-            .create_statechain(&statechain_id, &user_id, &state_chain, &amount, self.coin_value_info.clone())?;
+            .create_statechain(&statechain_id, &user_id, &state_chain, &amount)?;
 
         // set the shared public key
         let shared_pubkey = self.database.get_shared_pubkey(user_id.clone())?;
@@ -259,7 +259,7 @@ pub mod tests {
         // Second time return signed back up tx
         db.expect_get_backup_transaction_and_proof_key()
             .returning(move |_| Ok((tx_backup_signed.clone(), proof_key.clone())));
-        db.expect_create_statechain().returning(|_, _, _, _, _| Ok(()));
+        db.expect_create_statechain().returning(|_, _, _, _| Ok(()));
         db.expect_create_backup_transaction()
             .returning(|_, _| Ok(()));
         db.expect_update_statechain_id().returning(|_, _| Ok(()));

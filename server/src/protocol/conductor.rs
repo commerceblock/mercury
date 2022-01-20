@@ -828,13 +828,17 @@ impl Conductor for SCE {
         //Verify the signature
         let _ = self.verify_statechain_sig(key_id, sig, None)?;
 
+        let sc_amount = self.database.get_statechain_amount(*key_id)?;
+        let amount: u64 = sc_amount.amount.clone() as u64;
+
         if !self.database.is_confirmed(&key_id)? {
             self.verify_tx_confirmed(&key_id)?;
             self.database.set_confirmed(&key_id)?;
+            // add to histogram
+            let mut guard = self.coin_value_info.as_ref().lock()?;
+            guard.increment(&sc_amount.amount);
         }
 
-        let sc_amount = self.database.get_statechain_amount(*key_id)?;
-        let amount: u64 = sc_amount.amount as u64;
         let _res = match guard.register_amount_swap_size(key_id, amount, *swap_size) {
             Ok(_res) => return Ok(()),
             Err(err) => return Err(err),

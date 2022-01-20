@@ -1532,9 +1532,6 @@ pub mod tests {
         let sc_entity = test_sc_entity(db, None, None, None, None);
         let statechain_id = Uuid::new_v4();
 
-        sc_entity.verify_tx_confirmed(&statechain_id);
-
-        assert!(false);
         assert!(sc_entity.verify_tx_confirmed(&statechain_id).is_ok());
     }
 

@@ -151,7 +151,6 @@ pub trait Database {
         user_id: &Uuid,
         state_chain: &StateChain,
         amount: &i64,
-        coins_histo: Arc<Mutex<CoinValueInfo>>
     ) -> Result<()>;
     fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain>;
     fn update_statechain_owner(

@@ -1143,9 +1143,7 @@ impl Database for PGDatabase {
         user_id: &Uuid,
         state_chain: &StateChain,
         amount: &i64,
-        coins_histo: Arc<Mutex<CoinValueInfo>>
     ) -> Result<()> {
-        let mut guard = coins_histo.as_ref().lock()?;
         self.insert(statechain_id, Table::StateChain)?;
         self.update(
             statechain_id,
@@ -1163,8 +1161,6 @@ impl Database for PGDatabase {
                 &user_id.to_owned(),
             ],
         )?;
-
-        guard.increment(amount);
         Ok(())
     }
 

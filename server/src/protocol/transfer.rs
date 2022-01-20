@@ -96,10 +96,14 @@ impl Transfer for SCE {
         if !self.database.is_confirmed(&statechain_id)? {
             self.verify_tx_confirmed(&statechain_id)?;
             self.database.set_confirmed(&statechain_id)?;
+            // add to histogram
+            let sc_amount = self.database.get_statechain_amount(statechain_id.clone())?;
+            let mut guard = self.coin_value_info.as_ref().lock()?;
+            guard.increment(&sc_amount.amount);
         }
 
         // Check if state chain is owned by user and not locked
-        let sco = self.database.get_statechain_owner(statechain_id)?;
+        let sco = self.database.get_statechain_owner(statechain_id.clone())?;
 
         is_locked(sco.locked_until)?;
         if sco.owner_id != user_id {
