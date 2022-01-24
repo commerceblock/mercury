@@ -746,7 +746,7 @@ impl Database for PGDatabase {
         let mut guard = coins_histo.lock()?;
         let dbr = self.database_r()?;
         let statement =
-            dbr.prepare(&format!("SELECT amount,count(1) FROM {} GROUP BY amount", Table::StateChain.to_string(),))?;
+            dbr.prepare(&format!("SELECT amount,count(CASE WHEN confirmed THEN 1 END) FROM {} GROUP BY amount", Table::StateChain.to_string(),))?;
         let rows = statement.query(&[])?;
         if rows.is_empty() {
             return Ok(());
@@ -1143,9 +1143,7 @@ impl Database for PGDatabase {
         user_id: &Uuid,
         state_chain: &StateChain,
         amount: &i64,
-        coins_histo: Arc<Mutex<CoinValueInfo>>
     ) -> Result<()> {
-        let mut guard = coins_histo.as_ref().lock()?;
         self.insert(statechain_id, Table::StateChain)?;
         self.update(
             statechain_id,
@@ -1163,8 +1161,6 @@ impl Database for PGDatabase {
                 &user_id.to_owned(),
             ],
         )?;
-
-        guard.increment(amount);
         Ok(())
     }
 

@@ -435,7 +435,6 @@ impl Database for MemoryDB {
         _user_id: &uuid::Uuid,
         _state_chain: &super::StateChain,
         _amount: &i64,
-        _user_ids: Arc<Mutex<CoinValueInfo>>
     ) -> crate::Result<()> {
         unimplemented!()
     }
