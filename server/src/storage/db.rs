@@ -1128,7 +1128,9 @@ impl Database for PGDatabase {
         {
             Ok(_) => {
                 let mut guard = coins_histo.as_ref().lock()?;
-                guard.update(&(amount as i64),prev_statechain_amount)?;
+                if self.is_confirmed(&statechain_id)? {
+                    guard.update(&(amount as i64),prev_statechain_amount)?;
+                }
                 Ok(())
             },
             Err(e) => {
