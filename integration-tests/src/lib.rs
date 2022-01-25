@@ -111,6 +111,7 @@ impl SpawnServer for PGDatabase {
     ) -> thread::JoinHandle<SpawnError> {
         // Set enviroment variable to testing_mode=true to override Settings.toml
         env::set_var("MERC_TESTING_MODE", "true");
+        env::set_var("MERC_REQUIRED_CONFIRMATION", "0");
         match port {
             Some(p) => env::set_var("MERC_ROCKET_PORT", &p.to_string()[..]),
             None => ()
@@ -152,6 +153,7 @@ impl SpawnServer for MockDatabase {
     ) -> thread::JoinHandle<SpawnError> {
         // Set enviroment variable to testing_mode=true to override Settings.toml
         env::set_var("MERC_TESTING_MODE", "true");
+        env::set_var("MERC_REQUIRED_CONFIRMATION", "0");
 
         // Rocket server is blocking, so we spawn a new thread.
         let handle = thread::spawn(|| {
