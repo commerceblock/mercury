@@ -107,7 +107,7 @@ pub struct RegisterUtxo {
 pub struct SignatureDef(String);
 
 /// Owner -> Conductor
-#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct SwapMsg1 {
     #[schemars(with = "UuidDef")]
     pub swap_id: Uuid,
