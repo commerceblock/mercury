@@ -143,6 +143,8 @@ mod tests {
         assert_eq!(shared_key.smt_proof.clone().unwrap().proof, proof);
         assert_eq!(shared_key.proof_key.clone().unwrap(), proof_key);
 
+        let _d = state_entity::conductor::swap_register_utxo(&wallet, &wallet.shared_keys[0].statechain_id.clone().unwrap(), &5);
+
         let coins = state_entity::api::get_coins_info(&wallet.client_shim).unwrap();
 
         assert_eq!(coins.values.get(&10000).unwrap().get(),1);
