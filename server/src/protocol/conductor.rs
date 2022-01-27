@@ -714,6 +714,102 @@ impl Scheduler {
             },
         }
     }
+
+    fn register_bst(&mut self, swap_msg1: &SwapMsg1) -> Result<()> {
+        let base_err = "blind spend token e_prime already registered for statechain id";
+        // Add bst_e_prime value to list. If a BST has already been registered for the
+        // statechain_id, return an error.
+        let swap_id = &swap_msg1.swap_id;
+        let statechain_id = &swap_msg1.statechain_id;
+
+        // Create a new e_prime map if one does not exist, and assign it to a mutable
+        // reference
+        let e_prime_map = match self.bst_e_prime_map.get_mut(swap_id){
+            Some(m) => m,
+            None => {
+                let m = HashMap::<Uuid, FE>::new();
+                self.bst_e_prime_map
+                        .insert(swap_id.to_owned(), m);                
+                self.bst_e_prime_map
+                        .get_mut(swap_id).unwrap()
+            }
+        };
+            
+        match e_prime_map.get(statechain_id){
+            Some(bst_e_prime) => {
+                // The e_prime is already registered - if the data in the request match
+                // the registered data then return the existing blind spend token data.
+                // If not, return an error.
+                           
+                // 1. Check the user BST e_prime matches the registered one
+                // 2. Check the transfer batch sig is in the set
+                // 3. Check the address is in the list
+                           
+                if bst_e_prime != &swap_msg1.bst_e_prime {
+                    return Err(SEError::SwapError(
+                            format!("{} {}, but does not match the requested bst_e_prime",
+                            base_err,
+                            statechain_id)
+                            ))
+                }
+
+                let tbs_set = self.tb_sig_map.get_mut(swap_id);
+                if tbs_set.is_none() || !tbs_set.unwrap().contains(&swap_msg1.transfer_batch_sig) {
+                    return Err(SEError::SwapError(
+                                format!("{} {}, but transfer batch signature not found",
+                                base_err,
+                                statechain_id)
+                            )
+                    )
+                }
+
+                let sce_address_list = self.out_addr_map.get_mut(swap_id);
+                if sce_address_list.is_none() || !sce_address_list.unwrap().key_exists(&swap_msg1.address){
+                    return Err(SEError::SwapError(
+                                format!("{} {}, but address not found",
+                                    base_err,
+                                    statechain_id)
+                                )
+                        )
+                }
+
+            },
+            None => {
+                e_prime_map.insert(swap_msg1.statechain_id, swap_msg1.bst_e_prime);
+
+                //Add the transfer batch signature to the list. If it doesn't exist, make a new one.
+                match self.tb_sig_map.get_mut(swap_id) {
+                    Some(v) => {
+                        v.insert(swap_msg1.transfer_batch_sig.clone());
+                    }
+                    None => {
+                        let mut tbs_set = HashSet::<StateChainSig>::new();
+                        tbs_set.insert(swap_msg1.transfer_batch_sig.clone());
+                        self.tb_sig_map.insert(swap_id.to_owned(), tbs_set);
+                    }
+                }
+
+                //Add the SCEAddress to the list.
+                match self.out_addr_map.get_mut(swap_id) {
+                    Some(sce_address_list) => {
+                        sce_address_list.insert(swap_msg1.address.clone(), None);
+                    }
+                    None => {
+                        let sce_address_list = BisetMap::<SCEAddress, Option<Uuid>>::new(); // create new sce_address_list if none exists
+                        sce_address_list.insert(swap_msg1.address.clone(), None);
+                        self
+                            .out_addr_map
+                            .insert(swap_id.to_owned(), sce_address_list);
+                    }
+                };
+
+            }
+        };
+        Ok(())        
+    }
+                  
+
+    
 }
 
 /// Generate A Blind Spend Token for each e_prime value provided
@@ -724,10 +820,12 @@ pub fn generate_blind_spend_signatures(
     let bst_e_prime_map: &HashMap<Uuid, FE> = bst_e_prime_map.ok_or(SEError::SwapError(
         "Cannot generate BSTs - e_prime values not found for swap.".to_string(),
     ))?;
-    if swap_info.swap_token.statechain_ids.len() != bst_e_prime_map.len() {
+    let swap_size = &swap_info.swap_token.statechain_ids.len();
+    let e_prime_map_size = &bst_e_prime_map.len();
+    if swap_size != e_prime_map_size {
         return Err(SEError::SwapError(
-            "Cannot generate BSTs - Not enough e_prime values.".to_string(),
-        ));
+            format!("Cannot generate BSTs - swap size = {}, e_prime map size = {}",swap_size, e_prime_map_size)
+        ))
     }
 
     let mut scid_bst_sig_map = HashMap::<Uuid, BlindedSpendSignature>::new();
@@ -904,45 +1002,9 @@ impl Conductor for SCE {
                     &swap_msg1.transfer_batch_sig,
                     None,
                 )?;
-                //Add the transfer batch signature to the list. If it doesn't exist, make a new one.
-                match guard.tb_sig_map.get_mut(swap_id) {
-                    Some(v) => {
-                        v.insert(swap_msg1.transfer_batch_sig.clone());
-                    }
-                    None => {
-                        let mut tbs_set = HashSet::<StateChainSig>::new();
-                        tbs_set.insert(swap_msg1.transfer_batch_sig.clone());
-                        guard.tb_sig_map.insert(swap_id.to_owned(), tbs_set);
-                    }
-                }
 
-                //Add the SCEAddress to the list.
-                match guard.out_addr_map.get_mut(swap_id) {
-                    Some(sce_address_list) => {
-                        sce_address_list.insert(swap_msg1.address.clone(), None);
-                    }
-                    None => {
-                        let sce_address_list = BisetMap::<SCEAddress, Option<Uuid>>::new(); // create new sce_address_list if none exists
-                        sce_address_list.insert(swap_msg1.address.clone(), None);
-                        guard
-                            .out_addr_map
-                            .insert(swap_id.to_owned(), sce_address_list);
-                    }
-                };
+                guard.register_bst(&swap_msg1)?;                
 
-                // Add bst_e_prime value to list.
-                match guard.bst_e_prime_map.get_mut(swap_id) {
-                    Some(e_prime_map) => {
-                        e_prime_map.insert(swap_msg1.statechain_id, swap_msg1.bst_e_prime);
-                    }
-                    None => {
-                        let mut swaps_e_prime_list = HashMap::<Uuid, FE>::new(); // create new e_prime_map if none exists
-                        swaps_e_prime_list.insert(swap_msg1.statechain_id, swap_msg1.bst_e_prime);
-                        guard
-                            .bst_e_prime_map
-                            .insert(swap_id.to_owned(), swaps_e_prime_list.clone());
-                    }
-                };
                 info!(
                     "CONDUTOR: swap_first_message complete for StateChain ID {} of Swap ID: {}",
                     swap_msg1.statechain_id, swap_id
@@ -1707,6 +1769,7 @@ mod tests {
             SwapStatus::Phase1
         );
 
+        let mut swap_msgs = vec![];
         //Send valid first messages for all participants
         for i in 0..proof_key_vec.len() {
             let transfer_batch_sig = StateChainSig::new_transfer_batch_sig(
@@ -1726,12 +1789,127 @@ mod tests {
                 address: sce_addresses[i].clone(),
                 bst_e_prime: FE::new_random(),
             };
+            swap_msgs.push(swap_msg_1.clone());
             // Valid inputs
             match sc_entity.swap_first_message(&swap_msg_1) {
                 Ok(_) => assert!(true),
                 Err(e) => assert!(false, "{}", e.to_string()),
             };
         }
+
+
+        //Test repeated calls to swap_first_message
+        //Add mock expectations
+        //Mock database responses
+        let mut chain = Vec::<SCState>::new();
+            chain.push(SCState {
+            data: proof_key_vec[0].to_string(),
+            next_state: None,
+        });
+        let statechain: StateChain = chain.try_into().expect("expected Vec<State> to convert to StateChain");
+        let statechain2 = statechain.clone();
+
+        sc_entity.database.expect_get_statechain_owner()
+        .times(3)
+        .returning(move |_| {
+          Ok(StateChainOwner {
+              locked_until: chrono::prelude::Utc::now().naive_utc(),
+              owner_id: Uuid::new_v4(),
+              chain: statechain.clone(),
+          })
+        });
+
+        let swap_msg_1 = swap_msgs[0].clone();
+
+        sc_entity.database.expect_get_statechain()
+            .with(eq(statechain_ids[0]))
+            .returning(move |_| Ok(statechain2.clone()));
+
+        
+        // Expect Ok when repeating swap_first_message with the same input
+        match sc_entity.swap_first_message(&swap_msg_1) {
+            Ok(_) => assert!(true),
+            Err(e) => assert!(false, "{}", e.to_string()),
+        };
+
+        // Repeat attempts return the appropriate error
+        let expected_error_base = format!("Swap Error: blind spend token e_prime already registered for statechain id {}", 
+            &swap_msg_1.statechain_id);
+
+
+        // Expect Error when repeating swap_first_message with a different input
+        let mut swap_msg_1_diff_bst = swap_msg_1.clone();
+        while(swap_msg_1.bst_e_prime == swap_msg_1_diff_bst.bst_e_prime){
+                swap_msg_1_diff_bst.bst_e_prime = FE::new_random();
+            }
+
+        let mut expected_error = format!("{}, but does not match the requested bst_e_prime", expected_error_base);
+        match sc_entity.swap_first_message(&swap_msg_1_diff_bst) {
+                Ok(_) => assert!(false, "expected error: {}", expected_error),
+                Err(e) => {
+                    assert_eq!(expected_error, e.to_string())
+                },
+        };
+
+            let mut swap_msg_1_diff_address = swap_msg_1.clone();
+            let priv_key = SecretKey::from_slice(&[5 as u8; 32]).unwrap();
+            let pub_key = PublicKey::from_secret_key(
+                &Secp256k1::new(),
+                &priv_key,
+            );
+            swap_msg_1_diff_address.address = SCEAddress {
+                tx_backup_addr: None,
+                proof_key: pub_key,
+            };
+            assert!(swap_msg_1_diff_address.address != swap_msg_1.address);
+
+            let mut chain_diff = Vec::<SCState>::new();
+            chain_diff.push(SCState {
+                data: pub_key.to_string(),
+                next_state: None,
+             });
+            let statechain_diff: StateChain = chain_diff.try_into().expect("expected Vec<State> to convert to StateChain");
+            let statechain_diff2 = statechain_diff.clone();
+
+            sc_entity.database.expect_get_statechain_owner()
+            .times(1)
+            .returning(move |_| {
+              Ok(StateChainOwner {
+                  locked_until: chrono::prelude::Utc::now().naive_utc(),
+                  owner_id: Uuid::new_v4(),
+                  chain: statechain_diff.clone(),
+              })
+            });
+
+            sc_entity.database.expect_get_statechain()
+            .with(eq(statechain_ids[0]))
+            .returning(move |_| Ok(statechain_diff2.clone()));
+
+            expected_error = format!("{}, but address not found", expected_error_base);
+            match sc_entity.swap_first_message(&swap_msg_1_diff_address) {
+                Ok(_) => assert!(false, "exected error: {}", expected_error),
+                Err(e) => {
+                    assert_eq!(expected_error, e.to_string())
+                },
+            };
+
+            let mut swap_msg_1_diff_sig = swap_msg_1.clone();
+            swap_msg_1_diff_sig.transfer_batch_sig = StateChainSig::new_transfer_batch_sig(
+                &priv_key,
+                &swap_id,
+                &statechain_id,
+            ).unwrap();
+            expected_error = format!("{}, but transfer batch signature not found", expected_error_base);
+            match sc_entity.swap_first_message(&swap_msg_1_diff_sig) {
+                Ok(_) => assert!(false, "exected error: {}", expected_error),
+                Err(e) => {
+                    assert_eq!(expected_error, e.to_string())
+                },
+            };
+        
+
+
+
         //Scheduler updates swap info to move swap to phase 2
         let mut guard = sc_entity.scheduler.as_ref().expect("scheduler is None").lock().unwrap();
         guard.update_swap_info().unwrap();
@@ -2116,7 +2294,7 @@ mod tests {
                         swap_token_sig: signature.to_string(),
                         transfer_batch_sig,
                         address: sce_address,
-                        bst_e_prime: FE::zero(),
+                        bst_e_prime: FE::new_random(),
                     });
                     println!("Server response: {:?}", first_msg_resp);
                     phase_1_complete = true;
