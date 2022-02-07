@@ -146,6 +146,8 @@ pub struct Scheduler {
     max_swap_size: u32,
     //minimum wallet version number
     wallet_requirement: String,
+    //permitted swap size groups
+    permitted_groups: Vec<u64>,
     //State chain id to requested swap size map
     statechain_swap_size_map: BisetMap<Uuid, u64>,
     //A map of state chain registereds for swap to amount
@@ -173,6 +175,13 @@ pub struct Scheduler {
 
 impl Scheduler {
     pub fn new(config: &ConductorConfig) -> Self {
+        let permitted_groups_vec: Vec<&str> = config.permitted_groups.split(",").collect();
+        let mut permitted_groups_int: Vec<u64> = vec![];
+        for group_string in 0..permitted_groups_vec.len(){
+            let group_int: u64 = group_string.to_string().parse().unwrap();
+            permitted_groups_int.push(group_int);
+        }
+
         Self {
             utxo_timeout: config.utxo_timeout.clone(),
             #[cfg(not(test))]
@@ -182,6 +191,7 @@ impl Scheduler {
             daily_epochs: config.daily_epochs.clone(),
             max_swap_size: config.max_swap_size.clone(),
             wallet_requirement: config.swap_wallet_version.clone(),
+            permitted_groups: permitted_groups_int,
             statechain_swap_size_map: BisetMap::<Uuid, u64>::new(),
             statechain_amount_map: BisetMap::<Uuid, u64>::new(),
             group_info_map: HashMap::<SwapGroup, GroupStatus>::new(),
@@ -223,7 +233,8 @@ impl Scheduler {
         self.group_info_map.entry(group).or_insert(status.clone());
 
         let group = SwapGroup { amount: MIN_AMOUNT*1000, size: self.max_swap_size as u64 };
-        self.group_info_map.entry(group).or_insert(status);        
+        self.group_info_map.entry(group).or_insert(status);
+
         Ok(())
     }
 
@@ -303,6 +314,7 @@ impl Scheduler {
         if (!in_swap.is_none()) {
             return Err(SEError::SwapError(format!("Statecoin not found in swap: {:?}", &statechain_id)));
         };
+
         //If there was an amout already registered for this state chain id then
         //remove it from the inverse table before updating
         if (!self.statechain_amount_map.contains(&statechain_id,&amount)) {
@@ -929,6 +941,11 @@ impl Conductor for SCE {
         let sc_amount = self.database.get_statechain_amount(*key_id)?;
         let amount: u64 = sc_amount.amount.clone() as u64;
 
+        // check if amount permitted
+        if !guard.permitted_groups.contains(&amount) {
+            return Err(SEError::SwapError(String::from("Invalid coin amount for swap registration")));
+        }
+
         if !self.database.is_confirmed(&key_id)? {
             self.verify_tx_confirmed(&key_id)?;
             self.database.set_confirmed(&key_id)?;
@@ -1383,8 +1400,8 @@ mod tests {
         let now: NaiveDateTime = Utc::now().naive_utc();
         let t = now + chrono::Duration::seconds(utxo_timeout as i64);
         let t_swap = now + chrono::Duration::seconds(group_timeout as i64);
-        let wallet_requirement: String = "0.4.66".to_string();
-
+        let wallet_requirement: String = "0.6.0".to_string();
+        let permitted_groups: Vec<u64> = vec![10,100000];
 
         let statechain_swap_size_map = BisetMap::new();
         let statechain_amount_map = BisetMap::new();
@@ -1405,6 +1422,7 @@ mod tests {
             daily_epochs,
             max_swap_size,
             wallet_requirement,
+            permitted_groups,
             statechain_swap_size_map,
             statechain_amount_map,
             group_info_map: HashMap::<SwapGroup,GroupStatus>::new(),
@@ -1576,6 +1594,7 @@ mod tests {
     fn test_register_utxo() {
         // Check signature verified correctly
         let statechain_id = Uuid::from_str("00000000-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let statechain_id_2 = Uuid::from_str("20000000-93f0-46f9-abda-0678c891b2d3").unwrap();
         let proof_key_priv = SecretKey::from_slice(&[1; 32]).unwrap(); // Proof key priv part
         let proof_key = PublicKey::from_secret_key(&Secp256k1::new(), &proof_key_priv); // proof key
         let invalid_proof_key_priv = SecretKey::from_slice(&[2; 32]).unwrap();
@@ -1603,14 +1622,27 @@ mod tests {
 
         let statechain_amount = StateChainAmount {
             chain: statechain_2.clone(),
-            amount: 10,
+            amount: 100000,
+        };
+
+        let statechain_amount_2 = StateChainAmount {
+            chain: statechain_2.clone(),
+            amount: 123456,
         };
 
         db.expect_is_confirmed()
             .with(predicate::eq(statechain_id))
             .returning(|_| Ok(true));
+        db.expect_is_confirmed()
+            .with(predicate::eq(statechain_id_2))
+            .returning(|_| Ok(true));
         db.expect_get_statechain_amount()
+            .with(predicate::eq(statechain_id))
             .returning(move |_| Ok(statechain_amount.clone()));
+
+        db.expect_get_statechain_amount()
+            .with(predicate::eq(statechain_id_2))
+            .returning(move |_| Ok(statechain_amount_2.clone()));            
 
         let mut sc_entity = test_sc_entity(db, None, None, None, None);
         sc_entity.scheduler = Some(Arc::new(Mutex::new(get_scheduler(vec![(3, 10), (3, 10), (3, 10)]))));
@@ -1626,7 +1658,7 @@ mod tests {
             statechain_id,
             signature: invalid_signature,
             swap_size: 10,
-            wallet_version: "0.4.66".to_string()
+            wallet_version: "0.6.0".to_string()
         }) {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(
@@ -1634,20 +1666,35 @@ mod tests {
                 "{}", e.to_string()
             ),
         }
-        // Valid signature for proof key
+
+        // Try not permitted amount
         let signature =
             StateChainSig::new(&proof_key_priv, &"SWAP".to_string(), &proof_key.to_string())
                 .unwrap();
+        match sc_entity.register_utxo(&RegisterUtxo {
+                statechain_id: statechain_id_2,
+                signature: signature.clone(),
+                swap_size: 10,
+                wallet_version: "0.6.0".to_string()
+            }) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(
+                e.to_string().contains("Invalid coin amount"),
+                "{}", e.to_string()
+            ),
+        }
+            
+        // Valid signature for proof key
         assert!(sc_entity
             .register_utxo(&RegisterUtxo {
                 statechain_id,
-                signature: signature,
+                signature: signature.clone(),
                 swap_size: 10,
-                wallet_version: "0.4.66".to_string()
+                wallet_version: "0.6.0".to_string()
             })
             .is_ok());
 
-        let swap_group = SwapGroup { amount: 10, size: 10 };
+        let swap_group = SwapGroup { amount: 100000, size: 10 };
         let groupinfo = sc_entity.get_group_info().unwrap();
 
         assert_eq!(groupinfo.get(&swap_group).unwrap().number,1);
@@ -2220,7 +2267,7 @@ mod tests {
             StateChainSig::new(&proof_key_priv, &"SWAP".to_string(), &proof_key.to_string())
                 .unwrap();
         let swap_size: u64 = 10;
-        let wallet_version: String = "0.4.66".to_string();
+        let wallet_version: String = "0.6.0".to_string();
         let _ = conductor.register_utxo(&RegisterUtxo {
             statechain_id,
             signature,
