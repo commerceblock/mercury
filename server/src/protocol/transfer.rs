@@ -7,7 +7,8 @@ extern crate shared_lib;
 extern crate reqwest;
 use crate::server::TRANSFERS_COUNT;
 use super::transfer_batch::transfer_batch_is_ended;
-use shared_lib::{ecies, ecies::WalletDecryptable, ecies::SelfEncryptable, state_chain::*, structs::*, util::transaction_deserialise};
+use shared_lib::{ecies, ecies::WalletDecryptable, ecies::SelfEncryptable, 
+    state_chain::*, structs::*, util::transaction_deserialise};
 use bitcoin::secp256k1::key::SecretKey;
 use bitcoin::secp256k1::PublicKey;
 use bitcoin::util::key::PrivateKey;
@@ -32,6 +33,7 @@ use uuid::Uuid;
 use url::Url;
 use crate::protocol::{util::{Utilities, RateLimiter}, withdraw::Withdraw};
 
+
 cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
         use crate::MockDatabase;
@@ -43,16 +45,7 @@ cfg_if! {
     }
 }
 
-/// Struct holds data when transfer is complete but not yet finalized
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct TransferFinalizeData {
-    pub new_shared_key_id: Uuid,
-    pub statechain_id: Uuid,
-    pub statechain_sig: StateChainSig,
-    pub s2: FE,
-    pub new_tx_backup_hex: String,
-    pub batch_data: Option<BatchData>,
-}
+
 
 /// StateChain Transfer protocol trait
 pub trait Transfer {
@@ -96,21 +89,21 @@ impl Transfer for SCE {
             return Err(SEError::Generic(format!("transfer_sender - shared key id: {} is signed for withdrawal", &user_id)));
         }
 
-
-
-
         // Get state_chain id
         let statechain_id = self.database.get_statechain_id(user_id)?;
 
-        // Get back up tx and proof key
-        let (tx_backup,_) = self.database.get_backup_transaction_and_proof_key(user_id)?;
-
-        // Check that the funding transaction has the required number of confirmations
-        self.verify_tx_confirmed(&tx_backup.input[0].previous_output.txid.to_string())?;
-        self.database.set_confirmed(&statechain_id)?;
+        // Check that the funding transaction has the required number of confirmations and is valid
+        if !self.database.is_confirmed(&statechain_id)? {
+            self.verify_tx_confirmed(&statechain_id)?;
+            self.database.set_confirmed(&statechain_id)?;
+            // add to histogram
+            let sc_amount = self.database.get_statechain_amount(statechain_id.clone())?;
+            let mut guard = self.coin_value_info.as_ref().lock()?;
+            guard.increment(&sc_amount.amount);
+        }
 
         // Check if state chain is owned by user and not locked
-        let sco = self.database.get_statechain_owner(statechain_id)?;
+        let sco = self.database.get_statechain_owner(statechain_id.clone())?;
 
         is_locked(sco.locked_until)?;
         if sco.owner_id != user_id {
@@ -128,7 +121,7 @@ impl Transfer for SCE {
         let x1_ser = FESer::from_fe(&x1);
 
         self.database
-            .create_transfer(&statechain_id, &transfer_msg1.statechain_sig, &x1)?;
+            .create_transfer(&statechain_id, &transfer_msg1.statechain_sig, &x1, transfer_msg1.batch_id)?;
 
         info!(
             "TRANSFER: Sender side complete. Previous shared key ID: {}. State Chain ID: {}",
@@ -182,6 +175,24 @@ impl Transfer for SCE {
                 "State chain siganture provided does not match state chain at id {}",
                 statechain_id
             )));
+        }
+
+        // Check if batch transfer and batch ID matches
+        if td.batch_id.is_some() {
+            if transfer_msg4.batch_data.is_some() {
+                let batch_id = transfer_msg4.batch_data.clone().unwrap().id;
+                if batch_id != td.batch_id.unwrap() {
+                    return Err(SEError::Generic(format!(
+                        "Incorrect batch ID for receive. Expected {}",
+                        td.batch_id.unwrap()
+                    )));                
+                }
+            } else {
+                return Err(SEError::Generic(format!(
+                    "Expect receive in batch ID {}",
+                    td.batch_id.unwrap()
+                )));
+            }
         }
 
         let s2: FE;
@@ -541,6 +552,7 @@ mod tests {
         let transfer_msg_1 = TransferMsg1 {
             shared_key_id,
             statechain_sig,
+            batch_id: None
         };
 
         let mut db = MockDatabase::new();
@@ -581,6 +593,9 @@ mod tests {
         db.expect_transfer_is_completed()
             .with(predicate::eq(statechain_id))
             .returning(|_| false);
+        db.expect_is_confirmed()
+            .with(predicate::eq(statechain_id))
+            .returning(|_| Ok(true));
         db.expect_get_statechain_owner() // sc locked
             .with(predicate::eq(statechain_id))
             .times(1)
@@ -600,7 +615,7 @@ mod tests {
                     chain: serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap().try_into().unwrap(),
                 })
             });
-        db.expect_create_transfer().returning(|_, _, _| Ok(()));
+        db.expect_create_transfer().returning(|_, _, _, _| Ok(()));
         db.expect_update_transfer_msg().returning(|_, _| Ok(()));
         db.expect_set_confirmed().returning(|_| Ok(()));
 
@@ -662,6 +677,7 @@ mod tests {
                     .unwrap()
                     .statechain_sig,
                     x1,
+                    batch_id: None
                 })
             });
         db.expect_get_ecdsa_keypair()
@@ -806,6 +822,7 @@ mod tests {
                     .unwrap()
                     .statechain_sig,
                     x1,
+                    batch_id: None
                 })
             });
         db.expect_get_ecdsa_keypair()

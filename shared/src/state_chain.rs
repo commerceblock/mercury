@@ -258,9 +258,8 @@ impl StateChainSig {
     /// Verify self's signature for transfer or withdraw
     pub fn verify(&self, pk: &String) -> Result<()> {
         let message = StateChainSig::to_message(&self.purpose, &self.data)?;
-        Signature::from_str(&self.sig)
-            .unwrap()
-            .verify(&PublicKey::from_str(&pk).unwrap(), &message)
+        Signature::from_str(&self.sig)?
+            .verify(&PublicKey::from_str(&pk)?, &message)
     }
 
     pub fn is_transfer_batch(&self, batch_id: Option<&Uuid>) -> bool {

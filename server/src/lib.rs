@@ -59,7 +59,6 @@ pub type Hash = bitcoin::hashes::sha256d::Hash;
 use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::PostgresConnectionManager;
 
-use crate::protocol::transfer::TransferFinalizeData;
 use crate::storage::db::Alpha;
 use bitcoin::hashes::sha256d;
 use bitcoin::Transaction;
@@ -71,7 +70,7 @@ use mockall::*;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
 use rocket_contrib::databases::postgres;
-use shared_lib::{state_chain::*, structs::TransferMsg3, Root, structs::CoinValueInfo};
+use shared_lib::{state_chain::*, structs::{TransferMsg3,TransferFinalizeData}, Root, structs::CoinValueInfo};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 use crate::server::UserIDs;
@@ -152,7 +151,6 @@ pub trait Database {
         user_id: &Uuid,
         state_chain: &StateChain,
         amount: &i64,
-        coins_histo: Arc<Mutex<CoinValueInfo>>
     ) -> Result<()>;
     fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain>;
     fn update_statechain_owner(
@@ -184,6 +182,7 @@ pub trait Database {
         statechain_id: &Uuid,
         statechain_sig: &StateChainSig,
         x1: &FE,
+        batch_id: Option<Uuid>
     ) -> Result<()>;
     fn update_transfer_msg(&self, statechain_id: &Uuid, msg: &TransferMsg3) -> Result<()>;
     fn get_transfer_msg(&self, statechain_id: &Uuid) -> Result<TransferMsg3>;
@@ -230,7 +229,7 @@ pub trait Database {
     fn get_transfer_batch_start_time(&self, batch_id: &Uuid) -> Result<NaiveDateTime> ;
     fn get_batch_transfer_statechain_ids(&self, batch_id: &Uuid) -> Result<HashSet<Uuid>>;
     fn get_finalize_batch_data(&self, batch_id: Uuid) -> Result<TransferFinalizeBatchData>;
-    fn get_sc_finalize_batch_data(
+    fn get_sc_transfer_finalize_data(
         &self,
         statechain_id: &Uuid
     ) -> Result<TransferFinalizeData>;
@@ -324,6 +323,7 @@ pub mod structs {
         pub statechain_id: Uuid,
         pub statechain_sig: StateChainSig,
         pub x1: FE,
+        pub batch_id: Option<Uuid>,
     }
 
     pub struct ECDSAKeypair {

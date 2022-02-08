@@ -6,7 +6,6 @@ use super::super::Result;
 use bitcoin::Transaction;
 pub type Hash = bitcoin::hashes::sha256d::Hash;
 
-use crate::protocol::transfer::TransferFinalizeData;
 use crate::server::{get_postgres_url, UserIDs};
 use crate::{
     error::{
@@ -27,7 +26,7 @@ use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
 use shared_lib::mainstay::CommitmentInfo;
 use shared_lib::state_chain::*;
-use shared_lib::structs::{TransferMsg3,CoinValueInfo};
+use shared_lib::structs::{TransferMsg3,CoinValueInfo,TransferFinalizeData};
 use shared_lib::Root;
 use shared_lib::util::transaction_deserialise;
 use rocket_okapi::JsonSchema;
@@ -130,6 +129,7 @@ pub enum Column {
     StateChainSig,
     X1,
     TransferMsg,
+    BatchId,
 
     // TransferBatch
     // Id,
@@ -332,6 +332,7 @@ impl PGDatabase {
                 x1 varchar,
                 transfermsg varchar,
                 proofkey varchar,
+                batchid uuid,
                 PRIMARY KEY (id)
             );",
                 Table::Transfer.to_string(),
@@ -745,7 +746,7 @@ impl Database for PGDatabase {
         let mut guard = coins_histo.lock()?;
         let dbr = self.database_r()?;
         let statement =
-            dbr.prepare(&format!("SELECT amount,count(1) FROM {} GROUP BY amount", Table::StateChain.to_string(),))?;
+            dbr.prepare(&format!("SELECT amount,count(CASE WHEN confirmed THEN 1 END) FROM {} GROUP BY amount", Table::StateChain.to_string(),))?;
         let rows = statement.query(&[])?;
         if rows.is_empty() {
             return Ok(());
@@ -1127,7 +1128,9 @@ impl Database for PGDatabase {
         {
             Ok(_) => {
                 let mut guard = coins_histo.as_ref().lock()?;
-                guard.update(&(amount as i64),prev_statechain_amount)?;
+                if self.is_confirmed(&statechain_id)? {
+                    guard.update(&(amount as i64),prev_statechain_amount)?;
+                }
                 Ok(())
             },
             Err(e) => {
@@ -1142,9 +1145,7 @@ impl Database for PGDatabase {
         user_id: &Uuid,
         state_chain: &StateChain,
         amount: &i64,
-        coins_histo: Arc<Mutex<CoinValueInfo>>
     ) -> Result<()> {
-        let mut guard = coins_histo.as_ref().lock()?;
         self.insert(statechain_id, Table::StateChain)?;
         self.update(
             statechain_id,
@@ -1162,8 +1163,6 @@ impl Database for PGDatabase {
                 &user_id.to_owned(),
             ],
         )?;
-
-        guard.increment(amount);
         Ok(())
     }
 
@@ -1296,20 +1295,35 @@ impl Database for PGDatabase {
         statechain_id: &Uuid,
         statechain_sig: &StateChainSig,
         x1: &FE,
+        batch_id: Option<Uuid>
     ) -> Result<()> {
         // Create Transfer table entry
         if(!self.transfer_is_completed(statechain_id.clone())) {
             self.insert(&statechain_id, Table::Transfer)?;
         }
-        self.update(
-            statechain_id,
-            Table::Transfer,
-            vec![Column::StateChainSig, Column::X1],
-            vec![
-                &Self::ser(statechain_sig.to_owned())?,
-                &Self::ser(x1.to_owned())?,
-            ],
-        )
+        if batch_id.is_some() {
+            self.update(
+                statechain_id,
+                Table::Transfer,
+                vec![Column::StateChainSig, Column::X1, Column::BatchId],
+                vec![
+                    &Self::ser(statechain_sig.to_owned())?,
+                    &Self::ser(x1.to_owned())?,
+                    &batch_id.unwrap().to_owned(),
+                ],
+            )
+        } else {
+            self.update(
+                statechain_id,
+                Table::Transfer,
+                vec![Column::StateChainSig, Column::X1, Column::BatchId],
+                vec![
+                    &Self::ser(statechain_sig.to_owned())?,
+                    &Self::ser(x1.to_owned())?,
+                    &None::<Uuid>
+                ],
+            )
+        }
     }
 
     fn update_transfer_msg(&self, statechain_id: &Uuid, msg: &TransferMsg3) -> Result<()> {
@@ -1372,10 +1386,10 @@ impl Database for PGDatabase {
     }
 
     fn get_transfer_data(&self, statechain_id: Uuid) -> Result<TransferData> {
-        let (statechain_id, statechain_sig_str, x1_str) = self.get_3::<Uuid, String, String>(
+        let (statechain_id, statechain_sig_str, x1_str, batch_id) = self.get_4::<Uuid, String, String, Option<Uuid>>(
             statechain_id,
             Table::Transfer,
-            vec![Column::Id, Column::StateChainSig, Column::X1],
+            vec![Column::Id, Column::StateChainSig, Column::X1, Column::BatchId],
         )?;
 
         let statechain_sig: StateChainSig = Self::deser(statechain_sig_str)?;
@@ -1385,6 +1399,7 @@ impl Database for PGDatabase {
             statechain_id,
             statechain_sig,
             x1,
+            batch_id,
         });
     }
 
@@ -1626,7 +1641,7 @@ impl Database for PGDatabase {
         let mut finalized_data_vec = vec![];
 
         for id in self.get_batch_transfer_statechain_ids(&batch_id)? {
-            match self.get_sc_finalize_batch_data(&id){
+            match self.get_sc_transfer_finalize_data(&id){
                 Ok(v) => {
                     //Check the batch id
                     match v.batch_data {
@@ -1667,7 +1682,7 @@ impl Database for PGDatabase {
         )
     }
 
-    fn get_sc_finalize_batch_data(
+    fn get_sc_transfer_finalize_data(
         &self,
         statechain_id: &Uuid
     ) -> Result<TransferFinalizeData> {

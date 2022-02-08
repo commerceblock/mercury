@@ -5,8 +5,10 @@ mod tests {
     use shared_lib::{commitment::verify_commitment, state_chain::StateChainSig};
     use bitcoin::PublicKey;
     use client_lib::state_entity;
-    use std::thread::spawn;
+    use std::{thread::spawn, collections::HashMap};
     use std::{str::FromStr, thread, time::Duration};
+    use state_entity::transfer::{TransferFinalizeDataForRecovery,
+        get_transfer_finalize_data_for_recovery};
 
     /// Test batch transfer signature generation
     #[test]
@@ -154,10 +156,12 @@ mod tests {
             shared_key_ids.push(deposit.0);
             statechain_ids.push(deposit.1);
         }
-        dbg!("doing run batch transfer...");
+        println!("doing run batch transfer...");
         let (batch_id, transfer_finalized_datas, commitments, nonces, transfer_sigs) =
             run_batch_transfer(&mut wallets, &swap_map, &funding_txids, &statechain_ids);
-        dbg!("finished run batch transfer.");
+        println!("finished run batch transfer.");
+
+
         
         let mut sorted_statechain_ids = statechain_ids.clone();
         sorted_statechain_ids.sort();
@@ -186,11 +190,12 @@ mod tests {
         let receiver_addr = wallets[1]
             .get_new_state_entity_address()
             .expect("expected state chain entity address");
-        dbg!("do transfer sender...");
+        println!("do transfer sender...");
         match state_entity::transfer::transfer_sender(
             &mut wallets[0],
             &statechain_ids[0],
             receiver_addr.clone(),
+            Some(batch_id.clone()),
         ) {
             Err(e) => {
                 assert!(e.to_string().contains("State Chain not owned by User ID:"));
@@ -198,16 +203,17 @@ mod tests {
             _ => assert!(false),
         }
 
-        dbg!("get batch transfer status...");
+        println!("get batch transfer status...");
         // Check transfers complete
         let status_api =
             state_entity::api::get_transfer_batch_status(&wallets[0].client_shim, &batch_id);
         assert!(status_api.expect("expected status 1").finalized);
 
+        
         // Finalize transfers in wallets now that StateEntity has completed the transfers.
-        dbg!("finalize bach transfer...");
-        finalize_batch_transfer(&mut wallets, &swap_map, transfer_finalized_datas);
-        dbg!("finished finalize bach transfer.");
+        println!("finalize bach transfer...");
+        finalize_batch_transfer(&mut wallets, &swap_map, transfer_finalized_datas.clone());
+        println!("finished finalize bach transfer.");
 
         // Check amounts have correctly transferred
         batch_transfer_verify_amounts(&mut wallets, &amounts, &statechain_ids, &swap_map);
@@ -227,6 +233,52 @@ mod tests {
             &nonces[0]
         )
         .is_err());
+
+        //Test get recovery data for batch transfer
+        let mut transfer_finalized_datas_recovered = 
+            HashMap::<Uuid, TransferFinalizeDataForRecovery>::new();
+
+        let mut pubkey_hex_vec = vec![];
+        
+        for wallet in &mut wallets{
+            let state_chains_info = wallet.get_state_chains_info().unwrap();
+            let mut shared_key_infos = vec![];
+            for state_chain_id in state_chains_info.0 {
+                shared_key_infos.push(wallet
+                .get_shared_key_info(&state_chain_id)
+                .unwrap());
+            }
+            //Get recovery data 
+            for ski in &shared_key_infos {
+                pubkey_hex_vec.push(ski.2.clone());
+            } 
+        }
+        
+        let recovery_data = state_entity::api::get_recovery_data_vec(&wallets[0].client_shim, &pubkey_hex_vec).unwrap();
+
+        for wallet in &mut wallets{
+            println!("test get finalization recovery data...");
+            for data in &recovery_data {
+                    let finalization_data = state_entity::api::get_sc_transfer_finalize_data(
+                        &wallet.client_shim, &data.statechain_id).unwrap();
+                    match get_transfer_finalize_data_for_recovery(wallet,
+                        &finalization_data, &data, &data.proof_key){
+                        Ok(v) => {
+                            transfer_finalized_datas_recovered.insert(data.statechain_id.to_owned(), v);    
+                        },
+                        Err(e) => println!("error get_transfer_finalize_data_for_recovery: {}", &e)
+                    }
+            }
+        }
+        
+        assert_eq!(&transfer_finalized_datas_recovered.len(), &transfer_finalized_datas.len());
+        //Verify the recovered finalization data
+        for data in &transfer_finalized_datas {
+            let statechain_id = &data.statechain_id;
+            let recovered = &transfer_finalized_datas_recovered[statechain_id];
+            recovered.compare(&data).unwrap();
+        }
+
         reset_data(&wallets[0].client_shim).unwrap();
     }
 
@@ -360,6 +412,7 @@ mod tests {
                 &mut wallets[i],
                 &deposits[i].1, // state chain id
                 receiver_addr.clone(),
+                Some(batch_id.clone())
             ) {
                 Err(e) => {
                     assert!(e.to_string().contains("State Chain locked for"));

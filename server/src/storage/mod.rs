@@ -125,6 +125,9 @@ pub trait Storage {
     //Returns locked until time, owner id, tip of state chain
     fn get_statecoin_data_api(&self, statechain_id: Uuid) -> Result<StateCoinDataAPI>;
 
+    //Returns transfer finalize data
+    fn get_sc_transfer_finalize_data(&self, statechain_id: Uuid)-> Result<TransferFinalizeData>;
+
     //Returns locked until time, owner id, state chain
     fn get_owner_id(&self, statechain_id: Uuid) -> Result<OwnerID>;
 

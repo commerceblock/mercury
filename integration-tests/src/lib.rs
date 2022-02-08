@@ -111,6 +111,7 @@ impl SpawnServer for PGDatabase {
     ) -> thread::JoinHandle<SpawnError> {
         // Set enviroment variable to testing_mode=true to override Settings.toml
         env::set_var("MERC_TESTING_MODE", "true");
+        env::set_var("MERC_REQUIRED_CONFIRMATION", "0");
         match port {
             Some(p) => env::set_var("MERC_ROCKET_PORT", &p.to_string()[..]),
             None => ()
@@ -152,6 +153,7 @@ impl SpawnServer for MockDatabase {
     ) -> thread::JoinHandle<SpawnError> {
         // Set enviroment variable to testing_mode=true to override Settings.toml
         env::set_var("MERC_TESTING_MODE", "true");
+        env::set_var("MERC_REQUIRED_CONFIRMATION", "0");
 
         // Rocket server is blocking, so we spawn a new thread.
         let handle = thread::spawn(|| {
@@ -224,6 +226,7 @@ pub fn run_deposit(
     resp
 }
 
+
 /// Run confirm_proofs on a wallet
 /// Returns Vec<shared_key_id> of the shared keys that remain unconfirmed
 pub fn run_confirm_proofs(wallet: &mut Wallet) -> Vec<Uuid> {
@@ -281,7 +284,21 @@ pub fn run_transfer(
     sender_index: usize,
     receiver_index: usize,
     receiver_addr: &SCEAddress,
+    statechain_id: &Uuid
+) -> Uuid {
+    run_transfer_repeat_keygen(wallets, sender_index, receiver_index,
+        receiver_addr, statechain_id, 0)
+}
+
+/// Run a transfer between two wallets. Input vector of wallets with sender and receiver indexes in vector.
+/// Return new shared key id.
+pub fn run_transfer_repeat_keygen(
+    wallets: &mut Vec<Wallet>,
+    sender_index: usize,
+    receiver_index: usize,
+    receiver_addr: &SCEAddress,
     statechain_id: &Uuid,
+    keygen_1_reps: u32
 ) -> Uuid {
 
     let start = Instant::now();
@@ -289,6 +306,7 @@ pub fn run_transfer(
         &mut wallets[sender_index],
         statechain_id,
         receiver_addr.clone(),
+        None
     )
     .unwrap();
 
@@ -296,10 +314,11 @@ pub fn run_transfer(
 
     assert_eq!(tranfer_sender_resp,transfer_msg.unwrap()[0]);
 
-    let tfd = state_entity::transfer::transfer_receiver(
+    let tfd = state_entity::transfer::transfer_receiver_repeat_keygen(
         &mut wallets[receiver_index],
         &mut tranfer_sender_resp,
         &None,
+        keygen_1_reps
     )
     .unwrap();
     let new_shared_key_id = tfd.new_shared_key_id;
@@ -308,6 +327,9 @@ pub fn run_transfer(
 
     return new_shared_key_id;
 }
+
+
+
 
 /// Run a transfer with commitments between two wallets. Input vector of wallets with sender and receiver indexes in vector.
 /// Return new shared key id, commitments and nonces.
@@ -331,6 +353,7 @@ pub fn run_transfer_with_commitment(
         &mut wallets[sender_index],
         sender_statechain_id,
         receiver_addr.clone(),
+        Some(batch_id.clone())
     )
     .unwrap();
 
@@ -342,6 +365,16 @@ pub fn run_transfer_with_commitment(
     }
 
     let (commitment, nonce) = make_commitment(&commitment_data);
+
+    // check that we cannot run transfer_receiver without batch data
+    match state_entity::transfer::transfer_receiver(
+        &mut wallets[receiver_index],
+        &mut tranfer_sender_resp.clone(),
+        &None
+        ) {
+        Err(e) => assert!(e.to_string().contains("Expect receive in batch ID")),
+        _ => assert!(false),
+    }
 
     let transfer_finalized_data = state_entity::transfer::transfer_receiver(
         &mut wallets[receiver_index],

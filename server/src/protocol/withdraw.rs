@@ -84,8 +84,13 @@ impl Withdraw for SCE {
             None => (),
         };
 
+        info!("STATECHAIN SIG: {:?}", statechain_sig);
+
         // Verify StateChainSig
         let prev_proof_key = &sco.chain.get_tip().data;
+
+        info!("PROOF PUB KEY: {:?}", prev_proof_key);
+
         statechain_sig.verify(prev_proof_key)?;
         Ok(sco)
     }
