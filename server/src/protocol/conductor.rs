@@ -1434,6 +1434,7 @@ mod tests {
     //get a scheduler preset with requests
     fn get_scheduler(swap_size_amounts: Vec<(u64, u64)>) -> Scheduler {
         let utxo_timeout: u32 = 6;
+        let punishment_timeout: u32 = 6;
         let group_timeout: u32 = 8;
         let daily_epochs: u32 = 1;
         let max_swap_size: u32 = 3;
@@ -1447,6 +1448,7 @@ mod tests {
         let statechain_amount_map = BisetMap::new();
         let mut poll_timeout_map = HashMap::<Uuid, NaiveDateTime>::new();
         let mut swap_timeout_map = HashMap::<Uuid, NaiveDateTime>::new();
+        let mut punishment_map = HashMap::<Uuid, NaiveDateTime>::new();
 
         for (swap_size, amount) in swap_size_amounts {
             let id = Uuid::new_v4();
@@ -1462,6 +1464,8 @@ mod tests {
             daily_epochs,
             max_swap_size,
             wallet_requirement,
+            punishment_map,
+            punishment_timeout,
             permitted_groups,
             statechain_swap_size_map,
             statechain_amount_map,
