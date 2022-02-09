@@ -37,17 +37,20 @@ pub struct ConductorConfig {
     pub max_swap_size: u32,
     /// Minimum wallet version for swaps
     pub swap_wallet_version: String,
+    /// Allowable swap group amounts (in satoshis)
+    pub permitted_groups: String,
 }
 
 impl Default for ConductorConfig {
     fn default() -> Self {
         Self {
-            group_timeout: 600,
+            group_timeout: 60,
             utxo_timeout: 10,
-            punishment_duration: 300,
+            punishment_duration: 60,
             daily_epochs: 240,
             max_swap_size: 5,
-            swap_wallet_version: "0.4.66".to_string(),
+            swap_wallet_version: "0.6.0".to_string(),
+            permitted_groups: "100000,500000,1000000,5000000,10000000,50000000,100000000".to_string(),
         }
     }
 }
@@ -199,7 +202,7 @@ impl Default for Config {
             rate_limit_fast: None,
             rate_limit_id: None,
             deposit_pow: true,
-            wallet_version: "0.4.66".to_string(),
+            wallet_version: "0.6.0".to_string(),
             wallet_message: "".to_string(),
         }
     }
@@ -299,6 +302,7 @@ impl Config {
                 panic!("Invalid fee address: {}", e)
             };
         }
+
         Ok(conf_rs.try_into()?)
     }
 
