@@ -26,6 +26,7 @@ The server can be run in one of 3 modes by selecting the `MERC_MODE` environment
 | FEE_WITHDRAW | int | Withdraw fee in Satoshis |
 | PUNISHMENT_DURATION | int | Time in seconds that a StateChain is punished for  
 | BATCH_LIFETIME | int | Lifetime of batch-transfers |
+| PERMITTED_GROUPS | String | List of permitted swap group sizes in satoshis |
 | MS_SLOT | int | Mainstay slot |
 | MS_TOKEN | String | Mainstay token |
 | WATCH_ONLY | bool | If true, server watches blockheight for backup tx broadcast |
