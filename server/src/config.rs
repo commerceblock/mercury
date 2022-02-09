@@ -44,9 +44,9 @@ pub struct ConductorConfig {
 impl Default for ConductorConfig {
     fn default() -> Self {
         Self {
-            group_timeout: 120,
+            group_timeout: 60,
             utxo_timeout: 10,
-            punishment_duration: 300,
+            punishment_duration: 60,
             daily_epochs: 240,
             max_swap_size: 5,
             swap_wallet_version: "0.6.0".to_string(),

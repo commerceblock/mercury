@@ -543,6 +543,149 @@ mod tests {
 
     #[test]
     #[serial]
+    fn test_swap_punish() {
+        let _handle = start_server(None, None);
+
+        let num_state_chains: u64 = 3;
+        let amount: u64 = 10000; // = u64::from_str(&format!("10000")).unwrap();
+
+        // Gen some wallets and deposit coins into SCE
+        let mut wallets = vec![];
+        let mut deposits = vec![];
+        let mut wallet_sers = vec![];
+
+        for i in 0..num_state_chains as usize {
+            wallets.push(gen_wallet(None));
+            for _ in 0..i {
+                // Gen keys so different wallets have different proof keys (since wallets have the same seed)
+                let _ = wallets[i].se_proof_keys.get_new_key();
+            }
+
+            deposits.push(run_deposit(&mut wallets[i], &amount));
+            let deposit = deposits.last().unwrap().clone();
+
+            let (_shared_key_ids, _wallet_sc_ids, _bals, _locktimes) = wallets.last().unwrap().
+                get_state_chains_info().unwrap();
+
+
+            wallet_sers.push((wallets.last().unwrap().to_json(),deposit.1));
+        }
+
+        println!("Starting swaps...");
+        for (wallet_ser, deposit) in wallet_sers.clone() {
+                let mut wallet = wallet::wallet::Wallet::from_json(
+                    wallet_ser,
+                    ClientShim::new("http://localhost:8000".to_string(), None, None),
+                    ClientShim::new("http://localhost:8000".to_string(), None, None),
+                ).unwrap();
+                // register for swap (phase 1)
+                let ret = state_entity::conductor::swap_register_utxo(&mut wallet, &deposit, &num_state_chains);
+
+                println!("{:?}", ret);
+        }
+
+        // attempt to register again
+        thread::sleep(Duration::from_secs(10));        
+
+        let mut wallet = wallet::wallet::Wallet::from_json(
+            wallet_sers[0].0.clone(),
+            ClientShim::new("http://localhost:8000".to_string(), None, None),
+            ClientShim::new("http://localhost:8000".to_string(), None, None),
+        ).unwrap();
+
+        let _poll00 = state_entity::conductor::swap_poll_utxo(&wallet.conductor_shim, &wallet_sers[0].1);
+
+        let mut wallet2 = wallet::wallet::Wallet::from_json(
+            wallet_sers[1].0.clone(),
+            ClientShim::new("http://localhost:8000".to_string(), None, None),
+            ClientShim::new("http://localhost:8000".to_string(), None, None),
+        ).unwrap();
+
+        let mut wallet3 = wallet::wallet::Wallet::from_json(
+            wallet_sers[2].0.clone(),
+            ClientShim::new("http://localhost:8000".to_string(), None, None),
+            ClientShim::new("http://localhost:8000".to_string(), None, None),
+        ).unwrap();              
+
+        let register_try = state_entity::conductor::swap_register_utxo(&mut wallet, &wallet_sers[0].1, &num_state_chains);
+
+        match register_try {
+            Err(e) => assert!(e
+                .to_string()
+                .contains("Coin in active swap")),
+            _ => assert!(false),
+        }
+
+        // perform swap message 1 for wallets 2 and 3
+
+        let _poll0 = state_entity::conductor::swap_poll_utxo(&wallet.conductor_shim, &wallet_sers[0].1);
+
+        let swap_id = state_entity::conductor::swap_poll_utxo(&wallet.conductor_shim, &wallet_sers[0].1).unwrap().id.unwrap();
+        let info = state_entity::conductor::swap_info(&wallet.conductor_shim, &swap_id).unwrap().unwrap();
+
+        let proof_key2 = wallet2.se_proof_keys.get_new_key().unwrap();
+        let proof_key2 = bitcoin::secp256k1::PublicKey::from_slice(&proof_key2.to_bytes().as_slice()).unwrap();
+        let address2 = SCEAddress {
+            tx_backup_addr: None,
+            proof_key: proof_key2,
+        };
+        let transfer_batch_sig2 = state_entity::transfer::transfer_batch_sign(&mut wallet2, &wallet_sers[1].1, &swap_id).unwrap();
+
+        let my_bst_data2 = state_entity::conductor::swap_first_message(
+            &wallet2,
+            &info,
+            &wallet_sers[1].1,
+            &transfer_batch_sig2,
+            &address2,
+        ).unwrap();
+
+        let proof_key3 = wallet3.se_proof_keys.get_new_key().unwrap();
+        let proof_key3 = bitcoin::secp256k1::PublicKey::from_slice(&proof_key3.to_bytes().as_slice()).unwrap();
+        let address3 = SCEAddress {
+            tx_backup_addr: None,
+            proof_key: proof_key3,
+        };
+        let transfer_batch_sig3 = state_entity::transfer::transfer_batch_sign(&mut wallet3, &wallet_sers[2].1, &swap_id).unwrap();
+
+        let my_bst_data3 = state_entity::conductor::swap_first_message(
+            &wallet3,
+            &info,
+            &wallet_sers[2].1,
+            &transfer_batch_sig3,
+            &address3,
+        ).unwrap();
+
+        // after swap group timeout (60 s) attempt to register again
+
+        thread::sleep(Duration::from_secs(60));
+
+        let _poll1 = state_entity::conductor::swap_poll_utxo(&wallet.conductor_shim, &wallet_sers[0].1);
+        let register_try_2 = state_entity::conductor::swap_register_utxo(&mut wallet, &wallet_sers[0].1, &num_state_chains);
+
+        match register_try_2 {
+            Err(e) => assert!(e
+                .to_string()
+                .contains("In punishment list")),
+            _ => assert!(false),
+        }
+
+        // after punishment timeout (60 s) attempt to register again
+
+        thread::sleep(Duration::from_secs(65));
+
+        let _poll2 = state_entity::conductor::swap_poll_utxo(&wallet.conductor_shim, &wallet_sers[0].1);
+        let register_try_3 = state_entity::conductor::swap_register_utxo(&mut wallet, &wallet_sers[0].1, &num_state_chains);
+
+        match register_try_3 {
+            Err(_e) => assert!(false),
+            _ => assert!(true),
+        }
+
+        reset_data(&wallets[0].client_shim).unwrap();
+    }
+
+    #[test]
+    #[serial]
     fn test_swap_seperate_conductor() {
         let merc_port: u16 = 8000;
         let conductor_port: u16 = 8001;
