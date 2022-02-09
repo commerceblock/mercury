@@ -576,10 +576,6 @@ impl Scheduler {
                         // get e_prime_map for swap_id
                         let e_prime_map = self.bst_e_prime_map.get_mut(swap_id);
 
-                        println!("epm {:?}", e_prime_map);
-
-                        println!("pm {:?}", self.punishment_map);
-
                         // check if each sc_id completed
                         if !e_prime_map.is_none() {
                             for sc_id in &swap_info.swap_token.statechain_ids {
@@ -592,8 +588,6 @@ impl Scheduler {
                                 }
                             }
                         }
-
-                        println!("pm2 {:?}", self.punishment_map);
 
                         remove_list.push_back(swap_info.swap_token.id);
                         continue;
