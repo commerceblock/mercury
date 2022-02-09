@@ -146,6 +146,8 @@ pub struct Scheduler {
     max_swap_size: u32,
     //minimum wallet version number
     wallet_requirement: String,
+    //punishment timeout
+    punishment_timeout: u32,
     //punished coins with expiry time
     punishment_map: HashMap<Uuid, NaiveDateTime>,
     //State chain id to requested swap size map
@@ -184,6 +186,10 @@ impl Scheduler {
             daily_epochs: config.daily_epochs.clone(),
             max_swap_size: config.max_swap_size.clone(),
             wallet_requirement: config.swap_wallet_version.clone(),
+            #[cfg(not(test))]
+            punishment_timeout: config.punishment_duration.clone() as u32,
+            #[cfg(test)]
+            punishment_timeout: 24, 
             punishment_map: HashMap::<Uuid, NaiveDateTime>::new(),
             statechain_swap_size_map: BisetMap::<Uuid, u64>::new(),
             statechain_amount_map: BisetMap::<Uuid, u64>::new(),
@@ -304,8 +310,23 @@ impl Scheduler {
         //Only register if id not already in swap map
         let in_swap = self.swap_id_map.get(&statechain_id);
         if (!in_swap.is_none()) {
-            return Err(SEError::SwapError(format!("Statecoin not found in swap: {:?}", &statechain_id)));
+            let swap_timeout = self.swap_timeout_map.get(in_swap.unwrap());
+            let now: NaiveDateTime = Utc::now().naive_utc();
+            let seconds_remaining = swap_timeout.unwrap().timestamp() - now.timestamp();
+            return Err(SEError::SwapError(format!("Coin in active swap. Seconds remaining: {:?}", &seconds_remaining)));
         };
+
+        // check and update punishment list
+        if self.punishment_map.contains_key(&statechain_id) {
+            let now: NaiveDateTime = Utc::now().naive_utc();
+            if self.punishment_map.get(&statechain_id).unwrap() < &now {
+                self.punishment_map.remove(&statechain_id);
+            } else {
+                let seconds_remaining = self.punishment_map.get(&statechain_id).unwrap().timestamp() - now.timestamp();
+                return Err(SEError::SwapError(format!("In punishment list. Seconds remaining: {:?}", &seconds_remaining)));
+            }
+        }
+
         //If there was an amout already registered for this state chain id then
         //remove it from the inverse table before updating
         if (!self.statechain_amount_map.contains(&statechain_id,&amount)) {
@@ -551,18 +572,28 @@ impl Scheduler {
                 match Self::get_swap_timeout(&self.swap_timeout_map, &swap_info.swap_token.id) {
                     Some(true) => (),
                     _ => {
+                        // swap phase 1/2 timeout
+                        // get e_prime_map for swap_id
+                        let e_prime_map = self.bst_e_prime_map.get_mut(swap_id);
 
+                        println!("epm {:?}", e_prime_map);
 
+                        println!("pm {:?}", self.punishment_map);
 
+                        // check if each sc_id completed
+                        if !e_prime_map.is_none() {
+                            for sc_id in &swap_info.swap_token.statechain_ids {
+                                println!("{:?}", sc_id);
+                                if !e_prime_map.as_ref().unwrap().contains_key(&sc_id) {
+                                    info!("SCHEDULER: Statchain ID: {} punished in Swap ID: {} for failure to complete phase1/2", sc_id, swap_id);
+                                    let now: NaiveDateTime = Utc::now().naive_utc();
+                                    let t = now + Duration::seconds(self.punishment_timeout as i64);
+                                    self.punishment_map.insert(*sc_id,t);
+                                }
+                            }
+                        }
 
-
-
-//////// CHECK FOR BLAME HERE AND ADD TO PUNISHMENT LIST
-
-
-
-
-
+                        println!("pm2 {:?}", self.punishment_map);
 
                         remove_list.push_back(swap_info.swap_token.id);
                         continue;
