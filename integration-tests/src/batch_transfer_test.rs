@@ -492,7 +492,7 @@ mod tests {
         let _handle = start_server(None, None);
 
         let num_state_chains: u64 = 3;
-        let amount: u64 = 10000; // = u64::from_str(&format!("10000")).unwrap();
+        let amount: u64 = 100000; // = u64::from_str(&format!("10000")).unwrap();
 
         // Gen some wallets and deposit coins into SCE
         let mut wallets = vec![];
@@ -547,7 +547,7 @@ mod tests {
         let _handle = start_server(None, None);
 
         let num_state_chains: u64 = 3;
-        let amount: u64 = 10000; // = u64::from_str(&format!("10000")).unwrap();
+        let amount: u64 = 100000; // = u64::from_str(&format!("10000")).unwrap();
 
         // Gen some wallets and deposit coins into SCE
         let mut wallets = vec![];
@@ -579,9 +579,8 @@ mod tests {
                     ClientShim::new("http://localhost:8000".to_string(), None, None),
                 ).unwrap();
                 // register for swap (phase 1)
-                let ret = state_entity::conductor::swap_register_utxo(&mut wallet, &deposit, &num_state_chains);
+                let _ret = state_entity::conductor::swap_register_utxo(&mut wallet, &deposit, &num_state_chains);
 
-                println!("{:?}", ret);
         }
 
         // attempt to register again
@@ -631,7 +630,7 @@ mod tests {
         };
         let transfer_batch_sig2 = state_entity::transfer::transfer_batch_sign(&mut wallet2, &wallet_sers[1].1, &swap_id).unwrap();
 
-        let my_bst_data2 = state_entity::conductor::swap_first_message(
+        let _my_bst_data2 = state_entity::conductor::swap_first_message(
             &wallet2,
             &info,
             &wallet_sers[1].1,
@@ -647,7 +646,7 @@ mod tests {
         };
         let transfer_batch_sig3 = state_entity::transfer::transfer_batch_sign(&mut wallet3, &wallet_sers[2].1, &swap_id).unwrap();
 
-        let my_bst_data3 = state_entity::conductor::swap_first_message(
+        let _my_bst_data3 = state_entity::conductor::swap_first_message(
             &wallet3,
             &info,
             &wallet_sers[2].1,
@@ -671,7 +670,7 @@ mod tests {
 
         // after punishment timeout (60 s) attempt to register again
 
-        thread::sleep(Duration::from_secs(65));
+        thread::sleep(Duration::from_secs(60));
 
         let _poll2 = state_entity::conductor::swap_poll_utxo(&wallet.conductor_shim, &wallet_sers[0].1);
         let register_try_3 = state_entity::conductor::swap_register_utxo(&mut wallet, &wallet_sers[0].1, &num_state_chains);
@@ -686,6 +685,59 @@ mod tests {
 
     #[test]
     #[serial]
+    fn test_register_utxo() {
+        let _handle = start_server(None, None);
+
+        let num_state_chains: u64 = 2;
+        let amount: u64 = 100000; // = u64::from_str(&format!("10000")).unwrap();
+        let odd_amount: u64 = 123400;
+
+        let mut wallet1 = gen_wallet(None);
+        let _ = wallet1.se_proof_keys.get_new_key();
+        let deposit1 = run_deposit(&mut wallet1, &amount).clone();
+        
+        let wallet1_json = wallet1.to_json();
+
+        let mut wallet_1 = wallet::wallet::Wallet::from_json(
+            wallet1_json,
+            ClientShim::new("http://localhost:8000".to_string(), None, None),
+            ClientShim::new("http://localhost:8000".to_string(), None, None),
+        ).unwrap();
+
+        let register_try_1 = state_entity::conductor::swap_register_utxo(&mut wallet_1, &deposit1.1, &num_state_chains);
+
+        match register_try_1 {
+            Err(_e) => assert!(false),
+            _ => assert!(true),
+        }        
+
+        let mut wallet2 = gen_wallet(None);
+        let _ = wallet2.se_proof_keys.get_new_key();
+        let deposit2 = run_deposit(&mut wallet2, &odd_amount).clone();
+        
+        let wallet2_json = wallet2.to_json();
+
+        let mut wallet_2 = wallet::wallet::Wallet::from_json(
+            wallet2_json,
+            ClientShim::new("http://localhost:8000".to_string(), None, None),
+            ClientShim::new("http://localhost:8000".to_string(), None, None),
+        ).unwrap();
+
+        let register_try_2 = state_entity::conductor::swap_register_utxo(&mut wallet_2, &deposit2.1, &num_state_chains);
+
+        match register_try_2 {
+            Err(e) => assert!(e
+                .to_string()
+                .contains("Invalid coin amount for swap registration")),
+            _ => assert!(false),
+        }
+
+        reset_data(&wallet1.client_shim).unwrap();
+        reset_data(&wallet2.client_shim).unwrap();
+    }
+
+    #[test]
+    #[serial]
     fn test_swap_seperate_conductor() {
         let merc_port: u16 = 8000;
         let conductor_port: u16 = 8001;
@@ -693,7 +745,7 @@ mod tests {
         let _conductor_handle = start_server(Some(conductor_port), Some(String::from("conductor")));
 
         let num_state_chains: u64 = 3;
-        let amount: u64 = 10000; // = u64::from_str(&format!("10000")).unwrap();
+        let amount: u64 = 100000; // = u64::from_str(&format!("10000")).unwrap();
 
         // Gen some wallets and deposit coins into SCE
         let mut wallets = vec![];

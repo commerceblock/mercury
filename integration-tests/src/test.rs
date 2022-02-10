@@ -121,7 +121,7 @@ mod tests {
     fn test_deposit() {
         time_test!();
         let _handle = start_server(None, None);
-        let wallet = gen_wallet_with_deposit(10000);
+        let wallet = gen_wallet_with_deposit(100000);
         //handle.join().expect("The thread being joined has panicked");
         let state_chains_info = wallet.get_state_chains_info().unwrap();
         let (_, funding_txid, proof_key, _, _) = wallet
@@ -147,7 +147,7 @@ mod tests {
 
         let coins = state_entity::api::get_coins_info(&wallet.client_shim).unwrap();
 
-        assert_eq!(coins.values.get(&10000).unwrap().get(),1);
+        assert_eq!(coins.values.get(&100000).unwrap().get(),1);
 
         println!("Shared wallet id: {:?} ", funding_txid);
         println!("Funding txid: {:?} ", funding_txid);
@@ -155,7 +155,7 @@ mod tests {
         //Confirm in-ram data recovery from database
         reset_inram_data(&wallet.client_shim).unwrap();
         let coins = state_entity::api::get_coins_info(&wallet.client_shim).unwrap();
-        assert_eq!(coins.values.get(&10000).unwrap().get(),1);
+        assert_eq!(coins.values.get(&100000).unwrap().get(),1);
         //Reset data
         reset_data(&wallet.client_shim).unwrap();
     }
