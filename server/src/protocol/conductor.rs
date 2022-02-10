@@ -181,7 +181,7 @@ impl Scheduler {
     pub fn new(config: &ConductorConfig) -> Self {
         let permitted_groups_vec: Vec<&str> = config.permitted_groups.split(",").collect();
         let mut permitted_groups_int: Vec<u64> = vec![];
-        for group_string in 0..permitted_groups_vec.len(){
+        for group_string in permitted_groups_vec {
             let group_int: u64 = group_string.to_string().parse().unwrap();
             permitted_groups_int.push(group_int);
         }
