@@ -983,7 +983,7 @@ impl Conductor for SCE {
 
         // check if amount permitted
         if !guard.permitted_groups.contains(&amount) {
-            return Err(SEError::SwapError(String::from("Invalid coin amount for swap registration")));
+            return Err(SEError::SwapError(format!("Invalid coin amount for swap registration: {}. Permitted amounts: {:#?}",&amount,&guard.permitted_groups)));
         }
 
         if !self.database.is_confirmed(&key_id)? {
