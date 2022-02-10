@@ -181,7 +181,7 @@ impl Scheduler {
     pub fn new(config: &ConductorConfig) -> Self {
         let permitted_groups_vec: Vec<&str> = config.permitted_groups.split(",").collect();
         let mut permitted_groups_int: Vec<u64> = vec![];
-        for group_string in 0..permitted_groups_vec.len(){
+        for group_string in permitted_groups_vec {
             let group_int: u64 = group_string.to_string().parse().unwrap();
             permitted_groups_int.push(group_int);
         }
@@ -983,7 +983,7 @@ impl Conductor for SCE {
 
         // check if amount permitted
         if !guard.permitted_groups.contains(&amount) {
-            return Err(SEError::SwapError(String::from("Invalid coin amount for swap registration")));
+            return Err(SEError::SwapError(format!("Invalid coin amount for swap registration: {}. Permitted amounts: {:#?}",&amount,&guard.permitted_groups)));
         }
 
         if !self.database.is_confirmed(&key_id)? {

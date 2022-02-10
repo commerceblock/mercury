@@ -46,7 +46,7 @@ pub fn swap_register_utxo(wallet: &Wallet, statechain_id: &Uuid, swap_size: &u64
             statechain_id: statechain_id.to_owned(),
             signature: statechain_sig,
             swap_size: swap_size.to_owned(),
-            wallet_version: "0.4.66".to_string(),
+            wallet_version: "0.6.0".to_string(),
         },
     )
 }
