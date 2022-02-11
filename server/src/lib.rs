@@ -46,6 +46,10 @@ extern crate mockito;
 
 extern crate shared_lib;
 
+#[cfg(test)]
+#[macro_use]
+extern crate time_test;
+
 pub mod config;
 pub mod error;
 pub mod protocol;
@@ -326,6 +330,7 @@ pub mod structs {
         pub batch_id: Option<Uuid>,
     }
 
+    #[derive(Clone)]
     pub struct ECDSAKeypair {
         pub party_1_private: Party1Private,
         pub party_2_public: GE,
