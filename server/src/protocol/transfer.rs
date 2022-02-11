@@ -13,6 +13,8 @@ use bitcoin::secp256k1::key::SecretKey;
 use bitcoin::secp256k1::PublicKey;
 use bitcoin::util::key::PrivateKey;
 use bitcoin::network::constants::Network;
+use crate::structs::ECDSAKeypair;
+
 
 use crate::error::SEError;
 use crate::Database;
@@ -23,12 +25,11 @@ use rocket_okapi::openapi;
 use cfg_if::cfg_if;
 use curv::{
     elliptic::curves::traits::{ECPoint, ECScalar},
-    arithmetic::traits::Converter,
-    {FE, GE, BigInt},
+    {FE, GE},
 };
 use rocket::State;
 use rocket_contrib::json::Json;
-use std::str::FromStr;
+use std::{str::FromStr, convert::TryInto};
 use uuid::Uuid;
 use url::Url;
 use crate::protocol::{util::{Utilities, RateLimiter}, withdraw::Withdraw};
@@ -45,7 +46,42 @@ cfg_if! {
     }
 }
 
+impl TryInto<SecretKey> for ECDSAKeypair{
+    type Error = SEError;
+    fn try_into(self) -> Result<SecretKey> {
+        let s1 = self.party_1_private.get_private_key();
+        let fe = FEWrapped { data: s1 };
+        fe.try_into()
+    }
+}
 
+struct FEWrapped {
+    data: FE
+}
+
+impl FEWrapped {
+    fn from(fe: FE) -> Self {
+        FEWrapped{data: fe}
+    }
+
+    fn inner(&self) -> &FE {
+        &self.data
+    }
+}
+
+impl TryInto<SecretKey> for FEWrapped {
+    type Error = SEError;
+    fn try_into(self) -> Result<SecretKey> {
+        let element = &self.inner().get_element();
+        let fe_slice: &[u8; 32] = match element[0..element.len()].try_into(){
+            Ok(s) => s,
+            Err(e) => {
+                return Err(Self::Error::Generic(format!("error converting s1 to [u8;32]: {}", e)))
+            },    
+        };
+        Ok(SecretKey::from_slice(fe_slice)?)
+    }
+}
 
 /// StateChain Transfer protocol trait
 pub trait Transfer {
@@ -213,14 +249,14 @@ impl Transfer for SCE {
         },
         None => {
             let kp = self.database.get_ecdsa_keypair(user_id)?;
-
-            // let x1 = transfer_data.x1;
             let s1 = kp.party_1_private.get_private_key();
-
+            let s1w = FEWrapped::from(s1.clone());
+            let key: SecretKey = s1w.try_into()?;
+            
             let s1_priv = PrivateKey {
                 compressed: true,
                 network: Network::Regtest,
-                key: SecretKey::from_slice(&BigInt::to_vec(&s1.clone().to_big_int())).unwrap(),
+                key
             };
 
             match transfer_msg4.decrypt(&s1_priv) {
@@ -525,6 +561,7 @@ mod tests {
     use crate::shared_lib::util::transaction_serialise;
     use std::convert::TryInto;
     use crate::structs::WithdrawConfirmData;
+    use time_test::time_test;
 
     // Data from a run of transfer protocol.
     // static TRANSFER_MSG_1: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"}}";
@@ -892,11 +929,13 @@ mod tests {
                     party_2_public: serde_json::from_str(&PARTY_2_PUBLIC.to_string()).unwrap(),
                 };
         let s1 = kp.party_1_private.get_private_key();
+        let s1w = FEWrapped::from(s1.clone());
+        let key: SecretKey = s1w.try_into().expect("expected FE to convert to SecretKey");
 
         let s1_priv = PrivateKey {
             compressed: true,
             network: Network::Regtest,
-            key: SecretKey::from_slice(&BigInt::to_vec(&s1.clone().to_big_int())).unwrap(),
+            key
         };
 
         match transfer_msg_4.decrypt(&s1_priv) {
@@ -950,5 +989,35 @@ mod tests {
         }
         // Expected successful run
         sc_entity.transfer_receiver(transfer_msg_4.clone()).expect("expected transfer_receiver to return Ok");
+    }
+
+    #[test]
+    fn test_convert_ecdsa_keypair_to_secret_key() {
+        // simulate lockbox secret operations
+          let kp = ECDSAKeypair {
+            party_1_private: serde_json::from_str(&PARTY_1_PRIVATE.to_string()).unwrap(),
+            party_2_public: serde_json::from_str(&PARTY_2_PUBLIC.to_string()).unwrap(),
+        };
+        let _key: SecretKey = kp.try_into().expect("expected ECDSAKeypair to convert to SecretKey");
+    }
+
+    #[test]
+    fn test_convert_secp256k1_scalar_to_secret_key() {
+        let s1: FE = ECScalar::new_random();
+        let s1w = FEWrapped::from(s1);
+        let _key: SecretKey = s1w.try_into().expect(&format!("expected FEWrapped: {:?} to convert to SecretKey", s1));
+    }
+
+    #[test]
+    #[ignore]
+    // This test takes 1hr to run
+    fn test_convert_secp256k1_scalar_to_secret_key_long() {
+        let n = 100000000;
+        time_test!();
+        for _i in 0..n {
+            let s1: FE = ECScalar::new_random();
+            let s1w = FEWrapped::from(s1);
+            let _key: SecretKey = s1w.try_into().expect(&format!("expected FEWrapped: {:?} to convert to SecretKey", s1));
+        }
     }
 }

@@ -1448,7 +1448,7 @@ mod tests {
         let statechain_amount_map = BisetMap::new();
         let mut poll_timeout_map = HashMap::<Uuid, NaiveDateTime>::new();
         let mut swap_timeout_map = HashMap::<Uuid, NaiveDateTime>::new();
-        let mut punishment_map = HashMap::<Uuid, NaiveDateTime>::new();
+        let punishment_map = HashMap::<Uuid, NaiveDateTime>::new();
 
         for (swap_size, amount) in swap_size_amounts {
             let id = Uuid::new_v4();
