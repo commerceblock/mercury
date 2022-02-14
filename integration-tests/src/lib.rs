@@ -386,6 +386,19 @@ pub fn run_transfer_with_commitment(
     )
     .unwrap();
 
+    //Check that a repeat run of transfer_receiver yields the same response
+    let tfd2 = state_entity::transfer::transfer_receiver(
+        &mut wallets[receiver_index],
+        &mut tranfer_sender_resp,
+        &Some(BatchData {
+            id: batch_id.clone(),
+            commitment: commitment.clone(),
+        }),
+    )
+    .unwrap();
+
+    assert_eq!(transfer_finalized_data, tfd2);
+
     println!("(Transfer Took: {})", TimeFormat(start.elapsed()));
 
     return (transfer_finalized_data, commitment, nonce);
