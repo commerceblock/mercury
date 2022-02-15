@@ -252,10 +252,12 @@ impl Transfer for SCE {
                                 s2_pub
                             })
                         },
-                        Err(e) => match e {
-                            // If finalize data has not been stored, do nothing
-                            SEError::DBError(DBErrorType::NoDataForID, _) => (),
-                            _ => return Err(e),
+                        Err(e) => {
+                            if(e.to_string().contains("DB Error: No data for identifier.")){
+                                ()
+                            } else {
+                                return Err(e)
+                            }
                         }                
                     }
                 },

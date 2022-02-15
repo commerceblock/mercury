@@ -372,13 +372,13 @@ pub fn run_transfer_with_commitment(
         &mut tranfer_sender_resp.clone(),
         &None
         ) {
-        Err(e) => assert!(e.to_string().contains("Expect receive in batch ID")),
+        Err(e) => assert!(e.to_string().contains("Expected batch_data in request")),
         _ => assert!(false),
     }
 
     let transfer_finalized_data = state_entity::transfer::transfer_receiver(
         &mut wallets[receiver_index],
-        &mut tranfer_sender_resp,
+        &mut tranfer_sender_resp.clone(),
         &Some(BatchData {
             id: batch_id.clone(),
             commitment: commitment.clone(),
