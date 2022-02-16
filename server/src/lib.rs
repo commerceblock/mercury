@@ -47,7 +47,6 @@ extern crate mockito;
 extern crate shared_lib;
 
 #[cfg(test)]
-#[macro_use]
 extern crate time_test;
 
 pub mod config;

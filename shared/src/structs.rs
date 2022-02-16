@@ -783,7 +783,7 @@ pub struct KUAttest {
 }
 
 /// State Entity -> Receiver
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct TransferMsg5 {
     #[schemars(with = "UuidDef")]
     pub new_shared_key_id: Uuid,

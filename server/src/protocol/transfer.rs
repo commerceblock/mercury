@@ -16,7 +16,7 @@ use bitcoin::network::constants::Network;
 use crate::structs::ECDSAKeypair;
 
 
-use crate::error::SEError;
+use crate::error::{SEError, DBErrorType};
 use crate::Database;
 use crate::{server::StateChainEntity, storage::Storage};
 use super::requests::post_lb;
@@ -215,20 +215,58 @@ impl Transfer for SCE {
 
         // Check if batch transfer and batch ID matches
         if td.batch_id.is_some() {
-            if transfer_msg4.batch_data.is_some() {
-                let batch_id = transfer_msg4.batch_data.clone().unwrap().id;
-                if batch_id != td.batch_id.unwrap() {
+            match &transfer_msg4.batch_data {
+                Some(batch_data)=> {
+                    let batch_id = &batch_data.id;
+                    if batch_id != &td.batch_id.unwrap() {
+                        return Err(SEError::Generic(format!(
+                            "Incorrect batch ID for receive. Expected {}",
+                            td.batch_id.unwrap()
+                        )));                
+                    }
+                    //Check if transfer_receiver has already been completed,
+                    //and the TransferFinalizeData has already been generated.
+                    //If so, return TransferMsg5.
+                    match self.database.get_sc_transfer_finalize_data(&statechain_id){
+                        Ok(tfd) => {
+                            if (tfd.batch_data.is_none() || &tfd.batch_data.clone().unwrap() != batch_data){
+                                return Err(SEError::Generic(format!(
+                                    "TransferFinalizeData present for statechain_id {}; requested batch_data {:?}, got {:?}",
+                                    statechain_id,
+                                    &Some(batch_data),
+                                    &tfd.batch_data
+                                )));    
+                            }
+                            if (tfd.new_tx_backup_hex != transfer_msg4.tx_backup_hex){
+                                return Err(SEError::Generic(format!(
+                                    "TransferFinalizeData present for statechain_id {}; requested tx_backup_hex {:?}, got {:?}",
+                                    statechain_id,
+                                    transfer_msg4.tx_backup_hex,
+                                    tfd.new_tx_backup_hex
+                                )));    
+                            }
+                            let g: GE = ECPoint::generator();
+                            let s2_pub = g * tfd.s2;
+                            return Ok(TransferMsg5{
+                                new_shared_key_id: tfd.new_shared_key_id,
+                                s2_pub
+                            })
+                        },
+                        Err(e) => {
+                            if(e.to_string().contains("DB Error: No data for identifier.")){
+                                ()
+                            } else {
+                                return Err(e)
+                            }
+                        }                
+                    }
+                },
+                None => {
                     return Err(SEError::Generic(format!(
-                        "Incorrect batch ID for receive. Expected {}",
-                        td.batch_id.unwrap()
-                    )));                
+                        "Expected batch_data in request"
+                    )));
                 }
-            } else {
-                return Err(SEError::Generic(format!(
-                    "Expect receive in batch ID {}",
-                    td.batch_id.unwrap()
-                )));
-            }
+            };
         }
 
         let s2: FE;
@@ -568,7 +606,9 @@ mod tests {
     static TRANSFER_MSG_2: &str = "{\"x1\":{\"secret_bytes\":[50,125,83,219,71,208,81,134,217,92,70,185,127,178,160,88,58,35,104,206,209,53,194,34,11,60,12,105,150,25,45,26]},\"proof_key\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\"}";
     // static TRANSFER_MSG_3: &str = "{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"t1\":\"34c9a329617b8dd3cdeb3d491fa09f023f84f28005bdf40f0682eb020969183b\",\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\",\"sig\":\"3044022028d56cfdb4e02d46b2f8158b0414746ddf42ecaaaa995a3a02df8807c5062c0202207569dc0f49b64ae997b4c902539cddc1f4e4434d6b4b05af38af4b98232ebee8\"},\"statechain_id\":\"9b0ba36b-406a-499c-8c83-696b77f003a9\",\"tx_backup_psm\":{\"shared_key_id\":\"707ea4c9-5ddb-4f08-a240-2b4d80ae630d\",\"protocol\":\"Transfer\",\"tx\":{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"53e1d67d837fdaddb016c5de85d8903bc033f7f2208d3ff40430fc42edeab4cb:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,69,2,33,0,177,248,103,71,170,95,47,217,222,7,130,181,12,9,254,115,96,166,180,164,162,4,14,110,145,113,106,97,155,231,190,22,2,32,63,119,90,178,253,249,43,242,42,177,250,25,29,251,156,37,12,61,70,252,201,155,252,188,56,242,36,211,50,136,203,95,1],[2,108,195,112,80,86,19,121,166,106,134,63,140,162,115,194,178,158,147,92,173,6,188,127,94,107,131,160,62,11,191,241,230]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"0014a5c378a7de7311e6836253a28830b48cc6b9e252\"}]},\"input_addrs\":[\"026cc37050561379a66a863f8ca273c2b29e935cad06bc7f5e6b83a03e0bbff1e6\"],\"input_amounts\":[10000],\"proof_key\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\"},\"rec_se_addr\":{\"tx_backup_addr\":\"bcrt1q5hph3f77wvg7dqmz2w3gsv953nrtncjjzyj3m9\",\"proof_key\":\"0213be735d05adea658d78df4719072a6debf152845044402c5fe09dd41879fa01\"}}";
     static TRANSFER_MSG_4: &str = "{\"shared_key_id\":\"ef69278c-5143-4b2d-b443-4d25443242be\",\"statechain_id\":\"64070bf6-50af-4ee6-93c1-11e5f9588b39\",\"t2\":{\"secret_bytes\":[4,131,85,93,205,98,134,155,94,139,48,160,11,27,171,75,13,14,182,56,56,131,127,210,123,228,92,98,63,144,186,146,124,118,157,232,31,188,76,110,221,135,121,55,36,178,115,131,41,27,169,250,205,138,124,255,143,220,209,140,169,180,220,91,215,231,196,94,122,110,126,30,214,88,2,179,48,0,186,209,242,81,241,205,189,189,191,129,83,46,172,152,117,42,241,144,118,69,89,144,11,34,137,246,15,0,86,50,176,17,76,24,29,52,215,228,26,216,156,173,227,69,101,119,119]},\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"022d7ea3d286541ed593e0158e315d73908646abcfa46aa56c12229a2910cce48c\",\"sig\":\"3045022100869f749bc9f194076d105574ac74dafa6a07c54c6a5347d99916da11ad7edf5d0220047ee8579676babbb3990b9e95b84f8bc5f2df7082d12d789e28d7c15c15f8af\"},\"o2_pub\":{\"x\":\"4f42b26991577385dd4155a702306ff1b7c4bc89f10d98741b5998cbd6c8e708\",\"y\":\"2193d0f3600d4f7d430ac281dc7e07c9700e44bd77aabd45a7d6ea23667566fb\"},\"tx_backup_hex\":\"0200000000010170fab16bf256c5262c064ff7153edd77ddedb09a9fddcba656e132848b094ec00000000000feffffff02b824000000000000160014c4a4890486350f57f1b9418877487f479eec13352c010000000000001600141319a227287cfac4d8660830f4c9b0e1724a81000247304402205d3aebbce7863d1c7427b85cc4b85561040a6ad58d9b8f071c1ff92d2962eb1502203c794fc2959e09ea243444dedabb59f712ba3e3d47ad48ab0ca54a10ae6c281801210256185198842dae834fa3b98a11eec9864beb535c894038ccaa8fb728bc29338c17340000\",\"batch_data\":null}";
+    static TRANSFER_MSG_4_BATCH: &str = "{\"shared_key_id\":\"ef69278c-5143-4b2d-b443-4d25443242be\",\"statechain_id\":\"64070bf6-50af-4ee6-93c1-11e5f9588b39\",\"t2\":{\"secret_bytes\":[4,131,85,93,205,98,134,155,94,139,48,160,11,27,171,75,13,14,182,56,56,131,127,210,123,228,92,98,63,144,186,146,124,118,157,232,31,188,76,110,221,135,121,55,36,178,115,131,41,27,169,250,205,138,124,255,143,220,209,140,169,180,220,91,215,231,196,94,122,110,126,30,214,88,2,179,48,0,186,209,242,81,241,205,189,189,191,129,83,46,172,152,117,42,241,144,118,69,89,144,11,34,137,246,15,0,86,50,176,17,76,24,29,52,215,228,26,216,156,173,227,69,101,119,119]},\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"022d7ea3d286541ed593e0158e315d73908646abcfa46aa56c12229a2910cce48c\",\"sig\":\"3045022100869f749bc9f194076d105574ac74dafa6a07c54c6a5347d99916da11ad7edf5d0220047ee8579676babbb3990b9e95b84f8bc5f2df7082d12d789e28d7c15c15f8af\"},\"o2_pub\":{\"x\":\"4f42b26991577385dd4155a702306ff1b7c4bc89f10d98741b5998cbd6c8e708\",\"y\":\"2193d0f3600d4f7d430ac281dc7e07c9700e44bd77aabd45a7d6ea23667566fb\"},\"tx_backup_hex\":\"0200000000010170fab16bf256c5262c064ff7153edd77ddedb09a9fddcba656e132848b094ec00000000000feffffff02b824000000000000160014c4a4890486350f57f1b9418877487f479eec13352c010000000000001600141319a227287cfac4d8660830f4c9b0e1724a81000247304402205d3aebbce7863d1c7427b85cc4b85561040a6ad58d9b8f071c1ff92d2962eb1502203c794fc2959e09ea243444dedabb59f712ba3e3d47ad48ab0ca54a10ae6c281801210256185198842dae834fa3b98a11eec9864beb535c894038ccaa8fb728bc29338c17340000\",\"batch_data\":{ \"id\": \"78180bf6-50af-4ee6-93c1-11e5f9588b39\", \"commitment\": \"133e8fb4e386541ed593e0158e315d73908646abcfa46aa56c12229a2910cce48c\" }}";
     static FINALIZED_DATA: &str = "{\"new_shared_key_id\":\"a693a98e-d370-42a0-be22-0ce6a9887ed9\",\"statechain_id\":\"64070bf6-50af-4ee6-93c1-11e5f9588b39\",\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"022d7ea3d286541ed593e0158e315d73908646abcfa46aa56c12229a2910cce48c\",\"sig\":\"3045022100869f749bc9f194076d105574ac74dafa6a07c54c6a5347d99916da11ad7edf5d0220047ee8579676babbb3990b9e95b84f8bc5f2df7082d12d789e28d7c15c15f8af\"},\"s2\":\"aaa600f5e6bf19640203868a01cb1964005a0577b7393441d41c02ff8b80ba3d\",\"new_tx_backup_hex\":\"0200000000010170fab16bf256c5262c064ff7153edd77ddedb09a9fddcba656e132848b094ec00000000000feffffff02b824000000000000160014c4a4890486350f57f1b9418877487f479eec13352c010000000000001600141319a227287cfac4d8660830f4c9b0e1724a81000247304402205d3aebbce7863d1c7427b85cc4b85561040a6ad58d9b8f071c1ff92d2962eb1502203c794fc2959e09ea243444dedabb59f712ba3e3d47ad48ab0ca54a10ae6c281801210256185198842dae834fa3b98a11eec9864beb535c894038ccaa8fb728bc29338c17340000\",\"batch_data\":null}";
+    static FINALIZED_DATA_BATCH: &str = "{\"new_shared_key_id\":\"a693a98e-d370-42a0-be22-0ce6a9887ed9\",\"statechain_id\":\"64070bf6-50af-4ee6-93c1-11e5f9588b39\",\"statechain_sig\":{\"purpose\":\"TRANSFER\",\"data\":\"022d7ea3d286541ed593e0158e315d73908646abcfa46aa56c12229a2910cce48c\",\"sig\":\"3045022100869f749bc9f194076d105574ac74dafa6a07c54c6a5347d99916da11ad7edf5d0220047ee8579676babbb3990b9e95b84f8bc5f2df7082d12d789e28d7c15c15f8af\"},\"s2\":\"aaa600f5e6bf19640203868a01cb1964005a0577b7393441d41c02ff8b80ba3d\",\"new_tx_backup_hex\":\"0200000000010170fab16bf256c5262c064ff7153edd77ddedb09a9fddcba656e132848b094ec00000000000feffffff02b824000000000000160014c4a4890486350f57f1b9418877487f479eec13352c010000000000001600141319a227287cfac4d8660830f4c9b0e1724a81000247304402205d3aebbce7863d1c7427b85cc4b85561040a6ad58d9b8f071c1ff92d2962eb1502203c794fc2959e09ea243444dedabb59f712ba3e3d47ad48ab0ca54a10ae6c281801210256185198842dae834fa3b98a11eec9864beb535c894038ccaa8fb728bc29338c17340000\",\"batch_data\":{ \"id\": \"78180bf6-50af-4ee6-93c1-11e5f9588b39\", \"commitment\": \"133e8fb4e386541ed593e0158e315d73908646abcfa46aa56c12229a2910cce48c\" }}";
     pub static PARTY_1_PRIVATE: &str = "{\"x1\":\"90dcad79e709cd0e9721ea530bdaae824f25d694f9141d44c34f8c45b83a619a\",\"paillier_priv\":{\"p\":\"114413871311317346857216248124398373253057789180865139463658909581309809925099684086705518674269955826879417786610662265699564218950421752552463442949710298739699236291018601890635623572620844010612962848524109675418307426543377258756575401823280458998724649947851944337182752344801543308408780339793598493911\",\"q\":\"143642110993616480789938157546368017212072711379036975069374679010429977311234473719247827342504091910445056259588213765288791327321051188553463176893894215343606711582011189827766980183694378516680292236218631062799658567268548617381466151102553381323573366960980002823730109177797219479930574386517898816387\"},\"c_key_randomness\":\"185cb997a51310b4d9b8d58db7b6c6bd401e92af0f310aa7d91421be8396ba2cd521225b4cefe13341a7a609f4c06a7632231fbbc2ee3d3e62387e13d62ca3e9ca43ab89da60a139177c309d86651d4283463d40c5b9cb842156ba0591d436743a4fcd34863df434f724a4f67b694904a6de829e8ab70b7c79930b7230b2bab65653ade92da15dd31d3a6a34227a323322868d84e162cffe4c731e8b5e83f0921c69d48ebe9c2fcbe976dd59ab38709cf76ae155f33916333938a22551aea66a2c2ccd40712d55b2d8f477354700d83f179010d6374971a9994dfe5d67bcc69ef07f48a5034b5e63953eed4ab15ac9d40162a9bb1c66c70fca85bd625cea4fc7\"}";
     pub static PARTY_2_PUBLIC: &str = "{\"x\":\"5220bc6ebcc83d0a1e4482ab1f2194cb69648100e8be78acde47ca56b996bd9e\",\"y\":\"8dfbb36ef76f2197598738329ffab7d3b3a06d80467db8e739c6b165abc20231\"}";
     static STATE_CHAIN: &str = "{\"chain\":[{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}]}";
@@ -663,7 +703,11 @@ mod tests {
         msg_1_wrong_shared_key_id.shared_key_id = no_sc_shared_key_id;
         match sc_entity.transfer_sender(msg_1_wrong_shared_key_id) {
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("DB Error: No data for identifier.")),
+            Err(e) => match e {
+                // If finalize data has not been stored, do nothing
+                SEError::DBError(DBErrorType::NoDataForID, _) => assert!(true),
+                _ => assert!(false, "Expected error type: {:#?}", DBErrorType::NoDataForID)
+            }  
         }
 
         // Sc locked
@@ -831,6 +875,222 @@ mod tests {
 
         sc_entity.transfer_receiver(transfer_msg_4)
     }
+
+    //Repeated calls to batch transfer_receiver should return the same TransferMsg5.
+    //
+    #[test]
+    fn test_repeat_transfer_receiver_batch() {
+        let transfer_msg_4 =
+        serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4_BATCH.to_string()).unwrap();
+        let shared_key_id = transfer_msg_4.shared_key_id;
+        let statechain_id = transfer_msg_4.statechain_id;
+        let tfd = serde_json::from_str::<TransferFinalizeData>(&FINALIZED_DATA_BATCH.to_string()).unwrap();
+        let s2 = tfd.s2;
+        let msg2: TransferMsg2 = serde_json::from_str(&TRANSFER_MSG_2.to_string()).unwrap();
+        let x1 = msg2.x1.get_fe().expect("failed to get fe");
+        let batch_id = Some(tfd.batch_data.as_ref().unwrap().id.clone());
+
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_user_auth()
+        .returning(|_user_id| Ok(String::from("user_auth")));
+        db.expect_get_transfer_data()
+            .with(predicate::eq(statechain_id))
+            .returning(move |_| {
+                Ok(TransferData {
+                    statechain_id,
+                    statechain_sig: serde_json::from_str::<TransferMsg4>(
+                        &TRANSFER_MSG_4_BATCH.to_string(),
+                    )
+                    .unwrap()
+                    .statechain_sig,
+                    x1,
+                    batch_id: batch_id.clone()
+                })
+            });
+        let tfd_0 = tfd.clone();
+        db.expect_get_sc_transfer_finalize_data()
+            .with(predicate::eq(statechain_id))
+            .returning(move |_| {
+                Ok(tfd_0.clone())
+            });
+        db.expect_get_ecdsa_keypair()
+            .with(predicate::eq(shared_key_id))
+            .returning(|_| {
+                Ok(ECDSAKeypair {
+                    party_1_private: serde_json::from_str(&PARTY_1_PRIVATE.to_string()).unwrap(),
+                    party_2_public: serde_json::from_str(&PARTY_2_PUBLIC.to_string()).unwrap(),
+                })
+            });
+        db.expect_get_statechain().returning(move |_| {
+            Ok(serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap().try_into().unwrap())
+        });
+        db.expect_get_statechain_owner() //Lockbox update
+            .with(predicate::eq(statechain_id))
+            .returning(move |_| {
+            Ok(StateChainOwner {
+                locked_until: Utc::now().naive_utc(),
+                owner_id: shared_key_id,
+                chain: serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap().try_into().unwrap(),
+            })
+        });
+        db.expect_get_lockbox_index().returning(|_| Ok(None));
+        db.expect_update_statechain_owner()
+            .returning(|_, _, _| Ok(()));
+        db.expect_transfer_init_user_session()
+            .returning(|_, _, _, _| Ok(()));
+        db.expect_update_backup_tx().returning(|_, _| Ok(()));
+        db.expect_remove_transfer_data().returning(|_| Ok(()));
+        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
+        db.expect_get_root().returning(|_| Ok(None));
+        db.expect_root_update().returning(|_| Ok(1));
+        db.expect_get_finalize_batch_data().returning(move |_| {
+            Ok(TransferFinalizeBatchData {
+                finalized_data_vec: vec![TransferFinalizeData {
+                    new_shared_key_id: shared_key_id,
+                    statechain_id,
+                    statechain_sig: serde_json::from_str::<TransferMsg4>(
+                        &TRANSFER_MSG_4_BATCH.to_string(),
+                    )
+                    .unwrap()
+                    .statechain_sig,
+                    s2: s2,
+                    new_tx_backup_hex: transaction_serialise(
+                        &serde_json::from_str::<Transaction>(
+                            &BACKUP_TX_NOT_SIGNED.to_string(),
+                        )
+                        .unwrap()
+                    ),
+                    batch_data: Some(BatchData {
+                        id: shared_key_id,
+                        commitment: String::default(),
+                    }),
+                }],
+                start_time: Utc::now().naive_utc(),
+            })
+        });
+        db.expect_get_transfer_batch_start_time()
+            .returning(move |_| Ok(Utc::now().naive_utc() - Duration::seconds(1)));
+
+        db.expect_update_finalize_batch_data()
+            .returning(|_, _| Ok(()));
+
+            db.expect_get_user_auth()
+            .returning(|_user_id| Ok(String::from("user_auth")));
+            db.expect_get_transfer_data()
+                .with(predicate::eq(statechain_id))
+                .returning(move |_| {
+                    Ok(TransferData {
+                        statechain_id,
+                        statechain_sig: serde_json::from_str::<TransferMsg4>(
+                            &TRANSFER_MSG_4_BATCH.to_string(),
+                        )
+                        .unwrap()
+                        .statechain_sig,
+                        x1,
+                        batch_id: batch_id.clone()
+                    })
+                });
+            let tfd_1 = tfd.clone();
+            db.expect_get_sc_transfer_finalize_data()
+                .with(predicate::eq(statechain_id))
+                .returning(move |_| {
+                    Ok(tfd_1.clone())
+                });
+
+                db.expect_get_user_auth()
+                .returning(|_user_id| Ok(String::from("user_auth")));
+                db.expect_get_transfer_data()
+                    .with(predicate::eq(statechain_id))
+                    .returning(move |_| {
+                        Ok(TransferData {
+                            statechain_id,
+                            statechain_sig: serde_json::from_str::<TransferMsg4>(
+                                &TRANSFER_MSG_4_BATCH.to_string(),
+                            )
+                            .unwrap()
+                            .statechain_sig,
+                            x1,
+                            batch_id: batch_id.clone()
+                        })
+                    });
+                let tfd_2 = tfd.clone();
+                db.expect_get_sc_transfer_finalize_data()
+                    .with(predicate::eq(statechain_id))
+                    .returning(move |_| {
+                        Ok(tfd_2.clone())
+                    });
+
+                    db.expect_get_user_auth()
+                    .returning(|_user_id| Ok(String::from("user_auth")));
+                    db.expect_get_transfer_data()
+                        .with(predicate::eq(statechain_id))
+                        .returning(move |_| {
+                            Ok(TransferData {
+                                statechain_id,
+                                statechain_sig: serde_json::from_str::<TransferMsg4>(
+                                    &TRANSFER_MSG_4_BATCH.to_string(),
+                                )
+                                .unwrap()
+                                .statechain_sig,
+                                x1,
+                                batch_id: batch_id.clone()
+                            })
+                        });
+                    let tfd_3 = tfd.clone();
+                    db.expect_get_sc_transfer_finalize_data()
+                        .with(predicate::eq(statechain_id))
+                        .returning(move |_| {
+                            Ok(tfd_3.clone())
+                        });
+
+        let sc_entity = test_sc_entity(db, None, None, None, None);
+        let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
+
+        // Input data to transfer_receiver
+        let transfer_msg_4 =
+            serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4_BATCH.to_string()).unwrap();
+            
+        let tm5 = sc_entity.transfer_receiver(transfer_msg_4.clone()).expect("expected TransferMsg5");
+
+        let mut tm4_wrong_batch_data = transfer_msg_4.clone();
+        let mut bd = tm4_wrong_batch_data.batch_data.unwrap();
+        bd.commitment = "wrong commitment".to_string();
+        tm4_wrong_batch_data.batch_data = Some(bd);
+        let tm4_wrong_batch_data = tm4_wrong_batch_data;
+        let expected_err = SEError::Generic(format!(
+            "TransferFinalizeData present for statechain_id {}; requested batch_data {:?}, got {:?}",
+            transfer_msg_4.statechain_id,
+            tm4_wrong_batch_data.batch_data,
+            transfer_msg_4.batch_data
+        ));
+        match sc_entity.transfer_receiver(tm4_wrong_batch_data) {
+            Ok(_) => assert!(false, "expected Err({})", expected_err),
+            Err(e) => {
+                assert_eq!(e.to_string(), expected_err.to_string())
+            }
+        }
+
+        let mut tm4_wrong_tx_backup_hex = transfer_msg_4.clone();
+        tm4_wrong_tx_backup_hex.tx_backup_hex = "wrong tx".to_string();
+        let tm4_wrong_tx_backup_hex = tm4_wrong_tx_backup_hex;
+        let expected_err = SEError::Generic(format!(
+            "TransferFinalizeData present for statechain_id {}; requested tx_backup_hex {:?}, got {:?}",
+            transfer_msg_4.statechain_id,
+            tm4_wrong_tx_backup_hex.tx_backup_hex,
+            transfer_msg_4.tx_backup_hex
+        ));
+        match sc_entity.transfer_receiver(tm4_wrong_tx_backup_hex) {
+            Ok(_) => assert!(false, "expected Err({})", expected_err),
+            Err(e) => {
+                assert_eq!(e.to_string(), expected_err.to_string())
+            }
+        }
+
+        let tm5_repeated = sc_entity.transfer_receiver(transfer_msg_4.clone()).expect("expected TransferMsg5");
+        assert_eq!(tm5_repeated, tm5);
+    }
+
 
     #[test]
     fn do_transfer_receiver_lockbox() {
@@ -1012,7 +1272,7 @@ mod tests {
     #[ignore]
     // This test takes 1hr to run
     fn test_convert_secp256k1_scalar_to_secret_key_long() {
-        let n = 100000000;
+        let n = 600000000;
         time_test!();
         for _i in 0..n {
             let s1: FE = ECScalar::new_random();
