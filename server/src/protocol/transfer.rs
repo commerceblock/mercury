@@ -229,20 +229,14 @@ impl Transfer for SCE {
                     //If so, return TransferMsg5.
                     match self.database.get_sc_transfer_finalize_data(&statechain_id){
                         Ok(tfd) => {
-                            dbg!(&tfd);
                             match tfd.batch_data {
                                 Some(ref db_batch_data)=> {
-                                    dbg!("some db batch_data", &db_batch_data);
                                     match self.database.is_transfer_batch_finalized(&db_batch_data.id) {
                                         //Data are for an already completed batch transfer.
-                                        Ok(true) => {
-                                            dbg!("is finalized");
-                                            ()
-                                        },
+                                        Ok(true) => (),
                                         //Data are for an ongoing batch transfer - check that the
                                         //details match the request.
                                         Ok(false) => {
-                                            dbg!("is not finalized");
                                             if &db_batch_data.clone() != batch_data {
                                                 return Err(SEError::Generic(format!(
                                                     "TransferFinalizeData present for statechain_id {}; requested batch_data {:?}, got {:?}",
@@ -251,7 +245,6 @@ impl Transfer for SCE {
                                                     &tfd.batch_data
                                                 )));  
                                             }
-                                            dbg!("batch_data matches");
                                             if (tfd.new_tx_backup_hex != transfer_msg4.tx_backup_hex){
                                                 return Err(SEError::Generic(format!(
                                                     "TransferFinalizeData present for statechain_id {}; requested tx_backup_hex {:?}, got {:?}",
@@ -260,7 +253,6 @@ impl Transfer for SCE {
                                                     tfd.new_tx_backup_hex
                                                 )));    
                                             }
-                                            dbg!("backup tx matches");
                                             let g: GE = ECPoint::generator();
                                             let s2_pub = g * tfd.s2;
                                             return Ok(TransferMsg5{
@@ -1120,15 +1112,6 @@ mod tests {
                         .times(1)
                         .returning(|_| Ok(false));
 
-                    /*
-                    let tfd_4 = tfd_stored.clone();
-                    db.expect_get_sc_transfer_finalize_data()
-                        .times(1)
-                        .with(predicate::eq(statechain_id))
-                        .returning(move |_| {
-                            Ok(tfd_4.clone())
-                        });
-                        */
                         
         let mut tm4_wrong_batch_data = transfer_msg_4.clone();
         let mut bd = tm4_wrong_batch_data.batch_data.unwrap();
