@@ -16,7 +16,7 @@ use bitcoin::network::constants::Network;
 use crate::structs::ECDSAKeypair;
 
 
-use crate::error::{SEError, DBErrorType};
+use crate::error::SEError;
 use crate::Database;
 use crate::{server::StateChainEntity, storage::Storage};
 use super::requests::post_lb;
@@ -229,28 +229,59 @@ impl Transfer for SCE {
                     //If so, return TransferMsg5.
                     match self.database.get_sc_transfer_finalize_data(&statechain_id){
                         Ok(tfd) => {
-                            if (tfd.batch_data.is_none() || &tfd.batch_data.clone().unwrap() != batch_data){
-                                return Err(SEError::Generic(format!(
-                                    "TransferFinalizeData present for statechain_id {}; requested batch_data {:?}, got {:?}",
-                                    statechain_id,
-                                    &Some(batch_data),
-                                    &tfd.batch_data
-                                )));    
+                            match tfd.batch_data {
+                                Some(ref db_batch_data)=> {
+                                    match self.database.is_transfer_batch_finalized(&db_batch_data.id) {
+                                        //Data are for an already completed batch transfer.
+                                        Ok(true) => (),
+                                        //Data are for an ongoing batch transfer - check that the
+                                        //details match the request.
+                                        Ok(false) => {
+                                            if &db_batch_data.clone() != batch_data {
+                                                return Err(SEError::Generic(format!(
+                                                    "TransferFinalizeData present for statechain_id {}; requested batch_data {:?}, got {:?}",
+                                                    statechain_id,
+                                                    &Some(batch_data),
+                                                    &tfd.batch_data
+                                                )));  
+                                            }
+                                            if (tfd.new_tx_backup_hex != transfer_msg4.tx_backup_hex){
+                                                return Err(SEError::Generic(format!(
+                                                    "TransferFinalizeData present for statechain_id {}; requested tx_backup_hex {:?}, got {:?}",
+                                                    statechain_id,
+                                                    transfer_msg4.tx_backup_hex,
+                                                    tfd.new_tx_backup_hex
+                                                )));    
+                                            }
+                                            let g: GE = ECPoint::generator();
+                                            let s2_pub = g * tfd.s2;
+                                            return Ok(TransferMsg5{
+                                                new_shared_key_id: tfd.new_shared_key_id,
+                                                s2_pub
+                                            })
+                                        },
+                                        //The batch transfer status should be available.
+                                        Err(e) => {
+                                            if(e.to_string().contains("DB Error: No data for identifier.")){
+                                                return Err(SEError::Generic(format!(
+                                                    "TransferFinalizeData present for statechain_id {}; batch status not found: {}",
+                                                    statechain_id,
+                                                    e
+                                                )));  
+                                            } else {
+                                                return Err(e)
+                                            }
+                                        }
+                                    }
+                                },
+                                None => {
+                                    return Err(SEError::Generic(format!(
+                                        "TransferFinalizeData present for statechain_id {}; requested batch_data {:?}, got None",
+                                        statechain_id,
+                                        &Some(batch_data)
+                                    )));  
+                                }
                             }
-                            if (tfd.new_tx_backup_hex != transfer_msg4.tx_backup_hex){
-                                return Err(SEError::Generic(format!(
-                                    "TransferFinalizeData present for statechain_id {}; requested tx_backup_hex {:?}, got {:?}",
-                                    statechain_id,
-                                    transfer_msg4.tx_backup_hex,
-                                    tfd.new_tx_backup_hex
-                                )));    
-                            }
-                            let g: GE = ECPoint::generator();
-                            let s2_pub = g * tfd.s2;
-                            return Ok(TransferMsg5{
-                                new_shared_key_id: tfd.new_shared_key_id,
-                                s2_pub
-                            })
                         },
                         Err(e) => {
                             if(e.to_string().contains("DB Error: No data for identifier.")){
@@ -911,9 +942,16 @@ mod tests {
         let tfd_0 = tfd.clone();
         db.expect_get_sc_transfer_finalize_data()
             .with(predicate::eq(statechain_id))
+            .times(1)
             .returning(move |_| {
                 Ok(tfd_0.clone())
             });
+        //The previous batch transfer is completed
+        db.expect_is_transfer_batch_finalized()
+            .with(predicate::eq(batch_id.clone().unwrap()))
+            .times(1)
+            .returning(|_| Ok(true));
+        //New batch transfer - generate key pair
         db.expect_get_ecdsa_keypair()
             .with(predicate::eq(shared_key_id))
             .returning(|_| {
@@ -991,12 +1029,32 @@ mod tests {
                         batch_id: batch_id.clone()
                     })
                 });
-            let tfd_1 = tfd.clone();
+
+                let mut sc_entity = test_sc_entity(db, None, None, None, None);
+                let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
+        
+                // Input data to transfer_receiver
+                let transfer_msg_4 =
+                    serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4_BATCH.to_string()).unwrap();
+                    
+                let tm5 = sc_entity.transfer_receiver(transfer_msg_4.clone()).expect("expected TransferMsg5");
+
+
+
+            let mut tfd_stored = tfd.clone();
+            tfd_stored.new_shared_key_id = tm5.new_shared_key_id;
+            let tfd_1 = tfd_stored.clone();
+            let db = &mut sc_entity.database;
             db.expect_get_sc_transfer_finalize_data()
                 .with(predicate::eq(statechain_id))
+                .times(1)
                 .returning(move |_| {
                     Ok(tfd_1.clone())
                 });
+            db.expect_is_transfer_batch_finalized()
+                .with(predicate::eq(batch_id.clone().unwrap()))
+                .times(1)
+                .returning(|_| Ok(false));
 
                 db.expect_get_user_auth()
                 .returning(|_user_id| Ok(String::from("user_auth")));
@@ -1014,12 +1072,17 @@ mod tests {
                             batch_id: batch_id.clone()
                         })
                     });
-                let tfd_2 = tfd.clone();
+                let tfd_2 = tfd_stored.clone();
                 db.expect_get_sc_transfer_finalize_data()
+                    .times(1)
                     .with(predicate::eq(statechain_id))
                     .returning(move |_| {
                         Ok(tfd_2.clone())
                     });
+                db.expect_is_transfer_batch_finalized()
+                    .with(predicate::eq(batch_id.clone().unwrap()))
+                    .times(1)
+                    .returning(|_| Ok(false));
 
                     db.expect_get_user_auth()
                     .returning(|_user_id| Ok(String::from("user_auth")));
@@ -1037,22 +1100,19 @@ mod tests {
                                 batch_id: batch_id.clone()
                             })
                         });
-                    let tfd_3 = tfd.clone();
+                    let tfd_3 = tfd_stored.clone();
                     db.expect_get_sc_transfer_finalize_data()
+                        .times(1)
                         .with(predicate::eq(statechain_id))
                         .returning(move |_| {
                             Ok(tfd_3.clone())
                         });
+                    db.expect_is_transfer_batch_finalized()
+                        .with(predicate::eq(batch_id.clone().unwrap()))
+                        .times(1)
+                        .returning(|_| Ok(false));
 
-        let sc_entity = test_sc_entity(db, None, None, None, None);
-        let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
-
-        // Input data to transfer_receiver
-        let transfer_msg_4 =
-            serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4_BATCH.to_string()).unwrap();
-            
-        let tm5 = sc_entity.transfer_receiver(transfer_msg_4.clone()).expect("expected TransferMsg5");
-
+                        
         let mut tm4_wrong_batch_data = transfer_msg_4.clone();
         let mut bd = tm4_wrong_batch_data.batch_data.unwrap();
         bd.commitment = "wrong commitment".to_string();
@@ -1089,6 +1149,19 @@ mod tests {
 
         let tm5_repeated = sc_entity.transfer_receiver(transfer_msg_4.clone()).expect("expected TransferMsg5");
         assert_eq!(tm5_repeated, tm5);
+
+        let mut tm4_no_batch_data = transfer_msg_4.clone();
+        tm4_no_batch_data.batch_data = None;
+        let tm4_no_batch_data = tm4_no_batch_data;
+        let expected_err = SEError::Generic(format!(
+            "Expected batch_data in request"
+        ));
+        match sc_entity.transfer_receiver(tm4_no_batch_data) {
+            Ok(_) => assert!(false, "expected Err({})", expected_err),
+            Err(e) => {
+                assert_eq!(e.to_string(), expected_err.to_string())
+            }
+        }
     }
 
 
