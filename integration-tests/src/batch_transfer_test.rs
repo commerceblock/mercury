@@ -157,7 +157,7 @@ mod tests {
         for (from, to) in &swap_map {
             let state_chains_info = wallets[from.to_owned()].get_state_chains_info().unwrap();
             let shared_key_id = state_chains_info.0.last().unwrap();
-            let (statechain_id, funding_txid, _, _, _) = wallets[from.to_owned()]
+            let (statechain_id, _funding_txid, _, _, _) = wallets[from.to_owned()]
                 .get_shared_key_info(shared_key_id)
                 .unwrap();
 
