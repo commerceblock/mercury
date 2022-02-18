@@ -177,6 +177,7 @@ pub trait Database {
     fn get_sc_locked_until(&self, statechain_id: Uuid) -> Result<NaiveDateTime>;
     fn update_locked_until(&self, statechain_id: &Uuid, time: &NaiveDateTime) -> Result<()>;
     fn get_transfer_batch_data(&self, batch_id: Uuid) -> Result<TransferBatchData>;
+    fn is_transfer_batch_finalized(&self, batch_id: &Uuid) -> Result<bool>;
     fn has_transfer_batch_id(&self, batch_id: Uuid) -> bool;
     fn get_transfer_batch_id(&self, batch_id: Uuid) -> Result<Uuid>;
     fn get_punished_state_chains(&self, batch_id: Uuid) -> Result<Vec<Uuid>>;
