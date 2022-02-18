@@ -1140,17 +1140,21 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
                         utxo: OutPoint::null(),
                         chain: state_chain.chain.get_chain().clone(),
                         locktime: 0 as u32,
+                        confirmed: true,
                     }});
                 }
             }
 
-        let tx_backup = self.database.get_backup_transaction(statechain_id)?;
+        let tx_backup = self.database.get_backup_transaction(statechain_id.clone())?;
+
+        let confirmed = self.database.is_confirmed(&statechain_id)?;
 
         return Ok({StateChainDataAPI {
             amount: state_chain.amount as u64,
             utxo: tx_backup.input.get(0).unwrap().previous_output,
             chain: state_chain.chain.get_chain().clone(),
             locktime: tx_backup.lock_time,
+            confirmed
         }});
     }
 
@@ -1168,6 +1172,7 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
                         utxo: OutPoint::null(),
                         statecoin: statecoin.to_owned(),
                         locktime: 0 as u32,
+                        confirmed: true,
                     }});
                 }
             },
@@ -1176,11 +1181,14 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
         
         let tx_backup = self.database.get_backup_transaction(statechain_id)?;
 
+        let confirmed = self.database.is_confirmed(&statechain_id)?;
+
         return Ok({StateCoinDataAPI {
             amount: state_chain.amount as u64,
             utxo: tx_backup.input.get(0).unwrap().previous_output,
             statecoin: statecoin.to_owned(),
             locktime: tx_backup.lock_time,
+            confirmed,
         }});
     }
 
@@ -1490,6 +1498,9 @@ pub mod tests {
         db.expect_get_statecoin_pubkey().returning(move |_| {
             Ok(Some(SHAREDPUBLIC.to_string()))
         });
+        db.expect_is_confirmed().returning(move |_| {
+            Ok(true)
+        });        
 
         let sc_entity = test_sc_entity(db, None, None, None, None);
 
@@ -1583,6 +1594,9 @@ pub mod tests {
         db.expect_get_statecoin_pubkey().returning(move |_| {
             Ok(Some(SHAREDPUBLIC.to_string()))
         });
+        db.expect_is_confirmed().returning(move |_| {
+            Ok(true)
+        });        
 
         let sc_entity = test_sc_entity(db, None, None, None, None);
 

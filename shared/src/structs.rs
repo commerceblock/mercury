@@ -380,6 +380,8 @@ pub struct StateChainDataAPI {
     pub chain: Vec<State>,
     /// The current owner nLocktime
     pub locktime: u32,  // the curent owner nlocktime
+    /// The coin confirmation status
+    pub confirmed: bool,
 }
 
 impl StateChainDataAPI {
@@ -389,6 +391,7 @@ impl StateChainDataAPI {
             amount: 1000000,
             chain: vec![State::example()],
             locktime: 712903,
+            confirmed: true
         }
     }
 
@@ -416,6 +419,8 @@ pub struct StateCoinDataAPI {
     pub statecoin: State,
     /// The current owner nLocktime
     pub locktime: u32,  // the curent owner nlocktime
+    /// The coin confirmation status
+    pub confirmed: bool,
 }
 
 impl StateCoinDataAPI {
@@ -425,6 +430,7 @@ impl StateCoinDataAPI {
             amount: 1000000,
             statecoin: State::example(),
             locktime: 712903,
+            confirmed: true
         }
     }
 }
