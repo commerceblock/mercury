@@ -372,22 +372,11 @@ pub fn run_transfer_with_commitment(
         &mut tranfer_sender_resp.clone(),
         &None
         ) {
-        Err(e) => assert!(e.to_string().contains("Expected batch_data in request")),
+        Err(e) => assert!(e.to_string().contains("Expect receive in batch ID")),
         _ => assert!(false),
     }
 
     let transfer_finalized_data = state_entity::transfer::transfer_receiver(
-        &mut wallets[receiver_index],
-        &mut tranfer_sender_resp.clone(),
-        &Some(BatchData {
-            id: batch_id.clone(),
-            commitment: commitment.clone(),
-        }),
-    )
-    .unwrap();
-
-    //Check that a repeat run of transfer_receiver yields the same response
-    let tfd2 = state_entity::transfer::transfer_receiver(
         &mut wallets[receiver_index],
         &mut tranfer_sender_resp,
         &Some(BatchData {
@@ -396,8 +385,6 @@ pub fn run_transfer_with_commitment(
         }),
     )
     .unwrap();
-
-    assert_eq!(transfer_finalized_data, tfd2);
 
     println!("(Transfer Took: {})", TimeFormat(start.elapsed()));
 

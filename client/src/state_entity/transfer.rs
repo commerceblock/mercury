@@ -33,7 +33,7 @@ use std::str::FromStr;
 use uuid::Uuid;
 use shared_lib::structs::TransferFinalizeData as TransferFinalizeDataAPI;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TransferFinalizeData {
     pub new_shared_key_id: Uuid,
     pub o2: FE,
@@ -418,10 +418,8 @@ pub fn transfer_receiver_repeat_keygen(
     msg4.encrypt_with_pubkey(&PublicKey::from_str(&s1_pub.key).unwrap())?;
     let msg4 = msg4;
 
-
     let transfer_msg5: TransferMsg5 =
         requests::postb(&wallet.client_shim, &format!("transfer/receiver"), msg4)?;
-
 
     // Update tx_backup_psm shared_key_id with new one
     let mut tx_backup_psm = transfer_msg3.tx_backup_psm.clone();
