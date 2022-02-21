@@ -497,9 +497,6 @@ impl Database for MemoryDB {
     ) -> crate::Result<crate::structs::TransferBatchData> {
         unimplemented!()
     }
-    fn is_transfer_batch_finalized(&self, _batch_id: &uuid::Uuid) -> crate::Result<bool> {
-        unimplemented!()
-    }
     fn has_transfer_batch_id(&self, _batch_id: uuid::Uuid) -> bool {
         unimplemented!()
     }

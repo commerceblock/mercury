@@ -1274,10 +1274,6 @@ impl Database for PGDatabase {
         })
     }
 
-    fn is_transfer_batch_finalized(&self, batch_id: &Uuid) -> Result<bool> {
-        self.get_1::<bool>(*batch_id, Table::TransferBatch, vec![Column::Finalized])
-    }
-
     fn has_transfer_batch_id(&self, batch_id: Uuid) -> bool {
         self.get_transfer_batch_id(batch_id).is_ok()
     }
