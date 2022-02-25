@@ -232,17 +232,10 @@ impl Scheduler {
             }
         }
 
-        let group = SwapGroup { amount: MIN_AMOUNT, size: self.max_swap_size as u64 };
-        self.group_info_map.entry(group).or_insert(status.clone());
-
-        let group = SwapGroup { amount: MIN_AMOUNT*10, size: self.max_swap_size as u64 };
-        self.group_info_map.entry(group).or_insert(status.clone());
-
-        let group = SwapGroup { amount: MIN_AMOUNT*100, size: self.max_swap_size as u64 };
-        self.group_info_map.entry(group).or_insert(status.clone());
-
-        let group = SwapGroup { amount: MIN_AMOUNT*1000, size: self.max_swap_size as u64 };
-        self.group_info_map.entry(group).or_insert(status);
+        for permitted_group in &self.permitted_groups {
+            let group = SwapGroup { amount: *permitted_group, size: self.max_swap_size as u64 };
+            self.group_info_map.entry(group).or_insert(status.clone());            
+        }
 
         Ok(())
     }
