@@ -1480,7 +1480,7 @@ pub mod tests {
 
 
         let mut db = MockDatabase::new();
-        db.expect_has_withdraw_sc_sig().returning(|_| Ok(false));
+        db.expect_has_withdraw_sc_sig().returning(|_| Err(SEError::Generic("error".to_string())));
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_recovery_data().returning(move |key| {
             // return error to simulate no statecoin for key
@@ -1552,7 +1552,7 @@ pub mod tests {
         };
 
         let mut db = MockDatabase::new();
-        db.expect_has_withdraw_sc_sig().returning(|_| Ok(true));
+        db.expect_has_withdraw_sc_sig().returning(|_| Ok(()));
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_recovery_data().returning(move |key| {
             // return error to simulate no statecoin for key
@@ -1646,10 +1646,12 @@ pub mod tests {
             tx_hex: transaction_serialise(&tx_backup),
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "None".to_string(),
+            withdrawing: false
         };
 
 
         let mut db = MockDatabase::new();
+        db.expect_has_withdraw_sc_sig().returning(|_| Err(SEError::Generic("error".to_string())));
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_recovery_data().returning(move |key| {
             // return error to simulate no statecoin for key
