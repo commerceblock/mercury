@@ -449,7 +449,7 @@ impl Utilities for SCE {
                 };
 
                 // If withdraw init
-                let mut is_withdrawing;
+                let is_withdrawing;
                 match self.database.has_withdraw_sc_sig(statecoin.0) {
                     Ok(_) => is_withdrawing = true,
                     Err(_e) => is_withdrawing = false,

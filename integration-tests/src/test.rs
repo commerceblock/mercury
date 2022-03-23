@@ -191,6 +191,26 @@ mod tests {
         reset_data(&wallet.client_shim).unwrap();
     }
 
+      #[test]
+    #[serial]
+    fn test_get_statechain_depth() {
+        time_test!();
+        let _handle = start_server(None, None);
+        let mut wallet = gen_wallet(None);
+
+        let err = state_entity::api::get_statechain_depth(&wallet.client_shim, &Uuid::new_v4(),&1);
+        assert!(err.is_err());
+        let deposit = run_deposit(&mut wallet, &10000);
+
+        let state_chain =
+            state_entity::api::get_statechain_depth(&wallet.client_shim, &deposit.1.clone(),&1).unwrap();
+        assert_eq!(
+            state_chain.get_tip().unwrap().data,
+            deposit.5.to_string()
+        );
+        reset_data(&wallet.client_shim).unwrap();
+    }
+
     #[test]
     #[serial]
     fn test_get_statecoin() {

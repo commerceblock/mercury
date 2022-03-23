@@ -40,6 +40,17 @@ pub fn get_statechain(
     requests::get(client_shim, &format!("info/statechain/{}", statechain_id))
 }
 
+/// Get state chain by ID to depth
+pub fn get_statechain_depth(
+    client_shim: &ClientShim,
+    statechain_id: &Uuid,
+    depth: &usize
+) -> Result<StateChainDataAPI> {
+    requests::get(client_shim, &format!("info/statechain/{}/{}", statechain_id, depth))
+}
+
+
+
 /// Get statecoin (statechain tip) by statechain ID
 pub fn get_statecoin(
     client_shim: &ClientShim,
