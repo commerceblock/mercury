@@ -122,6 +122,9 @@ pub trait Storage {
     //Returns locked until time, owner id, state chain
     fn get_statechain_data_api(&self, statechain_id: Uuid) -> Result<StateChainDataAPI>;
 
+    //Returns locked until time, owner id, state chain to depth 
+    fn get_statechain_data_api_depth(&self, statechain_id: Uuid, depth: Option<usize>) -> Result<StateChainDataAPI>;
+
     //Returns locked until time, owner id, tip of state chain
     fn get_statecoin_data_api(&self, statechain_id: Uuid) -> Result<StateCoinDataAPI>;
 
