@@ -449,7 +449,7 @@ impl Utilities for SCE {
                 };
 
                 // If withdraw init
-                let mut is_withdrawing;
+                let is_withdrawing;
                 match self.database.has_withdraw_sc_sig(statecoin.0) {
                     Ok(_) => is_withdrawing = true,
                     Err(_e) => is_withdrawing = false,
@@ -581,6 +581,21 @@ pub fn get_statechain(
 ) -> Result<Json<StateChainDataAPI>> {
     sc_entity.check_rate_fast("info")?;
     match sc_entity.get_statechain_data_api(Uuid::from_str(&statechain_id).unwrap()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Get current statechain information for specified statechain ID, up to "depth" items from the statechain head
+#[get("/info/statechain/<statechain_id>/<depth>", format = "json")]
+pub fn get_statechain_depth(
+    sc_entity: State<SCE>,
+    statechain_id: String,
+    depth: usize,
+) -> Result<Json<StateChainDataAPI>> {
+    sc_entity.check_rate_fast("info")?;
+    match sc_entity.get_statechain_data_api_depth(Uuid::from_str(&statechain_id).unwrap(), Some(depth)) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -1135,18 +1150,35 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
     }
 
     fn get_statechain_data_api(&self, statechain_id: Uuid) -> Result<StateChainDataAPI> {
-        //let statechain_id = Uuid::from_str(&statechain_id).unwrap();
+        self.get_statechain_data_api_depth(statechain_id, None)
+    }
+
+    fn get_statechain_data_api_depth(&self, statechain_id: Uuid, n: Option<usize>) -> Result<StateChainDataAPI> {
 
         let state_chain = self.database.get_statechain_amount(statechain_id)?;
 
         let state = state_chain.chain.get_first().next_state.clone();
 
+        let mut chain = state_chain.chain.get_chain().clone();
+        
+        match n {
+            Some(n) => {
+                let mut at = chain.len() - n;
+                if at > chain.len() {
+                    at = chain.len()
+                }
+                let split_chain = chain.split_off(at);
+                chain = split_chain;
+            },
+            None => ()
+        };
+        
         if state.is_some() {
                 if state.unwrap().purpose == String::from("WITHDRAW") {
                     return Ok({StateChainDataAPI {
                         amount: state_chain.amount as u64,
                         utxo: OutPoint::null(),
-                        chain: state_chain.chain.get_chain().clone(),
+                        chain,
                         locktime: 0 as u32,
                         confirmed: true,
                     }});
@@ -1160,7 +1192,7 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
         return Ok({StateChainDataAPI {
             amount: state_chain.amount as u64,
             utxo: tx_backup.input.get(0).unwrap().previous_output,
-            chain: state_chain.chain.get_chain().clone(),
+            chain,
             locktime: tx_backup.lock_time,
             confirmed
         }});
@@ -1325,6 +1357,7 @@ pub mod tests {
     pub static BACKUP_TX_SIGNED2: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"73c7099ce462a699a4e589e370bebac139b2c1bcedb8cd8eb9c67c03aa03f05b:1\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,68,2,32,45,42,91,77,252,143,55,65,154,96,191,149,204,131,88,79,80,161,231,209,234,229,217,100,28,99,48,148,136,194,204,98,2,32,90,111,183,68,74,24,75,120,179,80,20,183,60,198,127,106,102,64,37,193,174,226,199,118,237,35,96,236,45,94,203,49,1],[2,242,131,110,175,215,21,123,219,179,199,144,85,14,163,42,19,197,97,249,41,130,243,139,15,17,51,185,147,228,100,122,213]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
     pub static STATE_CHAIN: &str = "{\"chain\":[{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}]}";
     pub static STATE_CHAIN_SIG: &str = "{ \"purpose\": \"TRANSFER\", \"data\": \"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\", \"sig\": \"3045022100abe02f0d1918aca36b634eb1af8a4e0714f3f699fb425de65cc661e538da3f2002200a538a22df665a95adb739ff6bb592b152dba5613602c453c58adf70858f05f6\"}";
+    pub static STATE_CHAIN_2: &str = "{\"chain\":[{\"data\":\"025ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null},{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}]}"; 
     pub static MASTER_KEY: &str = "{\"public\":{\"q\":{\"x\":\"f8308498a5b5996eb7c410fb7ada7f3524d604b45b247cc4d13e5a32c3763908\",\"y\":\"7e41091fd5ab1138d1a3cdf41b43c82a064839a6b82b251be2be70099b642d1a\"},\"p1\":{\"x\":\"701e7d08608e6065b8f19f7cd867bcd7c5c4a11290e51187210a66713349c76c\",\"y\":\"10f76cae4eac6727bec6ae239de37d806a4877bc418f9fadaad0fd379cb11e73\"},\"p2\":{\"x\":\"caff57b3e214231182b2ba729079422887527dec2c2be1af03eb9a28be046fbb\",\"y\":\"94d4d2624a6be1e5fccf22ea5d7d2294a65f86b23642e7107c5523bb383d2612\"},\"paillier_pub\":{\"n\":\"11489233870088042333010221250016305472224248130131837344400358635737478519468920848276451747026121985401781804607266395846806728547165860151830628936151241253052105217375620729553123605998218501591757218904947955026013349855548130232876481464163645763380508660165838175358408923868455078398162478065282146744074902115770410655628975593804546170315851709066735895285416399351986223748741323752676766246912115655411869835426209804163120117240537098699118426250380831687194901410283437954378683229249501222250355118886953166922692541953136499596437296944964919863277847025337779172484000271289374153321801582770169915217\"},\"c_key\":\"13acbe9791ae6136f0d3700bad8cbe723ed2676e33d9f080122283a3a5838e3418d9ae3f61cc5e3b033ec71979f339c87e2da410c46a3a6238e40fc403799b5b7855bf529c381bd80288f5002f62a460cc005ec71e85c7d0eda2133245a857fe414c8653f0248016545618e2d53f466e3808edfe15774fb32ffeafc98dc08dd9eaca2e5411ae22bd4dad358bffadb51e82d2f99404ff73db8c473a2483133863aeaf6ffccd455fe4ba0966f90e85ea02083962d15779215941396676d90a0ce99a09adaa064956f506ca40d18ba91a7f9826a2e82050fb3b569790b5642ac45e39d9dfb63f8c975c30090f9eceaca387129539eaebfcedc17d2e49f0bd029e3591ac30e3db26139368b1423cf058e2128978411518e87c2d3c106a91c16de80895ad7f928a9a40c6d5aac356bd2966b3bf98c77f616f04329caecc895d13d16d8193e9f0bfe866c86a2eee3b2b0beb95478d4c216e00f8a9712618599d176ad253e59e9e27743f1e61a710bb9a0ae989226900ef809acb17e11f9f068bdb35fd7a767560e912da3aa98cd9d529b3d993e360d73f19adf830599f71ca139f6e17014302dce8a40401276d3a7e3dda04ef4b344a7dc4cb94c106c346e389ab7e089b97aa1e3f1680d4b8eeb62d405ab3a4e827b93dd15074e1dfd74244a9b4857017818b63504399c98fc02d0b3af135a0d7ac4f9de9a7cd47fdbe40cb3a6185b6\"},\"private\":{\"x1\":\"7d40223e23d9be8a484f02c193f6d637ee920d22107bcc271315ecd7cf7bd417\",\"paillier_priv\":{\"p\":\"95968611635960852961029982396007186819172638068010828329449274935568627735159638229570155217385550521772837802209343399026212621624237395184543248204625051917248015126148738583692391387724379315739614056981768639631978130165718525707250385364943792301344169291673198185105717525805446423420947171964258675871\",\"q\":\"119718662948572417380116608786988393154649208452700228802334036347214087888515999164811204446322560182519144489173108609786997536166347774811155976446122754875172588386796176207110943485933259100127115436979944772204093241941218507628108172049881866436113901845596310515366261414462580028675547493957305267727\"},\"c_key_randomness\":\"2cca6bbfb2f111aaa52b33bd3320cff512f23010822687156ed81f231403d0c2ded58514221d81cd8185bf584efd79534e55b78da3766a18175121d0df84c098c442553513cda8646a81e36cd3bd853381678d6cba7adeb2dffc425e6209bf0ccd2a824d78d1fe8ad388d999c626cd1d0bad6e312fbdd06f219de1e7379e1b8c1f1c8bd50bcfc8acad0692f5028252e18ffe60268ecea8cf35343895d9f78e406ea9301f3392d6b78ea87884a710d548cad991571abe8264653e63dc30c4276b7fcfeb9783bc7e7f88b2d573e3de2d6fe4d3809c50866b820402925621a7bcae34d87914db54455ce5ffd189e2d0bb9032913e4be221eae1a22e31d5803cbc07\"},\"chain_code\":\"0\"}";
     pub static PARTY2PUBLIC: &str = "{\"q\":{\"x\":\"f8308498a5b5996eb7c410fb7ada7f3524d604b45b247cc4d13e5a32c3763908\",\"y\":\"7e41091fd5ab1138d1a3cdf41b43c82a064839a6b82b251be2be70099b642d1a\"},\"p1\":{\"x\":\"701e7d08608e6065b8f19f7cd867bcd7c5c4a11290e51187210a66713349c76c\",\"y\":\"10f76cae4eac6727bec6ae239de37d806a4877bc418f9fadaad0fd379cb11e73\"},\"p2\":{\"x\":\"caff57b3e214231182b2ba729079422887527dec2c2be1af03eb9a28be046fbb\",\"y\":\"94d4d2624a6be1e5fccf22ea5d7d2294a65f86b23642e7107c5523bb383d2612\"},\"paillier_pub\":{\"n\":\"11489233870088042333010221250016305472224248130131837344400358635737478519468920848276451747026121985401781804607266395846806728547165860151830628936151241253052105217375620729553123605998218501591757218904947955026013349855548130232876481464163645763380508660165838175358408923868455078398162478065282146744074902115770410655628975593804546170315851709066735895285416399351986223748741323752676766246912115655411869835426209804163120117240537098699118426250380831687194901410283437954378683229249501222250355118886953166922692541953136499596437296944964919863277847025337779172484000271289374153321801582770169915217\"},\"c_key\":\"13acbe9791ae6136f0d3700bad8cbe723ed2676e33d9f080122283a3a5838e3418d9ae3f61cc5e3b033ec71979f339c87e2da410c46a3a6238e40fc403799b5b7855bf529c381bd80288f5002f62a460cc005ec71e85c7d0eda2133245a857fe414c8653f0248016545618e2d53f466e3808edfe15774fb32ffeafc98dc08dd9eaca2e5411ae22bd4dad358bffadb51e82d2f99404ff73db8c473a2483133863aeaf6ffccd455fe4ba0966f90e85ea02083962d15779215941396676d90a0ce99a09adaa064956f506ca40d18ba91a7f9826a2e82050fb3b569790b5642ac45e39d9dfb63f8c975c30090f9eceaca387129539eaebfcedc17d2e49f0bd029e3591ac30e3db26139368b1423cf058e2128978411518e87c2d3c106a91c16de80895ad7f928a9a40c6d5aac356bd2966b3bf98c77f616f04329caecc895d13d16d8193e9f0bfe866c86a2eee3b2b0beb95478d4c216e00f8a9712618599d176ad253e59e9e27743f1e61a710bb9a0ae989226900ef809acb17e11f9f068bdb35fd7a767560e912da3aa98cd9d529b3d993e360d73f19adf830599f71ca139f6e17014302dce8a40401276d3a7e3dda04ef4b344a7dc4cb94c106c346e389ab7e089b97aa1e3f1680d4b8eeb62d405ab3a4e827b93dd15074e1dfd74244a9b4857017818b63504399c98fc02d0b3af135a0d7ac4f9de9a7cd47fdbe40cb3a6185b6\"}";
     pub static SHAREDPUBLIC: &str = "{\"x\":\"f8308498a5b5996eb7c410fb7ada7f3524d604b45b247cc4d13e5a32c3763908\",\"y\":\"7e41091fd5ab1138d1a3cdf41b43c82a064839a6b82b251be2be70099b642d1a\"}";
@@ -1718,5 +1751,84 @@ pub mod tests {
         let sc_entity = test_sc_entity(db, None, None, None, None);
 
         assert_eq!(sc_entity.get_sc_transfer_finalize_data(statechain_id).unwrap(), data);
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_statechain(){
+        let mut db = MockDatabase::new();
+        let state_chain = serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap();
+        let state_chain_amount = StateChainAmount {
+                chain: state_chain.try_into().unwrap(),
+                amount: 10000,
+            };
+
+        let tx_backup = serde_json::from_str::<Transaction>(
+                &BACKUP_TX_SIGNED.to_string()).unwrap();
+
+        let mut data = StateChainDataAPI::example();
+        data.amount = state_chain_amount.clone().amount as u64;
+        data.utxo = tx_backup.clone().input.get(0).unwrap().previous_output;
+        data.chain = state_chain_amount.clone().chain.get_chain().clone();
+        data.confirmed = true;
+        data.locktime = tx_backup.lock_time;
+
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_statechain_amount().returning(move |_| {
+            Ok(state_chain_amount.clone())
+        });
+        
+        db.expect_get_backup_transaction().returning(            
+            move |_|  Ok(tx_backup.clone())
+        );
+        
+        db.expect_is_confirmed().returning(|_| Ok(true));
+        
+        let sc_entity = test_sc_entity(db, None, None, None, None);
+        let statechain_id = Uuid::new_v4();
+
+        assert_eq!(sc_entity.get_statechain_data_api(statechain_id).unwrap(), data);
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_statechain_n(){
+        let mut db = MockDatabase::new();
+        let state_chain = serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap();
+        let state_chain_amount = StateChainAmount {
+            chain: state_chain.try_into().unwrap(),
+            amount: 10000,
+        };
+        let state_chain_2 = serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN_2.to_string()).unwrap();
+        let state_chain_amount_2 = StateChainAmount {
+            chain: state_chain_2.try_into().unwrap(),
+            amount: 10000,
+        };
+
+        let tx_backup = serde_json::from_str::<Transaction>(
+                &BACKUP_TX_SIGNED.to_string()).unwrap();
+
+        let mut data = StateChainDataAPI::example();
+        data.amount = state_chain_amount.clone().amount as u64;
+        data.utxo = tx_backup.clone().input.get(0).unwrap().previous_output;
+        data.chain = state_chain_amount.clone().chain.get_chain().clone();
+        data.locktime = tx_backup.lock_time;
+        data.confirmed = true;
+
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_statechain_amount().returning(move |_| {
+            Ok(state_chain_amount_2.clone())
+        });
+        
+        db.expect_get_backup_transaction().returning(            
+            move |_|  Ok(tx_backup.clone())
+        );
+        
+        db.expect_is_confirmed().returning(|_| Ok(true));
+        
+        let sc_entity = test_sc_entity(db, None, None, None, None);
+        let statechain_id = Uuid::new_v4();
+
+        assert_eq!(sc_entity.get_statechain_data_api_depth(statechain_id,Some(1)).unwrap(), data);
     }
 }

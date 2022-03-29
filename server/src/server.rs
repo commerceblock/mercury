@@ -204,6 +204,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
     match mode {
         Mode::Both => routes_with_openapi![
             util::get_statechain,
+            util::get_statechain_depth,
             util::get_statecoin,
             util::get_owner_id,
             util::get_smt_root,
@@ -243,6 +244,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             conductor::get_group_info],
         Mode::Core => routes_with_openapi![
             util::get_statechain,
+            util::get_statechain_depth,
             util::get_statecoin,
             util::get_owner_id,
             util::get_smt_root,
@@ -562,6 +564,7 @@ mock! {
         fn get_root(&self, id: i64) -> storage::Result<Option<storage::Root>>;
         fn update_root(&self, root: &storage::Root) -> storage::Result<i64>;
         fn get_statechain_data_api(&self,statechain_id: Uuid) -> storage::Result<StateChainDataAPI>;
+        fn get_statechain_data_api_depth(&self,statechain_id: Uuid, depth: Option<usize>) -> storage::Result<StateChainDataAPI>;
         fn get_statecoin_data_api(&self, statechain_id: Uuid) -> storage::Result<StateCoinDataAPI>;
         fn get_sc_transfer_finalize_data(&self, statechain_id: Uuid)-> storage::Result<TransferFinalizeData>;
         fn get_statechain(&self, statechain_id: Uuid) -> storage::Result<storage::StateChain>;
