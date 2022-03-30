@@ -1,6 +1,6 @@
 # Mercury wallet: pay on deposit
 
-Mercury wallet and service currently has an open deposit model: deposits are free and permissionless (i.e. no authentication required to generate a shared key deposit addresses) and the mercury server fee (as a fixed percentage of the coin value) is collected in the withdrawal transaction as a UTXO paid to a fixed, specified bitcoin address. This has the advantage of making the deposit process low friction and user friendly, but has some disadvantages:
+MercuryWallet currently has an open deposit model: deposits are free and permissionless (i.e. no authentication required to generate a shared key deposit addresses) and the mercury server fee (as a fixed percentage of the coin value) is collected in the withdrawal transaction as a UTXO paid to a fixed, specified bitcoin address. This has the advantage of making the deposit process low friction and user friendly, but has some disadvantages:
 
 The withdrawal transaction fee output is typically a small fraction of the coin value and for the smallest coin values is close to the dust limit (i.e. these outputs may not be spendable in a high tx fee environment). The on-chain mercury fee explicitly labels all withdrawn coins as mercury statechain withdrawals, which is a privacy concern for many users.
 
