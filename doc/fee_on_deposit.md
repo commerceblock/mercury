@@ -33,6 +33,15 @@ The above assumes a single deposit fee. To support a fee as a percentage of the 
 
 Nothing prevents a user from depositing a different amount (and cheating the % fee) - however they can be prevented from joining a swap group by having the `verify_tx_confirmed` function verify the amount of the confirmed deposit tx against the fee/amount in the `usersession` table. 
 
+# Withdrawal directly into LN channel.
+
+Currently the wallet can send the coin to any type of bitcoin address (except Taproot - P2TR - which is a pending straightforward upgrade).
+To create a dual funded channel (i.e. a channel where the counterparty provides BTC in addition to the mercury user) the withdrawal transaction process and co-signing with the server must support the handling of PSBTs. In this case, the withdrawal step would involve the mercury wallet co-signing (with the mercury server), a PSBT created by a LN wallet.
+
+To enable this, the mercury wallet should be able to both create a PSBT on the withdrawal page, and then co-sign it with the server, and then send it to the channel counterparty out of band (or via the third party LN wallet/node), and import a PSBT created by the channel counterparty and sign it, and export and/or broadcast the fully signed PSBT.
+
+This seems to be possible (i.e. paying directly to a dual funded channel opening tx from a third party wallet) with c-lightning and lnd via RPC, but required thrid party LN wallet support. It has the potential to eliminate an on-chain tx, which could be valuable in a high-fee environment. 
+
 ## Auto-deposit:
 
 Auto-deposit is where the wallet itself manages coin deposit process automatically, enabling the creation of many coins in a single operation. 
