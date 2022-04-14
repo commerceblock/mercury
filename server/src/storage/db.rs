@@ -1717,7 +1717,7 @@ impl Database for PGDatabase {
     }
 
     // find statecoin and user information from supplied proof key to enable wallet recovery
-    fn get_recovery_data(&self, proofkey: String) -> Result<Vec<(Uuid,Uuid,Transaction)>> {
+    fn get_recovery_data(&self, proofkey: String) -> Result<Vec<(Uuid,Option<Uuid>,Option<Transaction>)>> {
         let dbr = self.database_r()?;
         let statement =
             dbr.prepare(&format!("SELECT * FROM {} WHERE proofkey = $1", Table::UserSession.to_string(),))?;
@@ -1734,10 +1734,11 @@ impl Database for PGDatabase {
                 if (owner_id == user_id) {
                     let tx_backup_str = self.get_1::<String>(sid, Table::BackupTxs, vec![Column::TxBackup])?;
                     let tx_backup: Transaction = Self::deser(tx_backup_str)?;
-                    rc_vec.push((user_id,sid,tx_backup))
+                    rc_vec.push((user_id,Some(sid),Some(tx_backup)))
                 }
             } else {
-                return Err(SEError::DBError(NoDataForID, String::from("Proof key")));
+                let user_id: Uuid = row.get("id");
+                rc_vec.push((user_id,None,None))
             }
         }
 
