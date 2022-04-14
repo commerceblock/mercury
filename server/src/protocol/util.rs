@@ -483,8 +483,6 @@ impl Utilities for SCE {
                     let public = match self.database.get_public_master(statecoin.0)?{
                         Some(pm) => {
                             let mut master_key: Party1Public = serde_json::from_str(&pm).map_err(|e| e.to_string())?;
-                            let shared_public: GE = serde_json::from_str(&self.database.get_shared_pubkey(statecoin.0)?.unwrap()).map_err(|e| e.to_string())?;
-                            master_key.q = shared_public;
                             serde_json::to_string(&master_key).map_err(|e| e.to_string())?
                         },
                         None => {
