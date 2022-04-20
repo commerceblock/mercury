@@ -248,7 +248,6 @@ impl Utilities for SCE {
             }
         }
 
-
         // calculate SE fee amount from rate
         let withdraw_fee = (amount * self.config.fee_withdraw) / 10000 as u64;
         let tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
@@ -267,40 +266,40 @@ impl Utilities for SCE {
 
                 for (i, user_id) in prepare_sign_msg.shared_key_ids.iter().enumerate(){
                     let statechain_id = self.database.get_statechain_id(*user_id)?;
+
+                    // if withdrawal completed - allow re-signing to recover coins
+                    if statechain_id == Uuid::nil() {
+                        continue;
+                    }
+
                     let tx_backup = self.database.get_backup_transaction(statechain_id)?;
 
-                // Check funding txid UTXO info
-                let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
-                if tx
-                    .input
-                        .get(i)
-                    .unwrap()
-                    .previous_output
-                    .to_owned().clone()
-                    != tx_backup_input
-                {
-                        return Err(SEError::Generic(format!(
-                            "Incorrect withdraw transacton input - input number {}", i
-                    )));
-                }
+                    // Check funding txid UTXO info
+                    let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
+                    if tx
+                        .input
+                            .get(i)
+                        .unwrap()
+                        .previous_output
+                        .to_owned().clone()
+                        != tx_backup_input
+                        {
+                                return Err(SEError::Generic(format!(
+                                    "Incorrect withdraw transacton input - input number {}", i
+                            )));
+                        }
                 }
 
                 for (i, input_addr) in prepare_sign_msg.input_addrs.iter().enumerate(){
                         let user_id = &prepare_sign_msg.shared_key_ids[i];
-                    // Update UserSession with withdraw tx info
-                    let sig_hash = get_sighash(
-                        &tx,
-                            &i,
-                        &input_addr,
-                        &prepare_sign_msg.input_amounts[i],
-                        &self.config.network,
-                    );
-
-                    self.database.update_withdraw_tx_sighash(
-                        &user_id,
-                        sig_hash,
-                        tx.clone(),
-                    )?;
+                        // Update UserSession with withdraw tx info
+                        let sig_hash = get_sighash(
+                            &tx,
+                                &i,
+                            &input_addr,
+                            &prepare_sign_msg.input_amounts[i],
+                            &self.config.network,
+                        );
 
                         info!(
                             "WITHDRAW: Withdraw tx ready for signing. User ID: {:?}.",
@@ -310,32 +309,41 @@ impl Utilities for SCE {
                         // Verify withdrawal has been authorised via presense of withdraw_sc_sig
                         if let Err(_) = self.database.has_withdraw_sc_sig(*user_id) {
                             return Err(SEError::Generic(String::from(
-                                "Withdraw has not been authorised. /withdraw/init must be called first.",
-                    )));
+                                "Withdraw has not been authorised. /withdraw/init must be called first.",)));
                         }
 
                         let statechain_id = self.database.get_statechain_id(*user_id)?;
-                        let tx_backup = self.database.get_backup_transaction(statechain_id)?;
-                        // Check funding txid UTXO info
-                        let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
-                        if tx
-                            .input
-                            .get(i)
-                            .unwrap()
-                            .previous_output
-                            != tx_backup_input
-                        {
-                            return Err(SEError::Generic(String::from(
-                                "Incorrect withdraw transacton input.",
-                            )));
-                        }
-                        // Update UserSession with withdraw tx info
+
+                        if statechain_id == Uuid::nil() {
+                            self.database.update_withdraw_tx_sighash(
+                                &user_id,
+                                sig_hash,
+                                tx.clone(),
+                            )?;
+                        } else {
+
+                            let tx_backup = self.database.get_backup_transaction(statechain_id)?;
+                            // Check funding txid UTXO info
+                            let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
+                            if tx
+                                .input
+                                .get(i)
+                                .unwrap()
+                                .previous_output
+                                != tx_backup_input
+                            {
+                                return Err(SEError::Generic(String::from(
+                                    "Incorrect withdraw transacton input.",
+                                )));
+                            }
+                            // Update UserSession with withdraw tx info
                    
-                        self.database.update_withdraw_tx_sighash(
-                            &user_id,
-                            sig_hash,
-                            tx.clone(),
-                        )?;
+                            self.database.update_withdraw_tx_sighash(
+                                &user_id,
+                                sig_hash,
+                                tx.clone(),
+                            )?;
+                        }
                     }
 
                 info!(
