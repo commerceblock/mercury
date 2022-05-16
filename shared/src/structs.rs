@@ -467,9 +467,9 @@ pub struct RecoveryDataMsg {
     #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
     #[schemars(with = "UuidDef")]
-    pub statechain_id: Uuid,
-    pub amount: u64,
-    pub tx_hex: String,
+    pub statechain_id: Option<Uuid>,
+    pub amount: Option<u64>,
+    pub tx_hex: Option<String>,
     pub proof_key: String,
     pub shared_key_data: String,
     pub withdrawing: Option<String>
@@ -479,9 +479,9 @@ impl RecoveryDataMsg {
     pub fn example() -> Self{
         Self{
             shared_key_id: Uuid::new_v4(),
-            statechain_id: Uuid::new_v4(),
-            amount: 0,
-            tx_hex: "02000000000101ca878085da49c33eb9816c10e4056424e5e062689ea547ea91bb3aa840a3c5fb0000000000ffffffff02307500000000000016001412cc36c9533290c02f0c78f992df6e6ddfe50c8c0064f50500000000160014658fd2dc72e58168f3656fb632d63be54f80fbe4024730440220457cf52873ae5854859a7d48b39cb57eba880ea4011806e5058da7619f4c0fab02206303326f06bbebf7170b679ba787c856dec4b6462109bf66e1cb8dc087be7ebf012102a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe00000000".to_string(),
+            statechain_id: Some(Uuid::new_v4()),
+            amount: Some(0),
+            tx_hex: Some("02000000000101ca878085da49c33eb9816c10e4056424e5e062689ea547ea91bb3aa840a3c5fb0000000000ffffffff02307500000000000016001412cc36c9533290c02f0c78f992df6e6ddfe50c8c0064f50500000000160014658fd2dc72e58168f3656fb632d63be54f80fbe4024730440220457cf52873ae5854859a7d48b39cb57eba880ea4011806e5058da7619f4c0fab02206303326f06bbebf7170b679ba787c856dec4b6462109bf66e1cb8dc087be7ebf012102a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe00000000".to_string()),
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "".to_string(),
             withdrawing: None

@@ -681,7 +681,7 @@ impl Database for MemoryDB {
     fn get_recovery_data(
         &self, 
         _proofkey: String,
-    ) -> crate::Result<Vec<(uuid::Uuid,uuid::Uuid,bitcoin::Transaction)>> {
+    ) -> crate::Result<Vec<(uuid::Uuid,Option<uuid::Uuid>,Option<bitcoin::Transaction>)>> {
         unimplemented!()
     }
     fn create_user_session(

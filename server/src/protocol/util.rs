@@ -248,7 +248,6 @@ impl Utilities for SCE {
             }
         }
 
-
         // calculate SE fee amount from rate
         let withdraw_fee = (amount * self.config.fee_withdraw) / 10000 as u64;
         let tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
@@ -267,40 +266,40 @@ impl Utilities for SCE {
 
                 for (i, user_id) in prepare_sign_msg.shared_key_ids.iter().enumerate(){
                     let statechain_id = self.database.get_statechain_id(*user_id)?;
+
+                    // if withdrawal completed - allow re-signing to recover coins
+                    if statechain_id == Uuid::nil() {
+                        continue;
+                    }
+
                     let tx_backup = self.database.get_backup_transaction(statechain_id)?;
 
-                // Check funding txid UTXO info
-                let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
-                if tx
-                    .input
-                        .get(i)
-                    .unwrap()
-                    .previous_output
-                    .to_owned().clone()
-                    != tx_backup_input
-                {
-                        return Err(SEError::Generic(format!(
-                            "Incorrect withdraw transacton input - input number {}", i
-                    )));
-                }
+                    // Check funding txid UTXO info
+                    let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
+                    if tx
+                        .input
+                            .get(i)
+                        .unwrap()
+                        .previous_output
+                        .to_owned().clone()
+                        != tx_backup_input
+                        {
+                                return Err(SEError::Generic(format!(
+                                    "Incorrect withdraw transacton input - input number {}", i
+                            )));
+                        }
                 }
 
                 for (i, input_addr) in prepare_sign_msg.input_addrs.iter().enumerate(){
                         let user_id = &prepare_sign_msg.shared_key_ids[i];
-                    // Update UserSession with withdraw tx info
-                    let sig_hash = get_sighash(
-                        &tx,
-                            &i,
-                        &input_addr,
-                        &prepare_sign_msg.input_amounts[i],
-                        &self.config.network,
-                    );
-
-                    self.database.update_withdraw_tx_sighash(
-                        &user_id,
-                        sig_hash,
-                        tx.clone(),
-                    )?;
+                        // Update UserSession with withdraw tx info
+                        let sig_hash = get_sighash(
+                            &tx,
+                                &i,
+                            &input_addr,
+                            &prepare_sign_msg.input_amounts[i],
+                            &self.config.network,
+                        );
 
                         info!(
                             "WITHDRAW: Withdraw tx ready for signing. User ID: {:?}.",
@@ -310,32 +309,41 @@ impl Utilities for SCE {
                         // Verify withdrawal has been authorised via presense of withdraw_sc_sig
                         if let Err(_) = self.database.has_withdraw_sc_sig(*user_id) {
                             return Err(SEError::Generic(String::from(
-                                "Withdraw has not been authorised. /withdraw/init must be called first.",
-                    )));
+                                "Withdraw has not been authorised. /withdraw/init must be called first.",)));
                         }
 
                         let statechain_id = self.database.get_statechain_id(*user_id)?;
-                        let tx_backup = self.database.get_backup_transaction(statechain_id)?;
-                        // Check funding txid UTXO info
-                        let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
-                        if tx
-                            .input
-                            .get(i)
-                            .unwrap()
-                            .previous_output
-                            != tx_backup_input
-                        {
-                            return Err(SEError::Generic(String::from(
-                                "Incorrect withdraw transacton input.",
-                            )));
-                        }
-                        // Update UserSession with withdraw tx info
+
+                        if statechain_id == Uuid::nil() {
+                            self.database.update_withdraw_tx_sighash(
+                                &user_id,
+                                sig_hash,
+                                tx.clone(),
+                            )?;
+                        } else {
+
+                            let tx_backup = self.database.get_backup_transaction(statechain_id)?;
+                            // Check funding txid UTXO info
+                            let tx_backup_input = tx_backup.input.get(0).unwrap().previous_output.to_owned();
+                            if tx
+                                .input
+                                .get(i)
+                                .unwrap()
+                                .previous_output
+                                != tx_backup_input
+                            {
+                                return Err(SEError::Generic(String::from(
+                                    "Incorrect withdraw transacton input.",
+                                )));
+                            }
+                            // Update UserSession with withdraw tx info
                    
-                        self.database.update_withdraw_tx_sighash(
-                            &user_id,
-                            sig_hash,
-                            tx.clone(),
-                        )?;
+                            self.database.update_withdraw_tx_sighash(
+                                &user_id,
+                                sig_hash,
+                                tx.clone(),
+                            )?;
+                        }
                     }
 
                 info!(
@@ -437,16 +445,18 @@ impl Utilities for SCE {
     fn get_recovery_data(&self, recovery_requests: Vec<RecoveryRequest>) -> Result<Vec<RecoveryDataMsg>> {
         let mut recovery_data = vec!();
         for recovery_request in recovery_requests {
-            let rec_vec: Vec<(Uuid, Uuid, Transaction)> = match self.database.get_recovery_data(recovery_request.key.clone()) {
+            let rec_vec: Vec<(Uuid, Option<Uuid>, Option<Transaction>)> = match self.database.get_recovery_data(recovery_request.key.clone()) {
                 Ok(res) => res,
                 Err(_) => continue
             };
             for statecoin in rec_vec {
-                // If withdrawn err will be thrown. Return nothing in this case
-                let amount = match self.get_statechain_data_api(statecoin.1) {
-                    Ok(statechain_data) => statechain_data.amount,
-                    Err(_) => continue
-                };
+                // is completed deposit
+                if (statecoin.1.is_some()) {
+                    // If withdrawn err will be thrown. Return nothing in this case
+                    let amount = match self.get_statechain_data_api(statecoin.1.unwrap()) {
+                        Ok(statechain_data) => statechain_data.amount,
+                        Err(_) => continue
+                    };
 
                 // If withdraw init
                 let withdrawal_tx = match self.database.has_withdraw_sc_sig(statecoin.0) {
@@ -454,27 +464,49 @@ impl Utilities for SCE {
                     Err(_e) => None,
                 };
 
-                let public = match self.database.get_public_master(statecoin.0)?{
-                    Some(pm) => {
-                        let mut master_key: Party1Public = serde_json::from_str(&pm).map_err(|e| e.to_string())?;
-                        let shared_public: GE = serde_json::from_str(&self.database.get_statecoin_pubkey(statecoin.1)?.unwrap()).map_err(|e| e.to_string())?;
-                        master_key.q = shared_public;
-                        serde_json::to_string(&master_key).map_err(|e| e.to_string())?
-                    },
-                    None => {
-                        "None".to_string()
-                    }
-                };
+                    let public = match self.database.get_public_master(statecoin.0)?{
+                        Some(pm) => {
+                            let mut master_key: Party1Public = serde_json::from_str(&pm).map_err(|e| e.to_string())?;
+                            let shared_public: GE = serde_json::from_str(&self.database.get_statecoin_pubkey(statecoin.1.unwrap())?.unwrap()).map_err(|e| e.to_string())?;
+                            master_key.q = shared_public;
+                            serde_json::to_string(&master_key).map_err(|e| e.to_string())?
+                        },
+                        None => {
+                            "None".to_string()
+                        }
+                    };
 
-                recovery_data.push(RecoveryDataMsg {
-                    shared_key_id: statecoin.0,
-                    statechain_id: statecoin.1,
-                    amount,
-                    tx_hex: transaction_serialise(&statecoin.2),
-                    proof_key: recovery_request.key.clone(),
-                    shared_key_data: public,
-                    withdrawing: withdrawal_tx
-                })
+                    recovery_data.push(RecoveryDataMsg {
+                        shared_key_id: statecoin.0,
+                        statechain_id: Some(statecoin.1.unwrap()),
+                        amount: Some(amount),
+                        tx_hex: Some(transaction_serialise(&statecoin.2.unwrap())),
+                        proof_key: recovery_request.key.clone(),
+                        shared_key_data: public,
+                        withdrawing: withdrawal_tx
+                    })
+                } else {
+                    // is generated address (uncompleted deposit)
+                    let public = match self.database.get_public_master(statecoin.0)?{
+                        Some(pm) => {
+                            let mut master_key: Party1Public = serde_json::from_str(&pm).map_err(|e| e.to_string())?;
+                            serde_json::to_string(&master_key).map_err(|e| e.to_string())?
+                        },
+                        None => {
+                            "None".to_string()
+                        }
+                    };
+
+                    recovery_data.push(RecoveryDataMsg {
+                        shared_key_id: statecoin.0,
+                        statechain_id: None,
+                        amount: None,
+                        tx_hex: None,
+                        proof_key: recovery_request.key.clone(),
+                        shared_key_data: public,
+                        withdrawing: false
+                    })
+                }
             }
         }
         return Ok(recovery_data);
@@ -1502,9 +1534,9 @@ pub mod tests {
 
         let recovery_data = RecoveryDataMsg {
             shared_key_id: user_id,
-            statechain_id,
-            amount,
-            tx_hex: transaction_serialise(&tx_backup),
+            statechain_id: Some(statechain_id),
+            amount: Some(amount),
+            tx_hex: Some(transaction_serialise(&tx_backup)),
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "".to_string(),
             withdrawing: None,
@@ -1519,9 +1551,9 @@ pub mod tests {
             if key.len() == 0 {
                 return Err(SEError::Generic("error".to_string()));
             }
-            Ok(vec![(user_id,statechain_id,serde_json::from_str::<Transaction>(
+            Ok(vec![(user_id,Some(statechain_id),Some(serde_json::from_str::<Transaction>(
                 &BACKUP_TX_SIGNED.to_string(),
-            ).unwrap())])
+            ).unwrap()))])
         });
         db.expect_get_statechain_amount().returning(move |_| {
             Ok(StateChainAmount {
@@ -1578,9 +1610,9 @@ pub mod tests {
 
         let recovery_data = RecoveryDataMsg {
             shared_key_id: user_id,
-            statechain_id,
-            amount,
-            tx_hex: transaction_serialise(&tx_backup),
+            statechain_id: Some(statechain_id),
+            amount: Some(amount),
+            tx_hex: Some(transaction_serialise(&tx_backup)),
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "".to_string(),
             withdrawing: Some(transaction_serialise(&tx_withdraw)),
@@ -1595,9 +1627,9 @@ pub mod tests {
             if key.len() == 0 {
                 return Err(SEError::Generic("error".to_string()));
             }
-            Ok(vec![(user_id,statechain_id,serde_json::from_str::<Transaction>(
+            Ok(vec![(user_id,Some(statechain_id),Some(serde_json::from_str::<Transaction>(
                 &BACKUP_TX_SIGNED.to_string(),
-            ).unwrap())])
+            ).unwrap()))])
         });
         db.expect_get_statechain_amount().returning(move |_| {
             Ok(StateChainAmount {
@@ -1641,6 +1673,61 @@ pub mod tests {
 
     #[test]
     #[serial]
+    fn test_get_recovery_data_keygen() {
+        let user_id = Uuid::new_v4();
+
+        let recovery_data = RecoveryDataMsg {
+            shared_key_id: user_id,
+            statechain_id: None,
+            amount: None,
+            tx_hex: None,
+            proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
+            shared_key_data: "".to_string(),
+            withdrawing: false,
+        };
+
+
+        let mut db = MockDatabase::new();
+        db.expect_has_withdraw_sc_sig().returning(|_| Err(SEError::Generic("error".to_string())));
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_recovery_data().returning(move |key| {
+            // return error to simulate no statecoin for key
+            if key.len() == 0 {
+                return Err(SEError::Generic("error".to_string()));
+            }
+            Ok(vec![(user_id,None,None)])
+        });
+        db.expect_get_public_master().returning(move |_| {
+            Ok(Some(PARTY2PUBLIC.to_string()))
+        });
+        db.expect_get_shared_pubkey().returning(move |_| {
+            Ok(Some(SHAREDPUBLIC.to_string()))
+        });
+        db.expect_is_confirmed().returning(move |_| {
+            Ok(false)
+        });
+
+        let sc_entity = test_sc_entity(db, None, None, None, None);
+
+        // get_recovery invalid public key
+        let recover_msg = vec!(RecoveryRequest {
+            key: "0297901882fc1601c3ea2b5326c4e635455b5451573c619782502894df69e24548".to_string(),
+            sig: "".to_string(),
+        },RecoveryRequest {
+            key: "".to_string(),
+            sig: "".to_string(),
+        });
+
+        let recovery_return = sc_entity.get_recovery_data(recover_msg).unwrap();
+        assert_eq!(recovery_return.len(), 1);
+        assert_eq!(recovery_data.shared_key_id, recovery_return[0].shared_key_id);
+        assert_eq!(recovery_data.statechain_id, None);
+        assert_eq!(recovery_data.tx_hex, None);
+        assert_eq!(recovery_data.withdrawing, false);
+    }
+
+    #[test]
+    #[serial]
     fn test_verify_confirmed() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
@@ -1677,9 +1764,9 @@ pub mod tests {
 
         let recovery_data = RecoveryDataMsg {
             shared_key_id: user_id,
-            statechain_id,
-            amount,
-            tx_hex: transaction_serialise(&tx_backup),
+            statechain_id: Some(statechain_id),
+            amount: Some(amount),
+            tx_hex: Some(transaction_serialise(&tx_backup)),
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "None".to_string(),
             withdrawing: None
@@ -1694,9 +1781,9 @@ pub mod tests {
             if key.len() == 0 {
                 return Err(SEError::Generic("error".to_string()));
             }
-            Ok(vec![(user_id,statechain_id,serde_json::from_str::<Transaction>(
+            Ok(vec![(user_id,Some(statechain_id),Some(serde_json::from_str::<Transaction>(
                 &BACKUP_TX_SIGNED.to_string(),
-            ).unwrap())])
+            ).unwrap()))])
         });
         db.expect_get_statechain_amount().returning(move |_| {
             Ok(StateChainAmount {
