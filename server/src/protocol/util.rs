@@ -458,12 +458,11 @@ impl Utilities for SCE {
                         Err(_) => continue
                     };
 
-                    // If withdraw init
-                    let is_withdrawing;
-                    match self.database.has_withdraw_sc_sig(statecoin.0) {
-                        Ok(_) => is_withdrawing = true,
-                        Err(_e) => is_withdrawing = false,
-                    }
+                // If withdraw init
+                let withdrawal_tx = match self.database.has_withdraw_sc_sig(statecoin.0) {
+                    Ok(_) => self.database.get_tx_withdraw(statecoin.0).ok().map(|t| transaction_serialise(&t)),
+                    Err(_e) => None,
+                };
 
                     let public = match self.database.get_public_master(statecoin.0)?{
                         Some(pm) => {
@@ -484,13 +483,13 @@ impl Utilities for SCE {
                         tx_hex: Some(transaction_serialise(&statecoin.2.unwrap())),
                         proof_key: recovery_request.key.clone(),
                         shared_key_data: public,
-                        withdrawing: is_withdrawing
+                        withdrawing: withdrawal_tx
                     })
                 } else {
                     // is generated address (uncompleted deposit)
                     let public = match self.database.get_public_master(statecoin.0)?{
                         Some(pm) => {
-                            let mut master_key: Party1Public = serde_json::from_str(&pm).map_err(|e| e.to_string())?;
+                            let master_key: Party1Public = serde_json::from_str(&pm).map_err(|e| e.to_string())?;
                             serde_json::to_string(&master_key).map_err(|e| e.to_string())?
                         },
                         None => {
@@ -505,7 +504,7 @@ impl Utilities for SCE {
                         tx_hex: None,
                         proof_key: recovery_request.key.clone(),
                         shared_key_data: public,
-                        withdrawing: false
+                        withdrawing: None
                     })
                 }
             }
@@ -1493,16 +1492,11 @@ pub mod tests {
     fn test_update_root_smt() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_root_update().returning(|_| Ok(1 as i64));
-        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
-        db.expect_get_root().returning(|_| Ok(None));
-        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
-        db.expect_get_root()
-            .returning(|_x| Ok(Some(Root::from_random())));
-        db.expect_root_update().returning(|_x| Ok(1));
-        db.expect_get_confirmed_smt_root()
-            .returning(|| Ok(Some(Root::from_random())));
-        let sc_entity = test_sc_entity(db, None, None, None, None);
+        db.expect_root_get_current_id().times(1).returning(|| Ok(1 as i64));
+        db.expect_get_root().times(1).returning(|_| Ok(None));
+        db.expect_root_update().times(1).returning(|_| Ok(1 as i64));
+
+        let mut sc_entity = test_sc_entity(db, None, None, None, None);
 
         //Mainstay post commitment mock
         let _m = mocks::ms::post_commitment().create();
@@ -1521,6 +1515,22 @@ pub mod tests {
                 .unwrap();
 
         assert_eq!(new_root.hash(), hash_exp, "new root incorrect");
+
+        //A repeated update results in the same root
+        sc_entity.database.expect_root_get_current_id().times(1).returning(|| Ok(2 as i64));
+        sc_entity.database.expect_get_root()
+            .times(1)
+            .returning(move |_x| Ok(Some(new_root.clone())));
+        sc_entity.database.expect_root_update().times(1).returning(|_x| Ok(1));
+           
+        let (current_root, new_root_2) = sc_entity
+            .update_smt(
+                &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
+                &"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
+            )
+            .unwrap();
+        assert_eq!(new_root_2.hash(), hash_exp, "new root 2 incorrect");
+        assert_eq!(current_root.unwrap().hash(), hash_exp, "current root incorrect");
     }
 
     #[test]
@@ -1540,7 +1550,7 @@ pub mod tests {
             tx_hex: Some(transaction_serialise(&tx_backup)),
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "".to_string(),
-            withdrawing: false,
+            withdrawing: None,
         };
 
 
@@ -1604,6 +1614,9 @@ pub mod tests {
         let tx_backup = serde_json::from_str::<Transaction>(
                             &BACKUP_TX_SIGNED.to_string(),
                         ).unwrap();
+        let tx_withdraw = serde_json::from_str::<Transaction>(
+                            &BACKUP_TX_SIGNED.to_string(),
+                        ).unwrap();
         let amount = 1000;
 
         let recovery_data = RecoveryDataMsg {
@@ -1613,11 +1626,12 @@ pub mod tests {
             tx_hex: Some(transaction_serialise(&tx_backup)),
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "".to_string(),
-            withdrawing: true,
+            withdrawing: Some(transaction_serialise(&tx_withdraw)),
         };
 
         let mut db = MockDatabase::new();
         db.expect_has_withdraw_sc_sig().returning(|_| Ok(()));
+        db.expect_get_tx_withdraw().returning(move |_| Ok(tx_withdraw.clone()));
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_recovery_data().returning(move |key| {
             // return error to simulate no statecoin for key
@@ -1680,7 +1694,7 @@ pub mod tests {
             tx_hex: None,
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "".to_string(),
-            withdrawing: false,
+            withdrawing: None,
         };
 
 
@@ -1720,7 +1734,7 @@ pub mod tests {
         assert_eq!(recovery_data.shared_key_id, recovery_return[0].shared_key_id);
         assert_eq!(recovery_data.statechain_id, None);
         assert_eq!(recovery_data.tx_hex, None);
-        assert_eq!(recovery_data.withdrawing, false);
+        assert_eq!(recovery_data.withdrawing, None);
     }
 
     #[test]
@@ -1766,7 +1780,7 @@ pub mod tests {
             tx_hex: Some(transaction_serialise(&tx_backup)),
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "None".to_string(),
-            withdrawing: false
+            withdrawing: None
         };
 
 

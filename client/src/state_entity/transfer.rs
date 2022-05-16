@@ -97,7 +97,7 @@ pub fn get_transfer_finalize_data_for_recovery(wallet: &mut Wallet,
     tfd_api: &TransferFinalizeDataAPI,
     recovery_data: &RecoveryDataMsg, proof_key: &String) -> Result<TransferFinalizeDataForRecovery>{
  
-    let statechain_data=get_statechain(&wallet.client_shim, &recovery_data.statechain_id).unwrap();
+    let statechain_data=get_statechain(&wallet.client_shim, &recovery_data.statechain_id.expect("expected some recovery_data.statechain_id")).unwrap();
     let funding_txid=&statechain_data.utxo.txid.to_string();
     // generate o2 private key and corresponding 02 public key
     let funding_txid_int = match funding_txid_to_int(funding_txid) {
@@ -135,7 +135,7 @@ pub fn get_transfer_finalize_data_for_recovery(wallet: &mut Wallet,
         statechain_data,
         proof_key: proof_key.to_owned(),
         statechain_id: tfd_api.statechain_id.to_owned(),
-        tx_backup_hex: recovery_data.tx_hex.to_owned(),
+        tx_backup_hex: recovery_data.tx_hex.as_ref().expect("expected some recovery_data.tx_hex").to_owned(),
     })
 }
 
