@@ -876,7 +876,6 @@ pub struct WithdrawMsg1 {
 pub struct WithdrawMsg2 {
     #[schemars(with = "UuidDef")]
     pub shared_key_ids: Vec::<Uuid>,
-    pub address: String,
 }
 
 impl Default for TransferMsg5 {

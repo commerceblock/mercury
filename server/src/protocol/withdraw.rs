@@ -189,7 +189,8 @@ impl Withdraw for SCE {
                     .previous_output
                     .txid
                     .to_string(),
-                &withdraw_msg2.address,
+                // Withdrawal address
+                &wcd.withdraw_sc_sig.data,
             )?;
 
             //remove backup tx from the backup db
@@ -338,7 +339,6 @@ mod tests {
         let shared_key_ids = withdraw_msg_1.shared_key_ids;
         let withdraw_msg_2 = WithdrawMsg2 {
             shared_key_ids: shared_key_ids.clone(),
-            address: "bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8".to_string(),
         };
         let statechain_id = Uuid::from_str(STATE_CHAIN_ID).unwrap();
 
@@ -445,7 +445,6 @@ mod tests {
         let shared_key_ids = withdraw_msg_1.shared_key_ids;
         let withdraw_msg_2 = WithdrawMsg2 {
             shared_key_ids: shared_key_ids.clone(),
-            address: "bcrt1qt3jh638mmuzmh92jz8c4wj392p9gj2erf2zut8".to_string(),
         };
         let statechain_id = Uuid::from_str(STATE_CHAIN_ID).unwrap();
 

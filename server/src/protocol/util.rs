@@ -1492,16 +1492,11 @@ pub mod tests {
     fn test_update_root_smt() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_root_update().returning(|_| Ok(1 as i64));
-        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
-        db.expect_get_root().returning(|_| Ok(None));
-        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
-        db.expect_get_root()
-            .returning(|_x| Ok(Some(Root::from_random())));
-        db.expect_root_update().returning(|_x| Ok(1));
-        db.expect_get_confirmed_smt_root()
-            .returning(|| Ok(Some(Root::from_random())));
-        let sc_entity = test_sc_entity(db, None, None, None, None);
+        db.expect_root_get_current_id().times(1).returning(|| Ok(1 as i64));
+        db.expect_get_root().times(1).returning(|_| Ok(None));
+        db.expect_root_update().times(1).returning(|_| Ok(1 as i64));
+
+        let mut sc_entity = test_sc_entity(db, None, None, None, None);
 
         //Mainstay post commitment mock
         let _m = mocks::ms::post_commitment().create();
@@ -1520,6 +1515,22 @@ pub mod tests {
                 .unwrap();
 
         assert_eq!(new_root.hash(), hash_exp, "new root incorrect");
+
+        //A repeated update results in the same root
+        sc_entity.database.expect_root_get_current_id().times(1).returning(|| Ok(2 as i64));
+        sc_entity.database.expect_get_root()
+            .times(1)
+            .returning(move |_x| Ok(Some(new_root.clone())));
+        sc_entity.database.expect_root_update().times(1).returning(|_x| Ok(1));
+           
+        let (current_root, new_root_2) = sc_entity
+            .update_smt(
+                &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
+                &"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
+            )
+            .unwrap();
+        assert_eq!(new_root_2.hash(), hash_exp, "new root 2 incorrect");
+        assert_eq!(current_root.unwrap().hash(), hash_exp, "current root incorrect");
     }
 
     #[test]

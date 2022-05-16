@@ -159,7 +159,6 @@ pub fn batch_withdraw_confirm(wallet: &mut Wallet, shared_key_ids: &Vec<Uuid>,
         &format!("/withdraw/confirm"),
         &WithdrawMsg2 {
             shared_key_ids: shared_key_ids.clone(),
-            address: rec_se_address.to_string(),
         },
     )?;
     
