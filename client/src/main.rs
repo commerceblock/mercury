@@ -307,9 +307,9 @@ fn main() {
                     println!("No StateCoin data for given key.");
                     return
                 }
-                println!("\nStateChain ID {}", recovery_info[0].statechain_id);
+                println!("\nStateChain ID {:?}", recovery_info[0].statechain_id);
                 println!("\nShared key ID {}", recovery_info[0].shared_key_id);
-                println!("\nBackup tx: {} \n", recovery_info[0].tx_hex);
+                println!("\nBackup tx: {:?} \n", recovery_info[0].tx_hex);
             }
         } else if matches.is_present("coins-info") {
             let coins_info: CoinValueInfo =
