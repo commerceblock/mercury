@@ -499,7 +499,7 @@ dependencies = [
 
 [[package]]
 name = "client"
-version = "0.2.9"
+version = "0.2.10"
 dependencies = [
  "base64 0.12.3",
  "bech32",
@@ -3942,7 +3942,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "0.3.13"
+version = "0.3.14"
 dependencies = [
  "bisetmap",
  "bitcoin",
@@ -4339,7 +4339,7 @@ dependencies = [
 
 [[package]]
 name = "tests"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "bitcoin",
  "client",

@@ -449,11 +449,10 @@ impl Utilities for SCE {
                 };
 
                 // If withdraw init
-                let is_withdrawing;
-                match self.database.has_withdraw_sc_sig(statecoin.0) {
-                    Ok(_) => is_withdrawing = true,
-                    Err(_e) => is_withdrawing = false,
-                }
+                let withdrawal_tx = match self.database.has_withdraw_sc_sig(statecoin.0) {
+                    Ok(_) => self.database.get_tx_withdraw(statecoin.0).ok().map(|t| transaction_serialise(&t)),
+                    Err(_e) => None,
+                };
 
                 let public = match self.database.get_public_master(statecoin.0)?{
                     Some(pm) => {
@@ -474,7 +473,7 @@ impl Utilities for SCE {
                     tx_hex: transaction_serialise(&statecoin.2),
                     proof_key: recovery_request.key.clone(),
                     shared_key_data: public,
-                    withdrawing: is_withdrawing
+                    withdrawing: withdrawal_tx
                 })
             }
         }
@@ -1508,7 +1507,7 @@ pub mod tests {
             tx_hex: transaction_serialise(&tx_backup),
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "".to_string(),
-            withdrawing: false,
+            withdrawing: None,
         };
 
 
@@ -1572,6 +1571,9 @@ pub mod tests {
         let tx_backup = serde_json::from_str::<Transaction>(
                             &BACKUP_TX_SIGNED.to_string(),
                         ).unwrap();
+        let tx_withdraw = serde_json::from_str::<Transaction>(
+                            &BACKUP_TX_SIGNED.to_string(),
+                        ).unwrap();
         let amount = 1000;
 
         let recovery_data = RecoveryDataMsg {
@@ -1581,11 +1583,12 @@ pub mod tests {
             tx_hex: transaction_serialise(&tx_backup),
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "".to_string(),
-            withdrawing: true,
+            withdrawing: Some(transaction_serialise(&tx_withdraw)),
         };
 
         let mut db = MockDatabase::new();
         db.expect_has_withdraw_sc_sig().returning(|_| Ok(()));
+        db.expect_get_tx_withdraw().returning(move |_| Ok(tx_withdraw.clone()));
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_recovery_data().returning(move |key| {
             // return error to simulate no statecoin for key
@@ -1679,7 +1682,7 @@ pub mod tests {
             tx_hex: transaction_serialise(&tx_backup),
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "None".to_string(),
-            withdrawing: false
+            withdrawing: None
         };
 
 
