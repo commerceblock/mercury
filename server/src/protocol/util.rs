@@ -489,7 +489,7 @@ impl Utilities for SCE {
                     // is generated address (uncompleted deposit)
                     let public = match self.database.get_public_master(statecoin.0)?{
                         Some(pm) => {
-                            let mut master_key: Party1Public = serde_json::from_str(&pm).map_err(|e| e.to_string())?;
+                            let master_key: Party1Public = serde_json::from_str(&pm).map_err(|e| e.to_string())?;
                             serde_json::to_string(&master_key).map_err(|e| e.to_string())?
                         },
                         None => {
@@ -504,7 +504,7 @@ impl Utilities for SCE {
                         tx_hex: None,
                         proof_key: recovery_request.key.clone(),
                         shared_key_data: public,
-                        withdrawing: false
+                        withdrawing: None
                     })
                 }
             }
@@ -1683,7 +1683,7 @@ pub mod tests {
             tx_hex: None,
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "".to_string(),
-            withdrawing: false,
+            withdrawing: None,
         };
 
 
@@ -1723,7 +1723,7 @@ pub mod tests {
         assert_eq!(recovery_data.shared_key_id, recovery_return[0].shared_key_id);
         assert_eq!(recovery_data.statechain_id, None);
         assert_eq!(recovery_data.tx_hex, None);
-        assert_eq!(recovery_data.withdrawing, false);
+        assert_eq!(recovery_data.withdrawing, None);
     }
 
     #[test]
