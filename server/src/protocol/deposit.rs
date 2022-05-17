@@ -107,26 +107,36 @@ impl Deposit for SCE {
             )));
         }
 
-        // Create state chain DB object
-        let statechain_id = Uuid::new_v4();
         let mut total = 0;
         for output in &tx_backup.output {
             total += output.value;
         }
         let amount = (total + FEE) as i64;
-        let state_chain = StateChain::new(proof_key.clone());
 
-        // Insert into StateChain table
-        self.database
-            .create_statechain(&statechain_id, &user_id, &state_chain, &amount)?;
+        let statechain_id: Uuid;
+
+        // check if we already have a statechain with this user ID (in case of deposit RBF)
+        match self.database.get_statechain_id(user_id.clone()) {
+            Ok(res) => {
+                statechain_id = res;
+                self.database.update_backup_tx(&statechain_id, tx_backup.clone())?;
+            },
+            Err(_e) => {
+                // Create state chain DB object
+                statechain_id = Uuid::new_v4();
+                let state_chain = StateChain::new(proof_key.clone());
+                // Insert into StateChain table
+                self.database.create_statechain(&statechain_id, &user_id, &state_chain, &amount)?;
+
+                // Insert into BackupTx table
+                self.database
+                    .create_backup_transaction(&statechain_id, &tx_backup)?;        
+            }
+        }
 
         // set the shared public key
         let shared_pubkey = self.database.get_shared_pubkey(user_id.clone())?;
         self.database.set_shared_pubkey(statechain_id.clone(), &shared_pubkey.ok_or(SEError::Generic(String::from("Shared pubkey missing")))?)?;
-
-        // Insert into BackupTx table
-        self.database
-            .create_backup_transaction(&statechain_id, &tx_backup)?;
 
         info!(
             "DEPOSIT: State Chain created. ID: {} For user ID: {}",
@@ -265,6 +275,11 @@ pub mod tests {
         db.expect_update_statechain_id().returning(|_, _| Ok(()));
         db.expect_get_shared_pubkey().returning(|_| Ok(Some("".to_string())));
         db.expect_set_shared_pubkey().returning(|_,_| Ok(()));
+        db.expect_get_statechain_id().returning(move |_| {
+                Err(SEError::Generic(String::from(
+                "No DB entry found",
+            )))
+            });
 
         let sc_entity = test_sc_entity(db, None, None, None, None);
 
@@ -285,5 +300,64 @@ pub mod tests {
                 shared_key_id: user_id
             })
             .is_ok());
+    }
+
+    #[test]
+    fn test_deposit_confirm_rbf() {
+        let user_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let statechain_id = Uuid::from_str("11111111-93f0-46f9-abda-0678c891b2d3").unwrap();
+        let proof_key =
+            String::from("026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e");
+        let tx_backup: Transaction = serde_json::from_str(&BACKUP_TX_NOT_SIGNED).unwrap();
+        let tx_backup_signed = serde_json::from_str::<Transaction>(&BACKUP_TX_SIGNED).unwrap();
+
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
+        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
+        db.expect_get_root().returning(|_| Ok(None));
+        db.expect_root_update().returning(|_| Ok(1));
+        // First return unsigned back up tx
+        db.expect_get_backup_transaction_and_proof_key()
+            .times(1)
+            .returning(move |_| Ok((tx_backup.clone(), "".to_string())));
+        // Second time return signed back up tx
+        db.expect_get_backup_transaction_and_proof_key()
+            .returning(move |_| Ok((tx_backup_signed.clone(), proof_key.clone())));
+        db.expect_create_statechain().returning(|_, _, _, _| Ok(()));
+        db.expect_create_backup_transaction()
+            .returning(|_, _| Ok(()));
+        db.expect_update_statechain_id().returning(|_, _| Ok(()));
+        db.expect_get_shared_pubkey().returning(|_| Ok(Some("".to_string())));
+        db.expect_set_shared_pubkey().returning(|_,_| Ok(()));
+        db.expect_get_statechain_id().returning(move |_| Ok(statechain_id));
+        db.expect_update_backup_tx().returning(|_,_| Ok(()));
+
+        let sc_entity = test_sc_entity(db, None, None, None, None);
+
+        // Backup tx not signed error
+        match sc_entity.deposit_confirm(DepositMsg2 {
+            shared_key_id: user_id,
+        }) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e
+                .to_string()
+                .contains("Signed Back up transaction not found."), "{}", e.to_string()),
+        }
+
+        // Clean protocol run
+        let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
+        assert!(sc_entity
+            .deposit_confirm(DepositMsg2 {
+                shared_key_id: user_id
+            })
+            .is_ok());
+
+        assert_eq!(sc_entity
+            .deposit_confirm(DepositMsg2 {
+                shared_key_id: user_id
+            })
+            .unwrap().id,statechain_id);
     }
 }
