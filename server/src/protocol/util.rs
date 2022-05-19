@@ -315,7 +315,7 @@ impl Utilities for SCE {
 
                         // verify that the withdrawal address matches statechain
                         let withdrawal_sig = self.database.get_withdraw_sc_sig(*user_id)?;
-                        if tx.output[0].script_pubkey != bitcoin::Address::from_str(&withdrawal_sig.data).expect("Address format error").script_pubkey() {
+                        if tx.output[0].script_pubkey != bitcoin::Address::from_str(&withdrawal_sig.data)?.script_pubkey() {
                                     return Err(SEError::Generic(format!(
                                     "Incorrect withdraw address - must match statechain {}", withdrawal_sig.data
                             )));
