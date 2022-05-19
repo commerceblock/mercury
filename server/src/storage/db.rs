@@ -783,6 +783,12 @@ impl Database for PGDatabase {
         }
     }
 
+    fn get_withdraw_sc_sig(&self, user_id: Uuid) -> Result<StateChainSig> {
+        let withdraw_sc_sig_str = self.get_1::<String>(user_id, Table::UserSession, vec![Column::WithdrawScSig])?;
+        let withdraw_sc_sig: StateChainSig = Self::deser(withdraw_sc_sig_str)?;
+        Ok(withdraw_sc_sig)
+    }    
+
     fn update_withdraw_sc_sig(&self, user_id: &Uuid, sig: StateChainSig) -> Result<()> {
         self.update(
             user_id,

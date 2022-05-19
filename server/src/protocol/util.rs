@@ -312,6 +312,14 @@ impl Utilities for SCE {
                                 "Withdraw has not been authorised. /withdraw/init must be called first.",)));
                         }
 
+                        // verify that the withdrawal address matches statechain
+                        let withdrawal_sig = self.database.get_withdraw_sc_sig(*user_id)?;
+                        if tx.output[0].script_pubkey != bitcoin::Address::from_str(&withdrawal_sig.data).expect("Address format error").script_pubkey() {
+                                    return Err(SEError::Generic(format!(
+                                    "Incorrect withdraw address - must match statechain {}", withdrawal_sig.data
+                            )));
+                        }
+
                         let statechain_id = self.database.get_statechain_id(*user_id)?;
 
                         if statechain_id == Uuid::nil() {
