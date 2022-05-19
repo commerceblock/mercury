@@ -725,7 +725,7 @@ mod tests {
         run_withdraw_init(&mut wallet, statechain_id, &(FEE-1));
         
         let (sk_id, address, tx_signed, _amount) = run_withdraw_init(&mut wallet, statechain_id, &(FEE));
-        let _tx_id = run_withdraw_confirm(&mut wallet, &sk_id, &address, &tx_signed);
+        let _tx_id = run_withdraw_confirm(&mut wallet, &sk_id, &tx_signed);
 
         // Check marked spent in wallet
         let sk1 = wallet.get_shared_key(&shared_key_id).unwrap();
