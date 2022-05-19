@@ -313,6 +313,7 @@ pub mod structs {
         pub chain: StateChain,
     }
 
+    #[derive(Debug)]
     pub struct WithdrawConfirmData {
         pub tx_withdraw: Transaction,
         pub withdraw_sc_sig: StateChainSig,
