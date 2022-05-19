@@ -143,7 +143,7 @@ impl Withdraw for SCE {
                 } 
                 Ok(Some(wcd))
              },
-             Err(e) => {
+             Err(e) => { 
                 if(format!("{}",e).contains("DB Error: No data for identifier.")){
                     return Ok(None) 
                 }   
