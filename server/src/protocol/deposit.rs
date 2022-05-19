@@ -122,7 +122,7 @@ impl Deposit for SCE {
                 self.database.update_backup_tx(&statechain_id, tx_backup.clone())?;
             },
             Err(e) => match e {
-                SEError::DBError(DBErrorType::NoDataForID, _) => {
+                SEError::DBErrorWC(DBErrorType::NoDataForID, _, _) => {
                     // Create state chain DB object
                     statechain_id = Uuid::new_v4();
                     let state_chain = StateChain::new(proof_key.clone());
@@ -132,7 +132,7 @@ impl Deposit for SCE {
                     // Insert into BackupTx table
                     self.database
                         .create_backup_transaction(&statechain_id, &tx_backup)?;                    
-                    }
+                    },
 
                 _ => return Err(e),
 
