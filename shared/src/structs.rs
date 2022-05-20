@@ -461,6 +461,26 @@ impl RecoveryRequest {
 }
 
 /// Struct with recovery information for specified proof key
+#[derive(Serialize, Deserialize, JsonSchema, Debug, PartialEq)]
+#[schemars(example = "Self::example")]
+pub struct WithdrawingData {
+    //Withdrawal transaction
+    pub tx_hex: String,
+    //Receiving address
+    #[schemars(with = "AddressDef")]
+    pub rec_addr: Address
+}
+
+impl WithdrawingData {
+    pub fn example() -> Self{
+        Self{
+            tx_hex: "02000000000101ca878085da49c33eb9816c10e4056424e5e062689ea547ea91bb3aa840a3c5fb0000000000ffffffff02307500000000000016001412cc36c9533290c02f0c78f992df6e6ddfe50c8c0064f50500000000160014658fd2dc72e58168f3656fb632d63be54f80fbe4024730440220457cf52873ae5854859a7d48b39cb57eba880ea4011806e5058da7619f4c0fab02206303326f06bbebf7170b679ba787c856dec4b6462109bf66e1cb8dc087be7ebf012102a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe00000000".to_string(),
+            rec_addr: Address::from_str("1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h").unwrap(),
+        }
+    }
+}
+
+/// Struct with recovery information for specified proof key
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 #[schemars(example = "Self::example")]
 pub struct RecoveryDataMsg {
@@ -472,7 +492,7 @@ pub struct RecoveryDataMsg {
     pub tx_hex: Option<String>,
     pub proof_key: String,
     pub shared_key_data: String,
-    pub withdrawing: bool
+    pub withdrawing: Option<WithdrawingData>
 }
 
 impl RecoveryDataMsg {
@@ -484,7 +504,7 @@ impl RecoveryDataMsg {
             tx_hex: Some("02000000000101ca878085da49c33eb9816c10e4056424e5e062689ea547ea91bb3aa840a3c5fb0000000000ffffffff02307500000000000016001412cc36c9533290c02f0c78f992df6e6ddfe50c8c0064f50500000000160014658fd2dc72e58168f3656fb632d63be54f80fbe4024730440220457cf52873ae5854859a7d48b39cb57eba880ea4011806e5058da7619f4c0fab02206303326f06bbebf7170b679ba787c856dec4b6462109bf66e1cb8dc087be7ebf012102a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe00000000".to_string()),
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "".to_string(),
-            withdrawing: false
+            withdrawing: None
         }
     }
 }
@@ -876,7 +896,6 @@ pub struct WithdrawMsg1 {
 pub struct WithdrawMsg2 {
     #[schemars(with = "UuidDef")]
     pub shared_key_ids: Vec::<Uuid>,
-    pub address: String,
 }
 
 impl Default for TransferMsg5 {

@@ -260,11 +260,11 @@ mod tests {
             println!("test get finalization recovery data...");
             for data in &recovery_data {
                     let finalization_data = state_entity::api::get_sc_transfer_finalize_data(
-                        &wallet.client_shim, &data.statechain_id).unwrap();
+                        &wallet.client_shim, &data.statechain_id.expect("expect some data.statechain_id")).unwrap();
                     match get_transfer_finalize_data_for_recovery(wallet,
                         &finalization_data, &data, &data.proof_key){
                         Ok(v) => {
-                            transfer_finalized_datas_recovered.insert(data.statechain_id.to_owned(), v);    
+                            transfer_finalized_datas_recovered.insert(data.statechain_id.expect("expect some data.statechain_id").to_owned(), v);    
                         },
                         Err(e) => println!("error get_transfer_finalize_data_for_recovery: {}", &e)
                     }

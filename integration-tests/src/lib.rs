@@ -258,11 +258,11 @@ pub fn run_withdraw_init(wallet: &mut Wallet, statechain_id: &Uuid, fee: &u64)
 
 /// Run withdraw confirm 
 pub fn run_withdraw_confirm(wallet: &mut Wallet, shared_key_id: &Uuid, 
-    address: &bitcoin::Address, tx_signed: &bitcoin::Transaction) 
+    tx_signed: &bitcoin::Transaction) 
     -> String {
     let start = Instant::now();
     let resp = state_entity::withdraw::withdraw_confirm(wallet, shared_key_id,
-        address, tx_signed).unwrap();
+        tx_signed).unwrap();
     println!("(Withdraw Init Took: {})", TimeFormat(start.elapsed()));
     
     resp

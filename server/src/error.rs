@@ -6,6 +6,7 @@ use shared_lib::{error::SharedLibError, structs::CoinValueInfo};
 
 use crate::storage::db::Column;
 use bitcoin::secp256k1::Error as SecpError;
+use bitcoin::util::address::Error as AddressError;
 use config_rs::ConfigError;
 use monotree::Errors as MonotreeErrors;
 use postgres::Error as PostgresError;
@@ -105,6 +106,12 @@ impl From<ReqwestError> for SEError {
 
 impl From<uuid::ParseError> for SEError {
     fn from(e: uuid::ParseError) -> SEError {
+        SEError::Generic(e.to_string())
+    }
+}
+
+impl From<AddressError> for SEError {
+    fn from(e: AddressError) -> SEError {
         SEError::Generic(e.to_string())
     }
 }

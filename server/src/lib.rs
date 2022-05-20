@@ -46,10 +46,6 @@ extern crate mockito;
 
 extern crate shared_lib;
 
-#[cfg(test)]
-#[macro_use]
-extern crate time_test;
-
 pub mod config;
 pub mod error;
 pub mod protocol;
@@ -106,6 +102,7 @@ pub trait Database {
     fn set_connection(&mut self, url: &String) -> Result<()>;
     fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self;
     fn has_withdraw_sc_sig(&self, user_id: Uuid) -> Result<()>;
+    fn get_withdraw_sc_sig(&self, user_id: Uuid) -> Result<StateChainSig>;
     fn init_coins_histo(&self, coins_histo: &Mutex<CoinValueInfo>) -> Result<()>;
     fn init_user_ids(&self, user_ids: &Mutex<UserIDs>) -> Result<()>;
     fn update_withdraw_sc_sig(&self, user_id: &Uuid, sig: StateChainSig) -> Result<()>;
@@ -317,6 +314,7 @@ pub mod structs {
         pub chain: StateChain,
     }
 
+    #[derive(Debug)]
     pub struct WithdrawConfirmData {
         pub tx_withdraw: Transaction,
         pub withdraw_sc_sig: StateChainSig,

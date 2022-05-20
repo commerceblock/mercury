@@ -4,7 +4,7 @@
 //! utility functions.
 
 pub use super::super::Result;
-use super::{transfer_batch::{transfer_batch_is_ended, BatchTransfer}};
+use super::{transfer_batch::{transfer_batch_is_ended, BatchTransfer}, withdraw::Withdraw};
 use url::Url;
 extern crate shared_lib;
 use shared_lib::{
@@ -24,7 +24,8 @@ use crate::error::{DBErrorType, SEError};
 use crate::storage::Storage;
 use crate::{server::StateChainEntity, Database};
 use cfg_if::cfg_if;
-
+#[cfg(test)]
+use crate::structs::WithdrawConfirmData;
 use bitcoin::consensus;
 use bitcoin::Network;
 use electrumx_client::{electrumx_client::ElectrumxClient, interface::Electrumx};
@@ -36,7 +37,7 @@ use rocket_contrib::json::Json;
 use std::str::FromStr;
 use uuid::Uuid;
 use bitcoin::OutPoint;
-use bitcoin::Transaction;
+use bitcoin::{Transaction, Address};
 use curv::GE;
 use curv::elliptic::curves::traits::ECPoint;
 use std::ops::Deref;
@@ -312,6 +313,14 @@ impl Utilities for SCE {
                                 "Withdraw has not been authorised. /withdraw/init must be called first.",)));
                         }
 
+                        // verify that the withdrawal address matches statechain
+                        let withdrawal_sig = self.database.get_withdraw_sc_sig(*user_id)?;
+                        if tx.output[0].script_pubkey != bitcoin::Address::from_str(&withdrawal_sig.data)?.script_pubkey() {
+                                    return Err(SEError::Generic(format!(
+                                    "Incorrect withdraw address - must match statechain {}", withdrawal_sig.data
+                            )));
+                        }
+
                         let statechain_id = self.database.get_statechain_id(*user_id)?;
 
                         if statechain_id == Uuid::nil() {
@@ -458,12 +467,28 @@ impl Utilities for SCE {
                         Err(_) => continue
                     };
 
-                    // If withdraw init
-                    let is_withdrawing;
-                    match self.database.has_withdraw_sc_sig(statecoin.0) {
-                        Ok(_) => is_withdrawing = true,
-                        Err(_e) => is_withdrawing = false,
-                    }
+                // If withdraw init
+                let withdrawing_data = match self.database.has_withdraw_sc_sig(statecoin.0) {
+                    Ok(_) => {
+                        let tx_hex = self.database.get_tx_withdraw(statecoin.0).ok().map(|t| transaction_serialise(&t));
+                        let rec_addr = match self.database.get_withdraw_confirm_data(statecoin.0).map_err(|e| SEError::Generic(
+                            format!("{} in get_recovery_data", e))) {
+                                Ok(w) => Address::from_str(&w.withdraw_sc_sig.data).ok(),
+                                Err(e) => {
+                                    if(!format!("{}",e).contains("DB Error: No data for identifier.")){
+                                        return Err(e)
+                                    }     
+                                    None
+                                }   
+                        };
+                        
+                        match (tx_hex, rec_addr) {
+                            (Some(tx_hex), Some(rec_addr)) => Some(WithdrawingData{tx_hex, rec_addr}),
+                            _ => None
+                        }   
+                    },
+                    Err(_e) => None,
+                };
 
                     let public = match self.database.get_public_master(statecoin.0)?{
                         Some(pm) => {
@@ -484,13 +509,13 @@ impl Utilities for SCE {
                         tx_hex: Some(transaction_serialise(&statecoin.2.unwrap())),
                         proof_key: recovery_request.key.clone(),
                         shared_key_data: public,
-                        withdrawing: is_withdrawing
+                        withdrawing: withdrawing_data
                     })
                 } else {
                     // is generated address (uncompleted deposit)
                     let public = match self.database.get_public_master(statecoin.0)?{
                         Some(pm) => {
-                            let mut master_key: Party1Public = serde_json::from_str(&pm).map_err(|e| e.to_string())?;
+                            let master_key: Party1Public = serde_json::from_str(&pm).map_err(|e| e.to_string())?;
                             serde_json::to_string(&master_key).map_err(|e| e.to_string())?
                         },
                         None => {
@@ -505,7 +530,7 @@ impl Utilities for SCE {
                         tx_hex: None,
                         proof_key: recovery_request.key.clone(),
                         shared_key_data: public,
-                        withdrawing: false
+                        withdrawing: None
                     })
                 }
             }
@@ -1382,19 +1407,22 @@ pub mod tests {
     use bitcoin::Transaction;
     use std::num::NonZeroU32;
     use crate::config::Config;
+    use bitcoin::secp256k1::{rand, Secp256k1, SecretKey, PublicKey};
     
     // Useful data structs for tests throughout codebase
     pub static BACKUP_TX_NOT_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
+    pub static WITHDRAW_TX_NOT_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[]}],\"output\":[{\"value\":99500,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"},{\"value\":3000,\"script_pubkey\":\"00141319a227287cfac4d8660830f4c9b0e1724a8100\"}]}";    
     pub static BACKUP_TX_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,68,2,32,45,42,91,77,252,143,55,65,154,96,191,149,204,131,88,79,80,161,231,209,234,229,217,100,28,99,48,148,136,194,204,98,2,32,90,111,183,68,74,24,75,120,179,80,20,183,60,198,127,106,102,64,37,193,174,226,199,118,237,35,96,236,45,94,203,49,1],[2,242,131,110,175,215,21,123,219,179,199,144,85,14,163,42,19,197,97,249,41,130,243,139,15,17,51,185,147,228,100,122,213]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
     pub static BACKUP_TX_SIGNED2: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"73c7099ce462a699a4e589e370bebac139b2c1bcedb8cd8eb9c67c03aa03f05b:1\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,68,2,32,45,42,91,77,252,143,55,65,154,96,191,149,204,131,88,79,80,161,231,209,234,229,217,100,28,99,48,148,136,194,204,98,2,32,90,111,183,68,74,24,75,120,179,80,20,183,60,198,127,106,102,64,37,193,174,226,199,118,237,35,96,236,45,94,203,49,1],[2,242,131,110,175,215,21,123,219,179,199,144,85,14,163,42,19,197,97,249,41,130,243,139,15,17,51,185,147,228,100,122,213]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
     pub static STATE_CHAIN: &str = "{\"chain\":[{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}]}";
     pub static STATE_CHAIN_SIG: &str = "{ \"purpose\": \"TRANSFER\", \"data\": \"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\", \"sig\": \"3045022100abe02f0d1918aca36b634eb1af8a4e0714f3f699fb425de65cc661e538da3f2002200a538a22df665a95adb739ff6bb592b152dba5613602c453c58adf70858f05f6\"}";
+    pub static WITHDRAWAL_ADDRESS: &str = "1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h";
+    pub static WITHDRAW_STATE_CHAIN_SIG: &str = "{ \"purpose\": \"WITHDRAW\", \"data\": \"1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h\", \"sig\": \"3045022100abe02f0d1918aca36b634eb1af8a4e0714f3f699fb425de65cc661e538da3f2002200a538a22df665a95adb739ff6bb592b152dba5613602c453c58adf70858f05f6\"}";
     pub static STATE_CHAIN_2: &str = "{\"chain\":[{\"data\":\"025ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null},{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}]}"; 
     pub static MASTER_KEY: &str = "{\"public\":{\"q\":{\"x\":\"f8308498a5b5996eb7c410fb7ada7f3524d604b45b247cc4d13e5a32c3763908\",\"y\":\"7e41091fd5ab1138d1a3cdf41b43c82a064839a6b82b251be2be70099b642d1a\"},\"p1\":{\"x\":\"701e7d08608e6065b8f19f7cd867bcd7c5c4a11290e51187210a66713349c76c\",\"y\":\"10f76cae4eac6727bec6ae239de37d806a4877bc418f9fadaad0fd379cb11e73\"},\"p2\":{\"x\":\"caff57b3e214231182b2ba729079422887527dec2c2be1af03eb9a28be046fbb\",\"y\":\"94d4d2624a6be1e5fccf22ea5d7d2294a65f86b23642e7107c5523bb383d2612\"},\"paillier_pub\":{\"n\":\"11489233870088042333010221250016305472224248130131837344400358635737478519468920848276451747026121985401781804607266395846806728547165860151830628936151241253052105217375620729553123605998218501591757218904947955026013349855548130232876481464163645763380508660165838175358408923868455078398162478065282146744074902115770410655628975593804546170315851709066735895285416399351986223748741323752676766246912115655411869835426209804163120117240537098699118426250380831687194901410283437954378683229249501222250355118886953166922692541953136499596437296944964919863277847025337779172484000271289374153321801582770169915217\"},\"c_key\":\"13acbe9791ae6136f0d3700bad8cbe723ed2676e33d9f080122283a3a5838e3418d9ae3f61cc5e3b033ec71979f339c87e2da410c46a3a6238e40fc403799b5b7855bf529c381bd80288f5002f62a460cc005ec71e85c7d0eda2133245a857fe414c8653f0248016545618e2d53f466e3808edfe15774fb32ffeafc98dc08dd9eaca2e5411ae22bd4dad358bffadb51e82d2f99404ff73db8c473a2483133863aeaf6ffccd455fe4ba0966f90e85ea02083962d15779215941396676d90a0ce99a09adaa064956f506ca40d18ba91a7f9826a2e82050fb3b569790b5642ac45e39d9dfb63f8c975c30090f9eceaca387129539eaebfcedc17d2e49f0bd029e3591ac30e3db26139368b1423cf058e2128978411518e87c2d3c106a91c16de80895ad7f928a9a40c6d5aac356bd2966b3bf98c77f616f04329caecc895d13d16d8193e9f0bfe866c86a2eee3b2b0beb95478d4c216e00f8a9712618599d176ad253e59e9e27743f1e61a710bb9a0ae989226900ef809acb17e11f9f068bdb35fd7a767560e912da3aa98cd9d529b3d993e360d73f19adf830599f71ca139f6e17014302dce8a40401276d3a7e3dda04ef4b344a7dc4cb94c106c346e389ab7e089b97aa1e3f1680d4b8eeb62d405ab3a4e827b93dd15074e1dfd74244a9b4857017818b63504399c98fc02d0b3af135a0d7ac4f9de9a7cd47fdbe40cb3a6185b6\"},\"private\":{\"x1\":\"7d40223e23d9be8a484f02c193f6d637ee920d22107bcc271315ecd7cf7bd417\",\"paillier_priv\":{\"p\":\"95968611635960852961029982396007186819172638068010828329449274935568627735159638229570155217385550521772837802209343399026212621624237395184543248204625051917248015126148738583692391387724379315739614056981768639631978130165718525707250385364943792301344169291673198185105717525805446423420947171964258675871\",\"q\":\"119718662948572417380116608786988393154649208452700228802334036347214087888515999164811204446322560182519144489173108609786997536166347774811155976446122754875172588386796176207110943485933259100127115436979944772204093241941218507628108172049881866436113901845596310515366261414462580028675547493957305267727\"},\"c_key_randomness\":\"2cca6bbfb2f111aaa52b33bd3320cff512f23010822687156ed81f231403d0c2ded58514221d81cd8185bf584efd79534e55b78da3766a18175121d0df84c098c442553513cda8646a81e36cd3bd853381678d6cba7adeb2dffc425e6209bf0ccd2a824d78d1fe8ad388d999c626cd1d0bad6e312fbdd06f219de1e7379e1b8c1f1c8bd50bcfc8acad0692f5028252e18ffe60268ecea8cf35343895d9f78e406ea9301f3392d6b78ea87884a710d548cad991571abe8264653e63dc30c4276b7fcfeb9783bc7e7f88b2d573e3de2d6fe4d3809c50866b820402925621a7bcae34d87914db54455ce5ffd189e2d0bb9032913e4be221eae1a22e31d5803cbc07\"},\"chain_code\":\"0\"}";
     pub static PARTY2PUBLIC: &str = "{\"q\":{\"x\":\"f8308498a5b5996eb7c410fb7ada7f3524d604b45b247cc4d13e5a32c3763908\",\"y\":\"7e41091fd5ab1138d1a3cdf41b43c82a064839a6b82b251be2be70099b642d1a\"},\"p1\":{\"x\":\"701e7d08608e6065b8f19f7cd867bcd7c5c4a11290e51187210a66713349c76c\",\"y\":\"10f76cae4eac6727bec6ae239de37d806a4877bc418f9fadaad0fd379cb11e73\"},\"p2\":{\"x\":\"caff57b3e214231182b2ba729079422887527dec2c2be1af03eb9a28be046fbb\",\"y\":\"94d4d2624a6be1e5fccf22ea5d7d2294a65f86b23642e7107c5523bb383d2612\"},\"paillier_pub\":{\"n\":\"11489233870088042333010221250016305472224248130131837344400358635737478519468920848276451747026121985401781804607266395846806728547165860151830628936151241253052105217375620729553123605998218501591757218904947955026013349855548130232876481464163645763380508660165838175358408923868455078398162478065282146744074902115770410655628975593804546170315851709066735895285416399351986223748741323752676766246912115655411869835426209804163120117240537098699118426250380831687194901410283437954378683229249501222250355118886953166922692541953136499596437296944964919863277847025337779172484000271289374153321801582770169915217\"},\"c_key\":\"13acbe9791ae6136f0d3700bad8cbe723ed2676e33d9f080122283a3a5838e3418d9ae3f61cc5e3b033ec71979f339c87e2da410c46a3a6238e40fc403799b5b7855bf529c381bd80288f5002f62a460cc005ec71e85c7d0eda2133245a857fe414c8653f0248016545618e2d53f466e3808edfe15774fb32ffeafc98dc08dd9eaca2e5411ae22bd4dad358bffadb51e82d2f99404ff73db8c473a2483133863aeaf6ffccd455fe4ba0966f90e85ea02083962d15779215941396676d90a0ce99a09adaa064956f506ca40d18ba91a7f9826a2e82050fb3b569790b5642ac45e39d9dfb63f8c975c30090f9eceaca387129539eaebfcedc17d2e49f0bd029e3591ac30e3db26139368b1423cf058e2128978411518e87c2d3c106a91c16de80895ad7f928a9a40c6d5aac356bd2966b3bf98c77f616f04329caecc895d13d16d8193e9f0bfe866c86a2eee3b2b0beb95478d4c216e00f8a9712618599d176ad253e59e9e27743f1e61a710bb9a0ae989226900ef809acb17e11f9f068bdb35fd7a767560e912da3aa98cd9d529b3d993e360d73f19adf830599f71ca139f6e17014302dce8a40401276d3a7e3dda04ef4b344a7dc4cb94c106c346e389ab7e089b97aa1e3f1680d4b8eeb62d405ab3a4e827b93dd15074e1dfd74244a9b4857017818b63504399c98fc02d0b3af135a0d7ac4f9de9a7cd47fdbe40cb3a6185b6\"}";
     pub static SHAREDPUBLIC: &str = "{\"x\":\"f8308498a5b5996eb7c410fb7ada7f3524d604b45b247cc4d13e5a32c3763908\",\"y\":\"7e41091fd5ab1138d1a3cdf41b43c82a064839a6b82b251be2be70099b642d1a\"}";
     pub static SHAREDPUBLIC2: &str = "{\"x\":\"5922d902bc02956aac861f25cb3bc5d839879fbeed2818984143bff3a4eddc7\",\"y\":\"da7baea75521527df867f7ff3c996fc18732200f2445e879fbbcb662f7c835d4\"}";
-
 
     pub fn test_sc_entity(db: MockDatabase, 
             lockbox_url: Option<String>, 
@@ -1493,16 +1521,11 @@ pub mod tests {
     fn test_update_root_smt() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_root_update().returning(|_| Ok(1 as i64));
-        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
-        db.expect_get_root().returning(|_| Ok(None));
-        db.expect_root_get_current_id().returning(|| Ok(1 as i64));
-        db.expect_get_root()
-            .returning(|_x| Ok(Some(Root::from_random())));
-        db.expect_root_update().returning(|_x| Ok(1));
-        db.expect_get_confirmed_smt_root()
-            .returning(|| Ok(Some(Root::from_random())));
-        let sc_entity = test_sc_entity(db, None, None, None, None);
+        db.expect_root_get_current_id().times(1).returning(|| Ok(1 as i64));
+        db.expect_get_root().times(1).returning(|_| Ok(None));
+        db.expect_root_update().times(1).returning(|_| Ok(1 as i64));
+
+        let mut sc_entity = test_sc_entity(db, None, None, None, None);
 
         //Mainstay post commitment mock
         let _m = mocks::ms::post_commitment().create();
@@ -1521,6 +1544,22 @@ pub mod tests {
                 .unwrap();
 
         assert_eq!(new_root.hash(), hash_exp, "new root incorrect");
+
+        //A repeated update results in the same root
+        sc_entity.database.expect_root_get_current_id().times(1).returning(|| Ok(2 as i64));
+        sc_entity.database.expect_get_root()
+            .times(1)
+            .returning(move |_x| Ok(Some(new_root.clone())));
+        sc_entity.database.expect_root_update().times(1).returning(|_x| Ok(1));
+           
+        let (current_root, new_root_2) = sc_entity
+            .update_smt(
+                &"1dcaca3b140dfbfe7e6a2d6d7cafea5cdb905178ee5d377804d8337c2c35f62e".to_string(),
+                &"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
+            )
+            .unwrap();
+        assert_eq!(new_root_2.hash(), hash_exp, "new root 2 incorrect");
+        assert_eq!(current_root.unwrap().hash(), hash_exp, "current root incorrect");
     }
 
     #[test]
@@ -1540,7 +1579,7 @@ pub mod tests {
             tx_hex: Some(transaction_serialise(&tx_backup)),
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "".to_string(),
-            withdrawing: false,
+            withdrawing: None,
         };
 
 
@@ -1604,6 +1643,12 @@ pub mod tests {
         let tx_backup = serde_json::from_str::<Transaction>(
                             &BACKUP_TX_SIGNED.to_string(),
                         ).unwrap();
+        let tx_withdraw = serde_json::from_str::<Transaction>(
+                            &BACKUP_TX_SIGNED.to_string(),
+                        ).unwrap();
+
+        assert!(tx_withdraw.input[0].witness.len() > 0);
+
         let amount = 1000;
 
         let recovery_data = RecoveryDataMsg {
@@ -1613,11 +1658,29 @@ pub mod tests {
             tx_hex: Some(transaction_serialise(&tx_backup)),
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "".to_string(),
-            withdrawing: true,
+            withdrawing: Some(WithdrawingData {
+                tx_hex: transaction_serialise(&tx_withdraw),
+                rec_addr: Address::from_str(WITHDRAWAL_ADDRESS).unwrap(),
+            }),
         };
 
         let mut db = MockDatabase::new();
+        let tx_withdraw_clone_1 = tx_withdraw.clone();
         db.expect_has_withdraw_sc_sig().returning(|_| Ok(()));
+         db.expect_get_withdraw_confirm_data()
+            .times(1)
+            .returning(move |_| {
+                Ok(WithdrawConfirmData {
+                    tx_withdraw: tx_withdraw_clone_1.clone(), // any tx is fine here
+                    withdraw_sc_sig: serde_json::from_str::<StateChainSig>(
+                        &WITHDRAW_STATE_CHAIN_SIG.to_string(),
+                    )
+                    .unwrap(),
+                    statechain_id,
+                })
+            });
+        let tx_withdraw_clone_2 = tx_withdraw.clone();
+        db.expect_get_tx_withdraw().returning(move |_| Ok(tx_withdraw_clone_2.clone()));
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_recovery_data().returning(move |key| {
             // return error to simulate no statecoin for key
@@ -1680,7 +1743,7 @@ pub mod tests {
             tx_hex: None,
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "".to_string(),
-            withdrawing: false,
+            withdrawing: None,
         };
 
 
@@ -1720,7 +1783,7 @@ pub mod tests {
         assert_eq!(recovery_data.shared_key_id, recovery_return[0].shared_key_id);
         assert_eq!(recovery_data.statechain_id, None);
         assert_eq!(recovery_data.tx_hex, None);
-        assert_eq!(recovery_data.withdrawing, false);
+        assert_eq!(recovery_data.withdrawing, None);
     }
 
     #[test]
@@ -1766,7 +1829,7 @@ pub mod tests {
             tx_hex: Some(transaction_serialise(&tx_backup)),
             proof_key: "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5".to_string(),
             shared_key_data: "None".to_string(),
-            withdrawing: false
+            withdrawing: None
         };
 
 
@@ -1879,7 +1942,7 @@ pub mod tests {
 
     #[test]
     #[serial]
-    fn test_get_statechain_n(){
+    fn test_get_statechain_n() {
         let mut db = MockDatabase::new();
         let state_chain = serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap();
         let state_chain_amount = StateChainAmount {
@@ -1917,5 +1980,68 @@ pub mod tests {
         let statechain_id = Uuid::new_v4();
 
         assert_eq!(sc_entity.get_statechain_data_api_depth(statechain_id,Some(1)).unwrap(), data);
+    }
+
+    #[test]
+    #[serial]
+    fn test_prepare_sign_transaction_withdraw() {
+        let user_id = Uuid::new_v4();
+        let statechain_id = Uuid::new_v4();
+
+        let secp = Secp256k1::new();
+        let secret_key = SecretKey::new(&mut rand::thread_rng());
+        let public_key = PublicKey::from_secret_key(&secp, &secret_key);
+
+        // incorrect withdrawal address
+        let pst = PrepareSignTxMsg {   
+            shared_key_ids: vec![user_id.clone()],
+            protocol: Protocol::Withdraw,
+            tx_hex: "02000000017c391771397f16dd1b8551a664cc96faef0dceda7ca5989caeefba0f92a0aafa0000000000ffffffff02ac840100000000001600148fc32525487d2cb7323c960bdfb0a5ee6a364738b80b0000000000001600141319a227287cfac4d8660830f4c9b0e1724a810000000000".to_string(),
+            input_addrs: vec![public_key],
+            input_amounts: vec![100000],
+            proof_key: Some("02a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe".to_string()),
+        };
+
+        // correct (matching statechain) withdrawal address
+        let pst2 = PrepareSignTxMsg {   
+            shared_key_ids: vec![user_id.clone()],
+            protocol: Protocol::Withdraw,
+            tx_hex: "02000000017c391771397f16dd1b8551a664cc96faef0dceda7ca5989caeefba0f92a0aafa0000000000ffffffff02ac840100000000001600142f97503211071b4afae57f75be4cc5d38a0e791ab80b0000000000001600141319a227287cfac4d8660830f4c9b0e1724a810000000000".to_string(),
+            input_addrs: vec![public_key],
+            input_amounts: vec![100000],
+            proof_key: Some("02a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe".to_string()),
+        };
+
+        let withdrawal_sig = StateChainSig {
+            purpose: "WITHDRAW".to_string(),
+            data: "tb1q97t4qvs3qud547h90a6munx96w9qu7g6daqq3s".to_string(),
+            sig: "3045022100abe02f0d1918aca36b634eb1af8a4e0714f3f699fb425de65cc661e538da3f2002200a538a22df665a95adb739ff6bb592b152dba5613602c453c58adf70858f05f6".to_string(),
+        };
+
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
+        db.expect_has_withdraw_sc_sig().returning(|_| Ok(()));
+        db.expect_get_statechain_id().returning(move |_| Ok(statechain_id.clone()));
+        db.expect_get_backup_transaction().returning(|_| Ok(serde_json::from_str::<Transaction>(
+                &WITHDRAW_TX_NOT_SIGNED.to_string(),
+            ).unwrap()));
+        db.expect_get_withdraw_sc_sig().returning(move |_| Ok(withdrawal_sig.clone()));
+        db.expect_update_withdraw_tx_sighash().returning(|_,_,_| Ok(()));
+
+        let sc_entity = test_sc_entity(db, None, None, None, None);
+
+        // test mismatch
+        match sc_entity.prepare_sign_tx(pst) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e
+                .to_string()
+                .contains("Incorrect withdraw address"), "{}", e.to_string()),
+        }
+
+        // test correct
+        assert!(sc_entity.prepare_sign_tx(pst2).is_ok());
+
     }
 }

@@ -311,6 +311,9 @@ impl Database for MemoryDB {
     fn has_withdraw_sc_sig(&self, _user_id: uuid::Uuid) -> crate::Result<()> {
         unimplemented!()
     }
+    fn get_withdraw_sc_sig(&self, _user_id: uuid::Uuid) -> crate::Result<shared_lib::state_chain::StateChainSig> {
+        unimplemented!()
+    }
 
     fn init_coins_histo(&self, _coins_histo: &Mutex<CoinValueInfo>) -> crate::Result<()> {
         unimplemented!()
