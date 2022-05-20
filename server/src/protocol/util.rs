@@ -313,6 +313,14 @@ impl Utilities for SCE {
                                 "Withdraw has not been authorised. /withdraw/init must be called first.",)));
                         }
 
+                        // verify that the withdrawal address matches statechain
+                        let withdrawal_sig = self.database.get_withdraw_sc_sig(*user_id)?;
+                        if tx.output[0].script_pubkey != bitcoin::Address::from_str(&withdrawal_sig.data)?.script_pubkey() {
+                                    return Err(SEError::Generic(format!(
+                                    "Incorrect withdraw address - must match statechain {}", withdrawal_sig.data
+                            )));
+                        }
+
                         let statechain_id = self.database.get_statechain_id(*user_id)?;
 
                         if statechain_id == Uuid::nil() {
@@ -1399,9 +1407,11 @@ pub mod tests {
     use bitcoin::Transaction;
     use std::num::NonZeroU32;
     use crate::config::Config;
+    use bitcoin::secp256k1::{rand, Secp256k1, SecretKey, PublicKey};
     
     // Useful data structs for tests throughout codebase
     pub static BACKUP_TX_NOT_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
+    pub static WITHDRAW_TX_NOT_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[]}],\"output\":[{\"value\":99500,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"},{\"value\":3000,\"script_pubkey\":\"00141319a227287cfac4d8660830f4c9b0e1724a8100\"}]}";    
     pub static BACKUP_TX_SIGNED: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"faaaa0920fbaefae9c98a57cdace0deffa96cc64a651851bdd167f397117397c:0\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,68,2,32,45,42,91,77,252,143,55,65,154,96,191,149,204,131,88,79,80,161,231,209,234,229,217,100,28,99,48,148,136,194,204,98,2,32,90,111,183,68,74,24,75,120,179,80,20,183,60,198,127,106,102,64,37,193,174,226,199,118,237,35,96,236,45,94,203,49,1],[2,242,131,110,175,215,21,123,219,179,199,144,85,14,163,42,19,197,97,249,41,130,243,139,15,17,51,185,147,228,100,122,213]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
     pub static BACKUP_TX_SIGNED2: &str = "{\"version\":2,\"lock_time\":0,\"input\":[{\"previous_output\":\"73c7099ce462a699a4e589e370bebac139b2c1bcedb8cd8eb9c67c03aa03f05b:1\",\"script_sig\":\"\",\"sequence\":4294967295,\"witness\":[[48,68,2,32,45,42,91,77,252,143,55,65,154,96,191,149,204,131,88,79,80,161,231,209,234,229,217,100,28,99,48,148,136,194,204,98,2,32,90,111,183,68,74,24,75,120,179,80,20,183,60,198,127,106,102,64,37,193,174,226,199,118,237,35,96,236,45,94,203,49,1],[2,242,131,110,175,215,21,123,219,179,199,144,85,14,163,42,19,197,97,249,41,130,243,139,15,17,51,185,147,228,100,122,213]]}],\"output\":[{\"value\":9000,\"script_pubkey\":\"00148fc32525487d2cb7323c960bdfb0a5ee6a364738\"}]}";
     pub static STATE_CHAIN: &str = "{\"chain\":[{\"data\":\"026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e\",\"next_state\":null}]}";
@@ -1932,7 +1942,7 @@ pub mod tests {
 
     #[test]
     #[serial]
-    fn test_get_statechain_n(){
+    fn test_get_statechain_n() {
         let mut db = MockDatabase::new();
         let state_chain = serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap();
         let state_chain_amount = StateChainAmount {
@@ -1970,5 +1980,68 @@ pub mod tests {
         let statechain_id = Uuid::new_v4();
 
         assert_eq!(sc_entity.get_statechain_data_api_depth(statechain_id,Some(1)).unwrap(), data);
+    }
+
+    #[test]
+    #[serial]
+    fn test_prepare_sign_transaction_withdraw() {
+        let user_id = Uuid::new_v4();
+        let statechain_id = Uuid::new_v4();
+
+        let secp = Secp256k1::new();
+        let secret_key = SecretKey::new(&mut rand::thread_rng());
+        let public_key = PublicKey::from_secret_key(&secp, &secret_key);
+
+        // incorrect withdrawal address
+        let pst = PrepareSignTxMsg {   
+            shared_key_ids: vec![user_id.clone()],
+            protocol: Protocol::Withdraw,
+            tx_hex: "02000000017c391771397f16dd1b8551a664cc96faef0dceda7ca5989caeefba0f92a0aafa0000000000ffffffff02ac840100000000001600148fc32525487d2cb7323c960bdfb0a5ee6a364738b80b0000000000001600141319a227287cfac4d8660830f4c9b0e1724a810000000000".to_string(),
+            input_addrs: vec![public_key],
+            input_amounts: vec![100000],
+            proof_key: Some("02a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe".to_string()),
+        };
+
+        // correct (matching statechain) withdrawal address
+        let pst2 = PrepareSignTxMsg {   
+            shared_key_ids: vec![user_id.clone()],
+            protocol: Protocol::Withdraw,
+            tx_hex: "02000000017c391771397f16dd1b8551a664cc96faef0dceda7ca5989caeefba0f92a0aafa0000000000ffffffff02ac840100000000001600142f97503211071b4afae57f75be4cc5d38a0e791ab80b0000000000001600141319a227287cfac4d8660830f4c9b0e1724a810000000000".to_string(),
+            input_addrs: vec![public_key],
+            input_amounts: vec![100000],
+            proof_key: Some("02a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe".to_string()),
+        };
+
+        let withdrawal_sig = StateChainSig {
+            purpose: "WITHDRAW".to_string(),
+            data: "tb1q97t4qvs3qud547h90a6munx96w9qu7g6daqq3s".to_string(),
+            sig: "3045022100abe02f0d1918aca36b634eb1af8a4e0714f3f699fb425de65cc661e538da3f2002200a538a22df665a95adb739ff6bb592b152dba5613602c453c58adf70858f05f6".to_string(),
+        };
+
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_user_auth()
+           .returning(|_user_id| Ok(String::from("user_auth")));
+        db.expect_has_withdraw_sc_sig().returning(|_| Ok(()));
+        db.expect_get_statechain_id().returning(move |_| Ok(statechain_id.clone()));
+        db.expect_get_backup_transaction().returning(|_| Ok(serde_json::from_str::<Transaction>(
+                &WITHDRAW_TX_NOT_SIGNED.to_string(),
+            ).unwrap()));
+        db.expect_get_withdraw_sc_sig().returning(move |_| Ok(withdrawal_sig.clone()));
+        db.expect_update_withdraw_tx_sighash().returning(|_,_,_| Ok(()));
+
+        let sc_entity = test_sc_entity(db, None, None, None, None);
+
+        // test mismatch
+        match sc_entity.prepare_sign_tx(pst) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e
+                .to_string()
+                .contains("Incorrect withdraw address"), "{}", e.to_string()),
+        }
+
+        // test correct
+        assert!(sc_entity.prepare_sign_tx(pst2).is_ok());
+
     }
 }
