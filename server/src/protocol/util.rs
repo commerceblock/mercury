@@ -315,8 +315,6 @@ impl Utilities for SCE {
 
                         // verify that the withdrawal address matches statechain
                         let withdrawal_sig = self.database.get_withdraw_sc_sig(*user_id)?;
-                        println!("{:?}", tx.output[0].script_pubkey);
-                        println!("{:?}", bitcoin::Address::from_str(&withdrawal_sig.data)?.script_pubkey());
                         if tx.output[0].script_pubkey != bitcoin::Address::from_str(&withdrawal_sig.data)?.script_pubkey() {
                                     return Err(SEError::Generic(format!(
                                     "Incorrect withdraw address - must match statechain {}", withdrawal_sig.data
@@ -1994,10 +1992,21 @@ pub mod tests {
         let secret_key = SecretKey::new(&mut rand::thread_rng());
         let public_key = PublicKey::from_secret_key(&secp, &secret_key);
 
+        // incorrect withdrawal address
         let pst = PrepareSignTxMsg {   
             shared_key_ids: vec![user_id.clone()],
             protocol: Protocol::Withdraw,
             tx_hex: "02000000017c391771397f16dd1b8551a664cc96faef0dceda7ca5989caeefba0f92a0aafa0000000000ffffffff02ac840100000000001600148fc32525487d2cb7323c960bdfb0a5ee6a364738b80b0000000000001600141319a227287cfac4d8660830f4c9b0e1724a810000000000".to_string(),
+            input_addrs: vec![public_key],
+            input_amounts: vec![100000],
+            proof_key: Some("02a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe".to_string()),
+        };
+
+        // correct (matching statechain) withdrawal address
+        let pst2 = PrepareSignTxMsg {   
+            shared_key_ids: vec![user_id.clone()],
+            protocol: Protocol::Withdraw,
+            tx_hex: "02000000017c391771397f16dd1b8551a664cc96faef0dceda7ca5989caeefba0f92a0aafa0000000000ffffffff02ac840100000000001600142f97503211071b4afae57f75be4cc5d38a0e791ab80b0000000000001600141319a227287cfac4d8660830f4c9b0e1724a810000000000".to_string(),
             input_addrs: vec![public_key],
             input_amounts: vec![100000],
             proof_key: Some("02a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe".to_string()),
@@ -2019,15 +2028,20 @@ pub mod tests {
                 &WITHDRAW_TX_NOT_SIGNED.to_string(),
             ).unwrap()));
         db.expect_get_withdraw_sc_sig().returning(move |_| Ok(withdrawal_sig.clone()));
+        db.expect_update_withdraw_tx_sighash().returning(|_,_,_| Ok(()));
 
         let sc_entity = test_sc_entity(db, None, None, None, None);
 
+        // test mismatch
         match sc_entity.prepare_sign_tx(pst) {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e
                 .to_string()
                 .contains("Incorrect withdraw address"), "{}", e.to_string()),
-        }        
+        }
+
+        // test correct
+        assert!(sc_entity.prepare_sign_tx(pst2).is_ok());
 
     }
 }
