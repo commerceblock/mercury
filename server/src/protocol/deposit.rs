@@ -8,6 +8,7 @@ extern crate shared_lib;
 use crate::error::{SEError,DBErrorType};
 use crate::server::{StateChainEntity};
 use crate::protocol::util::RateLimiter;
+use crate::storage::db;
 use crate::storage::Storage;
 use crate::Database;
 use shared_lib::{state_chain::*, structs::*, util::FEE};
@@ -122,7 +123,7 @@ impl Deposit for SCE {
                 self.database.update_backup_tx(&statechain_id, tx_backup.clone())?;
             },
             Err(e) => match e {
-                SEError::DBError(DBErrorType::NoDataForID, _) => {
+                SEError::DBErrorWC(DBErrorType::NoDataForID, _, _) => {
                     // Create state chain DB object
                     statechain_id = Uuid::new_v4();
                     let state_chain = StateChain::new(proof_key.clone());
@@ -132,7 +133,7 @@ impl Deposit for SCE {
                     // Insert into BackupTx table
                     self.database
                         .create_backup_transaction(&statechain_id, &tx_backup)?;                    
-                    }
+                    },
 
                 _ => return Err(e),
 
@@ -281,9 +282,9 @@ pub mod tests {
         db.expect_get_shared_pubkey().returning(|_| Ok(Some("".to_string())));
         db.expect_set_shared_pubkey().returning(|_,_| Ok(()));
         db.expect_get_statechain_id().returning(move |_| {
-                Err(SEError::DBError(
+                Err(SEError::DBErrorWC(
                     DBErrorType::NoDataForID,
-                    user_id.clone().to_string()))
+                    user_id.clone().to_string(),db::Column::StateChainId))
             });
 
         let sc_entity = test_sc_entity(db, None, None, None, None);
