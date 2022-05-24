@@ -11,7 +11,7 @@ The user would then copy this invoice (by C&P or QR code) into a third party LN 
 
 ## Design
 
-To enable many ways to give permission to deposit coins, the deposit permission system will utilize a token system where tokens can be issued separately to the despoit process and then redeemed on deposit. This will enable fees to be paid via any mechanism and also managed separately and batched from within the wallet. 
+To enable many ways to give permission to deposit coins, the deposit permission system will utilize a token system where tokens can be issued separately to the deposit process and then redeemed on deposit. This will enable fees to be paid via any mechanism and also managed separately and batched from within the wallet. 
 
 ### Tokens
 
