@@ -44,6 +44,40 @@ pub trait SchemaExample{
 #[schemars(remote = "Uuid")]
 pub struct UuidDef(String);
 
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
+pub struct PodTokenID {
+    #[schemars(with = "UuidDef")]
+    pub id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+pub struct PODToken {
+    #[schemars(with = "UuidDef")]
+    pub token_id: Uuid,
+    pub lightning_invoice: String,
+    #[schemars(with = "AddressDef")]
+    pub btc_payment_address: Address,
+    pub value: u64
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PODStatus {
+    confirmed: bool,
+    spent: bool,
+}
+
+impl PartialEq<bool> for PODStatus {
+    fn eq(&self, other: &bool) -> bool {
+        (self.confirmed && !self.spent) == *other
+    }
+}
+
+impl PartialEq<Self> for PODStatus {
+    fn eq(&self, other: &Self) -> bool {
+        (self.confirmed == other.confirmed) && (self.spent == other.spent)
+    }
+}
+
 // structs for ids
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
 pub struct UserID {
