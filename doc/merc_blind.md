@@ -106,7 +106,7 @@ The party `P1` recieves `c3` and can decrypt it using their Pailier secret key `
 
 `P1` then verifies the full signature `(r,s)` against the agreed message `m` and shared public key `Q`, and if verified then releases it to `P2`. 
 
-## Blindiong considerations
+## Blinding considerations
 
 The aim of 'blinding' the mercury server is to make it so that the server does not and *cannot* know anything that would enable it to identify the coin that it is co-signing for. The prevents any censorship and maintainess of any lists in the server impossible. 
 
