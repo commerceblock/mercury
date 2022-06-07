@@ -60,7 +60,7 @@ The SE key share update then proceeds as follows:
 17. The SE sends Owner 2 `S2 = s2.G` who verifies that `o2.S2 = P`
 18. The SE then adds the public key `O2` to the leaf of the SMT at position TxID of `Tx0`. The root of the SMT is then attested to Bitcoin via the Mainstay protocol in slot `slot_id`.
 
-> The SE keeps a database of backup transactions for the users, and broadcast them at the appropriate time in case the users are off-line.
+> The SE keeps a database of backup transactions for the users, and broadcasts them at the appropriate time in case the users are off-line.
 
 ### Withdrawal
 
