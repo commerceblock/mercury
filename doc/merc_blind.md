@@ -100,7 +100,7 @@ Then `P2` computes `c1 = Enc_pk(k2^-1.H(m) mod q)` and `v = k2^-1.rx2 mod q` usi
 
 `P2` then performs a homomorphic scalar multiplication of `v` by `ck` to obtain `c2 = Enc_pk(k2^-1.rx2x1 mod q)`, and then Pailier homomorphic addition of `c1` and `c2` to obtian `c3 = Enc_pk(k2^-1.H(x) + k2^-1.rx2x1 mod q)`. This so-called 'almost signature' is then sent to `P1`. 
 
-The party `P1` recieves `c3` and can decrypt it using their Pailier secret key `sk` to give `t = Dec_sk(c3) = k2^-1.H(x) + k2^-1.rx2x1 mod q`. All that is now required is for `P1` to multiply this value by the inverse of their ephemeral key share `k1^-1` to complete the signature. 
+The party `P1` receives `c3` and can decrypt it using their Pailier secret key `sk` to give `t = Dec_sk(c3) = k2^-1.H(x) + k2^-1.rx2x1 mod q`. All that is now required is for `P1` to multiply this value by the inverse of their ephemeral key share `k1^-1` to complete the signature. 
 
 `s = k1^-1.k2^-1.H(x) + k1^-1.k2^-1.rx2x1 mod q = k^-1.H(x) + k^-1.rx mod q`
 
@@ -108,7 +108,7 @@ The party `P1` recieves `c3` and can decrypt it using their Pailier secret key `
 
 ## Blinding considerations
 
-The aim of 'blinding' the mercury server is to make it so that the server does not and *cannot* know anything that would enable it to identify the coin that it is co-signing for. The prevents any censorship and maintainess of any lists in the server impossible. 
+The aim of 'blinding' the mercury server is to make it so that the server does not and *cannot* know anything that would enable it to identify the coin that it is co-signing for. This prevents any censorship and maintenance of any lists in the server. 
 
 To achieve this the server cannot know or be able to derive in any way the following values: 
 
@@ -134,7 +134,7 @@ The design changes required are then as follows:
 
 The principle of a *fully* blind two-party ECDSA, is that one party (i.e. `P1`) has a share of the full private key, as above, and can cooperate with `P2` to generate a signature for the shared public key `P`, however this is done without `P1` learning any information about the message being signed (`m`) OR any information about the final valid signature `(r,s)` itself (since in Bitcoin, even if `P1` has no information on the message, they can search the public blockchain and find it if they know the final signature). 
 
-Blinding the server from the value of `O1` can be done in the distrubuted keygen by just not sending it to the server for verification - this is superfluous in the mercury trust setup in any case - the wallet performs all verification. 
+Blinding the server from the value of `O1` can be done in the distributed keygen by just not sending it to the server for verification - this is superfluous in the mercury trust setup in any case - the wallet performs all verification. 
 
 Blinding the message `m` from `P1` in the above protocol is trivial: `H(m)` is added to the encrypted signature by `P2`, and `P1` verifies the final signature against `m` after completing it. If `P1` agrees to not know or care about the message `m`, then they simply send the final signature directly to `P2` to verify, without checking it themselves (because they can't as they don't know `m`). 
 
@@ -149,7 +149,7 @@ With these modifications, the signing protocol for a fully blinded `P1` then pro
 3. `P2` then determines `r` (the x component of `R` mod q). 
 4. `P2` generate a random blinding key `b <- Zq`
 5. `P2` chooses `m` and computes `c1 = Enc_pk(k2^-1.H(m) mod q)` and `v = k2^-1.rx2 mod q` using the Paillier public key `pk` from `P1`. 
-6. `P2` then performs a homomorphic scalar multiplication of `v` by `ck` to obtain `c2 = Enc_pk(k2^-1.rx2x1 mod q)`, and then Pailier homomorphic addition of `c1` and `c2` to obtian `c3 = Enc_pk(k2^-1.H(x) + k2^-1.rx2x1 mod q)`.  
+6. `P2` then performs a homomorphic scalar multiplication of `v` by `ck` to obtain `c2 = Enc_pk(k2^-1.rx2x1 mod q)`, and then Pailier homomorphic addition of `c1` and `c2` to obtaidistrubuten `c3 = Enc_pk(k2^-1.H(x) + k2^-1.rx2x1 mod q)`.  
 7. `P2` then performs a homomorphic scalar multiplication of `c3` by `b` to obtain `c4 = Enc_pk(k2^-1.H(x).b + k2^-1.rx2x1.b mod q)` and sends to `P1`. 
 8. `P1` decrypts `c4` using their Pailier secret key `sk` to give `t = Dec_sk(c4) = k2^-1.H(x).b + k2^-1.rx2x1.b mod q`. 
 9. `P1` multiplies `t` by the inverse of their ephemeral key share `k1^-1` to compute the blinded `s` value: `s_b = k^-1.H(x).b + k^-1.rx.b mod q` and sends to `P2`. 
