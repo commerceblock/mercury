@@ -2,7 +2,7 @@
 
 ## Current protocol
 
-The following describes the process for deposit, transfer and withdrawal in the current mercury implimentation. 
+The following describes the process for deposit, transfer and withdrawal in the current mercury implementation. 
 
 Mercury employs the 2-of-2 MPC ECDSA protocol of Lindell has two parties (with private keys `a` and `b`) where the shared public key is `P = ab.G` and both parties cooperate to create a signature for `P` without revealing either `a` or `b`.
 
