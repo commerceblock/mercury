@@ -22,7 +22,7 @@ An owner wants to deposit an amount of BTC into the platform. The following step
 7. Owner 1 then pays a specified value of bitcoin to an address derived from the shared public key (`P`) generating the statecoin UTXO (`Tx0`). 
 8. Owner 1 then creates a *backup transaction* (`Tx1`) that pays the `P` output of `Tx0` to an address derived from `O1`, and sets the `nLocktime` to the initial future block height `h0` (where `h0 = cheight + hinit`, `cheight` is the current Bitcoin block height and `hinit` is the specified initial locktime).
 9. SE receives `Tx1` and `C1` from Owner 1 and verifies the `nLocktime` field. Owner 1 and the SE then sign `Tx1` with shared key (`P`) via 2P ECDSA (see below), which Owner 1 then saves.
-11. The SE then adds the public key `C1` to leaf of the sparse merkle tree (SMT) at position TxID of `Tx0`. The root of the SMT is then attested to Bitcoin via the Mainstay protocol in slot `slot_id`. 
+11. The SE then adds the public key `C1` to the leaf of the sparse merkle tree (SMT) at position TxID of `Tx0`. The root of the SMT is then attested to Bitcoin via the Mainstay protocol in slot `slot_id`. 
 
 ### Transfer
 
@@ -55,7 +55,7 @@ The SE key share update then proceeds as follows:
 15. The SE then multiplies this product by `x1_inv*s1` (where `x1_inv` the modular inverse of `x1`) to compute `s2 = o1*o2_inv*s1`.
 16. The SE then verifies that `s2.O2 = P` and deletes the key share `s1`. 
 
-> `s2` and `o2` are now key the private key shares of `P = s2*o2.G` which remains unchanged (i.e. `s2*o2 = s1*o1`), without anyone having learnt the full private key. Provided the SE deletes `s1`, then there is no way anyone but the current owner (with `o2`) can spend the output.
+> `s2` and `o2` are now the private key shares of `P = s2*o2.G` which remains unchanged (i.e. `s2*o2 = s1*o1`), without anyone having learnt the full private key. Provided the SE deletes `s1`, then there is no way anyone but the current owner (with `o2`) can spend the output.
 
 17. The SE sends Owner 2 `S2 = s2.G` who verifies that `o2.S2 = P`
 18. The SE then adds the public key `O2` to the leaf of the SMT at position TxID of `Tx0`. The root of the SMT is then attested to Bitcoin via the Mainstay protocol in slot `slot_id`.
