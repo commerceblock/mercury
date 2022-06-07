@@ -108,7 +108,7 @@ The party `P1` recieves `c3` and can decrypt it using their Pailier secret key `
 
 ## Blindiong considerations
 
-The aim of 'blinding' the mercury server is to make it so that the server does not and *cannot* know anything that would enable it to identify the coin that it is co-signing for. The prevents any censorship and makes any regulation (i.e. blacklisting) of the server impossible. 
+The aim of 'blinding' the mercury server is to make it so that the server does not and *cannot* know anything that would enable it to identify the coin that it is co-signing for. The prevents any censorship and maintainess of any lists in the server impossible. 
 
 To achieve this the server cannot know or be able to derive in any way the following values: 
 
