@@ -17,12 +17,12 @@ An owner wants to deposit an amount of BTC into the platform. The following step
 3. The SE then generates a private key: `s1` (the SE private key share), calculates the corresponding public key and sends it to Owner 1: `S1 = s1.G`
 4. Both SE and Owner 1 then multiply the public keys they receive by their own private key shares to obtain the same shared public key `P` (which corresponds to a shared private key of `p = o1*s1`): `P = o1.(s1.G) = s1.(o1.G)`
 
-> The above key sharing scheme is the same as that used in the 2P ECDSA protocols. The key generation routines of these existing 2P ECDSA implementations can be used in place of the above steps (which include additional verification and proof steps).
+> The above key sharing scheme is the same as that used in the 2P ECDSA protocol. The key generation routines of these existing 2P ECDSA implementations can be used in place of the above steps (which include additional verification and proof steps).
 
 7. Owner 1 then pays a specified value of bitcoin to an address derived from the shared public key (`P`) generating the statecoin UTXO (`Tx0`). 
 8. Owner 1 then creates a *backup transaction* (`Tx1`) that pays the `P` output of `Tx0` to an address derived from `O1`, and sets the `nLocktime` to the initial future block height `h0` (where `h0 = cheight + hinit`, `cheight` is the current Bitcoin block height and `hinit` is the specified initial locktime).
-9. SE receives `Tx1` and `C1` from Owner 1 and verifies the `nLocktime` field. Owner 1 and the SE then sign `Tx1` with shared key (`P`) via 2P ECDSA (see below), which Owner 1 then saves.
-11. The SE then adds the public key `C1` to the leaf of the sparse merkle tree (SMT) at position TxID of `Tx0`. The root of the SMT is then attested to Bitcoin via the Mainstay protocol in slot `slot_id`. 
+9. SE receives `Tx1` and `O1` from Owner 1 and verifies the `nLocktime` field. Owner 1 and the SE then sign `Tx1` with shared key (`P`) via 2P ECDSA (see below), which Owner 1 then saves.
+11. The SE then adds the public key `O1` to the leaf of the sparse merkle tree (SMT) at position TxID of `Tx0`. The root of the SMT is then attested to Bitcoin via the Mainstay protocol in slot `slot_id`. 
 
 ### Transfer
 
@@ -32,7 +32,7 @@ Owner 1 wishes to transfer the value of the deposit `A` to a new owner (Owner 2)
 2. `O2` then represents the Owner 2 encoded 'address' and is communicated to Owner 1 (directly or via a swap conductor) in order for them to 'send' the ownership.
 3. Owner 1 then requests that the SE facilitate a transfer to Owner 2 (and that the new owner can be authenticated with `O2`).
 4. SE generates a random key `x1` and encrypts it with the Owner 1 statechain public key: `Enc(x1,O1)`
-5. `Enc(x1,C1)` is sent to Owner 1 who decrypts it with `o1` to learn `x1`: `Dec(x1,c1)`
+5. `Enc(x1,O1)` is sent to Owner 1 who decrypts it with `o1` to learn `x1`: `Dec(x1,c1)`
 6. Owner 1 then computes `o1*x1` and encrypts it with the Owner 2 statechain public key (from the address): `Enc(o1*x1,O2)`
 7. Owner 1 creates a new *backup transaction* (`Tx2`) that pays the `P` output of `Tx0` to `O2`, and sets the `nLocktime` to the relative locktime `h0 - (n-1)*c` where `c` is the confirmation interval and `n` is the owner number (i.e. 2).
 8. The SE receives `Tx2` and verifies the `nLocktime` field corresponds to `h0 - (n-1)*c`. Owner 1 and the SE then sign `Tx2` with shared key (`P`) via 2P ECDSA, which Owner 1 then saves. 
@@ -43,22 +43,21 @@ Owner 1 wishes to transfer the value of the deposit `A` to a new owner (Owner 2)
 10. Owner 1 then sends Owner 2 a message containing the objects:
 	a. `Tx2`
 	b. `SCTx1`
-	c. `Enc(o1*x1,C2)`
+	c. `Enc(o1*x1,O2)`
 
 > At this point the Owner 1 has sent all the information required to complete the transfer to Owner 2 and is no longer involved in the protocol. Owner 2 verifies the correctness and validity of the four objects, and the payment is complete. Owner 1 can then complete the key update with the SE.
 
 The SE key share update then proceeds as follows:
 
-12. Owner 2 decrypts object d: `Dec(o1*x1,c2)` and then computes `o1*x1*o2_inv` where `o2_inv` is the modular inverse of the private key `o2`.
-13. Owner 2 then encrypts `Enc(o1*x1*o2_inv,SE)`, signs it with `C2` and sends it to the SE along with `SCTx1` and `O2`.
-14. The SE authenticates and decrypts this to learn `o1*x1*o2_inv`: `Dec(o1*x1*o2_inv,se)`
-15. The SE then multiplies this product by `x1_inv*s1` (where `x1_inv` the modular inverse of `x1`) to compute `s2 = o1*o2_inv*s1`.
-16. The SE then verifies that `s2.O2 = P` and deletes the key share `s1`. 
+12. Owner 2 decrypts object d: `Dec(o1*x1,o2)` and then computes `o1*x1*o2_inv` where `o2_inv` is the modular inverse of the private key `o2`.
+13. Owner 2 then sends `o1*x1*o2_inv` to the SE along with `SCTx1` and `O2`.
+14. The SE then multiplies `o1*x1*o2_inv` product by `x1_inv*s1` (where `x1_inv` the modular inverse of `x1`) to compute `s2 = o1*o2_inv*s1`.
+15. The SE then verifies that `s2.O2 = P` and deletes the key share `s1`. 
 
 > `s2` and `o2` are now the private key shares of `P = s2*o2.G` which remains unchanged (i.e. `s2*o2 = s1*o1`), without anyone having learnt the full private key. Provided the SE deletes `s1`, then there is no way anyone but the current owner (with `o2`) can spend the output.
 
-17. The SE sends Owner 2 `S2 = s2.G` who verifies that `o2.S2 = P`
-18. The SE then adds the public key `O2` to the leaf of the SMT at position TxID of `Tx0`. The root of the SMT is then attested to Bitcoin via the Mainstay protocol in slot `slot_id`.
+16. The SE sends Owner 2 `S2 = s2.G` who verifies that `o2.S2 = P`
+17. The SE then adds the public key `O2` to the leaf of the SMT at position TxID of `Tx0`. The root of the SMT is then attested to Bitcoin via the Mainstay protocol in slot `slot_id`.
 
 > The SE keeps a database of backup transactions for the users, and broadcasts them at the appropriate time in case the users are off-line.
 
@@ -70,7 +69,7 @@ This would proceed as follows:
 
 1. The current owner (e.g. Owner 2) creates a transaction `TxW` that spends `Tx0` to an address `W`.
 2. The owner then requests that the SE cooperate to sign this transaction using the shared public key `P`.
-3. The owner signs the current state concatenated with the string `WITHDRAWAL` with their key `O2` and sends it to the SE.
+3. The owner signs the current state concatenated with the string `WITHDRAWAL` and `W` with their key `O2` and sends it to the SE.
 4. SE and the owner sign `TxW`. The SE must confirm that `TxW` pays to `W` (otherwise this will create a fraud proof).
 3. The fully signed `TxW` is then broadcast and confirmed.
 4. The SE commits the close string to the leaf of the SMT at position TxID of `Tx0`, to verifiably close the UTXO chain of ownership.
@@ -89,7 +88,7 @@ Two mutually distrusting parties can share the key pair `x` and `Q` in a way tha
 
 To remain secure under a malicious adversary assumption, each party must provide the other with a proof of knowledge of the discrete log of the point generated (using a Schnorr proof). 
 
-In the protocol of Lindell [1], `P1` then generates a Pailier key pair `(pk,sk)` and then computes `ck = Enc_pk(x1)` which is the Pailier encryption of the `P1` private key share. In addition to this, `P1` also sends a zero-knowledge proof to `P2` that a value encrypted in
+In the protocol of Lindell `P1` then generates a Pailier key pair `(pk,sk)` and then computes `ck = Enc_pk(x1)` which is the Pailier encryption of the `P1` private key share. In addition to this, `P1` also sends a zero-knowledge proof to `P2` that a value encrypted in
 a given Paillier ciphertext is the discrete log of a given elliptic curve point. 
 
 ### Distributed two-party signing
@@ -125,8 +124,8 @@ This means that the server cannot:
 These requirements lead to two fundamental changes to the mercury protocol:
 
 1. The 2P-ECDSA keygen and signing must be blinded to the shared pubkey and signatures (for `P1`). 
-2. All verification of backup transaction locktime decrementing sequence must be performed client side (i.e. by the receiving wallet). This neccessitates that the full statechain and sequence of backup transactions is sent from sender to receiver and verified for each transfer. (this can be done via the server with the data encrypted with the receiver public key). 
-3. The server is no longer able to perform a proof-of-publication of the globally unique coin ownership (via the SMT of coin IDs). 
+2. All verification of backup transaction locktime decrementing sequence must be performed client side (i.e. by the receiving wallet). This requires that the full statechain and sequence of backup transactions is sent from sender to receiver and verified for each transfer. (this can be done via the server with the data encrypted with the receiver public key). 
+3. The server is no longer able to perform an explicit proof-of-publication of the globally unique coin ownership (via the SMT of coin TxIDs), as it cannot know these. It can however perform a proof-of-publication of its public key shares for each coin it is co-signing (i.e. `SX`, where `X = 1,2,3 ...`). These key shares can be used by the current owner to calulate the full shared public key and verify that their ownership is unique. 
 
 The design changes required are then as follows:
 
@@ -164,6 +163,12 @@ The two-party ECDSA in it's fully blinded form breaks several security assumptio
 
 The central rule of locktime based statechains is that the server ensures that the current owner has the closest locktime backup transaction, and that no other transactions have been co-signed outside of the strictly decrementing sequence. Therefore the server would have to verify the tx details of locktime of everything it co-signed. 
 
-In the blinded protocol, the server cannot verify what it signs, but can only HOW MANY unique signatures it has generated for a specific shared key, and it will return this number when queried by a wallet. The wallet will then have to check that every single previous backup transaction signed has been correctly decremented, AND that the total number of value backup transactions it has verified matches the number of signatures the server has co-generated. This will then enable a receiving wallet to verify that no other valid transactions spending the statecoin output exist (given it trusts the server to return the correct number of signatures). 
+In the blinded protocol, the server cannot verify what it signs, but can only state HOW MANY unique signatures it has generated for a specific shared key, and it will return this number when queried by a wallet. The wallet will then have to check that every single previous backup transaction signed has been correctly decremented, AND that the total number of value backup transactions it has verified matches the number of signatures the server has co-generated. This will then enable a receiving wallet to verify that no other valid transactions spending the statecoin output exist (given it trusts the server to return the correct number of signatures). 
 
 When it comes to withdrawal, the server can no longer verify that any fee has been added to the withdrawal transaction, and the wallet can just create any transaction it wants to end the chain. In this case, any fee collected by the SE must be done separately to the statecoin transactions (and can be required on deposit, before the keygen process is enabled). 
+
+### Keyshare publication
+
+The server no longer has the TxIDs of individual statecoins along with the user proof keys that it can compile into a sparse Merkle tree for publication. Instead, it takes each of the current public key shares for each coin (`S1` etc.) and generates a SMT with each as a leaf key. This is then updated with each new coin or coin ownership change. 
+
+To verify the uniqueness of the ownership of the shared public key, the current owner then derives the full shared public key from this commitment and their or key share (`P = o1.(s1.G)`) and verifies it against the coin. 
