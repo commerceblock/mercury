@@ -19,7 +19,8 @@ cfg_if! {
 pub fn watch_node(rpc_path: String) -> Result<()> {
 
     let config_rs = Config::load().unwrap();
-
+    println!("Watching node ...");
+    println!("{}",rpc_path);
     cfg_if! {
         if #[cfg(any(test,feature="mockdb"))]{
             use crate::MockDatabase;
@@ -39,7 +40,7 @@ pub fn watch_node(rpc_path: String) -> Result<()> {
     if rpc_path_parts.len() != 2 {
         panic!("Invalid bitcoind RPC path")
     };
-
+    println!("{:?}", rpc_path_parts);
     let rpc_cred: Vec<&str> = rpc_path_parts[0].split(':').collect();
     if rpc_cred.len() != 2 {
         panic!("Invalid bitcoind RPC credentials")
@@ -56,16 +57,18 @@ pub fn watch_node(rpc_path: String) -> Result<()> {
                                          rpc_cred[1].to_string())).unwrap();
         }
     }
+    println!("RPC IS {:?}", rpc);
 
     // main watch loop
     loop {
         // get current block height
         let bestblockcount = rpc.get_block_count();
+        println!("Best Block Count: {:?}", bestblockcount);
         let blocks = bestblockcount.unwrap() as i64;
 
         debug!("WATCH: Bitcoin block height {}", blocks);
 
-        //get all backup transactions with loctimes less than or equal to the current block height
+        //get all backup transactions with locktimes less than or equal to the current block height
         let txs = tx_db.get_current_backup_txs(blocks).unwrap();
 
         debug!("WATCH: Stored backup txs now valid {}", txs.len().to_string() );

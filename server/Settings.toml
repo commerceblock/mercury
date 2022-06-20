@@ -1,5 +1,5 @@
-electrum_server = "127.0.0.1:60401"
-network = "testnet"
+electrum_server = "sandbox:sandbox@localhost:8333"
+network = "regtest"
 required_confirmation = 0
 testing_mode = true
 lockheight_init = 1000
@@ -20,7 +20,7 @@ mainstay_config = ""
 
 #Watch config
 watch_only = false
-bitcoind = ""
+bitcoind = "sandbox:sandbox@http://localhost:18333"
 
 #Rate limiter for certain API calls
 rate_limit = 9999999999999

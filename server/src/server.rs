@@ -11,7 +11,7 @@ use log4rs::config::{Appender, Config as LogConfig, Root as LogRoot};
 use log4rs::encode::pattern::PatternEncoder;
 
 use std::thread;
-use crate::watch::watch_node;
+use crate::watch_btc::watch_node;
 
 use mockall::*;
 use monotree::database::Database as MonotreeDatabase;
@@ -221,6 +221,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             ecdsa::sign_first,
             ecdsa::sign_second,
             deposit::deposit_init,
+            deposit::deposit_ln_token,
             deposit::deposit_confirm,
             transfer::transfer_sender,
             transfer::transfer_receiver,
@@ -260,6 +261,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             ecdsa::sign_first,
             ecdsa::sign_second,
             deposit::deposit_init,
+            deposit::deposit_ln_token,
             deposit::deposit_confirm,
             transfer::transfer_sender,
             transfer::transfer_receiver,
@@ -331,6 +333,7 @@ pub fn get_server<
     prometheus.registry().register(Box::new(REG_SWAP_UTXOS.clone())).unwrap();
 
     let rocket_config = get_rocket_config(&sc_entity.config);
+    println!("Loading server config");
     let bitcoind = sc_entity.config.bitcoind.clone();
 
     if sc_entity.config.watch_only {
@@ -350,7 +353,7 @@ pub fn get_server<
         if sc_entity.config.bitcoind.is_empty() == false {
             thread::spawn(|| watch_node(bitcoind));
         }
-        
+        println!("This continues to run");
         let rock = rocket::custom(rocket_config)
             .register(catchers![internal_error, not_found, bad_request])
             .attach(prometheus.clone())
@@ -435,6 +438,7 @@ mock! {
     StateChainEntity{}
     trait Deposit {
         fn deposit_init(&self, deposit_msg1: DepositMsg1) -> deposit::Result<UserID>;
+        fn deposit_ln_token(&self) -> deposit::Result<String>;
         fn deposit_confirm(
             &self,
             deposit_msg2: DepositMsg2,

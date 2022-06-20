@@ -41,6 +41,10 @@ pub trait Deposit {
     ///     - Generate and return shared wallet ID
     ///     - Can do auth or other DoS mitigation here
     fn deposit_init(&self, deposit_msg1: DepositMsg1) -> Result<UserID>;
+    
+    /// API: Initiliase deposit protocol deposit_ln_token:
+
+    fn deposit_ln_token(&self) -> Result<String>;
 
     /// API: Complete deposit protocol:
     ///     - Wait for confirmation of funding tx in blockchain
@@ -88,6 +92,11 @@ impl Deposit for SCE {
         );
 
         Ok(UserID {id: user_id, challenge: Some(challenge)})
+    }
+
+    fn deposit_ln_token(&self) -> Result<String>{
+        
+        Ok("Successful Call".to_string())
     }
 
     fn deposit_confirm(&self, deposit_msg2: DepositMsg2) -> Result<StatechainID> {
@@ -171,6 +180,16 @@ impl Deposit for SCE {
 pub fn deposit_init(sc_entity: State<SCE>, deposit_msg1: Json<DepositMsg1>) -> Result<Json<UserID>> {
     sc_entity.check_rate_slow("deposit_init")?;
     match sc_entity.deposit_init(deposit_msg1.into_inner()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Initiate a statechain deposit and generate a shared key ID
+#[get("/deposit/ln-token")]
+pub fn deposit_ln_token(sc_entity: State<SCE>) -> Result<Json<String>> {
+    match sc_entity.deposit_ln_token() {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
