@@ -50,20 +50,37 @@ pub struct PodTokenID {
     pub id: Uuid,
 }
 
+
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
-pub struct PODToken {
-    #[schemars(with = "UuidDef")]
-    pub token_id: Uuid,
-    pub lightning_invoice: String,
+pub struct Invoice{
+    pub payment_hash: String,
+    pub expires_at: u64,
+    pub bolt11: String
+}
+
+impl From<clightningrpc::responses::Invoice> for Invoice {
+    fn from(item: clightningrpc::responses::Invoice) -> Self {
+        Self {
+            payment_hash: item.payment_hash,
+            expires_at: item.expires_at,
+            bolt11: item.bolt11
+        }
+    }
+}
+
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+pub struct PODInfo {
+    pub lightning_invoice: Invoice,
     #[schemars(with = "AddressDef")]
     pub btc_payment_address: Address,
     pub value: u64
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct PODStatus {
-    confirmed: bool,
-    spent: bool,
+    pub confirmed: bool,
+    pub spent: bool,
 }
 
 impl PartialEq<bool> for PODStatus {
@@ -1076,6 +1093,12 @@ impl SelfEncryptable for &mut TransferMsg4 {
     ) -> crate::ecies::Result<()> {
         (**self).encrypt_with_pubkey(pubkey)
     }
+}
+
+pub enum LightningInvoiceStatus {
+    Waiting,
+    Expired,
+    Paid
 }
 
 #[cfg(test)]

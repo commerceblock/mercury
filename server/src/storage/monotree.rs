@@ -6,9 +6,10 @@ use crate::PGDatabase;
 use monotree::database::{Database as MonotreeDatabase, MemCache, MemoryDB};
 use monotree::Errors;
 use std::collections::HashMap;
-use shared_lib::structs::{CoinValueInfo,TransferFinalizeData};
+use shared_lib::structs::{CoinValueInfo,TransferFinalizeData, PODInfo, PODStatus};
 use crate::server::UserIDs;
 use std::sync::{Arc, Mutex};
+use bitcoin::Address;
 
 pub type Result<T> = std::result::Result<T, Errors>;
 
@@ -773,4 +774,12 @@ impl Database for MemoryDB {
     fn get_sighash(&self, _user_id: uuid::Uuid) -> crate::Result<bitcoin::hashes::sha256d::Hash> {
         unimplemented!()
     }
+    fn set_pay_on_demand_info(&self, _token_id: &uuid::Uuid, _pod_info: &PODInfo) -> crate::Result<()> { unimplemented!() }
+    fn get_pay_on_demand_info(&self, _token_id: &uuid::Uuid) -> crate::Result<PODInfo> { unimplemented!() }
+    fn get_pay_on_demand_status(&self, _token_id: &uuid::Uuid) -> crate::Result<PODStatus> { unimplemented!() }
+    fn set_pay_on_demand_status(&self, _token_id: &uuid::Uuid, _pod_status: &PODStatus) -> crate::Result<()> { unimplemented!() }
+    fn get_pay_on_demand_confirmed(&self, _token_id: &uuid::Uuid) -> crate::Result<bool> { unimplemented!() }
+    fn set_pay_on_demand_confirmed(&self, _token_id: &uuid::Uuid, _confirmed: &bool) -> crate::Result<()> { unimplemented!() }
+    fn get_pay_on_demand_spent(&self, _token_id: &uuid::Uuid) -> crate::Result<bool> { unimplemented!() }
+    fn set_pay_on_demand_spent(&self, _token_id: &uuid::Uuid, _spent: &bool) -> crate::Result<()> { unimplemented!() }
 }

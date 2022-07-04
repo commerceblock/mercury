@@ -3,7 +3,7 @@ use super::protocol::*;
 use crate::config::{Config, Mode};
 use crate::structs::{StateChainOwner, WithdrawConfirmData};
 use crate::Database;
-use shared_lib::{mainstay, state_chain::StateChainSig, swap_data::*};
+use shared_lib::{mainstay, state_chain::StateChainSig, swap_data::*, structs::LightningInvoiceStatus};
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
@@ -35,6 +35,9 @@ use url::Url;
 use std::collections::HashSet;
 use std::default::Default;
 use governor::{Quota, clock::DefaultClock, state::keyed::DashMapStateStore};
+use crate::rpc::bitcoin_client_factory::{BitcoinClient, BitcoinClientFactory};
+use crate::rpc::lightning_client_factory::{LightningClient, LightningClientFactory};
+use threadpool::ThreadPool;
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -99,10 +102,12 @@ impl Lockbox {
 
 pub struct StateChainEntity<
     T: Database + Send + Sync + 'static,
-    D: MonotreeDatabase + Send + Sync + 'static,
+    D: MonotreeDatabase + Send + Sync + 'static
 > {
     pub config: Config,
     pub database: T,
+    pub lightning_waitinvoice_threadpool: Arc<Mutex<ThreadPool>>,
+    pub lightning_invoice_statuses: Arc<Mutex<HashMap<Uuid, LightningInvoiceStatus>>>,
     pub coin_value_info: Arc<Mutex<CoinValueInfo>>,
     pub user_ids: Arc<Mutex<UserIDs>>,
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
@@ -161,6 +166,8 @@ impl<
         let sce = Self {
             config: config_rs,
             database: db,
+            lightning_waitinvoice_threadpool: Arc::new(Mutex::new(ThreadPool::new(1000))),
+            lightning_invoice_statuses: Arc::new(Mutex::new(Default::default())),
             coin_value_info: Arc::new(Mutex::new(Default::default())),
             user_ids: Arc::new(Mutex::new(Default::default())),
             smt: Arc::new(Mutex::new(smt)),
@@ -173,7 +180,17 @@ impl<
 
         Ok(sce)
     }
+ 
+    pub fn bitcoin_client(&self) -> Result<BitcoinClient> {
+        Ok(BitcoinClientFactory::create(&self.config.bitcoind)?)
+    }
+
+    pub fn lightning_client(&self) -> Result<LightningClient> {
+        Ok(LightningClientFactory::create(&self.config.lightningd)?)
+    }
 }
+
+
 
 #[catch(500)]
 fn internal_error() -> &'static str {

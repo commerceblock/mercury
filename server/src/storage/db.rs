@@ -3,7 +3,7 @@
 //! Postgres DB access and update tools.
 
 use super::super::Result;
-use bitcoin::Transaction;
+use bitcoin::{Transaction, Address};
 pub type Hash = bitcoin::hashes::sha256d::Hash;
 
 use crate::server::{get_postgres_url, UserIDs};
@@ -26,7 +26,8 @@ use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
 use shared_lib::mainstay::CommitmentInfo;
 use shared_lib::state_chain::*;
-use shared_lib::structs::{TransferMsg3,CoinValueInfo,TransferFinalizeData};
+use shared_lib::structs::{TransferMsg3,CoinValueInfo,TransferFinalizeData,
+    PODInfo, PODStatus};
 use shared_lib::Root;
 use shared_lib::util::transaction_deserialise;
 use rocket_okapi::JsonSchema;
@@ -53,6 +54,7 @@ pub struct HDPos {
 pub enum Schema {
     StateChainEntity,
     Watcher,
+    PayOnDemand
 }
 impl Schema {
     pub fn to_string(&self) -> String {
@@ -70,11 +72,17 @@ pub enum Table {
     Root,
     BackupTxs,
     Smt,
-    Lockbox
+    Lockbox,
+    PayOnDemand
 }
 impl Table {
     pub fn to_string(&self) -> String {
         match self {
+            Table::PayOnDemand => format!(
+                "{:?}.{:?}",
+                Schema::PayOnDemand.to_string().to_lowercase(),
+                self
+            ),
             Table::BackupTxs => format!(
                 "{:?}.{:?}",
                 Schema::Watcher.to_string().to_lowercase(),
@@ -89,7 +97,7 @@ impl Table {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone, Copy, PartialEq)]
 pub enum Column {
     Data,
     Complete,
@@ -160,6 +168,12 @@ pub enum Column {
     Key,
     // Value
     Lockbox,
+
+    // PayOnDemand
+    // Id
+    LightningInvoice,
+    BtcPaymentAddress,
+    Spent
 }
 
 
@@ -238,6 +252,14 @@ impl PGDatabase {
             ),
             &[],
         )?;
+        let _ = self.database_w()?.execute(
+            &format!(
+                "
+            CREATE SCHEMA IF NOT EXISTS payondemand;
+            "
+            ),
+            &[],
+        )?;
 
         // Create tables if they do not already exist
         self.database_w()?.execute(
@@ -277,7 +299,22 @@ impl PGDatabase {
             &[],
         )?;
 
-
+        self.database_w()?.execute(
+            &format!(
+                "
+            CREATE TABLE IF NOT EXISTS {} (
+                id uuid NOT NULL,
+                lightninginvoice varchar,
+                btcpaymentaddress varchar,
+                value int8,
+                confirmed bool NOT NULL DEFAULT false,              
+                spent bool NOT NULL DEFAULT false,
+                PRIMARY KEY (id)
+            );",
+                Table::PayOnDemand.to_string(),
+            ),
+            &[],
+        )?;
 
 
         self.database_w()?.execute(
@@ -429,6 +466,15 @@ impl PGDatabase {
             ),
             &[],
         )?;
+           
+        let _ = self.database_w()?.execute(
+            &format!(
+                "
+            DROP SCHEMA payondemand CASCADE;",
+            ),
+            &[],
+        )?;
+
 
         Ok(())
     }
@@ -438,7 +484,7 @@ impl PGDatabase {
         self.database_w()?.execute(
             &format!(
                 "
-            TRUNCATE {},{},{},{},{},{},{},{},{} RESTART IDENTITY;",
+            TRUNCATE {},{},{},{},{},{},{},{},{},{} RESTART IDENTITY;",
                 Table::UserSession.to_string(),
                 Table::Ecdsa.to_string(),
                 Table::StateChain.to_string(),
@@ -448,6 +494,7 @@ impl PGDatabase {
                 Table::BackupTxs.to_string(),
                 Table::Smt.to_string(),
                 Table::Lockbox.to_string(),
+                Table::PayOnDemand.to_string(),
             ),
             &[],
         )?;
@@ -1883,5 +1930,119 @@ impl Database for PGDatabase {
             vec![Column::TxWithdraw],
             vec![&Self::ser(tx)?],
         )
+    }
+
+    fn set_pay_on_demand_info(&self, token_id: &Uuid, token: &PODInfo) -> Result<()> {
+        self.update(
+            token_id,
+            Table::PayOnDemand,
+            vec![Column::LightningInvoice, Column::BtcPaymentAddress, Column::Value],
+            vec![&Self::ser(&token.lightning_invoice)?, &Self::ser(&token.btc_payment_address)?, &(token.value as i64)],
+        )
+    }
+
+    fn get_pay_on_demand_info(&self, token_id: &Uuid) -> Result<PODInfo> {
+         let (lightning_invoice, btc_payment_address, value) =
+            self.get_3::<String, String, i64>(
+                token_id.to_owned(),
+                Table::PayOnDemand,
+                vec![
+                    Column::LightningInvoice,
+                    Column::BtcPaymentAddress,
+                    Column::Value,
+                ],
+            )?;
+        
+            Ok(PODInfo{
+                        lightning_invoice: Self::deser(lightning_invoice)?,
+                        btc_payment_address: Self::deser(btc_payment_address)?,
+                        value: value as u64})
+    }
+
+    fn get_pay_on_demand_status(&self, token_id: &Uuid) -> Result<PODStatus> {
+        let (confirmed, spent) =
+            self.get_2::<bool, bool>(
+                token_id.to_owned(),
+                Table::PayOnDemand,
+                vec![
+                    Column::Confirmed,
+                    Column::Spent
+                ],
+            )?;
+        Ok(PODStatus{confirmed, spent})
+    }
+
+    fn set_pay_on_demand_status(&self, token_id: &Uuid, pod_status: &PODStatus) -> Result<()> {
+        self.update(
+            &token_id,
+            Table::PayOnDemand,
+            vec![Column::Confirmed, Column::Spent],
+            vec![&pod_status.confirmed, &pod_status.spent],
+        )
+    }
+
+    fn get_pay_on_demand_confirmed(&self, token_id: &Uuid) -> Result<bool> {
+            self.get_1::<bool>(
+                token_id.to_owned(),
+                Table::PayOnDemand,
+                vec![Column::Confirmed],
+            )
+    }
+
+    fn set_pay_on_demand_confirmed(&self, token_id: &Uuid, confirmed: &bool) -> Result<()> {
+        self.update(
+            &token_id,
+            Table::PayOnDemand,
+            vec![Column::Confirmed],
+            vec![confirmed],
+        )
+    }
+
+    fn get_pay_on_demand_spent(&self, token_id: &Uuid) -> Result<bool> {
+          self.get_1::<bool>(
+                token_id.to_owned(),
+                Table::PayOnDemand,
+                vec![Column::Spent],
+            )
+    }
+
+    fn set_pay_on_demand_spent(&self, token_id: &Uuid, spent: &bool) -> Result<()> {
+        self.update(
+            &token_id,
+            Table::PayOnDemand,
+            vec![Column::Spent],
+            vec![spent],
+        )
+    }
+
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use std::str::FromStr;
+    static BTC_ADDRESS: &str = "tb1q7gjz7dnzpz06svq7v3z2wpt33erx086x66jgtn";
+
+    #[test]
+    fn test_table_string() {
+        assert_eq!(Table::UserSession.to_string(), "\"statechainentity\".UserSession");
+        assert_eq!(Table::Ecdsa.to_string(), "\"statechainentity\".Ecdsa");
+        assert_eq!(Table::StateChain.to_string(), "\"statechainentity\".StateChain");
+        assert_eq!(Table::Transfer.to_string(), "\"statechainentity\".Transfer");
+        assert_eq!(Table::TransferBatch.to_string(), "\"statechainentity\".TransferBatch");
+        assert_eq!(Table::Root.to_string(), "\"statechainentity\".Root");
+        assert_eq!(Table::BackupTxs.to_string(), "\"watcher\".BackupTxs");
+        assert_eq!(Table::Smt.to_string(), "\"statechainentity\".Smt");
+        assert_eq!(Table::Lockbox.to_string(), "\"statechainentity\".Lockbox");
+        assert_eq!(Table::PayOnDemand.to_string(), "\"payondemand\".PayOnDemand");
+    }
+
+    #[test]
+    fn test_address_ser_deser() {
+        let addr = Address::from_str(BTC_ADDRESS).unwrap();
+        let addr_ser = PGDatabase::ser(&addr).unwrap();
+        assert!(addr_ser.find(BTC_ADDRESS).is_some());
+        let addr_deser: Address = PGDatabase::deser(addr_ser).unwrap();
+        assert_eq!(addr, addr_deser);
     }
 }

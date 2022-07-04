@@ -45,6 +45,8 @@ extern crate mockall;
 extern crate mockito;
 
 extern crate shared_lib;
+extern crate clightningrpc;
+extern crate clightningrpc_common;
 
 pub mod config;
 pub mod error;
@@ -52,6 +54,7 @@ pub mod protocol;
 pub mod server;
 pub mod storage;
 pub mod watch;
+pub mod rpc;
 
 pub type Result<T> = std::result::Result<T, error::SEError>;
 pub type Hash = bitcoin::hashes::sha256d::Hash;
@@ -61,7 +64,7 @@ use rocket_contrib::databases::r2d2_postgres::PostgresConnectionManager;
 
 use crate::storage::db::Alpha;
 use bitcoin::hashes::sha256d;
-use bitcoin::Transaction;
+use bitcoin::{Transaction, Address};
 use chrono::NaiveDateTime;
 use curv::{FE, GE};
 use kms::ecdsa::two_party::*;
@@ -70,7 +73,8 @@ use mockall::*;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
 use rocket_contrib::databases::postgres;
-use shared_lib::{state_chain::*, structs::{TransferMsg3,TransferFinalizeData}, Root, structs::CoinValueInfo};
+use shared_lib::{state_chain::*, structs::{TransferMsg3,TransferFinalizeData, PODInfo, PODStatus}, 
+    Root, structs::CoinValueInfo};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 use crate::server::UserIDs;
@@ -276,6 +280,14 @@ pub trait Database {
     fn get_statecoin_pubkey(&self, statechain_id: Uuid) -> Result<Option<String>>;
     fn update_ecdsa_master(&self, user_id: &Uuid, master_key: MasterKey1) -> Result<()>;
     fn get_sighash(&self, user_id: Uuid) -> Result<sha256d::Hash>;
+    fn set_pay_on_demand_info(&self, token_id: &Uuid, pod_info: &PODInfo) -> Result<()>;
+    fn get_pay_on_demand_info(&self, token_id: &Uuid) -> Result<PODInfo>;
+    fn get_pay_on_demand_status(&self, token_id: &Uuid) -> Result<PODStatus>;
+    fn set_pay_on_demand_status(&self, token_id: &Uuid, pod_status: &PODStatus) -> Result<()>;
+    fn get_pay_on_demand_confirmed(&self, token_id: &Uuid) -> Result<bool>;
+    fn set_pay_on_demand_confirmed(&self, token_id: &Uuid, confirmed: &bool) -> Result<()>;
+    fn get_pay_on_demand_spent(&self, token_id: &Uuid) -> Result<bool>;
+    fn set_pay_on_demand_spent(&self, token_id: &Uuid, spent: &bool) -> Result<()>;
 }
 
 pub mod structs {
