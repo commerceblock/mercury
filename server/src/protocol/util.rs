@@ -934,22 +934,11 @@ impl SCE {
     }
 
     pub fn get_transfer_batch_status(&self, batch_id: Uuid) -> Result<TransferBatchDataAPI> {
+        let _guard = self.batch_transfer_guard.as_ref().lock()?;
         let tbd = self.database.get_transfer_batch_data(batch_id)?;
         debug!("TRANSFER_BATCH: data: {:?}", tbd);
         let mut finalized = tbd.finalized;
         if !finalized {
-            debug!("TRANSFER_BATCH: attempting to finalize batch transfer - batch id: {}", batch_id);
-            // Attempt to finalize transfers - will fail with Err if not all ready to be finalized
-            match self.finalize_batch(batch_id){
-                Ok(_) => {
-                        info!(
-                        "TRANSFER_BATCH: All transfers complete in batch. Finalized. ID: {}.",
-                        batch_id
-                        );
-                        finalized = true;
-                    },
-                Err(_) => (),
-            }
             // Check batch is still within lifetime
             debug!("TRANSFER_BATCH: checking if batch transfer has ended");
             if transfer_batch_is_ended(tbd.start_time, self.config.batch_lifetime as i64) {
@@ -983,7 +972,24 @@ impl SCE {
                 }
                 return Err(SEError::TransferBatchEnded(String::from("Timeout")));
             }
-            debug!("TRANSFER_BATCH: batch transfer ongoing: {:?}", tbd);
+            
+
+            debug!("TRANSFER_BATCH: attempting to finalize batch transfer - batch id: {}", batch_id);
+            // Attempt to finalize transfers - will fail with Err if not all ready to be finalized
+            match self.finalize_batch(batch_id){
+                Ok(_) => {
+                        info!(
+                        "TRANSFER_BATCH: All transfers complete in batch. Finalized. ID: {}.",
+                        batch_id
+                        );
+                        finalized = true;
+                    },
+                Err(_) => {
+                    debug!("TRANSFER_BATCH: batch transfer ongoing: {:?}", tbd);
+                    ()
+                },
+            }
+
         }
 
         debug!("TRANSFER_BATCH: batch transfer ended: {:?}, finalized: {}", tbd, finalized);
