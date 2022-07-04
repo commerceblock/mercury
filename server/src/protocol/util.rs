@@ -988,11 +988,11 @@ impl SCE {
                     debug!("TRANSFER_BATCH: batch transfer ongoing: {:?}", tbd);
                     ()
                 },
-            }
+            };
 
         }
 
-        debug!("TRANSFER_BATCH: batch transfer ended: {:?}, finalized: {}", tbd, finalized);
+        debug!("TRANSFER_BATCH: batch transfer data: {:?}, finalized: {}", tbd, finalized);
         // return status of transfers
         Ok(TransferBatchDataAPI {
             state_chains: tbd.state_chains,
