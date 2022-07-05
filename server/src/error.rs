@@ -147,6 +147,16 @@ impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, crate::server::UserID
     }
 }
 
+impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, ()>>>
+    for SEError
+{
+    fn from(
+        e: std::sync::PoisonError<std::sync::MutexGuard<'_, ()>>,
+    ) -> SEError {
+        SEError::Generic(e.to_string())
+    }
+}
+
 impl From<Box<dyn std::error::Error>>
     for SEError
 {
