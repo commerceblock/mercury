@@ -15,7 +15,7 @@ path = "src/lib.rs"
 [dependencies]
 mockall = "0.8.1"
 hex = "0.4.2"
-libsecp256k1 = "0.3.5"
+libsecp256k1 = "0.5.0"
 bitcoin = { version = "0.25", features = [ "use-serde", "rand" ] }
 bitcoin_hashes = "0.9"
 rocket = { version = "0.4.5", default-features = false, features=["tls"] }
