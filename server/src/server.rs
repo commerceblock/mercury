@@ -110,7 +110,8 @@ pub struct StateChainEntity<
     pub lockbox: Option<Lockbox>,
     pub rate_limiter_slow: Option<Arc<governor::RateLimiter<String, DashMapStateStore<String> , DefaultClock> >>,
     pub rate_limiter_fast: Option<Arc<governor::RateLimiter<String, DashMapStateStore<String> , DefaultClock> >>,
-    pub rate_limiter_id: Option<Arc<governor::RateLimiter<Uuid, DashMapStateStore<Uuid> , DefaultClock> >>
+    pub rate_limiter_id: Option<Arc<governor::RateLimiter<Uuid, DashMapStateStore<Uuid> , DefaultClock> >>,
+    pub batch_transfer_guard: Arc<Mutex<()>>
 }
 
 impl<
@@ -168,7 +169,8 @@ impl<
             lockbox,
             rate_limiter_slow,
             rate_limiter_fast,
-            rate_limiter_id
+            rate_limiter_id,
+            batch_transfer_guard: Arc::new(Mutex::new(Default::default()))
         };
 
         Ok(sce)
