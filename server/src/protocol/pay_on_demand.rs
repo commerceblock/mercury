@@ -111,7 +111,7 @@ impl POD for SCE {
     fn query_lightning_payment(&mut self, id: &Uuid) -> Result<LightningInvoiceStatus> {
         let mut guard = self.lightning_invoice_statuses.as_ref().lock().unwrap();
         match guard.get(id) {
-            Some(s) => Ok(s.to_owned()),
+            Some(s) => Ok(*s),
             None => {
                 let mut threadpool_guard = self.lightning_waitinvoice_threadpool.as_ref().lock().unwrap();
                 let lightning_rpc = LightningClientFactory::create(&self.config.lightningd)?;
@@ -119,13 +119,12 @@ impl POD for SCE {
                 threadpool_guard.execute(move || {
                         let invoice = lightning_rpc.waitinvoice(&id_clone.to_string()).
                             map_err(|e| SEError::from(e)).expect("failed to retrieve invoice payment");  
-                        let mut guard = statuses.as_ref().lock().unwrap();
                         let status = match invoice.status.as_str() {
                             "paid" => LightningInvoiceStatus::Paid,
                             "expired" => LightningInvoiceStatus::Expired,
                             _ => LightningInvoiceStatus::Waiting,
                         };
-                        guard.insert(status)
+                        guard.insert(id.clone(), status);
                     }
                 );
                 guard.insert(id.clone(), LightningInvoiceStatus::Waiting);
