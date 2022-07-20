@@ -32,7 +32,9 @@ use std::{thread, time};
 use std::sync::mpsc::channel;
 use crate::rpc::lightning_client_factory::{LightningClient, LightningClientFactory};
 use clightningrpc::common::MSat;
-
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
+use std::collections::HashMap;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -55,19 +57,23 @@ pub trait POD {
 
     /// API: Verify a POD token:
     ///     - Return the PODStatus struct for token_id
-    fn pod_token_verify(&mut self, token_id: &Uuid) -> Result<PODStatus>;
+    fn pod_token_verify(&self, token_id: &Uuid) -> Result<PODStatus>;
 
     fn get_lightning_invoice(&self, pod_token_id: &Uuid, value: &u64) -> Result<LightningInvoice>;
 
     fn get_btc_payment_address(&self, pod_token_id: &Uuid) -> Result<Address>;
 
-    fn query_lightning_payment(&mut self, id: &Uuid) -> Result<LightningInvoiceStatus>;
+    fn query_lightning_payment(&self, id: &Uuid) -> Result<LightningInvoiceStatus>;
 
     //fn wait_lightning_invoice(&self, label: &String) -> Result<()>;
 
     fn wait_lightning_invoices(&self) -> Result<()>;
 
     fn query_btc_payment(&self, address: &Address, value: &u64) -> Result<bool>;
+
+    fn start_lightning_query_thread(&self, 
+        statuses: Arc<Mutex<HashMap<Uuid, LightningInvoiceStatus>>>, 
+        threads: Arc<Mutex<HashMap<Uuid, JoinHandle<()>>>>, id: &Uuid);
 }
 
 impl POD for SCE {
@@ -80,18 +86,19 @@ impl POD for SCE {
         return Ok(pod_info)
     }
 
-    fn pod_token_verify(&mut self, token_id: &Uuid) -> Result<PODStatus> {
-        let db = &mut self.database;
-        let mut pod_status = db.get_pay_on_demand_status(token_id)?;
+    fn pod_token_verify(&self, token_id: &Uuid) -> Result<PODStatus> {
+        let mut pod_status = self.database.get_pay_on_demand_status(token_id)?;
         if (!pod_status.confirmed && !pod_status.spent) {
-            let pod_info: PODInfo = db.get_pay_on_demand_info(token_id)?;
             let confirmed = match self.query_lightning_payment(&token_id)?{
                 LightningInvoiceStatus::Paid => true,
-                _ => self.query_btc_payment(&pod_info.btc_payment_address, &pod_info.value)?                 
+                _ => {
+                    let pod_info: PODInfo = self.database.get_pay_on_demand_info(token_id)?;
+                    self.query_btc_payment(&pod_info.btc_payment_address, &pod_info.value)?
+                }                 
             };
             if(confirmed) {
-                db.set_pay_on_demand_confirmed(token_id, &true)?;
-                pod_status = db.get_pay_on_demand_status(token_id)?;
+                self.database.set_pay_on_demand_confirmed(token_id, &true)?;
+                pod_status = self.database.get_pay_on_demand_status(token_id)?;
             }
         }
         Ok(pod_status)
@@ -108,29 +115,71 @@ impl POD for SCE {
         Ok(result)
     }
 
-    fn query_lightning_payment(&mut self, id: &Uuid) -> Result<LightningInvoiceStatus> {
+    fn start_lightning_query_thread(&self, 
+        statuses: Arc<Mutex<HashMap<Uuid, LightningInvoiceStatus>>>, 
+        threads: Arc<Mutex<HashMap<Uuid, JoinHandle<()>>>>,
+        id: &Uuid) {
+        let id_clone = id.clone();
+        let lightningd = self.config.lightningd.clone();
+        let handle = thread::spawn(move || {
+            let lightning_rpc = LightningClientFactory::create(&lightningd).unwrap();
+            let mut guard = statuses.as_ref().lock().unwrap();
+            guard.insert(id_clone.clone(), LightningInvoiceStatus::Waiting);
+            // Need to drop the mutex here so that other threads can access it.
+            drop(guard);
+            let invoice = lightning_rpc.waitinvoice(&id_clone.to_string()).
+            map_err(|e| SEError::from(e)).expect("failed to retrieve invoice payment");  
+            let status = match invoice.status.as_str() {
+                "paid" => LightningInvoiceStatus::Paid,
+                "expired" => LightningInvoiceStatus::Expired,
+                _ => LightningInvoiceStatus::Waiting,
+            };
+            let mut guard = statuses.as_ref().lock().unwrap();
+            guard.insert(id_clone.clone(), status);            
+            ()
+        });
+        let mut threads_guard = self.lightning_waitinvoice_threads.as_ref().lock().unwrap();
+        threads_guard.insert(id.clone(), handle);
+    }
+
+    fn query_lightning_payment(&self, id: &Uuid) -> Result<LightningInvoiceStatus> {
         let mut guard = self.lightning_invoice_statuses.as_ref().lock().unwrap();
-        match guard.get(id) {
-            Some(s) => Ok(*s),
-            None => {
-                let mut threadpool_guard = self.lightning_waitinvoice_threadpool.as_ref().lock().unwrap();
-                let lightning_rpc = LightningClientFactory::create(&self.config.lightningd)?;
-                let id_clone = id.clone();
-                threadpool_guard.execute(move || {
-                        let invoice = lightning_rpc.waitinvoice(&id_clone.to_string()).
-                            map_err(|e| SEError::from(e)).expect("failed to retrieve invoice payment");  
-                        let status = match invoice.status.as_str() {
-                            "paid" => LightningInvoiceStatus::Paid,
-                            "expired" => LightningInvoiceStatus::Expired,
-                            _ => LightningInvoiceStatus::Waiting,
-                        };
-                        guard.insert(id.clone(), status);
-                    }
-                );
-                guard.insert(id.clone(), LightningInvoiceStatus::Waiting);
-                Ok(LightningInvoiceStatus::Waiting)
-            }
-        }
+        let mut threads_guard = self.lightning_waitinvoice_threads.as_ref().lock().unwrap();
+
+        let mut join_thread = |id: &Uuid| {
+            if let Some(h) = threads_guard.remove(id) {
+                h.join(); 
+            };
+        };
+
+        if let Some(s) = guard.get(id) {
+            match s {
+                //Thread should return immediately if expired or paid.
+                LightningInvoiceStatus::Expired => {
+                    join_thread(id);
+                    return Ok(*s);
+                },
+                LightningInvoiceStatus::Paid => {
+                    join_thread(id);
+                    return Ok(*s);
+                },
+                //Waiting - check if thread is running
+                LightningInvoiceStatus::Waiting => {
+                    //Check thread is still running. If not, restart it.
+                    if threads_guard.get(id).is_some() {
+                        return Ok(*s);
+                    } 
+                }
+            };
+            
+        }; 
+
+        drop(guard);
+        drop(threads_guard);
+        let statuses = Arc::clone(&self.lightning_invoice_statuses);    
+        let threads = Arc::clone(&self.lightning_waitinvoice_threads);
+        self.start_lightning_query_thread(statuses, threads, id);      
+        Ok(LightningInvoiceStatus::Waiting)    
     }
 
     /*
@@ -154,13 +203,13 @@ impl POD for SCE {
     }
     */
 
+    fn wait_lightning_invoices(&self) -> Result<()> {
+        unimplemented!()
+    }
+
     fn query_btc_payment(&self, address: &Address, value: &u64) -> Result<bool> {
         let received: Amount = self.bitcoin_client()?.get_received_by_address(&address, Some(1))?.into();
         Ok(received >= Amount::from_sat(value.to_owned()))
-    }
-
-    fn wait_lightning_invoices(&self) -> Result<()> {
-        unimplemented!()
     }
 }
 
@@ -183,7 +232,8 @@ pub fn pod_token_verify(
     pod_token_id: String,
 ) -> Result<Json<PODStatus>> {
     sc_entity.check_rate_fast("pod_token_verify")?;
-    match sc_entity.pod_token_verify(&Uuid::from_str(&pod_token_id)?.into()) {
+    let id = Uuid::from_str(&pod_token_id)?.into();
+    match sc_entity.pod_token_verify(&id) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -214,7 +264,7 @@ pub mod tests {
         sce.database.expect_set_pay_on_demand_info().returning(|_,_| Ok(()));
         let address = Address::from_str("1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h").unwrap();
         let address_clone = address.clone();
-        sce.bitcoin_client()?.expect_get_new_address().return_once(move |_,_| Ok(address_clone));
+        sce.bitcoin_client().unwrap().expect_get_new_address().return_once(move |_,_| Ok(address_clone));
         let invoice = LightningInvoice {
             payment_hash: String::from("0001020304050607080900010203040506070809000102030405060708090102"),
             expires_at: 604800,
@@ -222,7 +272,7 @@ pub mod tests {
 2pkx2ctnv5sxxmmwwd5kgetjypeh2ursdae8g6twvus8g6rfwvs8qun0dfjkxaq9qrsgq357wnc5r2ueh7ck6q93dj32dlqnls087fxdwk8qakdyafkq3yap9us6v52vjjsrvywa6rt52cm9r9zqt8r2t7mlcws\
 pyetp5h2tztugp9lfyql"),
         };
-        sce.lightning_client()?.expect_invoice().return_once(move |_,_,_,_| Ok(invoice.clone()));
+        sce.lightning_client().unwrap().expect_invoice().return_once(move |_,_,_,_| Ok(invoice.clone()));
         let value = 1234;
         let info: PODInfo = sce.pod_token_init(&value).unwrap();
         assert_eq!(&info.value, &value);
@@ -231,11 +281,11 @@ pyetp5h2tztugp9lfyql"),
 
     #[test]
     fn test_get_btc_payment_address() {
-        let mut sce = get_test_sce();
+        let sce = get_test_sce();
         let address = Address::from_str("1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h").unwrap();
         let address_clone = address.clone();
-        sce.bitcoin_client()?.expect_get_new_address().return_once(move |_,_| Ok(address_clone));
-        let _address: Address = sce.get_btc_payment_address(&Uuid::new_v4()).unwrap();
+        sce.bitcoin_client().unwrap().expect_get_new_address().return_once(move |_,_| Ok(address_clone));
+        //let _address: Address = sce.get_btc_payment_address(&Uuid::new_v4()).unwrap();
     }
 
     #[test]
@@ -249,7 +299,7 @@ pyetp5h2tztugp9lfyql"),
 pyetp5h2tztugp9lfyql")
         };
         let invoice_expected_db : Invoice = invoice_expected.clone().into();
-        sce.lightning_client()?.expect_invoice().return_once(move |_,_,_,_| Ok(invoice_expected.clone())); 
+        sce.lightning_client().unwrap().expect_invoice().return_once(move |_,_,_,_| Ok(invoice_expected.clone())); 
         let value = 123;
         let invoice: Invoice = sce.get_lightning_invoice(&Uuid::new_v4(), &value).unwrap().into();
         assert_eq!(invoice, invoice_expected_db);
@@ -295,7 +345,7 @@ pyetp5h2tztugp9lfyql"),
                 value: 1000
             }
         ));
-        sce.lightning_client()?.expect_waitinvoice().returning(move |_| 
+        sce.lightning_client().unwrap().expect_waitinvoice().returning(move |_| 
             Ok(responses::WaitInvoice {
             label: id_clone.to_string(),
             bolt11: String::from("lnbc1pvjluezsp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygspp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdpl\

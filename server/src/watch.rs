@@ -131,7 +131,8 @@ pub mod tests {
         let mut db = MockDatabase::new();
         db.expect_get_current_backup_txs().returning(move |_| {Ok(backup_txs.clone())});
         db.expect_remove_backup_tx().returning(|_| Ok(()));
-        let mut rpc = BitcoinClientFactory::create(&String::default()).unwrap();
+        let astr = String::default();
+        let mut rpc = BitcoinClientFactory::create(&astr).unwrap();
         rpc.expect_get_block_count().returning(|| Ok(147 as u64));
 
         assert_eq!(rpc.get_block_count().unwrap(), 147 as u64);

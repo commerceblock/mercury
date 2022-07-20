@@ -37,7 +37,7 @@ use std::default::Default;
 use governor::{Quota, clock::DefaultClock, state::keyed::DashMapStateStore};
 use crate::rpc::bitcoin_client_factory::{BitcoinClient, BitcoinClientFactory};
 use crate::rpc::lightning_client_factory::{LightningClient, LightningClientFactory};
-use threadpool::ThreadPool;
+use std::thread::JoinHandle;
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -106,7 +106,7 @@ pub struct StateChainEntity<
 > {
     pub config: Config,
     pub database: T,
-    pub lightning_waitinvoice_threadpool: Arc<Mutex<ThreadPool>>,
+    pub lightning_waitinvoice_threads: Arc<Mutex<HashMap<Uuid, JoinHandle<()>>>>,
     pub lightning_invoice_statuses: Arc<Mutex<HashMap<Uuid, LightningInvoiceStatus>>>,
     pub coin_value_info: Arc<Mutex<CoinValueInfo>>,
     pub user_ids: Arc<Mutex<UserIDs>>,
@@ -167,7 +167,7 @@ impl<
         let sce = Self {
             config: config_rs,
             database: db,
-            lightning_waitinvoice_threadpool: Arc::new(Mutex::new(ThreadPool::new(1000))),
+            lightning_waitinvoice_threads: Arc::new(Mutex::new(Default::default())),
             lightning_invoice_statuses: Arc::new(Mutex::new(Default::default())),
             coin_value_info: Arc::new(Mutex::new(Default::default())),
             user_ids: Arc::new(Mutex::new(Default::default())),

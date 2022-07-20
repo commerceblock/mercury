@@ -1095,6 +1095,7 @@ impl SelfEncryptable for &mut TransferMsg4 {
     }
 }
 
+#[derive(Clone, Copy)]
 pub enum LightningInvoiceStatus {
     Waiting,
     Expired,
