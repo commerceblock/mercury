@@ -183,6 +183,7 @@ impl<
         Ok(sce)
     }
  
+    
     pub fn bitcoin_client(&self) -> Result<BitcoinClient> {
         Ok(BitcoinClientFactory::create(&self.config.bitcoind)?)
     }
@@ -190,6 +191,7 @@ impl<
     pub fn lightning_client(&self) -> Result<LightningClient> {
         Ok(LightningClientFactory::create(&self.config.lightningd)?)
     }
+    
 }
 
 
