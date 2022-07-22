@@ -11,7 +11,7 @@
 
 use super::super::Result;
 extern crate shared_lib;
-use shared_lib::structs::{DepositMsg1, DepositMsg2, PrepareSignTxMsg, Protocol, UserID, StatechainID};
+use shared_lib::structs::{DepositMsg1, PODMsg1, DepositMsg2, PrepareSignTxMsg, Protocol, UserID, StatechainID};
 use shared_lib::util::{tx_backup_build, tx_funding_build, FEE, transaction_serialise};
 
 use super::api::{get_smt_proof, get_smt_root, get_statechain_fee_info};

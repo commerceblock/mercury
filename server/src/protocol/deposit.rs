@@ -43,6 +43,11 @@ pub trait Deposit {
     ///     - Can do auth or other DoS mitigation here
     fn deposit_init(&self, deposit_msg1: DepositMsg1) -> Result<UserID>;
 
+    /// API: Initiliase deposit protocol:
+    ///     - Generate and return shared wallet ID
+    ///     - Can do auth or other DoS mitigation here
+    fn pod_deposit_init(&self, deposit_msg1: PODMsg1) -> Result<PODUserID>;
+
     /// API: Complete deposit protocol:
     ///     - Wait for confirmation of funding tx in blockchain
     ///     - Create StateChain DB object
@@ -89,6 +94,55 @@ impl Deposit for SCE {
         );
 
         Ok(UserID {id: user_id, challenge: Some(challenge)})
+    }
+
+    fn pod_deposit_init(&self, pod_msg1: PODMsg1) -> Result<PODUserID> {
+
+        // Check proof key is valid public key
+        if let Err(_) = PublicKey::from_str(&pod_msg1.proof_key) {
+            return Err(SEError::Generic(String::from(
+                "Proof key not in correct format.",
+            )));
+        };
+
+        let spent = self.database.get_pay_on_demand_spent(&pod_msg1.token_id).unwrap();
+        let confirmed = self.database.get_pay_on_demand_confirmed(&pod_msg1.token_id).unwrap();
+
+        // Generate shared wallet ID (user ID)
+        let mut user_id = Uuid::new_v4();
+
+        if spent {
+            return Err(SEError::Generic(String::from(
+                "Token already spent",
+            )));
+        } if !confirmed{
+            return Err(SEError::Generic(String::from(
+                "Token payment not received",
+            )));
+        } if !spent && confirmed {
+            // Create DB entry for newly generated ID signalling that user has passed some
+            // verification. For now use ID as 'password' to interact with state entity
+            // unsolved_vdf saved for verification at keygen first
+            self.database
+                .pod_create_user_session(&user_id, &pod_msg1.auth, &pod_msg1.proof_key, self.user_ids.clone())?;
+            
+
+            self.database
+                .set_pay_on_demand_spent( &pod_msg1.token_id, &true );
+
+        }
+
+        info!(
+            "DEPOSIT: Protocol initiated. User ID generated: {}",
+            user_id
+        );
+        debug!(
+            "DEPOSIT: User ID: {} corresponding Proof key: {}",
+            user_id,
+            pod_msg1.proof_key.to_owned()
+        );
+
+        Ok(PODUserID { id: user_id })
     }
 
     fn deposit_confirm(&self, deposit_msg2: DepositMsg2) -> Result<StatechainID> {
@@ -251,6 +305,81 @@ pub mod tests {
                 )
             })
             .is_ok());
+    }
+
+    #[test]
+    fn test_pod_deposit_init() {
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+
+        let mut spent : bool = true;
+        let mut confirmed : bool = true;
+
+        db.expect_get_pay_on_demand_spent()
+            .times(1)
+            .return_once( move |_| Ok(spent));
+
+        spent = false;
+
+        db.expect_get_pay_on_demand_spent()
+            .returning( move |_| Ok(spent));
+        
+        db.expect_set_pay_on_demand_spent().returning(|_,_| Ok(()));
+        
+        db.expect_get_pay_on_demand_confirmed()
+            .times(1)
+            .returning(move |_| Ok(confirmed));
+        
+        confirmed = false;
+
+        db.expect_get_pay_on_demand_confirmed()
+            .times(1)
+            .returning(move |_| Ok(confirmed));
+        
+        confirmed = true;
+        
+        db.expect_get_pay_on_demand_confirmed()
+            .times(1)
+            .returning(move |_| Ok(confirmed));
+        
+        db.expect_pod_create_user_session().returning(|_, _, _, _| Ok(()));
+
+        let sc_entity = test_sc_entity(db, None, None, None, None);
+
+        // Token Already Spent
+        match sc_entity.pod_deposit_init(PODMsg1 {
+            auth: String::from("auth"),
+            proof_key: String::from(
+                "026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e"
+            ),
+            token_id: Uuid::new_v4(),
+        }) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Token already spent")),
+        }
+        
+        // Unconfirmed token ( token not paid for )
+        match sc_entity.pod_deposit_init(PODMsg1 {
+            auth: String::from("auth"),
+            proof_key: String::from(
+                "026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e"
+            ),
+            token_id: Uuid::new_v4(),
+        }) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e.to_string().contains("Token payment not received")),
+        }
+
+        //Successful call
+        assert!(sc_entity
+            .pod_deposit_init(PODMsg1 {
+                auth: String::from("auth"),
+                proof_key: String::from(
+                    "026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e"
+                ),
+                token_id: Uuid::new_v4(),
+        })
+        .is_ok());
     }
 
     #[test]

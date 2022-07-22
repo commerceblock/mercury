@@ -251,6 +251,10 @@ pub trait Database {
     fn create_user_session(&self, user_id: &Uuid, auth: &String, 
         proof_key: &String, challenge: &String, 
         user_ids: Arc<Mutex<UserIDs>>) -> Result<()>;
+    // Create DB entry for newly generated ID signalling that user has passed some
+    // verification. For now use ID as 'password' to interact with state entity
+    fn pod_create_user_session(&self, user_id: &Uuid, auth: &String,
+        proof_key: &String, user_ids: Arc<Mutex<UserIDs>>) -> Result<()>;
     // Create new UserSession to allow new owner to generate shared wallet
     fn transfer_init_user_session(
         &self,

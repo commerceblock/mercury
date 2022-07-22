@@ -456,6 +456,7 @@ mock! {
     StateChainEntity{}
     trait Deposit {
         fn deposit_init(&self, deposit_msg1: DepositMsg1) -> deposit::Result<UserID>;
+        fn pod_deposit_init(&self, pod_msg1: PODMsg1) -> deposit::Result<PODUserID>;
         fn deposit_confirm(
             &self,
             deposit_msg2: DepositMsg2,

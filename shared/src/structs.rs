@@ -104,6 +104,12 @@ pub struct UserID {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
+pub struct PODUserID {
+    #[schemars(with = "UuidDef")]
+    pub id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
 pub struct StatechainID {
     #[schemars(with = "UuidDef")]
     pub id: Uuid,
@@ -739,6 +745,14 @@ pub struct SignSecondMsgRequest {
 /// Client -> SE
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct DepositMsg1 {
+    pub auth: String,
+    pub proof_key: String,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct PODMsg1 {
+    #[schemars(with = "UuidDef")]
+    pub token_id: Uuid,
     pub auth: String,
     pub proof_key: String,
 }

@@ -698,6 +698,15 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
+    fn pod_create_user_session(
+        &self,
+        _user_id: &uuid::Uuid,
+        _auth: &String,
+        _proof_key: &String,
+        _user_ids: Arc<Mutex<UserIDs>>
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
     fn transfer_init_user_session(
         &self,
         _new_user_id: &uuid::Uuid,
