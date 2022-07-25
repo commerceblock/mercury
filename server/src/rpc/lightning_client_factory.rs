@@ -3,7 +3,6 @@
 //! Re-exports and instantiates a mock or real lighting client struct, depending on crate config
 
 use crate::Result;
-use crate::error::SEError;
 use cfg_if::cfg_if;
 
 pub struct LightningClientFactory {}
@@ -22,7 +21,7 @@ cfg_if!{
         impl LightningClientFactory {
             pub fn create(_rpc_path: &String) -> Result<LightningClient> {
                 let client = LightningClient::new(&String::default());
-                client.getinfo().map_err(|e| SEError::from(e))?;
+                client.getinfo().map_err(|e| crate::error::SEError::from(e))?;
                 Ok(client)
             }
         }

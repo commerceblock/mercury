@@ -3,7 +3,7 @@
 //! Postgres DB access and update tools.
 
 use super::super::Result;
-use bitcoin::{Transaction, Address};
+use bitcoin::Transaction;
 pub type Hash = bitcoin::hashes::sha256d::Hash;
 
 use crate::server::{get_postgres_url, UserIDs};
@@ -2020,6 +2020,7 @@ impl Database for PGDatabase {
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use bitcoin::Address;
     use std::str::FromStr;
     static BTC_ADDRESS: &str = "tb1q7gjz7dnzpz06svq7v3z2wpt33erx086x66jgtn";
 

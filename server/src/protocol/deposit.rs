@@ -8,7 +8,6 @@ extern crate shared_lib;
 use crate::error::{SEError,DBErrorType};
 use crate::server::{StateChainEntity};
 use crate::protocol::util::RateLimiter;
-use crate::storage::db;
 use crate::storage::Storage;
 use crate::Database;
 use shared_lib::{state_chain::*, structs::*, util::FEE};
@@ -209,6 +208,7 @@ pub fn deposit_confirm(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::storage::db;
     use crate::protocol::util::{
         mocks,
         tests::{test_sc_entity, BACKUP_TX_NOT_SIGNED, BACKUP_TX_SIGNED},

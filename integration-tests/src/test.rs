@@ -724,7 +724,7 @@ mod tests {
         //replace by fee
         run_withdraw_init(&mut wallet, statechain_id, &(FEE-1));
         
-        let (sk_id, address, tx_signed, _amount) = run_withdraw_init(&mut wallet, statechain_id, &(FEE));
+        let (sk_id, _address, tx_signed, _amount) = run_withdraw_init(&mut wallet, statechain_id, &(FEE));
         let _tx_id = run_withdraw_confirm(&mut wallet, &sk_id, &tx_signed);
 
         // Check marked spent in wallet

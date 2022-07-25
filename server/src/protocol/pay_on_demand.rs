@@ -3,39 +3,28 @@
 //! StateEntity POD trait and implementation for StateChainEntity.
 
 pub use super::super::Result;
-use crate::server::DEPOSITS_COUNT;
 extern crate shared_lib;
-use crate::error::{SEError,DBErrorType};
-use crate::server::{StateChainEntity};
+use crate::error::SEError;
+use crate::server::StateChainEntity;
 use crate::protocol::util::RateLimiter;
-use crate::storage::db;
-use crate::storage::Storage;
 use crate::Database;
 use crate::rpc::bitcoin_client_factory::BitcoinRpcApi;
-use shared_lib::{state_chain::*, structs::*, util::FEE};
+use shared_lib::structs::*;
 
-use bitcoin::{PublicKey, Address};
+use bitcoin::Address;
 use cfg_if::cfg_if;
 use rocket::State;
 use rocket_contrib::json::Json;
 use std::str::FromStr;
 use uuid::Uuid;
 use rocket_okapi::openapi;
-use rand::Rng;
-use hex;
-use bitcoincore_rpc::Error;
-use bitcoin::{consensus, Amount};
-use jsonrpc;
+use bitcoin::Amount;
 use clightningrpc::responses::Invoice as LightningInvoice;
 use shared_lib::structs::Invoice;
-use std::{thread, time};
-use std::sync::mpsc::channel;
-use crate::rpc::lightning_client_factory::{LightningClient, LightningClientFactory};
-use crate::rpc::bitcoin_client_factory::{BitcoinClient, BitcoinClientFactory};
-use clightningrpc::common::MSat;
+use std::thread;
+use crate::rpc::lightning_client_factory::LightningClient;
+use crate::rpc::bitcoin_client_factory::BitcoinClient;
 use std::sync::{Arc, Mutex};
-use std::thread::JoinHandle;
-use std::collections::HashMap;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -209,28 +198,7 @@ impl POD for SCE {
             }
         }     
     }
-
-    /*
-    fn query_lightning_payment(&self, label: &String) -> Result<bool> {
-        let (tx, rx) = channel::<bool>();
-        let sender = thread::spawn(move || {
-            //let invoice_paid = self.lightning_client.waitinvoice(label).map_err(|e| SEError::from(e)).expect("failed to retrieve invoice payment");
-            //tx.send(invoice_paid.status == "paid").expect("failed to send");
-            tx.send(true).expect("failed to send");
-        });
-        thread::sleep(time::Duration::from_secs(1));
-       /*
-        match rx.recv() {
-            Ok(value) => Ok(value),
-            Err(_) => {
-                sender.
-            }
-        }
-        */
-        Ok(true)
-    }
-    */
-
+    
     fn wait_lightning_invoices(&self) -> Result<()> {
         unimplemented!()
     }
@@ -271,13 +239,12 @@ pub fn pod_token_verify(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::error::DBErrorType;
     use crate::protocol::util::{
-        mocks,
-        tests::{test_sc_entity, BACKUP_TX_NOT_SIGNED, BACKUP_TX_SIGNED},
+        tests::test_sc_entity,
     };
-    use bitcoin::Transaction;
     use std::str::FromStr;
-    use clightningrpc::responses;
+    use clightningrpc::{responses, common::MSat};
 
     fn get_invoice_amount() -> bitcoin::Amount {
         bitcoin::Amount::from_sat(1234)
@@ -386,9 +353,7 @@ pyetp5h2tztugp9lfyql"),
 
     #[test]
     fn test_query_lightning_payment_uninitialized() {
-        let mut sce = get_test_sce();
-        let id = Uuid::from_fields(0, 1, 2, &[0,1,2,3,4,5,6,7]).unwrap();
-        let id_clone = id.clone();
+        let sce = get_test_sce();
         let lc = Arc::new(Mutex::new(sce.lightning_client().unwrap()));
         let mut lc_guard = lc.as_ref().lock().unwrap();
         lc_guard.expect_waitinvoice().returning( |id_str| 
@@ -412,7 +377,6 @@ pyetp5h2tztugp9lfyql"),
     fn test_pod_token_verify_waiting_lightning() {
         let mut sce = get_test_sce();
              let id = Uuid::from_fields(0, 1, 2, &[0,1,2,3,4,5,6,7]).unwrap();
-        let id_clone = id.clone();
         sce.database.expect_get_pay_on_demand_status().
             return_const( 
                 Ok(
@@ -444,7 +408,6 @@ pyetp5h2tztugp9lfyql"),
     fn test_pod_token_verify_paid() {
         let mut sce = get_test_sce();
         let id = Uuid::from_fields(0, 1, 2, &[0,1,2,3,4,5,6,7]).unwrap();
-        let id_clone = id.clone();
         sce.database.expect_get_pay_on_demand_status().
             return_const( 
                 Ok(
@@ -462,7 +425,6 @@ pyetp5h2tztugp9lfyql"),
     fn test_pod_token_verify_paid_lightning() {
          let mut sce = get_test_sce();
         let id = Uuid::from_fields(0, 1, 2, &[0,1,2,3,4,5,6,7]).unwrap();
-        let id_clone = id.clone();
 
         let mut seq = mockall::Sequence::new();
  
@@ -517,7 +479,6 @@ pyetp5h2tztugp9lfyql"),
     fn test_pod_token_verify_expired_lightning() {
         let mut sce = get_test_sce();
         let id = Uuid::from_fields(0, 1, 2, &[0,1,2,3,4,5,6,7]).unwrap();
-        let id_clone = id.clone();
         sce.database.expect_get_pay_on_demand_status().
             times(2).
             return_const(
@@ -592,7 +553,6 @@ pyetp5h2tztugp9lfyql"),
     fn test_pod_token_verify_unpaid_btc() {
          let mut sce = get_test_sce();
         let id = Uuid::from_fields(0, 1, 2, &[0,1,2,3,4,5,6,7]).unwrap();
-        let id_clone = id.clone();
         sce.database.expect_get_pay_on_demand_status().
             return_once(|_| 
                 Ok(

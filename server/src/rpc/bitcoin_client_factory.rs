@@ -13,7 +13,7 @@ cfg_if!{
         pub use shared_lib::mocks::mock_rpc_client::RpcApi as BitcoinRpcApi;
         //use shared_lib::mocks::mock_rpc_client::Auth as BitcoinAuth;
         impl BitcoinClientFactory {
-            pub fn create(rpc_path: &String) -> Result<BitcoinClient> {
+            pub fn create(_rpc_path: &String) -> Result<BitcoinClient> {
                 Ok(BitcoinClient::new())
             }
         }

@@ -7,7 +7,7 @@ use bitcoincore_rpc::Error;
 use bitcoin::consensus;
 use jsonrpc;
 use cfg_if::cfg_if;
-use crate::rpc::bitcoin_client_factory::{BitcoinClientFactory, BitcoinClient, BitcoinRpcApi};
+use crate::rpc::bitcoin_client_factory::{BitcoinClientFactory, BitcoinRpcApi};
 
 cfg_if! {
     if #[cfg(any(test))]{
@@ -108,7 +108,6 @@ pub mod tests {
     use crate::MockDatabase;
     use uuid::Uuid;
     use crate::structs::BackupTxID;
-    use shared_lib::mocks::mock_rpc_client::Client as MockBitcoinClient;
     use bitcoin::consensus::encode;
 
     #[test]

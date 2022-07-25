@@ -2,8 +2,7 @@
 use clightningrpc::responses;
 use clightningrpc::common::MSat;
 use clightningrpc_common::errors::Error;
-use std::path::Path;
-use mockall::{mock, automock};
+use mockall::automock;
 
 extern crate hex;
 
@@ -11,11 +10,8 @@ extern crate hex;
 #[derive(Debug)]
 pub struct Client {}
 
-/// Type-safe millisatoshi wrapper
-//#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-//pub struct MSat(pub u64);
-
 pub struct LightningRPC {
+    #[allow(dead_code)]
     client: Client
 }
 

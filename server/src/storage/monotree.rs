@@ -9,7 +9,6 @@ use std::collections::HashMap;
 use shared_lib::structs::{CoinValueInfo,TransferFinalizeData, PODInfo, PODStatus};
 use crate::server::UserIDs;
 use std::sync::{Arc, Mutex};
-use bitcoin::Address;
 
 pub type Result<T> = std::result::Result<T, Errors>;
 

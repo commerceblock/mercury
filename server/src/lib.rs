@@ -64,7 +64,7 @@ use rocket_contrib::databases::r2d2_postgres::PostgresConnectionManager;
 
 use crate::storage::db::Alpha;
 use bitcoin::hashes::sha256d;
-use bitcoin::{Transaction, Address};
+use bitcoin::Transaction;
 use chrono::NaiveDateTime;
 use curv::{FE, GE};
 use kms::ecdsa::two_party::*;
