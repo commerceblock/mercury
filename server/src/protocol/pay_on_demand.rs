@@ -43,7 +43,9 @@ cfg_if! {
 pub trait POD {
     /// API: Initiliase pay-on-deposit:
     ///     - Generate and return a new pay on deposit token
-    fn pod_token_init(&self, value: &u64, 
+    fn pod_token_init(&self, 
+        token_id: Uuid,
+        value: &u64, 
         lightning_client: Option<&LightningClient>, 
         bitcoin_client: Option<&BitcoinClient>) -> Result<PODInfo>;
 
@@ -71,12 +73,11 @@ pub trait POD {
 }
 
 impl POD for SCE {
-    fn pod_token_init(&self, value: &u64, lightning_client: Option<&LightningClient>, bitcoin_client: Option<&BitcoinClient>) -> Result<PODInfo> {
-        let token_id = Uuid::new_v4();
+    fn pod_token_init(&self, token_id: Uuid, value: &u64, lightning_client: Option<&LightningClient>, bitcoin_client: Option<&BitcoinClient>) -> Result<PODInfo> {
         let lightning_invoice: Invoice = self.get_lightning_invoice(lightning_client,&token_id, value)?.into();
         let btc_payment_address = self.get_btc_payment_address(bitcoin_client, &token_id)?;
-        let pod_info = PODInfo {lightning_invoice, btc_payment_address, value: value.to_owned()};
-        self.database.set_pay_on_demand_info(&token_id, &pod_info)?;
+        let pod_info = PODInfo {token_id, lightning_invoice, btc_payment_address, value: value.to_owned()};
+        self.database.set_pay_on_demand_info(&pod_info)?;
         return Ok(pod_info)
     }
 
@@ -198,7 +199,7 @@ impl POD for SCE {
             }
         }     
     }
-    
+
     fn wait_lightning_invoices(&self) -> Result<()> {
         unimplemented!()
     }
@@ -214,7 +215,8 @@ impl POD for SCE {
 #[get("/pod/token/init/<value>", format = "json")]
 pub fn deposit_init(sc_entity: State<SCE>, value: u64) -> Result<Json<PODInfo>> {
     sc_entity.check_rate_slow("pod_token_init")?;
-    match sc_entity.pod_token_init(&value, None, None) {
+    let token_id = Uuid::new_v4();
+    match sc_entity.pod_token_init(token_id, &value, None, None) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -296,8 +298,9 @@ pyetp5h2tztugp9lfyql"),
         Invoice::from(get_lightning_invoice())
     }
 
-    fn get_pod_info() -> PODInfo {
+    fn get_pod_info(token_id: Uuid) -> PODInfo {
         PODInfo {
+                token_id,
                 lightning_invoice: get_invoice(),
                 btc_payment_address: Address::from_str("1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h").unwrap(),
                 value: get_invoice_amount().as_sat()
@@ -313,6 +316,7 @@ pyetp5h2tztugp9lfyql"),
     
     #[test]
     fn test_pod_token_init() {
+        let token_id = Uuid::new_v4();
         let mut sce = get_test_sce();
         sce.database.expect_set_pay_on_demand_info().return_const(Ok(()));
         let address = Address::from_str("1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h").unwrap();
@@ -324,9 +328,11 @@ pyetp5h2tztugp9lfyql"),
         
         lc.expect_invoice().return_once(move |_,_,_,_| Ok(invoice.clone()));
         let value = 1234;
-        let info: PODInfo = sce.pod_token_init(&value, Some(&lc), Some(&bc)).unwrap();
+        let info_expected = get_pod_info(token_id.clone());
+        let info: PODInfo = sce.pod_token_init(token_id.clone(), &value, Some(&lc), Some(&bc)).unwrap();
         assert_eq!(&info.value, &value);
         assert_eq!(&info.btc_payment_address, &address);
+        assert_eq!(&info, &info_expected);
     }
 
     #[test]
@@ -376,7 +382,7 @@ pyetp5h2tztugp9lfyql"),
     #[test]
     fn test_pod_token_verify_waiting_lightning() {
         let mut sce = get_test_sce();
-             let id = Uuid::from_fields(0, 1, 2, &[0,1,2,3,4,5,6,7]).unwrap();
+        let id = Uuid::from_fields(0, 1, 2, &[0,1,2,3,4,5,6,7]).unwrap();
         sce.database.expect_get_pay_on_demand_status().
             return_const( 
                 Ok(
@@ -387,7 +393,7 @@ pyetp5h2tztugp9lfyql"),
                 )                    
             );
         sce.database.expect_get_pay_on_demand_info().return_const(Ok(
-            get_pod_info()
+            get_pod_info(id.clone())
         ));
         let lc = Arc::new(Mutex::new(sce.lightning_client().unwrap()));
         let mut lc_guard = lc.as_ref().lock().unwrap();
@@ -452,7 +458,7 @@ pyetp5h2tztugp9lfyql"),
                 )                    
             );
             
-        sce.database.expect_get_pay_on_demand_info().return_const(Ok(get_pod_info()));
+        sce.database.expect_get_pay_on_demand_info().return_const(Ok(get_pod_info(id.clone())));
         let lc = Arc::new(Mutex::new(sce.lightning_client().unwrap()));
         let mut lc_guard = lc.as_ref().lock().unwrap();
         lc_guard.expect_waitinvoice().return_once(move |id_str| 
@@ -490,7 +496,7 @@ pyetp5h2tztugp9lfyql"),
                 )                    
             );
         sce.database.expect_get_pay_on_demand_info().return_const(Ok(
-            get_pod_info()
+            get_pod_info(id.clone())
         ));
         let lc = Arc::new(Mutex::new(sce.lightning_client().unwrap()));
         let mut lc_guard = lc.as_ref().lock().unwrap();
@@ -534,7 +540,7 @@ pyetp5h2tztugp9lfyql"),
             times(1).
             return_const(Ok(()) );
         sce.database.expect_get_pay_on_demand_info().return_const(Ok(
-            get_pod_info()
+            get_pod_info(id.clone())
         ));
         let lc = Arc::new(Mutex::new(sce.lightning_client().unwrap()));
         let mut lc_guard = lc.as_ref().lock().unwrap();
@@ -563,7 +569,7 @@ pyetp5h2tztugp9lfyql"),
                 )                    
             );
         sce.database.expect_get_pay_on_demand_info().return_const(Ok(
-            get_pod_info()
+            get_pod_info(id.clone())
         ));
         let lc = Arc::new(Mutex::new(sce.lightning_client().unwrap()));
         let mut lc_guard = lc.as_ref().lock().unwrap();

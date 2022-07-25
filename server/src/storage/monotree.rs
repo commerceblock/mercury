@@ -773,7 +773,7 @@ impl Database for MemoryDB {
     fn get_sighash(&self, _user_id: uuid::Uuid) -> crate::Result<bitcoin::hashes::sha256d::Hash> {
         unimplemented!()
     }
-    fn set_pay_on_demand_info(&self, _token_id: &uuid::Uuid, _pod_info: &PODInfo) -> crate::Result<()> { unimplemented!() }
+    fn set_pay_on_demand_info(&self, _pod_info: &PODInfo) -> crate::Result<()> { unimplemented!() }
     fn get_pay_on_demand_info(&self, _token_id: &uuid::Uuid) -> crate::Result<PODInfo> { unimplemented!() }
     fn get_pay_on_demand_status(&self, _token_id: &uuid::Uuid) -> crate::Result<PODStatus> { unimplemented!() }
     fn set_pay_on_demand_status(&self, _token_id: &uuid::Uuid, _pod_status: &PODStatus) -> crate::Result<()> { unimplemented!() }

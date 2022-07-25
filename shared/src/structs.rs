@@ -44,12 +44,6 @@ pub trait SchemaExample{
 #[schemars(remote = "Uuid")]
 pub struct UuidDef(String);
 
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
-pub struct PodTokenID {
-    #[schemars(with = "UuidDef")]
-    pub id: Uuid,
-}
-
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct Invoice{
@@ -71,6 +65,8 @@ impl From<clightningrpc::responses::Invoice> for Invoice {
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct PODInfo {
+    #[schemars(with = "UuidDef")]
+    pub token_id: Uuid,
     pub lightning_invoice: Invoice,
     #[schemars(with = "AddressDef")]
     pub btc_payment_address: Address,

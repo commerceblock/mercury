@@ -280,7 +280,7 @@ pub trait Database {
     fn get_statecoin_pubkey(&self, statechain_id: Uuid) -> Result<Option<String>>;
     fn update_ecdsa_master(&self, user_id: &Uuid, master_key: MasterKey1) -> Result<()>;
     fn get_sighash(&self, user_id: Uuid) -> Result<sha256d::Hash>;
-    fn set_pay_on_demand_info(&self, token_id: &Uuid, pod_info: &PODInfo) -> Result<()>;
+    fn set_pay_on_demand_info(&self, pod_info: &PODInfo) -> Result<()>;
     fn get_pay_on_demand_info(&self, token_id: &Uuid) -> Result<PODInfo>;
     fn get_pay_on_demand_status(&self, token_id: &Uuid) -> Result<PODStatus>;
     fn set_pay_on_demand_status(&self, token_id: &Uuid, pod_status: &PODStatus) -> Result<()>;

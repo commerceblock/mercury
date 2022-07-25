@@ -1932,9 +1932,9 @@ impl Database for PGDatabase {
         )
     }
 
-    fn set_pay_on_demand_info(&self, token_id: &Uuid, token: &PODInfo) -> Result<()> {
+    fn set_pay_on_demand_info(&self, token: &PODInfo) -> Result<()> {
         self.update(
-            token_id,
+            &token.token_id,
             Table::PayOnDemand,
             vec![Column::LightningInvoice, Column::BtcPaymentAddress, Column::Value],
             vec![&Self::ser(&token.lightning_invoice)?, &Self::ser(&token.btc_payment_address)?, &(token.value as i64)],
@@ -1954,6 +1954,7 @@ impl Database for PGDatabase {
             )?;
         
             Ok(PODInfo{
+                        token_id: token_id.to_owned(),
                         lightning_invoice: Self::deser(lightning_invoice)?,
                         btc_payment_address: Self::deser(btc_payment_address)?,
                         value: value as u64})
