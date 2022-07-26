@@ -106,7 +106,7 @@ mod tests {
         let recover_msg = RecoveryRequest {
             key: "0297901882fc1601c3ea2b5326c4e635455b5451573c619782502894df69e24548",
             sig: "",
-        }
+        };
         let body = serde_json::to_string(&recover_msg).unwrap();
         let mut response = client
             .post(format!("/info/recover"))

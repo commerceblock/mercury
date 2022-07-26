@@ -164,7 +164,7 @@ pub struct StateEntityFeeInfoAPI {
 impl StateEntityFeeInfoAPI{
     pub fn example() -> Self{
         Self{
-            address: "bc1qzvv6yfeg0navfkrxpqc0fjdsu9ey4qgqqsarq4".to_string(),
+            address: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq".to_string(),
             deposit: 0,
             withdraw: 300,
             interval: 144,
