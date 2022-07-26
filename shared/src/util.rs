@@ -325,7 +325,7 @@ pub mod tests {
     use super::*;
     use serde_json;
     use uuid::Uuid;
-    use crate::structs::Protocol;
+    use crate::{structs::Protocol, state_chain::State};
 
     #[test]
     fn transaction() {
@@ -385,6 +385,83 @@ pub mod tests {
 
         let sig = secp.sign(&message, &priv_key.key);
         assert!(sig.verify_btc(&pub_key, &message).is_ok());
+    }
+
+    #[test]
+    fn test_tx_withdraw_build() {
+        let sc_infos = &vec![
+            StateChainDataAPI {
+                utxo: OutPoint {
+                    txid: bitcoin::Txid::from_str("2834e7d92dbc48d7b1d99b47bd661ba3ef1d4bc9afc77976ee723c48aa879a03").unwrap(),
+                    vout: 0,
+                },
+                amount: 10000,
+                chain: vec![
+                    State {
+                        data: "026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
+                        next_state: None,
+                    },
+                ],
+                locktime: 22345,
+                confirmed: false,
+            },
+            StateChainDataAPI {
+                utxo: OutPoint {
+                    txid: bitcoin::Txid::from_str("9d119463ae82c44f7da202b6ad4b51450036257d1d220827f88e6ab92d248af4").unwrap(),
+                    vout: 0,
+                },
+                amount: 10000,
+                chain: vec![
+                    State {
+                        data: "022d7ea3d286541ed593e0158e315d73908646abcfa46aa56c12229a2910cce48c".to_string(),
+                        next_state: None,
+                    },
+                ],
+                locktime: 22345,
+                confirmed: false,
+            },
+            StateChainDataAPI {
+                utxo: OutPoint {
+                    txid: bitcoin::Txid::from_str("fb5d9f5dace79eef8f048877b4fe0cbe6d399b28ba1869de22140617b1adc1aa").unwrap(),
+                    vout: 0,
+                },
+                amount: 10000,
+                chain: vec![
+                    State {
+                        data: "039afb8b85ba5c1b6664df7e68d4d79ea194e7022c76f0f9f3dadc3f94d8c79211".to_string(),
+                        next_state: None,
+                    },
+                ],
+                locktime: 22345,
+                confirmed: false,
+            },
+        ];
+        
+        let rec_se_address = &bitcoin::Address::from_str(
+            "bcrt1qc5ywjdp3xhxsfym5eaxqlr95ut62j8ym8mnf9n").unwrap();
+        
+        let se_fee_info = &StateEntityFeeInfoAPI {
+            address: "bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x".to_string(),
+            deposit: 40,
+            withdraw: 40,
+            interval: 100,
+            initlock: 10000,
+            wallet_version: "0.6.0".to_string(),
+            wallet_message: "".to_string(),
+        };
+
+        let tx_fee = &141;
+
+        let tx_withdraw_unsigned = tx_withdraw_build(
+            sc_infos,
+            rec_se_address,
+            se_fee_info,
+            tx_fee
+        ).unwrap();
+        assert_eq!(
+            transaction_serialise(&tx_withdraw_unsigned), 
+            "0200000003039a87aa483c72ee7679c7afc94b1defa31b66bd479bd9b1d748bc2dd9e734280000000000fffffffff48a242db96a8ef82708221d7d25360045514badb602a27d4fc482ae6394119d0000000000ffffffffaac1adb117061422de6918ba289b396dbe0cfeb47788048fef9ee7ac5d9f5dfb0000000000ffffffff025374000000000000160014c508e9343135cd049374cf4c0f8cb4e2f4a91c9b7800000000000000160014949d650ede9f0cbd63c55c0cbba6830cec47c1b700000000"
+        );
     }
 
     const TX_WITHDRAW_UNSIGNED: &str = "020000000100000000000000000000000000000000000000000000000000000000000000000000000000ffffffff02accc0e0000000000160014e8df018c7e326cc253faac7e46cdc51e68542c423075000000000000160014e8df018c7e326cc253faac7e46cdc51e68542c4200000000";
