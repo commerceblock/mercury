@@ -132,6 +132,8 @@ pub fn batch_withdraw_init(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>, tx_f
         &se_fee_info,
         tx_fee
     )?;
+    dbg!(&sc_infos, &rec_se_address, &se_fee_info, tx_fee, transaction_serialise(&tx_withdraw_unsigned));
+
     
     // co-sign withdraw tx
     let tx_w_prepare_sign_msg = PrepareSignTxMsg {
