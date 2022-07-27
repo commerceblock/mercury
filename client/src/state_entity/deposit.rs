@@ -11,7 +11,8 @@
 
 use super::super::Result;
 extern crate shared_lib;
-use shared_lib::structs::{DepositMsg1, DepositMsg2, PrepareSignTxMsg, Protocol, UserID, StatechainID};
+use shared_lib::structs::{DepositMsg1, DepositMsg2, PrepareSignTxMsg, Protocol, UserID, 
+    StatechainID, StateEntityFeeInfoAPI};
 use shared_lib::util::{tx_backup_build, tx_funding_build, FEE, transaction_serialise};
 
 use super::api::{get_smt_proof, get_smt_root, get_statechain_fee_info};
@@ -39,6 +40,31 @@ pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<UserID> {
     )
 }
 
+/// Message to server initiating state entity protocol using pay on demand
+/// Shared wallet ID returned
+pub fn session_init_pod(wallet: &mut Wallet, proof_key: &String) -> Result<UserID> {
+    requests::postb(
+        &wallet.client_shim,
+        &format!("deposit/init"),
+        &DepositMsg1 {
+            auth: "auth".to_string(),
+            proof_key: proof_key.to_owned(),
+        },
+    )
+}
+
+pub fn check_funds(
+    deposit_amount: &u64, 
+    se_fee_info: &StateEntityFeeInfoAPI
+) -> Result<u64> {
+    let withdraw_fee = (deposit_amount * se_fee_info.withdraw as u64) / 10000 as u64;
+     // Ensure funds cover fees before initiating protocol
+    match withdraw_fee  >= *deposit_amount {
+        true => Err(CError::WalletError(WalletErrorType::NotEnoughFunds)),
+        false => Ok(withdraw_fee)
+    }
+}
+
 /// Deposit coins into state entity. Returns shared_key_id, statechain_id, funding txid,
 /// signed backup tx, back up transacion data and proof_key
 pub fn deposit(
@@ -48,15 +74,10 @@ pub fn deposit(
     // Get state entity fee info
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
 
-    // Ensure funds cover fees before initiating protocol
-    if FEE + se_fee_info.deposit as u64 >= *amount {
-        return Err(CError::WalletError(WalletErrorType::NotEnoughFunds));
-    }
-
     //calculate SE fee amount from rate
-    let deposit_fee = (amount * se_fee_info.deposit as u64) / 10000 as u64;
-    let withdraw_fee = (amount * se_fee_info.withdraw as u64) / 10000 as u64;
-
+    let withdraw_fee = check_funds(amount, &se_fee_info)?;
+    let deposit_fee = se_fee_info.deposit as u64;
+    
     // Greedy coin selection.
     let (inputs, addrs, amounts) =
         wallet.coin_selection_greedy(&(amount + deposit_fee + FEE))?;
@@ -196,3 +217,4 @@ pub fn deposit(
         proof_key,
     ))
 }
+
