@@ -226,20 +226,6 @@ pub fn run_deposit(
     resp
 }
 
-/// Run pay on demand deposit on a wallet for some amount
-/// Returns shared_key_id, statechain_id, funding txid, signed backup tx, back up transacion data and proof_key
-pub fn run_deposit_pod(
-    wallet: &mut Wallet,
-    amount: &u64,
-) -> (Uuid, Uuid, String, Transaction, PrepareSignTxMsg, PublicKey) {
-    let start = Instant::now();
-    let resp = state_entity::deposit::deposit_pod(wallet, amount).unwrap();
-    println!("(Deposit Took: {})", TimeFormat(start.elapsed()));
-
-    resp
-}
-
-
 /// Run confirm_proofs on a wallet
 /// Returns Vec<shared_key_id> of the shared keys that remain unconfirmed
 pub fn run_confirm_proofs(wallet: &mut Wallet) -> Vec<Uuid> {

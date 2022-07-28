@@ -59,7 +59,7 @@ pub fn check_funds(
 ) -> Result<u64> {
     let withdraw_fee = (deposit_amount * se_fee_info.withdraw as u64) / 10000 as u64;
      // Ensure funds cover fees before initiating protocol
-    match withdraw_fee  >= *deposit_amount {
+    match withdraw_fee + FEE >= *deposit_amount {
         true => Err(CError::WalletError(WalletErrorType::NotEnoughFunds)),
         false => Ok(withdraw_fee)
     }
