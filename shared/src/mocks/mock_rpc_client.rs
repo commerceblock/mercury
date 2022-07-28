@@ -1,59 +1,14 @@
 // Mock bitcoin-rpc interface
-use bitcoincore_rpc::{Result, Auth, RawTx};
-use std::path::PathBuf;
+use bitcoincore_rpc::Result;
 use bitcoin::{Address, Amount};
 use std::str::FromStr;
 use bitcoincore_rpc::bitcoincore_rpc_json as json;
-use mockall::{mock, automock};
+use mockall::automock;
 
 extern crate hex;
 
 
 pub struct Client {}
-
-/*
-#[derive(Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
-pub enum Auth {
-    None,
-    UserPass(String, String),
-    CookieFile(PathBuf),
-}
-*/
-
-/*
-impl Client {
-    pub fn new(_url: String, _auth: Auth) -> Result<Client> {
-        Ok(Client {})
-    }
-    
-}
-*/
-
-/*
-mock! {
-    Client {}
-    impl RpcApi for Client {
-        fn get_block_count(&self) -> Result<u64>;
-        fn send_raw_transaction<R: RawTx + 'static>(&self, tx: R) -> Result<bitcoin::Txid>;
-        fn get_new_address(
-            &self,
-            label: Option<&'static str>,
-            address_type: Option<json::AddressType>,
-        ) -> Result<Address>;
-        fn get_received_by_address(&self, address: &Address, minconf: Option<u32>) -> Result<Amount>;
-    }
-    
-    /*
-    impl Client {
-            pub fn new(_url: String, _auth: Auth) -> Result<Client> {
-            Ok(Client {})
-        }
-    
-    }
-    */
-}
-*/
-
 
 pub trait RpcApi<'a> {
     fn get_block_count(&self) -> Result<u64>;
@@ -87,13 +42,13 @@ impl<'b> RpcApi<'b> for Client {
 
     fn get_new_address<'a>(
         &self,
-        label: Option<&'a str>,
-        address_type: Option<json::AddressType>,
+        _label: Option<&'a str>,
+        _address_type: Option<json::AddressType>,
     ) -> Result<Address> {
         Ok(Address::from_str("1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h").unwrap())
     }
 
-    fn get_received_by_address(&self, address: &Address, minconf: Option<u32>) -> Result<Amount> {
+    fn get_received_by_address(&self, _address: &Address, _minconf: Option<u32>) -> Result<Amount> {
         Ok(bitcoin::Amount::from_sat(0))
     }
 }

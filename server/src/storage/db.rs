@@ -3,7 +3,7 @@
 //! Postgres DB access and update tools.
 
 use super::super::Result;
-use bitcoin::{Transaction, Address};
+use bitcoin::Transaction;
 pub type Hash = bitcoin::hashes::sha256d::Hash;
 
 use crate::server::{get_postgres_url, UserIDs};
@@ -73,7 +73,8 @@ pub enum Table {
     BackupTxs,
     Smt,
     Lockbox,
-    PayOnDemand
+    PayOnDemand,
+    UserSessionValue,
 }
 impl Table {
     pub fn to_string(&self) -> String {
@@ -172,8 +173,7 @@ pub enum Column {
     // PayOnDemand
     // Id
     LightningInvoice,
-    BtcPaymentAddress,
-    Spent
+    BtcPaymentAddress
 }
 
 
@@ -286,6 +286,20 @@ impl PGDatabase {
             &[],
         )?;
 
+        // Create tables if they do not already exist
+        self.database_w()?.execute(
+            &format!(
+                "
+            CREATE TABLE IF NOT EXISTS {} (
+                id uuid NOT NULL,
+                value int8,
+                PRIMARY KEY (id)
+            );",
+                Table::UserSessionValue.to_string(),
+            ),
+            &[],
+        )?;
+
         self.database_w()?.execute(
             &format!(
                 "
@@ -306,9 +320,9 @@ impl PGDatabase {
                 id uuid NOT NULL,
                 lightninginvoice varchar,
                 btcpaymentaddress varchar,
-                value int8,
+                value NOT NULL int8,
                 confirmed bool NOT NULL DEFAULT false,              
-                spent bool NOT NULL DEFAULT false,
+                amount int8 NOT NULL DEFAULT 0,
                 PRIMARY KEY (id)
             );",
                 Table::PayOnDemand.to_string(),
@@ -484,7 +498,7 @@ impl PGDatabase {
         self.database_w()?.execute(
             &format!(
                 "
-            TRUNCATE {},{},{},{},{},{},{},{},{},{} RESTART IDENTITY;",
+            TRUNCATE {},{},{},{},{},{},{},{},{},{},{} RESTART IDENTITY;",
                 Table::UserSession.to_string(),
                 Table::Ecdsa.to_string(),
                 Table::StateChain.to_string(),
@@ -495,6 +509,7 @@ impl PGDatabase {
                 Table::Smt.to_string(),
                 Table::Lockbox.to_string(),
                 Table::PayOnDemand.to_string(),
+                Table::UserSessionValue.to_string(),
             ),
             &[],
         )?;
@@ -1120,6 +1135,11 @@ impl Database for PGDatabase {
 
     fn get_user_auth(&self, user_id: &Uuid) -> Result<String> {
         self.get_1::<String>(*user_id, Table::UserSession, vec![Column::Authentication])
+    }
+
+    fn get_user_value(&self, user_id: &Uuid) -> Result<u64> {
+        let value = self.get_1::<i64>(*user_id, Table::UserSession, vec![Column::Value])? as u64;
+        Ok(value)
     }
 
     fn is_confirmed(&self, statechain_id: &Uuid) -> Result<bool> {
@@ -1802,7 +1822,7 @@ impl Database for PGDatabase {
     // verification. For now use ID as 'password' to interact with state entity
     fn create_user_session(&self, user_id: &Uuid, auth: &String, 
         proof_key: &String, challenge: &String,
-        user_ids: Arc<Mutex<UserIDs>>) -> Result<()> {
+        user_ids: Arc<Mutex<UserIDs>>, value: Option<u64>) -> Result<()> {
         let mut guard = user_ids.as_ref().lock()?;
         guard.insert(user_id.to_owned());
         self.insert(user_id, Table::UserSession).map_err(|e| { guard.remove(user_id); e })?;
@@ -1822,7 +1842,17 @@ impl Database for PGDatabase {
             let _ = self.remove(user_id, Table::Lockbox);
             e
          })?;
-        Ok(())
+        self.update(
+            user_id,
+            Table::UserSessionValue,
+            vec![Column::Value],
+            vec![&value.map(|v| v as i64)],
+        ).map_err(|e| { 
+            guard.remove(user_id); 
+            let _ = self.remove(user_id, Table::UserSession);
+            let _ = self.remove(user_id, Table::Lockbox);
+            e
+        })    
     }
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
@@ -1958,9 +1988,9 @@ impl Database for PGDatabase {
         )
     }
 
-    fn set_pay_on_demand_info(&self, token_id: &Uuid, token: &PODInfo) -> Result<()> {
+    fn set_pay_on_demand_info(&self, token: &PODInfo) -> Result<()> {
         self.update(
-            token_id,
+            &token.token_id,
             Table::PayOnDemand,
             vec![Column::LightningInvoice, Column::BtcPaymentAddress, Column::Value],
             vec![&Self::ser(&token.lightning_invoice)?, &Self::ser(&token.btc_payment_address)?, &(token.value as i64)],
@@ -1980,30 +2010,31 @@ impl Database for PGDatabase {
             )?;
         
             Ok(PODInfo{
+                        token_id: token_id.to_owned(),
                         lightning_invoice: Self::deser(lightning_invoice)?,
                         btc_payment_address: Self::deser(btc_payment_address)?,
                         value: value as u64})
     }
 
     fn get_pay_on_demand_status(&self, token_id: &Uuid) -> Result<PODStatus> {
-        let (confirmed, spent) =
-            self.get_2::<bool, bool>(
+        let (confirmed, amount) =
+            self.get_2::<bool, i64>(
                 token_id.to_owned(),
                 Table::PayOnDemand,
                 vec![
                     Column::Confirmed,
-                    Column::Spent
+                    Column::Amount
                 ],
             )?;
-        Ok(PODStatus{confirmed, spent})
+        Ok(PODStatus{confirmed, amount: amount as u64})
     }
 
     fn set_pay_on_demand_status(&self, token_id: &Uuid, pod_status: &PODStatus) -> Result<()> {
         self.update(
             &token_id,
             Table::PayOnDemand,
-            vec![Column::Confirmed, Column::Spent],
-            vec![&pod_status.confirmed, &pod_status.spent],
+            vec![Column::Confirmed, Column::Amount],
+            vec![&pod_status.confirmed, &(pod_status.amount as i64)],
         )
     }
 
@@ -2024,20 +2055,21 @@ impl Database for PGDatabase {
         )
     }
 
-    fn get_pay_on_demand_spent(&self, token_id: &Uuid) -> Result<bool> {
-          self.get_1::<bool>(
-                token_id.to_owned(),
-                Table::PayOnDemand,
-                vec![Column::Spent],
-            )
+    fn get_pay_on_demand_amount(&self, token_id: &Uuid) -> Result<u64> {
+        let amount = self.get_1::<i64>(
+            token_id.to_owned(),
+            Table::PayOnDemand,
+            vec![Column::Amount],
+        )? as u64;
+        Ok(amount)
     }
 
-    fn set_pay_on_demand_spent(&self, token_id: &Uuid, spent: &bool) -> Result<()> {
+    fn set_pay_on_demand_amount(&self, token_id: &Uuid, amount: &u64) -> Result<()> {
         self.update(
             &token_id,
             Table::PayOnDemand,
-            vec![Column::Spent],
-            vec![spent],
+            vec![Column::Amount],
+            vec![&(*amount as i64)],
         )
     }
 
@@ -2046,6 +2078,7 @@ impl Database for PGDatabase {
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use bitcoin::Address;
     use std::str::FromStr;
     static BTC_ADDRESS: &str = "tb1q7gjz7dnzpz06svq7v3z2wpt33erx086x66jgtn";
 
@@ -2061,6 +2094,7 @@ pub mod tests {
         assert_eq!(Table::Smt.to_string(), "\"statechainentity\".Smt");
         assert_eq!(Table::Lockbox.to_string(), "\"statechainentity\".Lockbox");
         assert_eq!(Table::PayOnDemand.to_string(), "\"payondemand\".PayOnDemand");
+        assert_eq!(Table::UserSessionValue.to_string(), "\"statechainentity\".UserSessionValue");
     }
 
     #[test]

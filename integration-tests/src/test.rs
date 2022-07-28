@@ -724,7 +724,7 @@ mod tests {
         //replace by fee
         run_withdraw_init(&mut wallet, statechain_id, &(FEE-1));
         
-        let (sk_id, address, tx_signed, _amount) = run_withdraw_init(&mut wallet, statechain_id, &(FEE));
+        let (sk_id, _address, tx_signed, _amount) = run_withdraw_init(&mut wallet, statechain_id, &(FEE));
         let _tx_id = run_withdraw_confirm(&mut wallet, &sk_id, &tx_signed);
 
         // Check marked spent in wallet
@@ -905,7 +905,7 @@ mod tests {
             ))
         });
         db.expect_create_user_session()
-            .returning(|_user_id, _auth, _proof_key, _challenge, _user_ids| Ok(()));
+            .returning(|_user_id, _auth, _proof_key, _challenge, _user_ids, _amount| Ok(()));
         db.expect_get_user_auth()
             .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_init_ecdsa()

@@ -101,6 +101,17 @@ pub fn tx_withdraw_verify(
     
     // Check fee info
     let tx = transaction_deserialise(&tx_psm.tx_hex)?;
+    // If there is no withdrawal fee there should be 1 output only
+    if fee_withdraw.to_owned() == 0 {
+        if tx.output.len() != 1 {
+              return Err(SharedLibError::FormatError(format!(
+                "Withdrawal fee is 0, expected withdrawal tx to have 1 output - withdrawal tx has {} outputs.",
+            tx.output.len()
+            )));
+        }
+        return Ok(())
+    }
+
     let mut found = 0;
     for i in 0..fee_address.len(){
         // found a correct address
@@ -117,8 +128,10 @@ pub fn tx_withdraw_verify(
     }
 
     if tx.output[1].value != fee_withdraw.to_owned() {
-        return Err(SharedLibError::FormatError(String::from(
-            "Incorrect State Entity fee.",
+        return Err(SharedLibError::FormatError(format!(
+            "Incorrect State Entity fee - expected {}, got {}",
+            fee_withdraw,
+            &tx.output[1].value
         )));
     }
     Ok(())
@@ -215,15 +228,6 @@ pub fn tx_backup_build(
 ///     - amount-fee to receive address, and
 ///     - amount 'fee' to State Entity fee address 'fee_addr'
 
-/*pub fn tx_withdraw_build(
-    funding_txid: &Txid,
-    rec_se_address: &Address,
-    amount: &u64,
-    fee: &u64,
-    fee_addr: &String,
-) -> Result<Transaction> {
-*/
-
 pub fn tx_withdraw_build(
     sc_infos: &Vec::<StateChainDataAPI>,
     rec_se_address: &Address,
@@ -260,21 +264,25 @@ pub fn tx_withdraw_build(
         )));
     }
 
+    let mut output = vec![TxOut {
+                script_pubkey: rec_se_address.script_pubkey(),
+                value: amount - fee - tx_fee,
+    }];
+
+    if fee > 0 {
+        output.push(
+            TxOut {
+                script_pubkey: Address::from_str(&se_fee_info.address)?.script_pubkey(),
+                value: fee,
+            }
+        );
+    }
 
     let tx_0 = Transaction {
         version: 2,
         lock_time: 0,
         input: txins,
-        output: vec![
-            TxOut {
-                script_pubkey: rec_se_address.script_pubkey(),
-                value: amount - fee - tx_fee,
-            },
-            TxOut {
-                script_pubkey: Address::from_str(&se_fee_info.address)?.script_pubkey(),
-                value: fee,
-            },
-        ],
+        output
     };
     Ok(tx_0)
 }
@@ -316,6 +324,8 @@ pub mod tests {
     use super::keygen::*;
     use super::*;
     use serde_json;
+    use uuid::Uuid;
+    use crate::{structs::Protocol, state_chain::State};
 
     #[test]
     fn transaction() {
@@ -376,4 +386,251 @@ pub mod tests {
         let sig = secp.sign(&message, &priv_key.key);
         assert!(sig.verify_btc(&pub_key, &message).is_ok());
     }
+
+    #[test]
+    fn test_tx_withdraw_build() {
+        let sc_infos = &vec![
+            StateChainDataAPI {
+                utxo: OutPoint {
+                    txid: bitcoin::Txid::from_str("2834e7d92dbc48d7b1d99b47bd661ba3ef1d4bc9afc77976ee723c48aa879a03").unwrap(),
+                    vout: 0,
+                },
+                amount: 10000,
+                chain: vec![
+                    State {
+                        data: "026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
+                        next_state: None,
+                    },
+                ],
+                locktime: 22345,
+                confirmed: false,
+            },
+            StateChainDataAPI {
+                utxo: OutPoint {
+                    txid: bitcoin::Txid::from_str("9d119463ae82c44f7da202b6ad4b51450036257d1d220827f88e6ab92d248af4").unwrap(),
+                    vout: 0,
+                },
+                amount: 10000,
+                chain: vec![
+                    State {
+                        data: "022d7ea3d286541ed593e0158e315d73908646abcfa46aa56c12229a2910cce48c".to_string(),
+                        next_state: None,
+                    },
+                ],
+                locktime: 22345,
+                confirmed: false,
+            },
+            StateChainDataAPI {
+                utxo: OutPoint {
+                    txid: bitcoin::Txid::from_str("fb5d9f5dace79eef8f048877b4fe0cbe6d399b28ba1869de22140617b1adc1aa").unwrap(),
+                    vout: 0,
+                },
+                amount: 10000,
+                chain: vec![
+                    State {
+                        data: "039afb8b85ba5c1b6664df7e68d4d79ea194e7022c76f0f9f3dadc3f94d8c79211".to_string(),
+                        next_state: None,
+                    },
+                ],
+                locktime: 22345,
+                confirmed: false,
+            },
+        ];
+        
+        let rec_se_address = &bitcoin::Address::from_str(
+            "bcrt1qc5ywjdp3xhxsfym5eaxqlr95ut62j8ym8mnf9n").unwrap();
+        
+        let se_fee_info = &StateEntityFeeInfoAPI {
+            address: "bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x".to_string(),
+            deposit: 40,
+            withdraw: 40,
+            interval: 100,
+            initlock: 10000,
+            wallet_version: "0.6.0".to_string(),
+            wallet_message: "".to_string(),
+        };
+
+        let tx_fee = &141;
+
+        let tx_withdraw_unsigned = tx_withdraw_build(
+            sc_infos,
+            rec_se_address,
+            se_fee_info,
+            tx_fee
+        ).unwrap();
+        // No withdrawal fee - two outputs
+        assert_eq!(tx_withdraw_unsigned.output.len(), 2);
+        assert_eq!(
+            transaction_serialise(&tx_withdraw_unsigned), 
+            "0200000003039a87aa483c72ee7679c7afc94b1defa31b66bd479bd9b1d748bc2dd9e734280000000000fffffffff48a242db96a8ef82708221d7d25360045514badb602a27d4fc482ae6394119d0000000000ffffffffaac1adb117061422de6918ba289b396dbe0cfeb47788048fef9ee7ac5d9f5dfb0000000000ffffffff025374000000000000160014c508e9343135cd049374cf4c0f8cb4e2f4a91c9b7800000000000000160014949d650ede9f0cbd63c55c0cbba6830cec47c1b700000000"
+        );
+    }
+
+    #[test]
+    fn test_tx_withdraw_build_zero_withdraw_fee() {
+        let sc_infos = &vec![
+            StateChainDataAPI {
+                utxo: OutPoint {
+                    txid: bitcoin::Txid::from_str("2834e7d92dbc48d7b1d99b47bd661ba3ef1d4bc9afc77976ee723c48aa879a03").unwrap(),
+                    vout: 0,
+                },
+                amount: 10000,
+                chain: vec![
+                    State {
+                        data: "026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e".to_string(),
+                        next_state: None,
+                    },
+                ],
+                locktime: 22345,
+                confirmed: false,
+            },
+            StateChainDataAPI {
+                utxo: OutPoint {
+                    txid: bitcoin::Txid::from_str("9d119463ae82c44f7da202b6ad4b51450036257d1d220827f88e6ab92d248af4").unwrap(),
+                    vout: 0,
+                },
+                amount: 10000,
+                chain: vec![
+                    State {
+                        data: "022d7ea3d286541ed593e0158e315d73908646abcfa46aa56c12229a2910cce48c".to_string(),
+                        next_state: None,
+                    },
+                ],
+                locktime: 22345,
+                confirmed: false,
+            },
+            StateChainDataAPI {
+                utxo: OutPoint {
+                    txid: bitcoin::Txid::from_str("fb5d9f5dace79eef8f048877b4fe0cbe6d399b28ba1869de22140617b1adc1aa").unwrap(),
+                    vout: 0,
+                },
+                amount: 10000,
+                chain: vec![
+                    State {
+                        data: "039afb8b85ba5c1b6664df7e68d4d79ea194e7022c76f0f9f3dadc3f94d8c79211".to_string(),
+                        next_state: None,
+                    },
+                ],
+                locktime: 22345,
+                confirmed: false,
+            },
+        ];
+        
+        let rec_se_address = &bitcoin::Address::from_str(
+            "bcrt1qc5ywjdp3xhxsfym5eaxqlr95ut62j8ym8mnf9n").unwrap();
+        
+        let se_fee_info = &StateEntityFeeInfoAPI {
+            address: "bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x".to_string(),
+            deposit: 40,
+            withdraw: 0,
+            interval: 100,
+            initlock: 10000,
+            wallet_version: "0.6.0".to_string(),
+            wallet_message: "".to_string(),
+        };
+
+        let tx_fee = &0;
+
+        let tx_withdraw_unsigned = tx_withdraw_build(
+            sc_infos,
+            rec_se_address,
+            se_fee_info,
+            tx_fee
+        ).unwrap();
+        // No withdrawal fee - one output only
+        assert_eq!(tx_withdraw_unsigned.output.len(), 1);
+        assert_eq!(
+            transaction_serialise(&tx_withdraw_unsigned), 
+            "0200000003039a87aa483c72ee7679c7afc94b1defa31b66bd479bd9b1d748bc2dd9e734280000000000fffffffff48a242db96a8ef82708221d7d25360045514badb602a27d4fc482ae6394119d0000000000ffffffffaac1adb117061422de6918ba289b396dbe0cfeb47788048fef9ee7ac5d9f5dfb0000000000ffffffff015875000000000000160014c508e9343135cd049374cf4c0f8cb4e2f4a91c9b00000000"
+        );
+    }
+
+    const TX_WITHDRAW_UNSIGNED: &str = "020000000100000000000000000000000000000000000000000000000000000000000000000000000000ffffffff02accc0e0000000000160014e8df018c7e326cc253faac7e46cdc51e68542c423075000000000000160014e8df018c7e326cc253faac7e46cdc51e68542c4200000000";
+    const TX_WITHDRAW_UNSIGNED_ZERO_WITHDRAW_FEE: &str = "020000000100000000000000000000000000000000000000000000000000000000000000000000000000ffffffff0110cd0e0000000000160014e8df018c7e326cc253faac7e46cdc51e68542c4200000000";
+    const TX_WITHDRAW_UNSIGNED_ZERO_WITHDRAW_FEE_TOO_MANY_OUTPUTS: &str = "020000000100000000000000000000000000000000000000000000000000000000000000000000000000ffffffff0210cd0e0000000000160014e8df018c7e326cc253faac7e46cdc51e68542c423075000000000000160014e8df018c7e326cc253faac7e46cdc51e68542c4200000000";
+    
+    #[test]
+    fn test_tx_withdraw_verify() {
+        let shared_key_ids = vec![Uuid::from_str("485a12a4-1de8-4da8-850b-e5e4c15fd56b").unwrap()];
+        let fee_info = StateEntityFeeInfoAPI::example();        
+        let public_key = PublicKey::from_slice(
+            &[3,76,3,120,106,132,70,114,65,251,156,183,67,79,207,186,151,
+                149,27,87,156,125,146,95,34,38,209,206,13,70,102,45,79,]
+        ).unwrap();
+        let proof_key = Some("02a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe".to_string());
+        let input_amounts = vec![100000];
+        let input_addrs = vec![public_key];
+
+        let tx_psm = PrepareSignTxMsg {
+            shared_key_ids: shared_key_ids.clone(),
+            protocol: Protocol::Withdraw,
+            tx_hex: TX_WITHDRAW_UNSIGNED.to_string(),
+            input_addrs,
+            input_amounts,
+            proof_key
+        };
+
+        let mut tx_psm_extra_input_addr = tx_psm.clone();
+        tx_psm_extra_input_addr.input_addrs.push(public_key);
+
+        let mut tx_psm_zero_fee = tx_psm.clone();
+        tx_psm_zero_fee.tx_hex = TX_WITHDRAW_UNSIGNED_ZERO_WITHDRAW_FEE.to_string();
+        
+        let mut tx_psm_zero_fee_too_many_outputs = tx_psm.clone();
+        tx_psm_zero_fee_too_many_outputs.tx_hex = TX_WITHDRAW_UNSIGNED_ZERO_WITHDRAW_FEE_TOO_MANY_OUTPUTS.to_string();
+
+        //Ok
+        let fee_withdraw = 30000;
+        tx_withdraw_verify(&tx_psm, &[fee_info.address.as_str()], &fee_withdraw).unwrap();
+        
+        // Wrong number of inputs
+        let expected_err = SharedLibError::FormatError(String::from(
+                "Withdraw tx number of signing addresses != number of input amounts.",
+            ));
+        match tx_withdraw_verify(&tx_psm_extra_input_addr, &[fee_info.address.as_str()], &fee_withdraw) {
+            Ok(_) => panic!("expected Err: {}", &expected_err),
+            Err(err) => assert_eq!(&err, &expected_err)
+        }
+    
+        // Wrong withdrawal fee
+        let expected_err = SharedLibError::FormatError(String::from(
+                "Incorrect State Entity fee - expected 30001, got 30000",
+            ));
+        match tx_withdraw_verify(&tx_psm, &[fee_info.address.as_str()], &(fee_withdraw+1)) {
+            Ok(_) => panic!("expected Err: {}", &expected_err),
+            Err(err) => assert_eq!(&err, &expected_err)
+        }
+
+        // Wrong fee address
+        let expected_err = SharedLibError::FormatError(String::from(
+                "Incorrect State Entity fee address.",
+            ));
+        match tx_withdraw_verify(&tx_psm, 
+            &["bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x"], 
+            &(fee_withdraw)
+        ) {
+            Ok(_) => panic!("expected Err: {}", &expected_err),
+            Err(err) => assert_eq!(&err, &expected_err)
+        }
+
+        let mut tx_psm_deser = transaction_deserialise(&TX_WITHDRAW_UNSIGNED_ZERO_WITHDRAW_FEE.to_string()).unwrap();
+        tx_psm_deser.output = vec![tx_psm_deser.output[0].clone()];
+
+
+        // Zero withdrawal fee - ok
+        tx_withdraw_verify(&tx_psm_zero_fee, &[fee_info.address.as_str()], &0).unwrap();
+
+         // Zero withdrawal fee - too many outputs
+        let expected_err = SharedLibError::FormatError(String::from(
+                "Withdrawal fee is 0, expected withdrawal tx to have 1 output - withdrawal tx has 2 outputs.",
+        ));
+        match tx_withdraw_verify(&tx_psm_zero_fee_too_many_outputs, 
+            &[fee_info.address.as_str()], 
+            &0
+        ) {
+            Ok(_) => panic!("expected Err: {}", &expected_err),
+            Err(err) => assert_eq!(&err, &expected_err)
+        }
+    }
+
 }

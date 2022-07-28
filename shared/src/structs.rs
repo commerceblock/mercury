@@ -44,12 +44,6 @@ pub trait SchemaExample{
 #[schemars(remote = "Uuid")]
 pub struct UuidDef(String);
 
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
-pub struct PodTokenID {
-    #[schemars(with = "UuidDef")]
-    pub id: Uuid,
-}
-
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct Invoice{
@@ -71,6 +65,8 @@ impl From<clightningrpc::responses::Invoice> for Invoice {
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct PODInfo {
+    #[schemars(with = "UuidDef")]
+    pub token_id: Uuid,
     pub lightning_invoice: Invoice,
     #[schemars(with = "AddressDef")]
     pub btc_payment_address: Address,
@@ -80,18 +76,24 @@ pub struct PODInfo {
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct PODStatus {
     pub confirmed: bool,
-    pub spent: bool,
+    pub amount: u64,
 }
 
 impl PartialEq<bool> for PODStatus {
     fn eq(&self, other: &bool) -> bool {
-        (self.confirmed && !self.spent) == *other
+        (self.confirmed && self.amount > 0) == *other
     }
 }
 
 impl PartialEq<Self> for PODStatus {
     fn eq(&self, other: &Self) -> bool {
-        (self.confirmed == other.confirmed) && (self.spent == other.spent)
+        (self.confirmed == other.confirmed) && (self.amount == other.amount)
+    }
+}
+
+impl PODStatus {
+    pub fn empty(&self) -> bool {
+        self.amount == 0
     }
 }
 
@@ -174,7 +176,7 @@ pub struct StateEntityFeeInfoAPI {
 impl StateEntityFeeInfoAPI{
     pub fn example() -> Self{
         Self{
-            address: "bc1qzvv6yfeg0navfkrxpqc0fjdsu9ey4qgqqsarq4".to_string(),
+            address: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq".to_string(),
             deposit: 0,
             withdraw: 300,
             interval: 144,

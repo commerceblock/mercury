@@ -64,7 +64,7 @@ use rocket_contrib::databases::r2d2_postgres::PostgresConnectionManager;
 
 use crate::storage::db::Alpha;
 use bitcoin::hashes::sha256d;
-use bitcoin::{Transaction, Address};
+use bitcoin::Transaction;
 use chrono::NaiveDateTime;
 use curv::{FE, GE};
 use kms::ecdsa::two_party::*;
@@ -138,6 +138,7 @@ pub trait Database {
     fn get_statechain_id(&self, user_id: Uuid) -> Result<Uuid>;
     fn get_owner_id(&self, statechain_id: Uuid) -> Result<Uuid>;
     fn get_user_auth(&self, user_id: &Uuid) -> Result<String>;
+    fn get_user_value(&self, user_id: &Uuid) -> Result<u64>;
     fn is_confirmed(&self, statechain_id: &Uuid) -> Result<bool>;
     fn set_confirmed(&self, statechain_id: &Uuid) -> Result<()>;
     fn get_challenge(&self, user_id: &Uuid) -> Result<String>;
@@ -254,7 +255,8 @@ pub trait Database {
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
     fn pod_create_user_session(&self, user_id: &Uuid, auth: &String,
-        proof_key: &String, user_ids: Arc<Mutex<UserIDs>>) -> Result<()>;
+        proof_key: &String, user_ids: Arc<Mutex<UserIDs>>, value: Option<u64>) -> Result<()>;
+
     // Create new UserSession to allow new owner to generate shared wallet
     fn transfer_init_user_session(
         &self,
@@ -284,14 +286,14 @@ pub trait Database {
     fn get_statecoin_pubkey(&self, statechain_id: Uuid) -> Result<Option<String>>;
     fn update_ecdsa_master(&self, user_id: &Uuid, master_key: MasterKey1) -> Result<()>;
     fn get_sighash(&self, user_id: Uuid) -> Result<sha256d::Hash>;
-    fn set_pay_on_demand_info(&self, token_id: &Uuid, pod_info: &PODInfo) -> Result<()>;
+    fn set_pay_on_demand_info(&self, pod_info: &PODInfo) -> Result<()>;
     fn get_pay_on_demand_info(&self, token_id: &Uuid) -> Result<PODInfo>;
     fn get_pay_on_demand_status(&self, token_id: &Uuid) -> Result<PODStatus>;
     fn set_pay_on_demand_status(&self, token_id: &Uuid, pod_status: &PODStatus) -> Result<()>;
     fn get_pay_on_demand_confirmed(&self, token_id: &Uuid) -> Result<bool>;
     fn set_pay_on_demand_confirmed(&self, token_id: &Uuid, confirmed: &bool) -> Result<()>;
-    fn get_pay_on_demand_spent(&self, token_id: &Uuid) -> Result<bool>;
-    fn set_pay_on_demand_spent(&self, token_id: &Uuid, spent: &bool) -> Result<()>;
+    fn get_pay_on_demand_amount(&self, token_id: &Uuid) -> Result<u64>;
+    fn set_pay_on_demand_amount(&self, token_id: &Uuid, amount: &u64) -> Result<()>;
 }
 
 pub mod structs {

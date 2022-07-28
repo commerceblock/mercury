@@ -8,7 +8,6 @@ extern crate shared_lib;
 use crate::error::{SEError,DBErrorType};
 use crate::server::{StateChainEntity};
 use crate::protocol::util::RateLimiter;
-use crate::storage::db;
 use crate::storage::Storage;
 use crate::Database;
 use shared_lib::{state_chain::*, structs::*, util::FEE};
@@ -81,7 +80,7 @@ impl Deposit for SCE {
         // verification. For now use ID as 'password' to interact with state entity
         // unsolved_vdf saved for verification at keygen first
         self.database
-            .create_user_session(&user_id, &deposit_msg1.auth, &deposit_msg1.proof_key, &challenge, self.user_ids.clone())?;
+            .create_user_session(&user_id, &deposit_msg1.auth, &deposit_msg1.proof_key, &challenge, self.user_ids.clone(), None)?;
 
         info!(
             "DEPOSIT: Protocol initiated. User ID generated: {}",
@@ -278,6 +277,7 @@ pub fn deposit_confirm(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::storage::db;
     use crate::protocol::util::{
         mocks,
         tests::{test_sc_entity, BACKUP_TX_NOT_SIGNED, BACKUP_TX_SIGNED},
@@ -289,7 +289,7 @@ pub mod tests {
     fn test_deposit_init() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().returning(|_, _, _, _, _| Ok(()));
+        db.expect_create_user_session().returning(|_, _, _, _, _, _| Ok(()));
 
         let sc_entity = test_sc_entity(db, None, None, None, None);
 
