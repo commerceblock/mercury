@@ -69,6 +69,8 @@ pub struct Config {
     pub electrum_server: String,
     pub testing_mode: bool,
     pub tor: Tor,
+    pub network: String,
+    pub daemon_address: String,
 }
 
 impl Config {
@@ -81,6 +83,8 @@ impl Config {
             electrum_server: cfg.get("electrum_server")?,
             testing_mode: cfg.get("testing_mode")?,
             tor,
+            network: cfg.get("network")?,
+            daemon_address: cfg.get("daemon_address")?
         })
     }
 }
@@ -93,6 +97,8 @@ impl Default for Config {
             electrum_server: "127.0.0.1:60401".to_string(),
             testing_mode: true,
             tor: Tor::default(),
+            network: "testnet".to_string(),
+            daemon_address: "/tmp/rustd.sock".to_string()
         }
     }
 }
