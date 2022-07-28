@@ -75,7 +75,7 @@ impl Deposit for SCE {
         // verification. For now use ID as 'password' to interact with state entity
         // unsolved_vdf saved for verification at keygen first
         self.database
-            .create_user_session(&user_id, &deposit_msg1.auth, &deposit_msg1.proof_key, &challenge, self.user_ids.clone())?;
+            .create_user_session(&user_id, &deposit_msg1.auth, &deposit_msg1.proof_key, &challenge, self.user_ids.clone(), None)?;
 
         info!(
             "DEPOSIT: Protocol initiated. User ID generated: {}",
@@ -220,7 +220,7 @@ pub mod tests {
     fn test_deposit_init() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().returning(|_, _, _, _, _| Ok(()));
+        db.expect_create_user_session().returning(|_, _, _, _, _, _| Ok(()));
 
         let sc_entity = test_sc_entity(db, None, None, None, None);
 
