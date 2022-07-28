@@ -89,6 +89,7 @@ impl From<RecvTimeoutError> for SpawnError {
     }
 }
 
+
 pub trait SpawnServer {
     /// Spawn a StateChain Entity server in testing mode if there isn't one running already.
     /// Returns Ok(()) if a new server was spawned, otherwise returns an error.
@@ -122,8 +123,8 @@ impl SpawnServer for PGDatabase {
             None => ()
         };
         
-        // Rocket server is blocking, so we spawn a new thread.
-        let handle = thread::spawn(|| {
+        let builder = thread::Builder::new();
+        let handle = builder.spawn(|| {
             match server::get_server::<Self, PGDatabase>(
                 mainstay_config,
                 self,
@@ -136,9 +137,9 @@ impl SpawnServer for PGDatabase {
                 }
                 Err(_) => SpawnError::GetServer,
             }
-        });
+        }).unwrap();
         std::thread::sleep(std::time::Duration::from_secs(7));
-        handle
+        handle      
     }
 }
 
@@ -519,7 +520,14 @@ pub fn reset_inram_data(client: &ClientShim) -> Result<()> {
     Ok(())
 }
 
-pub fn start_server(port: Option<u16>, mode: Option<String>) -> thread::JoinHandle<SpawnError> {
-    PGDatabase::get_new().spawn_server(None, port, mode)
+pub fn start_server(port: Option<u16>, mode: Option<String>) -> std::result::Result<thread::JoinHandle<SpawnError>, SpawnError> {
+    let handle = PGDatabase::get_new().spawn_server(None, port, mode);
+    match handle.is_finished() {
+        true => {
+            let error = handle.join().unwrap();
+            Err(error)
+        },
+        false => Ok(handle)
+    } 
 }
 
