@@ -320,8 +320,8 @@ impl PGDatabase {
                 id uuid NOT NULL,
                 lightninginvoice varchar,
                 btcpaymentaddress varchar,
-                value NOT NULL int8,
-                confirmed bool NOT NULL DEFAULT false,              
+                value int8,
+                confirmed bool NOT NULL DEFAULT false,             
                 amount int8 NOT NULL DEFAULT 0,
                 PRIMARY KEY (id)
             );",
