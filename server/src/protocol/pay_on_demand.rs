@@ -25,6 +25,7 @@ use std::thread;
 use crate::rpc::lightning_client_factory::LightningClient;
 use crate::rpc::bitcoin_client_factory::BitcoinClient;
 use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -32,10 +33,13 @@ cfg_if! {
     if #[cfg(any(test,feature="mockdb"))]{
         use crate::MockDatabase;
         use monotree::database::MemoryDB;
-        type SCE = StateChainEntity::<MockDatabase, MemoryDB>;
+        type DB = MockDatabase;
+        type SCE = StateChainEntity::<DB, MemoryDB>;
+        
     } else {
         use crate::PGDatabase;
-        type SCE = StateChainEntity::<PGDatabase, PGDatabase>;
+        type DB = PGDatabase;
+        type SCE = StateChainEntity::<DB, DB>;
     }
 }
 
@@ -81,24 +85,37 @@ impl POD for SCE {
         return Ok(pod_info)
     }
 
-    fn pod_token_verify(&self, bitcoin_client: Option<&BitcoinClient>, lightning_client: Option<Arc<Mutex<LightningClient>>>, token_id: &Uuid) -> Result<PODStatus> {
+    fn pod_token_verify(&self, bitcoin_client: Option<&BitcoinClient>, 
+        lightning_client: Option<Arc<Mutex<LightningClient>>>, 
+        token_id: &Uuid) -> Result<PODStatus> {
+        let statuses =self.lightning_invoice_statuses.clone();
+        let database = &self.database;
+
+        fn confirm_payment(pod_info: &PODInfo, 
+                statuses: Arc<Mutex<HashMap<Uuid, LightningInvoiceStatus>>>,
+                database: &DB
+            ) 
+            -> Result<PODStatus> {
+                database.set_pay_on_demand_status(&pod_info.token_id, &PODStatus {confirmed: true, amount: pod_info.value})?;
+                //Database updated as confirmed - lightning payment status no longer needed in memory
+                let mut guard = statuses.as_ref().lock().unwrap();
+                guard.remove(&pod_info.token_id);
+                database.get_pay_on_demand_status(&pod_info.token_id)
+        }
+        
         let mut pod_status = self.database.get_pay_on_demand_status(token_id)?;
-        if (!pod_status.confirmed && !pod_status.spent) {
-            let confirmed = match self.query_lightning_payment(lightning_client, &token_id)?{
-                LightningInvoiceStatus::Paid => true,
+        if (!pod_status.confirmed) {
+            let pod_info = &self.database.get_pay_on_demand_info(token_id)?;
+            match self.query_lightning_payment(lightning_client, &token_id)?{
+                LightningInvoiceStatus::Paid => pod_status = confirm_payment(pod_info, statuses, database)?,
                 _ => {
-                    let pod_info: PODInfo = self.database.get_pay_on_demand_info(token_id)?;
-                    self.query_btc_payment(bitcoin_client, &pod_info.btc_payment_address, &pod_info.value)?
+                    if self.query_btc_payment(bitcoin_client, &pod_info.btc_payment_address, &pod_info.value)? {
+                        pod_status = confirm_payment(&pod_info, statuses, database)?
+                    } 
                 }                 
             };
-            if(confirmed) {
-                self.database.set_pay_on_demand_confirmed(token_id, &true)?;
-                //Database updated as confirmed - lightning payment status no longer needed in memory
-                let mut guard = self.lightning_invoice_statuses.as_ref().lock().unwrap();
-                guard.remove(&token_id);
-                pod_status = self.database.get_pay_on_demand_status(token_id)?;
-            }
         }
+
         Ok(pod_status)
     }
 
@@ -388,7 +405,7 @@ pyetp5h2tztugp9lfyql"),
                 Ok(
                     PODStatus {
                         confirmed: false,
-                        spent: false
+                        amount: 0
                     }
                 )                    
             );
@@ -404,10 +421,10 @@ pyetp5h2tztugp9lfyql"),
         let mut bc = sce.bitcoin_client().unwrap();
         bc.expect_get_received_by_address().returning(|_,_| Ok(bitcoin::Amount::from_sat(0)));
         let result = sce.pod_token_verify(Some(&bc), Some(Arc::clone(&lc)), &id);
-        assert_eq!(result, Ok(PODStatus { confirmed: false, spent: false }));
+        assert_eq!(result, Ok(PODStatus { confirmed: false, amount: 0 }));
         //Still unpaid on second call
         let result_2 = sce.pod_token_verify(Some(&bc), Some(lc), &id);
-        assert_eq!(result_2, Ok(PODStatus { confirmed: false, spent: false }));
+        assert_eq!(result_2, Ok(PODStatus { confirmed: false, amount: 0 }));
     }
 
   #[test]
@@ -419,12 +436,12 @@ pyetp5h2tztugp9lfyql"),
                 Ok(
                     PODStatus {
                         confirmed: true,
-                        spent: false
+                        amount: 100
                     }
                 )                    
             );
         let result = sce.pod_token_verify(None, None, &id);
-        assert_eq!(result, Ok(PODStatus { confirmed: true, spent: false }));
+        assert_eq!(result, Ok(PODStatus { confirmed: true, amount: 100 }));
     }
 
     #[test]
@@ -441,7 +458,7 @@ pyetp5h2tztugp9lfyql"),
                 Ok(
                     PODStatus {
                         confirmed: false,
-                        spent: false
+                        amount: 0
                     }
                 )                    
             );
@@ -453,7 +470,7 @@ pyetp5h2tztugp9lfyql"),
                 Ok(
                     PODStatus {
                         confirmed: true,
-                        spent: false
+                        amount: 100
                     }
                 )                    
             );
@@ -468,7 +485,7 @@ pyetp5h2tztugp9lfyql"),
         let mut bc = sce.bitcoin_client().unwrap();
         bc.expect_get_received_by_address().returning(|_,_| Ok(bitcoin::Amount::from_sat(0)));
         let result = sce.pod_token_verify(Some(&bc), Some(Arc::clone(&lc)), &id);
-        assert_eq!(result, Ok(PODStatus { confirmed: false, spent: false }));
+        assert_eq!(result, Ok(PODStatus { confirmed: false, amount: 0 }));
         
         //Paid on second call
         let mut lc_guard = lc.as_ref().lock().unwrap();
@@ -477,7 +494,7 @@ pyetp5h2tztugp9lfyql"),
         );
         drop(lc_guard);
         let result_2 = sce.pod_token_verify(Some(&bc), Some(lc), &id);
-        assert_eq!(result_2, Ok(PODStatus { confirmed: true, spent: false }));
+        assert_eq!(result_2, Ok(PODStatus { confirmed: true, amount: 100 }));
     }
 
   
@@ -491,7 +508,7 @@ pyetp5h2tztugp9lfyql"),
                 Ok(
                     PODStatus {
                         confirmed: false,
-                        spent: false
+                        amount: 0
                     }
                 )                    
             );
@@ -507,9 +524,9 @@ pyetp5h2tztugp9lfyql"),
         let mut bc = sce.bitcoin_client().unwrap();
         bc.expect_get_received_by_address().returning(|_,_| Ok(bitcoin::Amount::from_sat(0)));
         let result = sce.pod_token_verify(Some(&bc), Some(Arc::clone(&lc)), &id);
-        assert_eq!(result, Ok(PODStatus { confirmed: false, spent: false }));
+        assert_eq!(result, Ok(PODStatus { confirmed: false, amount: 0 }));
         let result_2 = sce.pod_token_verify(Some(&bc), Some(Arc::clone(&lc)), &id);
-        assert_eq!(result_2, Ok(PODStatus { confirmed: false, spent: false }));
+        assert_eq!(result_2, Ok(PODStatus { confirmed: false, amount: 0 }));
     }
 
     #[test]
@@ -522,7 +539,7 @@ pyetp5h2tztugp9lfyql"),
                 Ok(
                     PODStatus {
                         confirmed: false,
-                        spent: false
+                        amount: 0
                     }
                 )                    
             );
@@ -532,11 +549,11 @@ pyetp5h2tztugp9lfyql"),
                 Ok(
                     PODStatus {
                         confirmed: true,
-                        spent: false
+                        amount: 100
                     }
                 )                    
             );
-        sce.database.expect_set_pay_on_demand_confirmed().
+        sce.database.expect_set_pay_on_demand_status().
             times(1).
             return_const(Ok(()) );
         sce.database.expect_get_pay_on_demand_info().return_const(Ok(
@@ -552,7 +569,7 @@ pyetp5h2tztugp9lfyql"),
         //full amount paid - expect confirmed
         bc.expect_get_received_by_address().times(1).returning(|_,_| Ok(get_invoice_amount()));
         let result = sce.pod_token_verify(Some(&bc), Some(Arc::clone(&lc)), &id);
-        assert_eq!(result, Ok(PODStatus { confirmed: true, spent: false }));
+        assert_eq!(result, Ok(PODStatus { confirmed: true, amount: 100 }));
     }
 
     #[test]
@@ -564,7 +581,7 @@ pyetp5h2tztugp9lfyql"),
                 Ok(
                     PODStatus {
                         confirmed: false,
-                        spent: false
+                        amount: 0
                     }
                 )                    
             );
@@ -581,7 +598,7 @@ pyetp5h2tztugp9lfyql"),
         //Less than full amount paid - expect not confirmed
         bc.expect_get_received_by_address().return_once(|_,_|  Ok(get_invoice_amount()-bitcoin::Amount::from_sat(1)));
         let result = sce.pod_token_verify(Some(&bc), Some(Arc::clone(&lc)), &id);
-        assert_eq!(result, Ok(PODStatus { confirmed: false, spent: false }));
+        assert_eq!(result, Ok(PODStatus { confirmed: false, amount: 0 }));
     }
  
     

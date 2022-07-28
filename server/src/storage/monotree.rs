@@ -401,6 +401,9 @@ impl Database for MemoryDB {
     fn get_user_auth(&self, _user_id: &uuid::Uuid) -> crate::Result<String> {
         unimplemented!()
     }
+    fn get_user_value(&self, _user_id: &uuid::Uuid) -> crate::Result<u64> {
+        unimplemented!()
+    }
     fn is_confirmed(&self, _statechain_id: &uuid::Uuid) -> crate::Result<bool> {
         unimplemented!()
     }
@@ -693,7 +696,8 @@ impl Database for MemoryDB {
         _auth: &String,
         _proof_key: &String,
         _challenge: &String,
-        _user_ids: Arc<Mutex<UserIDs>>
+        _user_ids: Arc<Mutex<UserIDs>>,
+        _value: Option<u64>
     ) -> crate::Result<()> {
         unimplemented!()
     }
@@ -779,6 +783,6 @@ impl Database for MemoryDB {
     fn set_pay_on_demand_status(&self, _token_id: &uuid::Uuid, _pod_status: &PODStatus) -> crate::Result<()> { unimplemented!() }
     fn get_pay_on_demand_confirmed(&self, _token_id: &uuid::Uuid) -> crate::Result<bool> { unimplemented!() }
     fn set_pay_on_demand_confirmed(&self, _token_id: &uuid::Uuid, _confirmed: &bool) -> crate::Result<()> { unimplemented!() }
-    fn get_pay_on_demand_spent(&self, _token_id: &uuid::Uuid) -> crate::Result<bool> { unimplemented!() }
-    fn set_pay_on_demand_spent(&self, _token_id: &uuid::Uuid, _spent: &bool) -> crate::Result<()> { unimplemented!() }
+    fn get_pay_on_demand_amount(&self, _token_id: &uuid::Uuid) -> crate::Result<u64> { unimplemented!() }
+    fn set_pay_on_demand_amount(&self, _token_id: &uuid::Uuid, _amount: &u64) -> crate::Result<()> { unimplemented!() }
 }

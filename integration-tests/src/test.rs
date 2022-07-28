@@ -905,7 +905,7 @@ mod tests {
             ))
         });
         db.expect_create_user_session()
-            .returning(|_user_id, _auth, _proof_key, _challenge, _user_ids| Ok(()));
+            .returning(|_user_id, _auth, _proof_key, _challenge, _user_ids, _amount| Ok(()));
         db.expect_get_user_auth()
             .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_init_ecdsa()

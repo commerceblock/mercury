@@ -76,18 +76,24 @@ pub struct PODInfo {
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct PODStatus {
     pub confirmed: bool,
-    pub spent: bool,
+    pub amount: u64,
 }
 
 impl PartialEq<bool> for PODStatus {
     fn eq(&self, other: &bool) -> bool {
-        (self.confirmed && !self.spent) == *other
+        (self.confirmed && self.amount > 0) == *other
     }
 }
 
 impl PartialEq<Self> for PODStatus {
     fn eq(&self, other: &Self) -> bool {
-        (self.confirmed == other.confirmed) && (self.spent == other.spent)
+        (self.confirmed == other.confirmed) && (self.amount == other.amount)
+    }
+}
+
+impl PODStatus {
+    pub fn empty(&self) -> bool {
+        self.amount == 0
     }
 }
 
