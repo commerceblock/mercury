@@ -256,11 +256,22 @@ impl Deposit for SCE {
 }
 
 #[openapi]
+// DEPOSIT WITH NO FEE
 /// # Initiate a statechain deposit and generate a shared key ID
 #[post("/deposit/init", format = "json", data = "<deposit_msg1>")]
 pub fn deposit_init(sc_entity: State<SCE>, deposit_msg1: Json<DepositMsg1>) -> Result<Json<UserID>> {
     sc_entity.check_rate_slow("deposit_init")?;
     match sc_entity.deposit_init(deposit_msg1.into_inner()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+/// # Pay On Deposit: Initiate a statechain deposit and generate a shared key ID
+#[post("/pod/deposit/init", format = "json", data = "<pod_msg1>")]
+pub fn pod_deposit_init(sc_entity: State<SCE>, pod_msg1: Json<PODMsg1>) -> Result<Json<PODUserID>> {
+    sc_entity.check_rate_slow("deposit_init")?;
+    match sc_entity.pod_deposit_init(pod_msg1.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
