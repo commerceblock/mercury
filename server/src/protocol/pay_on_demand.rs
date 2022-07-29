@@ -561,7 +561,7 @@ pyetp5h2tztugp9lfyql"),
         ));
         let lc = Arc::new(Mutex::new(sce.lightning_client().unwrap()));
         let mut lc_guard = lc.as_ref().lock().unwrap();
-        lc_guard.expect_waitinvoice().times(2).returning(|id_str| 
+        lc_guard.expect_waitinvoice().times(1).returning(|id_str| 
             Ok(get_waiting(id_str))
         );
         drop(lc_guard);

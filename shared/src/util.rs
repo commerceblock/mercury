@@ -113,18 +113,33 @@ pub fn tx_withdraw_verify(
     }
 
     let mut found = 0;
+    let se_fee_script_pubkey = &tx.output[1].script_pubkey;
+    
     for i in 0..fee_address.len(){
-        // found a correct address
-        if tx.output[1].script_pubkey == Address::from_str(&fee_address[i])?.script_pubkey() {
-            found = 1;
-        }
+        let addr = &Address::from_str(&fee_address[i])?;
+        let network = addr.network;
+        match &Address::from_script(se_fee_script_pubkey, network) {
+            Some(se_fee_addr) => {
+                if &se_fee_addr == &addr {
+                    // found a correct address
+                    found = 1;
+                }
+            },
+            None=> ()
+        };
     }
 
     // didn't find a correct address
     if found == 0 {
-        return Err(SharedLibError::FormatError(String::from(
-            "Incorrect State Entity fee address.",
-        )));
+        let fa: Vec<Address> = fee_address.into_iter().filter_map(|x| Address::from_str(*x).ok()).collect();
+        //let fa_sp: Vec<bitcoin::blockdata::script::Script> = fa.into_iter().map(|x| x.script_pubkey()).collect();
+        let se_fee_addr_bitcoin = &Address::from_script(se_fee_script_pubkey, Network::Bitcoin);
+        let se_fee_addr_testnet = &Address::from_script(se_fee_script_pubkey, Network::Testnet);
+        let se_fee_addr_regtest = &Address::from_script(se_fee_script_pubkey, Network::Regtest);
+        return Err(SharedLibError::FormatError(format!(
+            "Incorrect State Entity fee address. Expected one of {:?}, found bitcoin: {:?}, or testnet: {:?}, or regtest: {:?}", 
+            &fa, &se_fee_addr_bitcoin, &se_fee_addr_testnet, &se_fee_addr_regtest)
+        ));
     }
 
     if tx.output[1].value != fee_withdraw.to_owned() {
