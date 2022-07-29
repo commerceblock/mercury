@@ -476,7 +476,8 @@ pub mod tests {
         let challenge: String = "cc9391e5b30bfc533bafc5c7fa8d4af4".to_string();
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().returning(|_, _, _, _, _, _| Ok(()));
+        db.expect_create_user_session().returning(|_, _, _, _, _ | Ok(()));
+        db.expect_create_user_session_challenge().returning(|_, _, _, _, _, _ | Ok(()));
         db.expect_get_user_auth()
            .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
@@ -559,7 +560,8 @@ pub mod tests {
         let challenge: String = "cc9391e5b30bfc533bafc5c7fa8d4af4".to_string();
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().returning(|_, _, _, _, _,_| Ok(()));
+        db.expect_create_user_session().returning(|_, _, _, _, _ | Ok(()));
+        db.expect_create_user_session_challenge().returning(|_, _, _, _, _, _ | Ok(()));
         db.expect_get_user_auth()
            .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
@@ -645,7 +647,7 @@ pub mod tests {
         let challenge: String = "cc9391e5b30bfc533bafc5c7fa8d4af4".to_string();
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().returning(|_, _, _, _, _, _| Ok(()));
+        db.expect_create_user_session_challenge().returning(|_, _, _, _, _, _ | Ok(()));
         db.expect_get_user_auth()
            .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
@@ -693,7 +695,7 @@ pub mod tests {
         let tx_backup: Transaction = serde_json::from_str(&BACKUP_TX_NOT_SIGNED).unwrap();
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().returning(|_, _, _, _, _, _| Ok(()));
+        db.expect_create_user_session_challenge().returning(|_, _, _, _, _, _ | Ok(()));
         db.expect_get_user_auth()
            .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));

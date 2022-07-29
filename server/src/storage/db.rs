@@ -1821,6 +1821,41 @@ impl Database for PGDatabase {
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
     fn create_user_session(&self, user_id: &Uuid, auth: &String, 
+        proof_key: &String, user_ids: Arc<Mutex<UserIDs>>, value: Option<u64>) -> Result<()> {
+        let mut guard = user_ids.as_ref().lock()?;
+        guard.insert(user_id.to_owned());
+        self.insert(user_id, Table::UserSession).map_err(|e| { guard.remove(user_id); e })?;
+        self.insert(user_id, Table::Lockbox).map_err(|e| { 
+            guard.remove(user_id); 
+            let _ = self.remove(user_id, Table::UserSession); 
+            e
+         })?;
+        self.update(
+            user_id,
+            Table::UserSession,
+            vec![Column::Authentication, Column::ProofKey],
+            vec![&auth.clone(), &proof_key.to_owned()],
+        ).map_err(|e| { 
+            guard.remove(user_id); 
+            let _ = self.remove(user_id, Table::UserSession);
+            let _ = self.remove(user_id, Table::Lockbox);
+            e
+         })?;
+        self.update(
+            user_id,
+            Table::UserSessionValue,
+            vec![Column::Value],
+            vec![&value.map(|v| v as i64)],
+        ).map_err(|e| { 
+            guard.remove(user_id); 
+            let _ = self.remove(user_id, Table::UserSession);
+            let _ = self.remove(user_id, Table::Lockbox);
+            e
+        })    
+    }
+    // Create DB entry for newly generated ID signalling that user has passed some
+    // verification. For now use ID as 'password' to interact with state entity
+    fn create_user_session_challenge(&self, user_id: &Uuid, auth: &String, 
         proof_key: &String, challenge: &String,
         user_ids: Arc<Mutex<UserIDs>>, value: Option<u64>) -> Result<()> {
         let mut guard = user_ids.as_ref().lock()?;
@@ -1853,32 +1888,6 @@ impl Database for PGDatabase {
             let _ = self.remove(user_id, Table::Lockbox);
             e
         })    
-    }
-    // Create DB entry for newly generated ID signalling that user has passed some
-    // verification. For now use ID as 'password' to interact with state entity
-    fn pod_create_user_session(&self, user_id: &Uuid, auth: &String, 
-        proof_key: &String, user_ids: Arc<Mutex<UserIDs>>
-    ) -> Result<()> {
-        let mut guard = user_ids.as_ref().lock()?;
-        guard.insert(user_id.to_owned());
-        self.insert(user_id, Table::UserSession).map_err(|e| { guard.remove(user_id); e })?;
-        self.insert(user_id, Table::Lockbox).map_err(|e| { 
-            guard.remove(user_id); 
-            let _ = self.remove(user_id, Table::UserSession); 
-            e
-         })?;
-        self.update(
-            user_id,
-            Table::UserSession,
-            vec![ Column::Authentication, Column::ProofKey ],
-            vec![ &auth.clone(), &proof_key.to_owned() ],
-        ).map_err(|e| { 
-            guard.remove(user_id); 
-            let _ = self.remove(user_id, Table::UserSession);
-            let _ = self.remove(user_id, Table::Lockbox);
-            e
-         })?;
-        Ok(())
     }
 
     // Create new UserSession to allow new owner to generate shared wallet

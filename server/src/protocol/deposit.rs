@@ -79,8 +79,9 @@ impl Deposit for SCE {
         // Create DB entry for newly generated ID signalling that user has passed some
         // verification. For now use ID as 'password' to interact with state entity
         // unsolved_vdf saved for verification at keygen first
+
         self.database
-            .create_user_session(&user_id, &deposit_msg1.auth, &deposit_msg1.proof_key, &challenge, self.user_ids.clone(), None)?;
+            .create_user_session_challenge(&user_id, &deposit_msg1.auth, &deposit_msg1.proof_key, &challenge, self.user_ids.clone(), None)?;
 
         info!(
             "DEPOSIT: Protocol initiated. User ID generated: {}",
@@ -105,46 +106,51 @@ impl Deposit for SCE {
         };
 
 
-        let status = self.database.pay_on_demand(&pod_msg1.token_id)?;
+        let status = self.database.get_pay_on_demand_status(&pod_msg1.token_id)?;
         // Get token info
-        
-        let mut deposit_value = status.value - pod_msg1.amount;
-        // The remaining token value
 
-        // Generate shared wallet ID (user ID)
-        let mut user_id = Uuid::new_v4();
-
-        println!("deposit_value: {}", deposit_value);
-
-
-        if status.value <= 0 {
-            return Err(SEError::Generic(String::from(
-                "Token already spent",
-            )));
-        } if deposit_value < 0{
-            return Err(SEError::Generic(String::from(
-                "Insufficent token value remaining",
-            )));
-        } if !status.confirmed{
+        if !status.confirmed{
             return Err(SEError::Generic(String::from(
                 "Token payment not received",
             )));
-        } if status.value > 0 && deposit_value >= 0 && status.confirmed {
-            // Create DB entry for newly generated ID signalling that user has passed some
-            // verification. For now use ID as 'password' to interact with state entity
-            // unsolved_vdf saved for verification at keygen first
-            
-            self.database
-                .pod_create_user_session(&user_id, &pod_msg1.auth, &pod_msg1.proof_key, self.user_ids.clone(), &pod_msg1.amount)?;
-            
-            // Once DB entry created
-            // Decrement token value
+        } 
 
-            //  POTENTIAL ERROR: Can this be called twice by one wallet? -> double spending
-            self.database
-                .decrement_pay_on_demand( &pod_msg1.token_id, &pod_msg1.amount );
-
+        let deposit_amount = match pod_msg1.amount{
+            Some(x) => x,
+            None => u64::MIN
+        };
+        
+        if deposit_amount == u64::MIN {
+            return Err(SEError::Generic(String::from(
+                "Invalid deposit amount",
+            )));
         }
+        
+        if deposit_amount > status.amount{
+            return Err(SEError::Generic(String::from(
+                "Insufficent token credit to make deposit",
+            )));
+        }
+        
+        let token_value = status.amount - deposit_amount;
+        // The remaining token value
+        
+        // Generate shared wallet ID (user ID)
+        let user_id = Uuid::new_v4();
+
+
+        // Create DB entry for newly generated ID signalling that user has passed some
+        // verification. For now use ID as 'password' to interact with state entity
+        // unsolved_vdf saved for verification at keygen first
+        
+        self.database
+            .create_user_session(&user_id, &pod_msg1.auth, &pod_msg1.proof_key, self.user_ids.clone(), pod_msg1.amount)?;
+        
+        // Once DB entry created
+        // Decrement token value
+        self.database
+            .set_pay_on_demand_amount( &pod_msg1.token_id, &token_value )?;
+
 
         info!(
             "DEPOSIT: Protocol initiated. User ID generated: {}",
@@ -289,7 +295,7 @@ pub mod tests {
     fn test_deposit_init() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().returning(|_, _, _, _, _, _| Ok(()));
+        db.expect_create_user_session_challenge().returning(|_, _, _, _, _, _| Ok(()));
 
         let sc_entity = test_sc_entity(db, None, None, None, None);
 
@@ -326,104 +332,105 @@ pub mod tests {
     fn test_pod_deposit_init() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_pod_create_user_session().returning(|_, _, _, _, _| Ok(()));
+        db.expect_create_user_session().returning(|_, _, _, _, _ | Ok(()));
         
         // let mut confirmed_var = true;
         // let mut value_var = 0;
 
-        let mut token_status = PODStatus1 {
+        let token_status = PODStatus {
             confirmed: true,
-            value: 0
+            amount: 0
         };
 
-        // Token Spent
-        db.expect_pay_on_demand()
+        // Token Spent Test 1
+        db.expect_get_pay_on_demand_status()
             .times(1)
             .return_once( move |_| Ok(token_status));
         
         
         // MOCK Decrement Token
-        db.expect_decrement_pay_on_demand().returning(|_,_| Ok(()));
+        db.expect_set_pay_on_demand_amount().returning(|_,_| Ok(()));
 
 
-        let mut unconfirmed_token = PODStatus1 {
+        let unconfirmed_token = PODStatus {
             confirmed: false,
-            value: 10000
+            amount: 10000
         };
 
 
-        // Token Not Confirmed
-        db.expect_pay_on_demand()
+        // Token Not Confirmed Test 2
+        db.expect_get_pay_on_demand_status()
             .times(1)
             .return_once( move |_| Ok(unconfirmed_token));
         
         
         // Insufficient token value for deposit
 
-        let mut low_token = PODStatus1 {
+        let low_token = PODStatus {
             confirmed: true,
-            value: 5000
+            amount: 10000
         };
         
-        // Insufficient Token Funds for Deposit
-        db.expect_pay_on_demand()
+        // Insufficient Token Funds for Deposit Test 3
+        db.expect_get_pay_on_demand_status()
             .times(1)
             .return_once( move |_| Ok(low_token));
         
-        let mut success_token = PODStatus1{
+        let success_token = PODStatus{
             confirmed: true,
-            value: 20000
+            amount: 20000
         };
 
 
-        // Successful call
-        db.expect_pay_on_demand()
+        // Successful call Test 4
+        db.expect_get_pay_on_demand_status()
             .times(1)
             .return_once( move |_| Ok(success_token));
 
         let sc_entity = test_sc_entity(db, None, None, None, None);
 
-        // Token Already Spent
+        // Token Already Spent Test 1
         match sc_entity.pod_deposit_init(PODMsg1 {
             auth: String::from("auth"),
             proof_key: String::from(
                 "026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e"
             ),
             token_id: Uuid::new_v4(),
-            amount: 10000,
+            amount: Some(10000),
         }) {
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("Token already spent")),
+            Err(e) => assert!(e.to_string().contains("Insufficent token credit to make deposit")),
         }
         
         
-        // Unconfirmed token ( token not paid for )
+        // Unconfirmed token ( token not paid for ) Test 2
         match sc_entity.pod_deposit_init(PODMsg1 {
             auth: String::from("auth"),
             proof_key: String::from(
                 "026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e"
             ),
             token_id: Uuid::new_v4(),
-            amount: 10000,
+            amount: Some(10000),
         }) {
             Ok(_) => assert!(false, "Expected failure."),
             Err(e) => assert!(e.to_string().contains("Token payment not received")),
         }
         
-        // Insufficient Token Funds for Deposit
+        // Insufficient Token Funds for Deposit Test 3
         match sc_entity.pod_deposit_init(PODMsg1 {
             auth: String::from("auth"),
             proof_key: String::from(
                 "026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e"
             ),
             token_id: Uuid::new_v4(),
-            amount: 10000,
+            amount: Some(0),
         }) {
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e.to_string().contains("Insufficent token value remaining")),
+            Err(e) => assert!(e.to_string().contains("Invalid deposit amount")),
         }        
-
-        //Successful call
+        
+        
+        //Successful call Test 4
         assert!(sc_entity
             .pod_deposit_init(PODMsg1 {
                 auth: String::from("auth"),
@@ -431,7 +438,7 @@ pub mod tests {
                     "026ff25fd651cd921fc490a6691f0dd1dcbf725510f1fbd80d7bf7abdfef7fea0e"
                 ),
                 token_id: Uuid::new_v4(),
-                amount: 10000,
+                amount: Some(10000),
         })
         .is_ok());
     }
