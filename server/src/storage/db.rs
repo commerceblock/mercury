@@ -78,8 +78,13 @@ pub enum Table {
 }
 impl Table {
     pub fn to_string(&self) -> String {
-        match self {
+        match self { 
             Table::PayOnDemand => format!(
+                "{:?}.{:?}",
+                Schema::PayOnDemand.to_string().to_lowercase(),
+                self
+            ),
+            Table::UserSessionValue => format!(
                 "{:?}.{:?}",
                 Schema::PayOnDemand.to_string().to_lowercase(),
                 self
@@ -311,8 +316,7 @@ impl PGDatabase {
                 Table::Lockbox.to_string(),
             ),
             &[],
-        )?;
-
+        )?; 
         self.database_w()?.execute(
             &format!(
                 "
@@ -1831,6 +1835,12 @@ impl Database for PGDatabase {
             let _ = self.remove(user_id, Table::UserSession); 
             e
          })?;
+        self.insert(user_id, Table::UserSessionValue).map_err(|e| { 
+            guard.remove(user_id); 
+            let _ = self.remove(user_id, Table::UserSession); 
+            let _ = self.remove(user_id, Table::Lockbox); 
+            e
+         })?;
         self.update(
             user_id,
             Table::UserSession,
@@ -1842,17 +1852,20 @@ impl Database for PGDatabase {
             let _ = self.remove(user_id, Table::Lockbox);
             e
          })?;
+        
         self.update(
             user_id,
             Table::UserSessionValue,
             vec![Column::Value],
-            vec![&value.map(|v| v as i64)],
+            vec![&value.map(|x| x as i64)],
         ).map_err(|e| { 
             guard.remove(user_id); 
+            let _ = self.remove(user_id, Table::UserSessionValue);
             let _ = self.remove(user_id, Table::UserSession);
             let _ = self.remove(user_id, Table::Lockbox);
             e
-        })    
+        })  
+
     }
 
     // Create new UserSession to allow new owner to generate shared wallet
@@ -1972,7 +1985,7 @@ impl Database for PGDatabase {
     }
 
     fn get_pay_on_demand_info(&self, token_id: &Uuid) -> Result<PODInfo> {
-         let (lightning_invoice, btc_payment_address, value) =
+          let (lightning_invoice, btc_payment_address, value) =
             self.get_3::<String, String, i64>(
                 token_id.to_owned(),
                 Table::PayOnDemand,
@@ -2068,7 +2081,7 @@ pub mod tests {
         assert_eq!(Table::Smt.to_string(), "\"statechainentity\".Smt");
         assert_eq!(Table::Lockbox.to_string(), "\"statechainentity\".Lockbox");
         assert_eq!(Table::PayOnDemand.to_string(), "\"payondemand\".PayOnDemand");
-        assert_eq!(Table::UserSessionValue.to_string(), "\"statechainentity\".UserSessionValue");
+        assert_eq!(Table::UserSessionValue.to_string(), "\"payondemand\".UserSessionValue");
     }
 
     #[test]

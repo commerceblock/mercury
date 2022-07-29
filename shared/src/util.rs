@@ -617,15 +617,13 @@ pub mod tests {
         }
 
         // Wrong fee address
-        let expected_err = SharedLibError::FormatError(String::from(
-                "Incorrect State Entity fee address.",
-            ));
+        let expected_err = "Incorrect State Entity fee address.";
         match tx_withdraw_verify(&tx_psm, 
             &["bcrt1qjjwk2rk7nuxt6c79tsxthf5rpnky0sdhjr493x"], 
             &(fee_withdraw)
         ) {
             Ok(_) => panic!("expected Err: {}", &expected_err),
-            Err(err) => assert_eq!(&err, &expected_err)
+            Err(err) => assert!(&err.to_string().contains(&expected_err))
         }
 
         let mut tx_psm_deser = transaction_deserialise(&TX_WITHDRAW_UNSIGNED_ZERO_WITHDRAW_FEE.to_string()).unwrap();
