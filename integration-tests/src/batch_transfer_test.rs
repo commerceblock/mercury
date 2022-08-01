@@ -15,7 +15,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_batch_sigs() {
-        let _handle = start_server(None, None);
+        let _handle = start_server(None, None, None, None);
 
         let mut wallet = gen_wallet(None);
         let num_state_chains = 3;
@@ -115,7 +115,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_batch_transfer() {
-        let _handle = start_server(None, None);
+        let _handle = start_server(None, None, None, None);
 
         let num_state_chains = 3; // must be > 1
         let mut amounts = vec![];
@@ -300,7 +300,7 @@ mod tests {
     // #[test]
     #[allow(dead_code)]
     fn test_failure_batch_transfer() {
-        let _handle = start_server(None, None);
+        let _handle = start_server(None, None, None, None);
 
         let num_state_chains = 3; // must be > 2
         let mut amounts = vec![];
@@ -498,7 +498,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_swap() {
-        let _handle = start_server(None, None);
+        let _handle = start_server(None, None, None, None);
 
         let num_state_chains: u64 = 3;
         let amount: u64 = 100000; // = u64::from_str(&format!("10000")).unwrap();
@@ -551,7 +551,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_swap_punish() {
-        let _handle = start_server(None, None);
+        let _handle = start_server(None, None, None, None);
 
         let num_state_chains: u64 = 3;
         let amount: u64 = 100000; // = u64::from_str(&format!("10000")).unwrap();
@@ -725,7 +725,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_register_utxo() {
-        let _handle = start_server(None, None);
+        let _handle = start_server(None, None, None, None);
 
         let num_state_chains: u64 = 2;
         let amount: u64 = 100000; // = u64::from_str(&format!("10000")).unwrap();
@@ -790,8 +790,8 @@ mod tests {
     fn test_swap_seperate_conductor() {
         let merc_port: u16 = 8000;
         let conductor_port: u16 = 8001;
-        let _handle = start_server(Some(merc_port), Some(String::from("core")));
-        let _conductor_handle = start_server(Some(conductor_port), Some(String::from("conductor")));
+        let _handle = start_server(Some(merc_port), Some(String::from("core")), None, None);
+        let _conductor_handle = start_server(Some(conductor_port), Some(String::from("conductor")), None, None);
 
         let num_state_chains: u64 = 3;
         let amount: u64 = 100000; // = u64::from_str(&format!("10000")).unwrap();

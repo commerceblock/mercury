@@ -18,7 +18,7 @@ pub fn run_simulation() {
     let mainstay_config = mainstay::MainstayConfig::mock_from_url(&mockito::server_url());
     let mut db = MockDatabase::new();
     db.expect_set_connection_from_config().returning(|_| Ok(()));
-    let _ = db.spawn_server(Some(mainstay_config), None, None);
+    let _ = db.spawn_server(Some(mainstay_config), None, None, None, None);
 
     // Begin with a few clients
     let mut wallets = vec![];
