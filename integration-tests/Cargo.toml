@@ -44,6 +44,7 @@ default = ["mockdb"]
 
 [dependencies.server]
 path = "../server"
+features = ["mockbitcoinrpc", "mocklightningrpc"]
 
 [dependencies.client]
 path = "../client"

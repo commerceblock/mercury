@@ -168,7 +168,56 @@ mod tests {
         drop(handle);
     }
 
-   
+    #[test]
+    #[serial]
+    fn test_deposit_pay_on_demand() {
+        time_test!();
+        //Start the server with deposit fee = 100, withdraw fee = 0
+        let handle = start_server(None, None, Some(100), Some(0));
+        let wallet = gen_wallet_with_deposit(100000);
+        //handle.join().expect("The thread being joined has panicked");
+        let state_chains_info = wallet.get_state_chains_info().unwrap();
+        let (_, funding_txid, proof_key, _, _) = wallet
+            .get_shared_key_info(state_chains_info.0.last().unwrap())
+            .unwrap();
+
+        // Get SMT inclusion proof and verify
+        let root = state_entity::api::get_smt_root(&wallet.client_shim)
+            .unwrap()
+            .unwrap();
+        let proof =
+            state_entity::api::get_smt_proof(&wallet.client_shim, &root, &funding_txid).unwrap();
+
+        // ensure wallet's shared key is updated with proof info
+        let shared_key = wallet
+            .get_shared_key(state_chains_info.0.last().unwrap())
+            .unwrap();
+        assert_eq!(shared_key.smt_proof.clone().unwrap().root, root);
+        assert_eq!(shared_key.smt_proof.clone().unwrap().proof, proof);
+        assert_eq!(shared_key.proof_key.clone().unwrap(), proof_key);
+
+        let _d = state_entity::conductor::swap_register_utxo(
+            &wallet,
+            &wallet.shared_keys[0].statechain_id.clone().unwrap(),
+            &5,
+        );
+
+        let coins = state_entity::api::get_coins_info(&wallet.client_shim).unwrap();
+
+        assert_eq!(coins.values.get(&100000).unwrap().get(), 1);
+
+        println!("Shared wallet id: {:?} ", funding_txid);
+        println!("Funding txid: {:?} ", funding_txid);
+
+        //Confirm in-ram data recovery from database
+        reset_inram_data(&wallet.client_shim).unwrap();
+        let coins = state_entity::api::get_coins_info(&wallet.client_shim).unwrap();
+        assert_eq!(coins.values.get(&100000).unwrap().get(), 1);
+        //Reset data
+        reset_data(&wallet.client_shim).unwrap();
+        drop(handle);
+    }
+
     // #[test]
     // #[serial]
     // fn test_confirm_proofs() {
