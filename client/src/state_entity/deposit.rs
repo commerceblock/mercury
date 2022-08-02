@@ -11,7 +11,8 @@
 
 use super::super::Result;
 extern crate shared_lib;
-use shared_lib::structs::{DepositMsg1, DepositMsg2, PrepareSignTxMsg, Protocol, UserID, 
+use shared_lib::structs::{DepositMsg1, DepositMsg1POD, DepositMsg2, 
+    PrepareSignTxMsg, Protocol, UserID, 
     StatechainID, StateEntityFeeInfoAPI};
 use shared_lib::util::{tx_backup_build, tx_funding_build, FEE, transaction_serialise};
 
@@ -42,13 +43,14 @@ pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<UserID> {
 
 /// Message to server initiating state entity protocol using pay on demand
 /// Shared wallet ID returned
-pub fn session_init_pod(wallet: &mut Wallet, proof_key: &String) -> Result<UserID> {
+pub fn session_init_pod(wallet: &mut Wallet, proof_key: &String, amount: &u64) -> Result<UserID> {
     requests::postb(
         &wallet.client_shim,
-        &format!("deposit/init"),
-        &DepositMsg1 {
+        &format!("deposit/init/pod"),
+        &DepositMsg1POD {
             auth: "auth".to_string(),
             proof_key: proof_key.to_owned(),
+            amount: amount.to_owned()
         },
     )
 }
@@ -86,31 +88,34 @@ pub fn deposit(
     let proof_key = wallet.se_proof_keys.get_new_key()?;
 
     // Init. session - Receive shared wallet ID
-    let shared_key_id: UserID = session_init(wallet, &proof_key.to_string())?;
+    let (shared_key_id, solution) : (UserID, Option<String>) = match deposit_fee > 0 {
+        true => (session_init_pod(wallet, &proof_key.to_string(), amount)?,
+            None),
+        false => {
+            let shared_key_id = session_init(wallet, &proof_key.to_string())?;
+            let challenge = match &shared_key_id.challenge {
+                Some(c) => c,
+                None => return Err(CError::Generic(String::from("missing pow challenge from server"))),
+            };
 
-    // generate solution for the PoW challenge
-    let challenge = match shared_key_id.challenge {
-        Some(c) => c,
-        None => return Err(CError::Generic(String::from("missing pow challenge from server"))),
+            let difficulty = 4 as usize;
+            let mut counter = 0;
+            let zeros = String::from_utf8(vec![b'0'; difficulty]).unwrap();
+            let mut hasher = Sha3_256::new();
+            loop {
+                hasher.input(&format!("{}:{:x}", challenge, counter).as_bytes());
+                let result = hex::encode(hasher.result_reset());
+                if result[..difficulty] == zeros {
+                    break;
+                };
+                counter += 1
+            }
+            (shared_key_id, Some(format!("{:x}", counter)))
+        }
     };
 
-    let difficulty = 4 as usize;
-    let mut counter = 0;
-    let zeros = String::from_utf8(vec![b'0'; difficulty]).unwrap();
-    let mut hasher = Sha3_256::new();
-    loop {
-        hasher.input(&format!("{}:{:x}", challenge, counter).as_bytes());
-        let result = hex::encode(hasher.result_reset());
-        if result[..difficulty] == zeros {
-            break;
-        };
-        counter += 1
-    }
-
-    let solution = format!("{:x}", counter);
-
     // 2P-ECDSA with state entity to create a Shared key
-    let shared_key = wallet.gen_shared_key(&shared_key_id.id, amount, solution)?;
+    let shared_key = wallet.gen_shared_key(&shared_key_id.id, amount, &solution)?;
 
     // Create funding tx
     let pk = shared_key.share.public.q.get_element(); // co-owned key address to send funds to (P_addr)

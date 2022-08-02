@@ -141,7 +141,7 @@ pub trait Database {
     fn get_user_value(&self, user_id: &Uuid) -> Result<u64>;
     fn is_confirmed(&self, statechain_id: &Uuid) -> Result<bool>;
     fn set_confirmed(&self, statechain_id: &Uuid) -> Result<()>;
-    fn get_challenge(&self, user_id: &Uuid) -> Result<String>;
+    fn get_challenge(&self, user_id: &Uuid) -> Result<Option<String>>;
     fn update_statechain_id(&self, user_id: &Uuid, statechain_id: &Uuid) -> Result<()>;
     fn get_statechain_amount(&self, statechain_id: Uuid) -> Result<StateChainAmount>;
     fn update_statechain_amount(
@@ -250,8 +250,8 @@ pub trait Database {
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
     fn create_user_session(&self, user_id: &Uuid, auth: &String, 
-        proof_key: &String, challenge: &String, 
-        user_ids: Arc<Mutex<UserIDs>>, value: Option<u64>) -> Result<()>;
+        proof_key: &String, challenge: &Option<String>, 
+        user_ids: Arc<Mutex<UserIDs>>, value: &Option<u64>) -> Result<()>;
     // Create new UserSession to allow new owner to generate shared wallet
     fn transfer_init_user_session(
         &self,
@@ -260,6 +260,7 @@ pub trait Database {
         finalized_data: TransferFinalizeData,
         user_ids: Arc<Mutex<UserIDs>>
     ) -> Result<()>;
+    fn get_user_session_value(&self, user_id: Uuid) -> Result<Option<u64>>;
     fn update_ecdsa_sign_first(
         &self,
         user_id: Uuid,

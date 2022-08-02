@@ -236,7 +236,6 @@ pub fn run_deposit(
     resp
 }
 
-
 /// Run confirm_proofs on a wallet
 /// Returns Vec<shared_key_id> of the shared keys that remain unconfirmed
 pub fn run_confirm_proofs(wallet: &mut Wallet) -> Vec<Uuid> {

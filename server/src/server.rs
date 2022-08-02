@@ -3,41 +3,43 @@ use super::protocol::*;
 use crate::config::{Config, Mode};
 use crate::structs::{StateChainOwner, WithdrawConfirmData};
 use crate::Database;
-use shared_lib::{mainstay, state_chain::StateChainSig, swap_data::*, structs::LightningInvoiceStatus};
+use shared_lib::{
+    mainstay, state_chain::StateChainSig, structs::LightningInvoiceStatus, swap_data::*,
+};
 
 use log::LevelFilter;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config as LogConfig, Root as LogRoot};
 use log4rs::encode::pattern::PatternEncoder;
 
-use std::thread;
 use crate::watch::watch_node;
+use std::thread;
 
+use crate::rpc::bitcoin_client_factory::{BitcoinClient, BitcoinClientFactory};
+use crate::rpc::lightning_client_factory::{LightningClient, LightningClientFactory};
+use governor::{clock::DefaultClock, state::keyed::DashMapStateStore, Quota};
 use mockall::*;
 use monotree::database::Database as MonotreeDatabase;
+use once_cell::sync::Lazy;
+use reqwest;
 use rocket;
-use rocket_okapi::routes_with_openapi;
-use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 use rocket::{
     config::{Config as RocketConfig, Environment},
-    Request, Rocket, Route
+    Request, Rocket, Route,
 };
+use rocket_okapi::routes_with_openapi;
+use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 use rocket_prometheus::{
     prometheus::{opts, IntCounter, IntCounterVec},
     PrometheusMetrics,
 };
-use reqwest;
-use once_cell::sync::Lazy;
-use std::sync::{Arc, Mutex};
-use uuid::Uuid;
 use std::collections::HashMap;
-use url::Url;
 use std::collections::HashSet;
 use std::default::Default;
-use governor::{Quota, clock::DefaultClock, state::keyed::DashMapStateStore};
-use crate::rpc::bitcoin_client_factory::{BitcoinClient, BitcoinClientFactory};
-use crate::rpc::lightning_client_factory::{LightningClient, LightningClientFactory};
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
+use url::Url;
+use uuid::Uuid;
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
@@ -53,17 +55,23 @@ pub static TRANSFERS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
         .expect("Could not create lazy IntCounter")
 });
 pub static REG_SWAP_UTXOS: Lazy<IntCounterVec> = Lazy::new(|| {
-    IntCounterVec::new(opts!("reg_swap_utxos", "Registered utxos by group size and amount"), &["size","amount"])
-        .expect("Could not create lazy IntGaugeVec")
+    IntCounterVec::new(
+        opts!(
+            "reg_swap_utxos",
+            "Registered utxos by group size and amount"
+        ),
+        &["size", "amount"],
+    )
+    .expect("Could not create lazy IntGaugeVec")
 });
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-pub type UserIDs = HashSet::<Uuid>;
+pub type UserIDs = HashSet<Uuid>;
 
 #[derive(Debug, Clone)]
 pub struct Endpoints {
-    endpoints: Vec<Url>
+    endpoints: Vec<Url>,
 }
 
 impl Endpoints {
@@ -75,10 +83,12 @@ impl Endpoints {
     /// of the statechain identifier.
     pub fn select(&self, statechain_id: &Uuid) -> Option<(&Url, usize)> {
         let len = self.endpoints.len();
-        if len == 0 {return None}
+        if len == 0 {
+            return None;
+        }
         let scid_bytes = statechain_id.as_bytes();
         let index = u128::from_be_bytes(*scid_bytes) % len as u128;
-        self.get(&(index as usize)).map(|x|(x, index as usize))
+        self.get(&(index as usize)).map(|x| (x, index as usize))
     }
 
     pub fn get(&self, index: &usize) -> Option<&Url> {
@@ -96,13 +106,13 @@ impl Lockbox {
     pub fn new(endpoints: Vec<Url>) -> Result<Lockbox> {
         let endpoint = Endpoints::from(endpoints);
         let client = reqwest::blocking::Client::new();
-        Ok(Lockbox{client, endpoint})
+        Ok(Lockbox { client, endpoint })
     }
 }
 
 pub struct StateChainEntity<
     T: Database + Send + Sync + 'static,
-    D: MonotreeDatabase + Send + Sync + 'static
+    D: MonotreeDatabase + Send + Sync + 'static,
 > {
     pub config: Config,
     pub database: T,
@@ -113,10 +123,13 @@ pub struct StateChainEntity<
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
     pub scheduler: Option<Arc<Mutex<Scheduler>>>,
     pub lockbox: Option<Lockbox>,
-    pub rate_limiter_slow: Option<Arc<governor::RateLimiter<String, DashMapStateStore<String> , DefaultClock> >>,
-    pub rate_limiter_fast: Option<Arc<governor::RateLimiter<String, DashMapStateStore<String> , DefaultClock> >>,
-    pub rate_limiter_id: Option<Arc<governor::RateLimiter<Uuid, DashMapStateStore<Uuid> , DefaultClock> >>,
-    pub batch_transfer_guard: Arc<Mutex<()>>
+    pub rate_limiter_slow:
+        Option<Arc<governor::RateLimiter<String, DashMapStateStore<String>, DefaultClock>>>,
+    pub rate_limiter_fast:
+        Option<Arc<governor::RateLimiter<String, DashMapStateStore<String>, DefaultClock>>>,
+    pub rate_limiter_id:
+        Option<Arc<governor::RateLimiter<Uuid, DashMapStateStore<Uuid>, DefaultClock>>>,
+    pub batch_transfer_guard: Arc<Mutex<()>>,
 }
 
 impl<
@@ -124,8 +137,11 @@ impl<
         D: Database + MonotreeDatabase + Send + Sync + 'static,
     > StateChainEntity<T, D>
 {
-
-    pub fn load(mut db: T, mut db_smt: D, config: Option<Config>) -> Result<StateChainEntity<T, D>> {
+    pub fn load(
+        mut db: T,
+        mut db_smt: D,
+        config: Option<Config>,
+    ) -> Result<StateChainEntity<T, D>> {
         // Get config as defaults, Settings.toml and env vars
         let config_rs = config.unwrap_or(Config::load()?);
         db.set_connection_from_config(&config_rs)?;
@@ -138,11 +154,10 @@ impl<
 
         let conductor_config = config_rs.conductor.clone();
 
-        pub fn init_lb(conf: &Config) -> Option<Lockbox>{
-
+        pub fn init_lb(conf: &Config) -> Option<Lockbox> {
             let lb_config = match &conf.lockbox {
                 None => return None,
-                Some(l) => l
+                Some(l) => l,
             };
 
             let lb_str = lb_config.replace(" ", "");
@@ -153,16 +168,28 @@ impl<
             }
             Some(lb_list).map(|l| Lockbox::new(l.to_vec()).unwrap())
         }
-    
+
         let (lockbox, scheduler) = match config_rs.mode {
-            Mode::Both => (init_lb(&config_rs), Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config))))),
-            Mode::Conductor => (None, Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config))))),
-            Mode::Core => (init_lb(&config_rs), None)
+            Mode::Both => (
+                init_lb(&config_rs),
+                Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config)))),
+            ),
+            Mode::Conductor => (
+                None,
+                Some(Arc::new(Mutex::new(Scheduler::new(&conductor_config)))),
+            ),
+            Mode::Core => (init_lb(&config_rs), None),
         };
 
-        let rate_limiter_slow = config_rs.rate_limit_slow.map(|r| Arc::new(governor::RateLimiter::dashmap(Quota::per_second(r))));
-        let rate_limiter_fast = config_rs.rate_limit_fast.map(|r| Arc::new(governor::RateLimiter::dashmap(Quota::per_second(r))));
-        let rate_limiter_id = config_rs.rate_limit_id.map(|r| Arc::new(governor::RateLimiter::dashmap(Quota::per_second(r))));
+        let rate_limiter_slow = config_rs
+            .rate_limit_slow
+            .map(|r| Arc::new(governor::RateLimiter::dashmap(Quota::per_second(r))));
+        let rate_limiter_fast = config_rs
+            .rate_limit_fast
+            .map(|r| Arc::new(governor::RateLimiter::dashmap(Quota::per_second(r))));
+        let rate_limiter_id = config_rs
+            .rate_limit_id
+            .map(|r| Arc::new(governor::RateLimiter::dashmap(Quota::per_second(r))));
 
         let sce = Self {
             config: config_rs,
@@ -177,13 +204,12 @@ impl<
             rate_limiter_slow,
             rate_limiter_fast,
             rate_limiter_id,
-            batch_transfer_guard: Arc::new(Mutex::new(Default::default()))
+            batch_transfer_guard: Arc::new(Mutex::new(Default::default())),
         };
 
         Ok(sce)
     }
- 
-    
+
     pub fn bitcoin_client(&self) -> Result<BitcoinClient> {
         Ok(BitcoinClientFactory::create(&self.config.bitcoind)?)
     }
@@ -191,10 +217,7 @@ impl<
     pub fn lightning_client(&self) -> Result<LightningClient> {
         Ok(LightningClientFactory::create(&self.config.lightningd)?)
     }
-    
 }
-
-
 
 #[catch(500)]
 fn internal_error() -> &'static str {
@@ -221,7 +244,7 @@ fn get_docs() -> SwaggerUIConfig {
     }
 }
 
-fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
+fn get_routes(mode: &Mode) -> std::vec::Vec<Route> {
     match mode {
         Mode::Both => routes_with_openapi![
             util::get_statechain,
@@ -242,6 +265,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             ecdsa::second_message,
             ecdsa::sign_first,
             ecdsa::sign_second,
+            deposit::deposit_init_pod,
             deposit::deposit_init,
             deposit::deposit_confirm,
             transfer::transfer_sender,
@@ -262,7 +286,8 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             conductor::deregister_utxo,
             conductor::swap_first_message,
             conductor::swap_second_message,
-            conductor::get_group_info],
+            conductor::get_group_info
+        ],
         Mode::Core => routes_with_openapi![
             util::get_statechain,
             util::get_statechain_depth,
@@ -282,6 +307,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             ecdsa::second_message,
             ecdsa::sign_first,
             ecdsa::sign_second,
+            deposit::deposit_init_pod,
             deposit::deposit_init,
             deposit::deposit_confirm,
             transfer::transfer_sender,
@@ -293,7 +319,8 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             transfer_batch::transfer_batch_init,
             transfer_batch::transfer_reveal_nonce,
             withdraw::withdraw_init,
-            withdraw::withdraw_confirm],
+            withdraw::withdraw_confirm
+        ],
         Mode::Conductor => routes_with_openapi![
             util::reset_test_dbs,
             util::reset_inram_data,
@@ -305,7 +332,8 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             conductor::deregister_utxo,
             conductor::swap_first_message,
             conductor::swap_second_message,
-            conductor::get_group_info],
+            conductor::get_group_info
+        ],
     }
 }
 
@@ -319,7 +347,7 @@ pub fn get_server<
     db: T,
     db_smt: D,
 ) -> Result<Rocket> {
-    let mut sc_entity = StateChainEntity::<T, D>::load(db, db_smt,None)?;
+    let mut sc_entity = StateChainEntity::<T, D>::load(db, db_smt, None)?;
 
     set_logging_config(&sc_entity.config.log_file);
 
@@ -329,11 +357,13 @@ pub fn get_server<
         // reset dbs
         sc_entity.database.reset()?;
     }
-    let guard_coins_mutex: &Mutex::<CoinValueInfo> = sc_entity.coin_value_info.as_ref();
+    let guard_coins_mutex: &Mutex<CoinValueInfo> = sc_entity.coin_value_info.as_ref();
     //let mut guard_coins: &mut CoinValueInfo = guard_coins_mutex.lock()?.deref_mut();
-    let guard_ids_mutex: &Mutex::<HashSet::<Uuid>> = sc_entity.user_ids.as_ref();
+    let guard_ids_mutex: &Mutex<HashSet<Uuid>> = sc_entity.user_ids.as_ref();
     //let mut guard_ids = guard_ids_mutex.lock()?.deref_mut();
-    sc_entity.database.init(guard_coins_mutex, guard_ids_mutex)?;
+    sc_entity
+        .database
+        .init(guard_coins_mutex, guard_ids_mutex)?;
     drop(guard_coins_mutex);
     drop(guard_ids_mutex);
     match mainstay_config {
@@ -348,10 +378,22 @@ pub fn get_server<
     }
 
     let prometheus = PrometheusMetrics::new();
-    prometheus.registry().register(Box::new(DEPOSITS_COUNT.clone())).unwrap();
-    prometheus.registry().register(Box::new(WITHDRAWALS_COUNT.clone())).unwrap();
-    prometheus.registry().register(Box::new(TRANSFERS_COUNT.clone())).unwrap();
-    prometheus.registry().register(Box::new(REG_SWAP_UTXOS.clone())).unwrap();
+    prometheus
+        .registry()
+        .register(Box::new(DEPOSITS_COUNT.clone()))
+        .unwrap();
+    prometheus
+        .registry()
+        .register(Box::new(WITHDRAWALS_COUNT.clone()))
+        .unwrap();
+    prometheus
+        .registry()
+        .register(Box::new(TRANSFERS_COUNT.clone()))
+        .unwrap();
+    prometheus
+        .registry()
+        .register(Box::new(REG_SWAP_UTXOS.clone()))
+        .unwrap();
 
     let rocket_config = get_rocket_config(&sc_entity.config);
     let bitcoind = sc_entity.config.bitcoind.clone();
@@ -361,32 +403,19 @@ pub fn get_server<
         thread::spawn(|| watch_node(bitcoind));
         let rock = rocket::custom(rocket_config)
             .register(catchers![internal_error, not_found, bad_request])
-            .mount(
-                "/",
-                routes![
-                    ping::ping
-                ],
-            );
+            .mount("/", routes![ping::ping]);
         Ok(rock)
     } else {
         // if bitcoind path supplied, run watching
         if sc_entity.config.bitcoind.is_empty() == false {
             thread::spawn(|| watch_node(bitcoind));
         }
-        
+
         let rock = rocket::custom(rocket_config)
             .register(catchers![internal_error, not_found, bad_request])
             .attach(prometheus.clone())
-            .mount(
-                "/",
-                routes![
-                    ping::ping,
-                ],
-            )
-            .mount(
-                "/",
-                get_routes(&sc_entity.config.mode),
-            )
+            .mount("/", routes![ping::ping,])
+            .mount("/", get_routes(&sc_entity.config.mode))
             .mount("/swagger", make_swagger_ui(&get_docs()))
             .mount("/metrics", prometheus)
             .manage(sc_entity);
@@ -446,7 +475,7 @@ use crate::protocol::deposit::Deposit;
 use crate::protocol::ecdsa::Ecdsa;
 use crate::protocol::transfer::Transfer;
 use crate::protocol::transfer_batch::BatchTransfer;
-use crate::protocol::util::{Proof, Utilities, RateLimiter};
+use crate::protocol::util::{Proof, RateLimiter, Utilities};
 use crate::protocol::withdraw::Withdraw;
 use crate::storage;
 use crate::storage::Storage;
@@ -458,6 +487,7 @@ mock! {
     StateChainEntity{}
     trait Deposit {
         fn deposit_init(&self, deposit_msg1: DepositMsg1) -> deposit::Result<UserID>;
+        fn deposit_init_pod(&self, deposit_msg1: DepositMsg1POD) -> deposit::Result<UserID>;
         fn deposit_confirm(
             &self,
             deposit_msg2: DepositMsg2,
@@ -573,7 +603,7 @@ mock! {
             withdraw_msg2: WithdrawMsg2,
         ) -> withdraw::Result<Vec<Vec<Vec<u8>>>>;
             /// Get withdraw confirm data if signed for withdrawal
-        fn get_if_signed_for_withdrawal(&self, user_id: &Uuid) 
+        fn get_if_signed_for_withdrawal(&self, user_id: &Uuid)
             -> withdraw::Result<Option<WithdrawConfirmData>>;
     }
     trait Storage{
@@ -603,19 +633,21 @@ mod tests {
         let eps = Endpoints::from(urls);
         assert_eq!(eps.endpoints.len(), 0);
         assert!(eps.select(&Uuid::default()).is_none());
-        let urls = vec![Url::parse("https://url1.net/").unwrap(), 
-                        Url::parse("https://url2.net/").unwrap(), 
-                        Url::parse("https://url3.net/").unwrap(), 
-                        Url::parse("https://url4.net/").unwrap(), 
-                        Url::parse("https://url5.net/").unwrap(), 
-                        Url::parse("https://url6.net/").unwrap()];
+        let urls = vec![
+            Url::parse("https://url1.net/").unwrap(),
+            Url::parse("https://url2.net/").unwrap(),
+            Url::parse("https://url3.net/").unwrap(),
+            Url::parse("https://url4.net/").unwrap(),
+            Url::parse("https://url5.net/").unwrap(),
+            Url::parse("https://url6.net/").unwrap(),
+        ];
         let eps: Endpoints = Endpoints::from(urls.clone());
         for i in 0..100000 {
             let id = Uuid::from_bytes(&(i as u128).to_be_bytes()).unwrap();
             let (url_selected, index) = eps.select(&id).unwrap();
-            let index_check = ( i % urls.len() as u128 ) as usize; 
-            assert_eq!(index, index_check); 
+            let index_check = (i % urls.len() as u128) as usize;
+            assert_eq!(index, index_check);
             assert_eq!(url_selected, &urls[index])
-        }    
+        }
     }
 }

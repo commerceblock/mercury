@@ -52,7 +52,7 @@ mod tests {
 
         let solution = format!("{:x}", counter);
 
-        let key_res = wallet.gen_shared_key(&init_res.unwrap().id, &1000, solution.to_string());
+        let key_res = wallet.gen_shared_key(&init_res.unwrap().id, &1000, &Some(solution.to_string()));
         assert!(key_res.is_ok());
         reset_data(&wallet.client_shim).unwrap();
     }
@@ -92,7 +92,7 @@ mod tests {
         let key_res = wallet.gen_shared_key_repeat_keygen(
             &init_res.unwrap().id,
             &1000,
-            solution.to_string(),
+            &Some(solution.to_string()),
             10,
         );
         assert!(key_res.is_ok());
@@ -113,7 +113,7 @@ mod tests {
             &secret_key,
             &1000,
             Protocol::Deposit,
-            "".to_string(),
+            &Some("".to_string()),
         );
         assert!(err.is_err());
         reset_data(&client_shim).unwrap();

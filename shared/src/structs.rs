@@ -663,7 +663,7 @@ pub struct EphKeyGenFirstMsg2Def(String);
 
 // 2P-ECDSA Co-signing algorithm structs
 
-#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct KeyGenMsg1 {
     #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
@@ -742,7 +742,15 @@ pub struct SignSecondMsgRequest {
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct DepositMsg1 {
     pub auth: String,
+    pub proof_key: String
+}
+
+/// Client -> SE
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct DepositMsg1POD {
+    pub auth: String,
     pub proof_key: String,
+    pub amount: u64
 }
 
 /// Client -> SE

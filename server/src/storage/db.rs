@@ -1159,8 +1159,8 @@ impl Database for PGDatabase {
         )
     }    
 
-    fn get_challenge(&self, user_id: &Uuid) -> Result<String> {
-        let challenge_str = self.get_1::<String>(*user_id, Table::UserSession, vec![Column::Challenge])?;
+    fn get_challenge(&self, user_id: &Uuid) -> Result<Option<String>> {
+        let challenge_str = self.get_1::<Option<String>>(*user_id, Table::UserSession, vec![Column::Challenge])?;
         Ok(challenge_str)
     }
 
@@ -1825,8 +1825,8 @@ impl Database for PGDatabase {
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
     fn create_user_session(&self, user_id: &Uuid, auth: &String, 
-        proof_key: &String, challenge: &String,
-        user_ids: Arc<Mutex<UserIDs>>, value: Option<u64>) -> Result<()> {
+        proof_key: &String, challenge: &Option<String>,
+        user_ids: Arc<Mutex<UserIDs>>, value: &Option<u64>) -> Result<()> {
         let mut guard = user_ids.as_ref().lock()?;
         guard.insert(user_id.to_owned());
         self.insert(user_id, Table::UserSession).map_err(|e| { guard.remove(user_id); e })?;
@@ -1867,6 +1867,11 @@ impl Database for PGDatabase {
         })  
 
     }
+
+    fn get_user_session_value(&self, user_id: Uuid) -> Result<Option<u64>> {
+        self.get_1::<Option<i64>>(user_id, Table::UserSessionValue, vec![Column::Value]).
+            map(|x| x.map(|x| x as u64))
+    } 
 
     // Create new UserSession to allow new owner to generate shared wallet
     fn transfer_init_user_session(

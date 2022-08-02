@@ -5,22 +5,22 @@
 pub use super::super::Result;
 use crate::server::DEPOSITS_COUNT;
 extern crate shared_lib;
-use crate::error::{SEError,DBErrorType};
-use crate::server::{StateChainEntity};
+use crate::error::{DBErrorType, SEError};
 use crate::protocol::util::RateLimiter;
+use crate::server::StateChainEntity;
 use crate::storage::Storage;
 use crate::Database;
 use shared_lib::{state_chain::*, structs::*, util::FEE};
 
 use bitcoin::PublicKey;
 use cfg_if::cfg_if;
+use hex;
+use rand::Rng;
 use rocket::State;
 use rocket_contrib::json::Json;
+use rocket_okapi::openapi;
 use std::str::FromStr;
 use uuid::Uuid;
-use rocket_okapi::openapi;
-use rand::Rng;
-use hex;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -41,6 +41,11 @@ pub trait Deposit {
     ///     - Generate and return shared wallet ID
     ///     - Can do auth or other DoS mitigation here
     fn deposit_init(&self, deposit_msg1: DepositMsg1) -> Result<UserID>;
+
+    /// API: Initiliase deposit protocol using pay on demand:
+    ///     - Generate and return shared wallet ID
+    ///     - Can do auth or other DoS mitigation here
+    fn deposit_init_pod(&self, deposit_msg1: DepositMsg1POD) -> Result<UserID>;
 
     /// API: Complete deposit protocol:
     ///     - Wait for confirmation of funding tx in blockchain
@@ -74,8 +79,14 @@ impl Deposit for SCE {
         // Create DB entry for newly generated ID signalling that user has passed some
         // verification. For now use ID as 'password' to interact with state entity
         // unsolved_vdf saved for verification at keygen first
-        self.database
-            .create_user_session(&user_id, &deposit_msg1.auth, &deposit_msg1.proof_key, &challenge, self.user_ids.clone(), None)?;
+        self.database.create_user_session(
+            &user_id,
+            &deposit_msg1.auth,
+            &deposit_msg1.proof_key,
+            &Some(challenge.clone()),
+            self.user_ids.clone(),
+            &None,
+        )?;
 
         info!(
             "DEPOSIT: Protocol initiated. User ID generated: {}",
@@ -87,7 +98,49 @@ impl Deposit for SCE {
             deposit_msg1.proof_key.to_owned()
         );
 
-        Ok(UserID {id: user_id, challenge: Some(challenge)})
+        Ok(UserID {
+            id: user_id,
+            challenge: Some(challenge),
+        })
+    }
+
+    fn deposit_init_pod(&self, deposit_msg1: DepositMsg1POD) -> Result<UserID> {
+        // Check proof key is valid public key
+        if let Err(_) = PublicKey::from_str(&deposit_msg1.proof_key) {
+            return Err(SEError::Generic(String::from(
+                "Proof key not in correct format.",
+            )));
+        };
+
+        // Generate shared wallet ID (user ID)
+        let user_id = Uuid::new_v4();
+
+        // Create DB entry for newly generated ID signalling that user has passed some
+        // verification. For now use ID as 'password' to interact with state entity
+        // unsolved_vdf saved for verification at keygen first
+        self.database.create_user_session(
+            &user_id,
+            &deposit_msg1.auth,
+            &deposit_msg1.proof_key,
+            &None,
+            self.user_ids.clone(),
+            &Some(deposit_msg1.amount),
+        )?;
+
+        info!(
+            "DEPOSIT: Protocol initiated. User ID generated: {}",
+            user_id
+        );
+        debug!(
+            "DEPOSIT: User ID: {} corresponding Proof key: {}",
+            user_id,
+            deposit_msg1.proof_key.to_owned()
+        );
+
+        Ok(UserID {
+            id: user_id,
+            challenge: None,
+        })
     }
 
     fn deposit_confirm(&self, deposit_msg2: DepositMsg2) -> Result<StatechainID> {
@@ -119,29 +172,37 @@ impl Deposit for SCE {
         match self.database.get_statechain_id(user_id.clone()) {
             Ok(res) => {
                 statechain_id = res;
-                self.database.update_backup_tx(&statechain_id, tx_backup.clone())?;
-            },
+                self.database
+                    .update_backup_tx(&statechain_id, tx_backup.clone())?;
+            }
             Err(e) => match e {
                 SEError::DBErrorWC(DBErrorType::NoDataForID, _, _) => {
                     // Create state chain DB object
                     statechain_id = Uuid::new_v4();
                     let state_chain = StateChain::new(proof_key.clone());
                     // Insert into StateChain table
-                    self.database.create_statechain(&statechain_id, &user_id, &state_chain, &amount)?;
+                    self.database.create_statechain(
+                        &statechain_id,
+                        &user_id,
+                        &state_chain,
+                        &amount,
+                    )?;
 
                     // Insert into BackupTx table
                     self.database
-                        .create_backup_transaction(&statechain_id, &tx_backup)?;                    
-                    },
+                        .create_backup_transaction(&statechain_id, &tx_backup)?;
+                }
 
                 _ => return Err(e),
-
-            }
+            },
         }
 
         // set the shared public key
         let shared_pubkey = self.database.get_shared_pubkey(user_id.clone())?;
-        self.database.set_shared_pubkey(statechain_id.clone(), &shared_pubkey.ok_or(SEError::Generic(String::from("Shared pubkey missing")))?)?;
+        self.database.set_shared_pubkey(
+            statechain_id.clone(),
+            &shared_pubkey.ok_or(SEError::Generic(String::from("Shared pubkey missing")))?,
+        )?;
 
         info!(
             "DEPOSIT: State Chain created. ID: {} For user ID: {}",
@@ -176,16 +237,33 @@ impl Deposit for SCE {
             statechain_id, new_root, current_root
         );
 
-        Ok(StatechainID {id: statechain_id})
+        Ok(StatechainID { id: statechain_id })
     }
 }
 
 #[openapi]
 /// # Initiate a statechain deposit and generate a shared key ID
 #[post("/deposit/init", format = "json", data = "<deposit_msg1>")]
-pub fn deposit_init(sc_entity: State<SCE>, deposit_msg1: Json<DepositMsg1>) -> Result<Json<UserID>> {
+pub fn deposit_init(
+    sc_entity: State<SCE>,
+    deposit_msg1: Json<DepositMsg1>,
+) -> Result<Json<UserID>> {
     sc_entity.check_rate_slow("deposit_init")?;
     match sc_entity.deposit_init(deposit_msg1.into_inner()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Initiate a statechain deposit and generate a shared key ID
+#[post("/deposit/init/pod", format = "json", data = "<deposit_msg1>")]
+pub fn deposit_init_pod(
+    sc_entity: State<SCE>,
+    deposit_msg1: Json<DepositMsg1POD>,
+) -> Result<Json<UserID>> {
+    sc_entity.check_rate_slow("pod_deposit_init")?;
+    match sc_entity.deposit_init_pod(deposit_msg1.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -208,11 +286,11 @@ pub fn deposit_confirm(
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::storage::db;
     use crate::protocol::util::{
         mocks,
         tests::{test_sc_entity, BACKUP_TX_NOT_SIGNED, BACKUP_TX_SIGNED},
     };
+    use crate::storage::db;
     use bitcoin::Transaction;
     use std::str::FromStr;
 
@@ -220,7 +298,8 @@ pub mod tests {
     fn test_deposit_init() {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().returning(|_, _, _, _, _, _| Ok(()));
+        db.expect_create_user_session()
+            .returning(|_, _, _, _, _, _| Ok(()));
 
         let sc_entity = test_sc_entity(db, None, None, None, None);
 
@@ -264,7 +343,7 @@ pub mod tests {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth()
-           .returning(|_user_id| Ok(String::from("user_auth")));
+            .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
         db.expect_get_root().returning(|_| Ok(None));
         db.expect_root_update().returning(|_| Ok(1));
@@ -279,13 +358,16 @@ pub mod tests {
         db.expect_create_backup_transaction()
             .returning(|_, _| Ok(()));
         db.expect_update_statechain_id().returning(|_, _| Ok(()));
-        db.expect_get_shared_pubkey().returning(|_| Ok(Some("".to_string())));
-        db.expect_set_shared_pubkey().returning(|_,_| Ok(()));
+        db.expect_get_shared_pubkey()
+            .returning(|_| Ok(Some("".to_string())));
+        db.expect_set_shared_pubkey().returning(|_, _| Ok(()));
         db.expect_get_statechain_id().returning(move |_| {
-                Err(SEError::DBErrorWC(
-                    DBErrorType::NoDataForID,
-                    user_id.clone().to_string(),db::Column::StateChainId))
-            });
+            Err(SEError::DBErrorWC(
+                DBErrorType::NoDataForID,
+                user_id.clone().to_string(),
+                db::Column::StateChainId,
+            ))
+        });
 
         let sc_entity = test_sc_entity(db, None, None, None, None);
 
@@ -294,9 +376,12 @@ pub mod tests {
             shared_key_id: user_id,
         }) {
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e
-                .to_string()
-                .contains("Signed Back up transaction not found."), "{}", e.to_string()),
+            Err(e) => assert!(
+                e.to_string()
+                    .contains("Signed Back up transaction not found."),
+                "{}",
+                e.to_string()
+            ),
         }
 
         // Clean protocol run
@@ -320,7 +405,7 @@ pub mod tests {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth()
-           .returning(|_user_id| Ok(String::from("user_auth")));
+            .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
         db.expect_get_root().returning(|_| Ok(None));
         db.expect_root_update().returning(|_| Ok(1));
@@ -335,10 +420,12 @@ pub mod tests {
         db.expect_create_backup_transaction()
             .returning(|_, _| Ok(()));
         db.expect_update_statechain_id().returning(|_, _| Ok(()));
-        db.expect_get_shared_pubkey().returning(|_| Ok(Some("".to_string())));
-        db.expect_set_shared_pubkey().returning(|_,_| Ok(()));
-        db.expect_get_statechain_id().returning(move |_| Ok(statechain_id));
-        db.expect_update_backup_tx().returning(|_,_| Ok(()));
+        db.expect_get_shared_pubkey()
+            .returning(|_| Ok(Some("".to_string())));
+        db.expect_set_shared_pubkey().returning(|_, _| Ok(()));
+        db.expect_get_statechain_id()
+            .returning(move |_| Ok(statechain_id));
+        db.expect_update_backup_tx().returning(|_, _| Ok(()));
 
         let sc_entity = test_sc_entity(db, None, None, None, None);
 
@@ -347,9 +434,12 @@ pub mod tests {
             shared_key_id: user_id,
         }) {
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e
-                .to_string()
-                .contains("Signed Back up transaction not found."), "{}", e.to_string()),
+            Err(e) => assert!(
+                e.to_string()
+                    .contains("Signed Back up transaction not found."),
+                "{}",
+                e.to_string()
+            ),
         }
 
         // Clean protocol run
@@ -360,11 +450,15 @@ pub mod tests {
             })
             .is_ok());
 
-        assert_eq!(sc_entity
-            .deposit_confirm(DepositMsg2 {
-                shared_key_id: user_id
-            })
-            .unwrap().id,statechain_id);
+        assert_eq!(
+            sc_entity
+                .deposit_confirm(DepositMsg2 {
+                    shared_key_id: user_id
+                })
+                .unwrap()
+                .id,
+            statechain_id
+        );
     }
 
     #[test]
@@ -378,7 +472,7 @@ pub mod tests {
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
         db.expect_get_user_auth()
-           .returning(|_user_id| Ok(String::from("user_auth")));
+            .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_root_get_current_id().returning(|| Ok(1 as i64));
         db.expect_get_root().returning(|_| Ok(None));
         db.expect_root_update().returning(|_| Ok(1));
@@ -393,13 +487,12 @@ pub mod tests {
         db.expect_create_backup_transaction()
             .returning(|_, _| Ok(()));
         db.expect_update_statechain_id().returning(|_, _| Ok(()));
-        db.expect_get_shared_pubkey().returning(|_| Ok(Some("".to_string())));
-        db.expect_set_shared_pubkey().returning(|_,_| Ok(()));
-        db.expect_get_statechain_id().returning(move |_| {
-                Err(SEError::Generic(String::from(
-                "Other error",)))
-            });
-        db.expect_update_backup_tx().returning(|_,_| Ok(()));
+        db.expect_get_shared_pubkey()
+            .returning(|_| Ok(Some("".to_string())));
+        db.expect_set_shared_pubkey().returning(|_, _| Ok(()));
+        db.expect_get_statechain_id()
+            .returning(move |_| Err(SEError::Generic(String::from("Other error"))));
+        db.expect_update_backup_tx().returning(|_, _| Ok(()));
 
         let sc_entity = test_sc_entity(db, None, None, None, None);
 
@@ -408,9 +501,12 @@ pub mod tests {
             shared_key_id: user_id,
         }) {
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e
-                .to_string()
-                .contains("Signed Back up transaction not found."), "{}", e.to_string()),
+            Err(e) => assert!(
+                e.to_string()
+                    .contains("Signed Back up transaction not found."),
+                "{}",
+                e.to_string()
+            ),
         }
 
         // Clean protocol run
@@ -420,10 +516,7 @@ pub mod tests {
             shared_key_id: user_id,
         }) {
             Ok(_) => assert!(false, "Expected failure."),
-            Err(e) => assert!(e
-                .to_string()
-                .contains("Other error"), "{}", e.to_string()),
+            Err(e) => assert!(e.to_string().contains("Other error"), "{}", e.to_string()),
         }
-
     }
 }

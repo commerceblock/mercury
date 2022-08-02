@@ -410,7 +410,7 @@ impl Database for MemoryDB {
     fn set_confirmed(&self, _statechain_id: &uuid::Uuid) -> crate::Result<()> {
         unimplemented!()
     }      
-    fn get_challenge(&self, _user_id: &uuid::Uuid) -> crate::Result<String> {
+    fn get_challenge(&self, _user_id: &uuid::Uuid) -> crate::Result<Option<String>> {
         unimplemented!()
     }
     fn update_statechain_id(
@@ -695,10 +695,13 @@ impl Database for MemoryDB {
         _user_id: &uuid::Uuid,
         _auth: &String,
         _proof_key: &String,
-        _challenge: &String,
+        _challenge: &Option<String>,
         _user_ids: Arc<Mutex<UserIDs>>,
-        _value: Option<u64>
+        _value: &Option<u64>
     ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_user_session_value(&self, _user_id: uuid::Uuid) -> crate::Result<Option<u64>>{
         unimplemented!()
     }
     fn transfer_init_user_session(
