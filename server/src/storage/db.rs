@@ -1869,8 +1869,21 @@ impl Database for PGDatabase {
     }
 
     fn get_user_session_value(&self, user_id: Uuid) -> Result<Option<u64>> {
-        self.get_1::<Option<i64>>(user_id, Table::UserSessionValue, vec![Column::Value]).
-            map(|x| x.map(|x| x as u64))
+        match self.get_1::<Option<i64>>(user_id, Table::UserSessionValue, vec![Column::Value]).
+            map(|x| x.map(|x| x as u64)) {
+                Ok(v) => Ok(v),
+                Err(e) => match e {
+                        SEError::DBError(ref error_type, ref _message) => match error_type {
+                            NoDataForID => Ok(None),
+                            _ => Err(e),
+                        },
+                        SEError::DBErrorWC(ref error_type, ref _message, ref _column) => match error_type {
+                            NoDataForID => Ok(None),
+                            _ => Err(e),
+                        },
+                        _ => Err(e)
+                }
+        }
     } 
 
     // Create new UserSession to allow new owner to generate shared wallet
