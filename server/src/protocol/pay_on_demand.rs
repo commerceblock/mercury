@@ -230,7 +230,7 @@ impl POD for SCE {
 #[openapi]
 /// # Initialize a pay-on-demand token
 #[get("/pod/token/init/<value>", format = "json")]
-pub fn deposit_init(sc_entity: State<SCE>, value: u64) -> Result<Json<PODInfo>> {
+pub fn pod_token_init(sc_entity: State<SCE>, value: u64) -> Result<Json<PODInfo>> {
     sc_entity.check_rate_slow("pod_token_init")?;
     let token_id = Uuid::new_v4();
     match sc_entity.pod_token_init(token_id, &value, None, None) {

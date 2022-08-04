@@ -171,12 +171,30 @@ mod tests {
 
     #[test]
     #[serial]
+    fn test_pod_token_init(){
+          //Start the server with deposit fee = 100, withdraw fee = 0
+        let deposit_fee: u64 = 100;
+        let withdraw_fee: u64 = 0;
+        let handle = start_server(None, None, Some(deposit_fee), Some(withdraw_fee));
+        let client = ClientShim::new("http://localhost:8000".to_string(), None, None);
+        let pod_info = state_entity::api::pod_token_init(&client, &1000).unwrap();
+        let pod_status = state_entity::api::pod_token_verify(&client, &pod_info.token_id).unwrap();
+    }
+
+    #[test]
+    #[serial]
     fn test_deposit_pay_on_demand() {
         time_test!();
         //Start the server with deposit fee = 100, withdraw fee = 0
-        let handle = start_server(None, None, Some(100), Some(0));
+        let deposit_fee: u64 = 100;
+        let withdraw_fee: u64 = 0;
+        let handle = start_server(None, None, Some(deposit_fee), Some(withdraw_fee));
         let wallet = gen_wallet_with_deposit(100000);
         //handle.join().expect("The thread being joined has panicked");
+        let fee_info = state_entity::api::get_statechain_fee_info(&wallet.client_shim).unwrap();
+        assert_eq!(fee_info.deposit as u64, deposit_fee);
+        assert_eq!(fee_info.withdraw as u64, withdraw_fee);
+
         let state_chains_info = wallet.get_state_chains_info().unwrap();
         let (_, funding_txid, proof_key, _, _) = wallet
             .get_shared_key_info(state_chains_info.0.last().unwrap())
@@ -957,10 +975,8 @@ mod tests {
                 "".to_string(),
             ))
         });
-        db.expect_create_user_session()
-            .return_const(Ok(()));
-        db.expect_create_user_session_pod()
-            .return_const(Ok(()));
+        db.expect_create_user_session().return_const(Ok(()));
+        db.expect_create_user_session_pod().return_const(Ok(()));
         db.expect_get_user_auth()
             .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_init_ecdsa().returning(|_user_id| Ok(0));
