@@ -44,13 +44,15 @@ pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<UserID> {
 /// Message to server initiating state entity protocol using pay on demand
 /// Shared wallet ID returned
 pub fn session_init_pod(wallet: &mut Wallet, proof_key: &String, amount: &u64) -> Result<UserID> {
+    let token_id = Uuid::new_v4();
     requests::postb(
         &wallet.client_shim,
         &format!("deposit/init/pod"),
         &DepositMsg1POD {
             auth: "auth".to_string(),
             proof_key: proof_key.to_owned(),
-            amount: amount.to_owned()
+            amount: amount.to_owned(),
+            token_id
         },
     )
 }

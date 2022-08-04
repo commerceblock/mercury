@@ -1822,10 +1822,23 @@ impl Database for PGDatabase {
         Ok(rc_vec)
     }
 
+    
+    // Create DB entry for newly generated ID signalling that user has passed some
+    // verification. For now use ID as 'password' to interact with state entity
+    // Use pay on demand 
+    // fee_deposit = deposit fee in basis points
+    fn create_user_session_pod(&self, user_id: &Uuid, auth: &String, 
+        proof_key: &String,  user_ids: Arc<Mutex<UserIDs>>, 
+        value: &u64) -> Result<()> {
+            self.create_user_session(
+                user_id, auth, proof_key, &None, 
+                user_ids, &Some(value.clone()))
+    }
+
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
     fn create_user_session(&self, user_id: &Uuid, auth: &String, 
-        proof_key: &String, challenge: &Option<String>,
+        proof_key: &String, challenge: &Option<String>, 
         user_ids: Arc<Mutex<UserIDs>>, value: &Option<u64>) -> Result<()> {
         let mut guard = user_ids.as_ref().lock()?;
         guard.insert(user_id.to_owned());
@@ -1834,38 +1847,37 @@ impl Database for PGDatabase {
             guard.remove(user_id); 
             let _ = self.remove(user_id, Table::UserSession); 
             e
-         })?;
+        })?;
         self.insert(user_id, Table::UserSessionValue).map_err(|e| { 
             guard.remove(user_id); 
             let _ = self.remove(user_id, Table::UserSession); 
             let _ = self.remove(user_id, Table::Lockbox); 
             e
-         })?;
+        })?;
         self.update(
             user_id,
             Table::UserSession,
-            vec![Column::Authentication, Column::ProofKey, Column::Challenge],
-            vec![&auth.clone(), &proof_key.to_owned(), &challenge.clone()],
+            vec![Column::Authentication, Column::ProofKey, Column:: Challenge],
+            vec![&auth.clone(), &proof_key.to_owned(), challenge],
         ).map_err(|e| { 
             guard.remove(user_id); 
             let _ = self.remove(user_id, Table::UserSession);
             let _ = self.remove(user_id, Table::Lockbox);
+            let _ = self.remove(user_id, Table::UserSessionValue);
             e
          })?;
-        
         self.update(
             user_id,
             Table::UserSessionValue,
             vec![Column::Value],
-            vec![&value.map(|x| x as i64)],
+            vec![&value.map(|v| v as i64)],
         ).map_err(|e| { 
-            guard.remove(user_id); 
-            let _ = self.remove(user_id, Table::UserSessionValue);
+            guard.remove(user_id);
             let _ = self.remove(user_id, Table::UserSession);
             let _ = self.remove(user_id, Table::Lockbox);
+            let _ = self.remove(user_id, Table::UserSessionValue);
             e
-        })  
-
+        })    
     }
 
     fn get_user_session_value(&self, user_id: Uuid) -> Result<Option<u64>> {

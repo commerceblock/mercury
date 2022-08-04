@@ -695,11 +695,16 @@ impl Database for MemoryDB {
         _user_id: &uuid::Uuid,
         _auth: &String,
         _proof_key: &String,
-        _challenge: &Option<String>,
+        _challenge: &Option<String>, 
         _user_ids: Arc<Mutex<UserIDs>>,
         _value: &Option<u64>
     ) -> crate::Result<()> {
         unimplemented!()
+    }
+    fn create_user_session_pod(&self, _user_id: &uuid::Uuid, _auth: &String, 
+        _proof_key: &String,  _user_ids: Arc<Mutex<UserIDs>>, 
+        _value: &u64) -> crate::Result<()> {
+            unimplemented!()
     }
     fn get_user_session_value(&self, _user_id: uuid::Uuid) -> crate::Result<Option<u64>>{
         unimplemented!()

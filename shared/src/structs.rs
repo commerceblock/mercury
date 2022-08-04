@@ -76,7 +76,7 @@ pub struct PODInfo {
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct PODStatus {
     pub confirmed: bool,
-    pub amount: u64,
+    pub amount: u64
 }
 
 impl PartialEq<bool> for PODStatus {
@@ -103,6 +103,12 @@ pub struct UserID {
     #[schemars(with = "UuidDef")]
     pub id: Uuid,
     pub challenge: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
+pub struct PODUserID {
+    #[schemars(with = "UuidDef")]
+    pub id: Uuid,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
@@ -748,6 +754,8 @@ pub struct DepositMsg1 {
 /// Client -> SE
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct DepositMsg1POD {
+    #[schemars(with = "UuidDef")]
+    pub token_id: Uuid,
     pub auth: String,
     pub proof_key: String,
     pub amount: u64
