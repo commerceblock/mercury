@@ -472,6 +472,18 @@ impl Database for MemoryDB {
     fn get_backup_transaction(&self, _statechain_id: uuid::Uuid) -> crate::Result<bitcoin::Transaction> {
         unimplemented!()
     }
+    fn get_backup_locktime(
+        &self, 
+        _statechain_id: uuid::Uuid,
+    ) -> crate::Result<i64> {
+        unimplemented!()        
+    }
+    fn update_backup_locktime(
+        &self, 
+        _statechain_id: uuid::Uuid, 
+        _locktime: i64) -> crate::Result<()> {
+        unimplemented!() 
+    }
     fn get_backup_transaction_and_proof_key(
         &self,
         _user_id: uuid::Uuid,
