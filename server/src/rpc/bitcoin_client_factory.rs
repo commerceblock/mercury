@@ -11,10 +11,20 @@ cfg_if!{
     if #[cfg(any(test,feature="mockbitcoinrpc"))]{
         pub use shared_lib::mocks::mock_rpc_client::MockClient as BitcoinClient;
         pub use shared_lib::mocks::mock_rpc_client::RpcApi as BitcoinRpcApi;
-        //use shared_lib::mocks::mock_rpc_client::Auth as BitcoinAuth;
+
+        fn set_expectations(client: &mut BitcoinClient) {
+            client.expect_get_new_address().returning(move |_,_|
+                Ok(mock_constants::address())
+            );
+            client.expect_get_received_by_address()
+            .returning(|_, _| Ok(bitcoin::Amount::from_sat(0)));
+        }
+
         impl BitcoinClientFactory {
             pub fn create(_rpc_path: &String) -> Result<BitcoinClient> {
-                Ok(BitcoinClient::new())
+                let mut client = BitcoinClient::new();
+                set_expectations(&mut client);
+                Ok(client)
             }
         }
     } else {
@@ -38,6 +48,15 @@ cfg_if!{
                     auth)?.into())
             }
         }
+    }
+}
+
+pub mod mock_constants {
+    use bitcoin::util::address::Address;
+    use std::str::FromStr;
+
+    pub fn address() -> Address {
+        Address::from_str("tb1qmfrhnm4ke95e3t6grqs99w8qjxylqdhelecvwc").unwrap()
     }
 }
 

@@ -13,8 +13,8 @@ use super::super::Result;
 extern crate shared_lib;
 use shared_lib::structs::{DepositMsg1, DepositMsg1POD, DepositMsg2, 
     PrepareSignTxMsg, Protocol, UserID, 
-    StatechainID, StateEntityFeeInfoAPI, 
-    PODInfo, PODStatus};
+    StatechainID, StateEntityFeeInfoAPI
+};
 use shared_lib::util::{tx_backup_build, tx_funding_build, FEE, transaction_serialise};
 
 use super::api::{get_smt_proof, get_smt_root, get_statechain_fee_info};
@@ -22,7 +22,7 @@ use crate::error::{CError, WalletErrorType};
 use crate::state_entity::util::{cosign_tx_input, verify_statechain_smt};
 use crate::utilities::requests;
 use crate::wallet::wallet::{to_bitcoin_public_key, Wallet};
-use crate::ClientShim;
+
 
 use bitcoin::{consensus, PublicKey, Transaction};
 use curv::elliptic::curves::traits::ECPoint;

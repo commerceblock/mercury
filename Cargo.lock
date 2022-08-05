@@ -4497,6 +4497,7 @@ version = "0.1.9"
 dependencies = [
  "bitcoin 0.25.2",
  "client",
+ "clightningrpc",
  "curv",
  "digest 0.8.1",
  "env_logger",

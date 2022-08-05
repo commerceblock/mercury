@@ -12,6 +12,8 @@ extern crate uuid;
 extern crate curv;
 extern crate monotree;
 
+extern crate clightningrpc;
+
 extern crate client_lib;
 extern crate server_lib;
 extern crate shared_lib;

@@ -2005,7 +2005,8 @@ impl Database for PGDatabase {
         )
     }
 
-    fn set_pay_on_demand_info(&self, token: &PODInfo) -> Result<()> {
+    fn init_pay_on_demand_info(&self, token: &PODInfo) -> Result<()> {
+        self.insert(&token.token_id, Table::PayOnDemand)?;
         self.update(
             &token.token_id,
             Table::PayOnDemand,

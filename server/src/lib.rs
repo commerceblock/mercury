@@ -20,8 +20,8 @@ extern crate crypto;
 extern crate hex;
 extern crate jsonwebtoken as jwt;
 extern crate log4rs;
-extern crate url;
 extern crate rand;
+extern crate url;
 
 extern crate curv;
 extern crate electrumx_client;
@@ -44,17 +44,17 @@ extern crate mockall;
 #[cfg(test)]
 extern crate mockito;
 
-extern crate shared_lib;
 extern crate clightningrpc;
 extern crate clightningrpc_common;
+extern crate shared_lib;
 
 pub mod config;
 pub mod error;
 pub mod protocol;
+pub mod rpc;
 pub mod server;
 pub mod storage;
 pub mod watch;
-pub mod rpc;
 
 pub type Result<T> = std::result::Result<T, error::SEError>;
 pub type Hash = bitcoin::hashes::sha256d::Hash;
@@ -62,6 +62,7 @@ pub type Hash = bitcoin::hashes::sha256d::Hash;
 use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::PostgresConnectionManager;
 
+use crate::server::UserIDs;
 use crate::storage::db::Alpha;
 use bitcoin::hashes::sha256d;
 use bitcoin::Transaction;
@@ -73,12 +74,15 @@ use mockall::*;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
 use rocket_contrib::databases::postgres;
-use shared_lib::{state_chain::*, structs::{TransferMsg3,TransferFinalizeData, PODInfo, PODStatus}, 
-    Root, structs::CoinValueInfo};
+use shared_lib::{
+    state_chain::*,
+    structs::CoinValueInfo,
+    structs::{PODInfo, PODStatus, TransferFinalizeData, TransferMsg3},
+    Root,
+};
 use std::collections::{HashMap, HashSet};
-use uuid::Uuid;
-use crate::server::UserIDs;
 use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
 #[database("postgres_w")]
 pub struct DatabaseW(postgres::Connection);
@@ -119,7 +123,7 @@ pub trait Database {
     fn update_sighash(&self, user_id: &Uuid, sig_hash: Hash) -> Result<()>;
     fn update_s1_pubkey(&self, user_id: &Uuid, pubkey: &GE) -> Result<()>;
     fn get_lockbox_index(&self, user_id: &Uuid) -> Result<Option<usize>>;
-    fn update_lockbox_index(&self, user_id: &Uuid, lockbox_index: &usize)->Result<()>;
+    fn update_lockbox_index(&self, user_id: &Uuid, lockbox_index: &usize) -> Result<()>;
     fn get_s1_pubkey(&self, user_id: &Uuid) -> Result<GE>;
     fn update_user_backup_tx(&self, user_id: &Uuid, tx: Transaction) -> Result<()>;
     fn get_user_backup_tx(&self, user_id: Uuid) -> Result<Transaction>;
@@ -188,20 +192,16 @@ pub trait Database {
         statechain_id: &Uuid,
         statechain_sig: &StateChainSig,
         x1: &FE,
-        batch_id: Option<Uuid>
+        batch_id: Option<Uuid>,
     ) -> Result<()>;
     fn update_transfer_msg(&self, statechain_id: &Uuid, msg: &TransferMsg3) -> Result<()>;
     fn get_transfer_msg(&self, statechain_id: &Uuid) -> Result<TransferMsg3>;
     fn get_transfer_msg_addr(&self, receive_addr: &str) -> Result<Vec<TransferMsg3>>;
-    fn create_transfer_batch_data(
-        &self,
-        batch_id: &Uuid,
-        state_chains: Vec<Uuid>,
-    ) -> Result<()>;
+    fn create_transfer_batch_data(&self, batch_id: &Uuid, state_chains: Vec<Uuid>) -> Result<()>;
     fn get_transfer_data(&self, statechain_id: Uuid) -> Result<TransferData>;
     fn remove_transfer_data(&self, statechain_id: &Uuid) -> Result<()>;
     fn transfer_is_completed(&self, statechain_id: Uuid) -> bool;
-    fn get_public_master(&self, user_id: Uuid) -> Result<Option<String>>;    
+    fn get_public_master(&self, user_id: Uuid) -> Result<Option<String>>;
     fn get_ecdsa_master(&self, user_id: Uuid) -> Result<Option<String>>;
     fn get_ecdsa_witness_keypair(
         &self,
@@ -218,7 +218,7 @@ pub trait Database {
     fn update_keygen_first_msg(
         &self,
         user_id: &Uuid,
-        key_gen_first_msg: &party_one::KeyGenFirstMsg
+        key_gen_first_msg: &party_one::KeyGenFirstMsg,
     ) -> Result<()>;
     fn update_keygen_second_msg(
         &self,
@@ -228,17 +228,14 @@ pub trait Database {
         party_one_private: party_one::Party1Private,
     ) -> Result<()>;
     fn init_ecdsa(&self, user_id: &Uuid) -> Result<u64>;
-    fn get_keygen_first_msg(&self,user_id: &Uuid) -> Result<party_one::KeyGenFirstMsg>;
+    fn get_keygen_first_msg(&self, user_id: &Uuid) -> Result<party_one::KeyGenFirstMsg>;
     fn get_ecdsa_party_1_private(&self, user_id: Uuid) -> Result<party_one::Party1Private>;
     fn get_ecdsa_keypair(&self, user_id: Uuid) -> Result<ECDSAKeypair>;
     fn update_punished(&self, batch_id: &Uuid, punished_state_chains: Vec<Uuid>) -> Result<()>;
-    fn get_transfer_batch_start_time(&self, batch_id: &Uuid) -> Result<NaiveDateTime> ;
+    fn get_transfer_batch_start_time(&self, batch_id: &Uuid) -> Result<NaiveDateTime>;
     fn get_batch_transfer_statechain_ids(&self, batch_id: &Uuid) -> Result<HashSet<Uuid>>;
     fn get_finalize_batch_data(&self, batch_id: Uuid) -> Result<TransferFinalizeBatchData>;
-    fn get_sc_transfer_finalize_data(
-        &self,
-        statechain_id: &Uuid
-    ) -> Result<TransferFinalizeData>;
+    fn get_sc_transfer_finalize_data(&self, statechain_id: &Uuid) -> Result<TransferFinalizeData>;
     fn update_finalize_batch_data(
         &self,
         statechain_id: &Uuid,
@@ -246,22 +243,36 @@ pub trait Database {
     ) -> Result<()>;
     fn update_transfer_batch_finalized(&self, batch_id: &Uuid, b_finalized: &bool) -> Result<()>;
     fn get_statechain_owner(&self, statechain_id: Uuid) -> Result<StateChainOwner>;
-    fn get_recovery_data(&self, proofkey: String) -> Result<Vec<(Uuid,Option<Uuid>,Option<Transaction>)>>;
+    fn get_recovery_data(
+        &self,
+        proofkey: String,
+    ) -> Result<Vec<(Uuid, Option<Uuid>, Option<Transaction>)>>;
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
-    fn create_user_session(&self, user_id: &Uuid, auth: &String, 
-        proof_key: &String,  challenge: &Option<String>, 
-        user_ids: Arc<Mutex<UserIDs>>, value: &Option<u64>) -> Result<()>;
-    fn create_user_session_pod(&self, user_id: &Uuid, auth: &String, 
-        proof_key: &String,  user_ids: Arc<Mutex<UserIDs>>, 
-        value: &u64) -> Result<()>;
+    fn create_user_session(
+        &self,
+        user_id: &Uuid,
+        auth: &String,
+        proof_key: &String,
+        challenge: &Option<String>,
+        user_ids: Arc<Mutex<UserIDs>>,
+        value: &Option<u64>,
+    ) -> Result<()>;
+    fn create_user_session_pod(
+        &self,
+        user_id: &Uuid,
+        auth: &String,
+        proof_key: &String,
+        user_ids: Arc<Mutex<UserIDs>>,
+        value: &u64,
+    ) -> Result<()>;
     // Create new UserSession to allow new owner to generate shared wallet
     fn transfer_init_user_session(
         &self,
         new_user_id: &Uuid,
         statechain_id: &Uuid,
         finalized_data: TransferFinalizeData,
-        user_ids: Arc<Mutex<UserIDs>>
+        user_ids: Arc<Mutex<UserIDs>>,
     ) -> Result<()>;
     fn get_user_session_value(&self, user_id: Uuid) -> Result<Option<u64>>;
     fn update_ecdsa_sign_first(
@@ -285,7 +296,7 @@ pub trait Database {
     fn get_statecoin_pubkey(&self, statechain_id: Uuid) -> Result<Option<String>>;
     fn update_ecdsa_master(&self, user_id: &Uuid, master_key: MasterKey1) -> Result<()>;
     fn get_sighash(&self, user_id: Uuid) -> Result<sha256d::Hash>;
-    fn set_pay_on_demand_info(&self, pod_info: &PODInfo) -> Result<()>;
+    fn init_pay_on_demand_info(&self, pod_info: &PODInfo) -> Result<()>;
     fn get_pay_on_demand_info(&self, token_id: &Uuid) -> Result<PODInfo>;
     fn get_pay_on_demand_status(&self, token_id: &Uuid) -> Result<PODStatus>;
     fn set_pay_on_demand_status(&self, token_id: &Uuid, pod_status: &PODStatus) -> Result<()>;

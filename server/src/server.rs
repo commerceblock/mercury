@@ -40,7 +40,6 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use url::Url;
 use uuid::Uuid;
-use cfg_if::cfg_if;
 
 //prometheus statics
 pub static DEPOSITS_COUNT: Lazy<IntCounter> = Lazy::new(|| {
