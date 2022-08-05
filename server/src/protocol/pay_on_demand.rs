@@ -24,6 +24,7 @@ use shared_lib::structs::Invoice;
 use std::thread;
 use crate::rpc::lightning_client_factory::LightningClient;
 use crate::rpc::bitcoin_client_factory::BitcoinClient;
+use crate::rpc::lightning_client_factory::mock_constants as ln_consts;
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 
@@ -302,13 +303,7 @@ pyetp5h2tztugp9lfyql"),
     }
 
     fn get_lightning_invoice() -> LightningInvoice {
-        LightningInvoice {
-            payment_hash: String::from("0001020304050607080900010203040506070809000102030405060708090102"),
-            expires_at: 604800,
-            bolt11: String::from("lnbc1pvjluezsp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygspp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdpl\
-2pkx2ctnv5sxxmmwwd5kgetjypeh2ursdae8g6twvus8g6rfwvs8qun0dfjkxaq9qrsgq357wnc5r2ueh7ck6q93dj32dlqnls087fxdwk8qakdyafkq3yap9us6v52vjjsrvywa6rt52cm9r9zqt8r2t7mlcws\
-pyetp5h2tztugp9lfyql"),
-        }
+        ln_consts::invoice
     }
 
     fn get_invoice() -> Invoice {
@@ -377,11 +372,12 @@ pyetp5h2tztugp9lfyql"),
     #[test]
     fn test_query_lightning_payment_uninitialized() {
         let sce = get_test_sce();
-        let lc = Arc::new(Mutex::new(sce.lightning_client().unwrap()));
-        let mut lc_guard = lc.as_ref().lock().unwrap();
-        lc_guard.expect_waitinvoice().returning( |id_str| 
+        let lc = sce.lightning_client().unwrap();
+        lc.expect_waitinvoice().returning( |id_str| 
             Ok(get_paid(id_str))
         );
+        let lc_arc = Arc::new(Mutex::new(lc));
+        let mut lc_guard = lc_arc.as_ref().lock().unwrap();
     }
 
     #[test]
@@ -412,11 +408,12 @@ pyetp5h2tztugp9lfyql"),
         sce.database.expect_get_pay_on_demand_info().return_const(Ok(
             get_pod_info(id.clone())
         ));
-        let lc = Arc::new(Mutex::new(sce.lightning_client().unwrap()));
-        let mut lc_guard = lc.as_ref().lock().unwrap();
-        lc_guard.expect_waitinvoice().returning(|id_str| 
+        let lc = sce.lightning_client().unwrap();
+        lc.expect_waitinvoice().returning(|id_str| 
             Ok(get_waiting(id_str))
         );
+        let lc_arc = Arc::new(Mutex::new(lc));
+        let mut lc_guard = lc_arc.as_ref().lock().unwrap();
         drop(lc_guard);
         let mut bc = sce.bitcoin_client().unwrap();
         bc.expect_get_received_by_address().returning(|_,_| Ok(bitcoin::Amount::from_sat(0)));
@@ -476,11 +473,12 @@ pyetp5h2tztugp9lfyql"),
             );
             
         sce.database.expect_get_pay_on_demand_info().return_const(Ok(get_pod_info(id.clone())));
-        let lc = Arc::new(Mutex::new(sce.lightning_client().unwrap()));
-        let mut lc_guard = lc.as_ref().lock().unwrap();
-        lc_guard.expect_waitinvoice().return_once(move |id_str| 
+        let lc = sce.lightning_client().unwrap();
+        lc.expect_waitinvoice().return_once(move |id_str| 
             Ok(get_waiting(id_str))
         );
+        let lc_arc = Arc::new(Mutex::new(lc));
+        let mut lc_guard = lc_arc.as_ref().lock().unwrap();
         drop(lc_guard);
         let mut bc = sce.bitcoin_client().unwrap();
         bc.expect_get_received_by_address().returning(|_,_| Ok(bitcoin::Amount::from_sat(0)));
@@ -515,8 +513,9 @@ pyetp5h2tztugp9lfyql"),
         sce.database.expect_get_pay_on_demand_info().return_const(Ok(
             get_pod_info(id.clone())
         ));
-        let lc = Arc::new(Mutex::new(sce.lightning_client().unwrap()));
-        let mut lc_guard = lc.as_ref().lock().unwrap();
+        let lc = sce.lightning_client().unwrap();
+        let lc_arc = Arc::new(Mutex::new(lc));
+        let mut lc_guard = lc_arc.as_ref().lock().unwrap();
         lc_guard.expect_waitinvoice().returning(|id_str| 
             Ok(get_expired(id_str))
         );
