@@ -4,7 +4,8 @@
 
 use super::Result;
 use crate::error::SharedLibError;
-use crate::structs::{PrepareSignTxMsg, StateChainDataAPI, StateEntityFeeInfoAPI};
+use crate::structs::{PrepareSignTxMsg, StateChainDataAPI, 
+    StateEntityFeeInfoAPI};
 #[cfg(test)]
 use crate::Verifiable;
 
@@ -101,14 +102,7 @@ pub fn tx_withdraw_verify(
     
     // Check fee info
     let tx = transaction_deserialise(&tx_psm.tx_hex)?;
-    // If there is no withdrawal fee there should be 1 output only
     if fee_withdraw.to_owned() == 0 {
-        if tx.output.len() != 1 {
-              return Err(SharedLibError::FormatError(format!(
-                "Withdrawal fee is 0, expected withdrawal tx to have 1 output - withdrawal tx has {} outputs.",
-            tx.output.len()
-            )));
-        }
         return Ok(())
     }
 
@@ -172,11 +166,7 @@ pub fn tx_funding_build(
         TxOut {
             script_pubkey: Address::from_str(p_address)?.script_pubkey(),
             value: *amount,
-        },
-        TxOut {
-            script_pubkey: Address::from_str(change_addr)?.script_pubkey(),
-            value: *change_amount - FEE,
-        },
+        }
     ];
 
     if *fee != 0 {
@@ -186,6 +176,17 @@ pub fn tx_funding_build(
                 value: *fee,
             });
     }
+
+    if *change_amount != 0{
+        outputs.push(
+            TxOut {
+                script_pubkey: Address::from_str(change_addr)?.script_pubkey(),
+                value: *change_amount - FEE,
+            },
+        )
+    }
+
+   
 
     let tx_0 = Transaction {
         version: 2,
@@ -633,17 +634,11 @@ pub mod tests {
         // Zero withdrawal fee - ok
         tx_withdraw_verify(&tx_psm_zero_fee, &[fee_info.address.as_str()], &0).unwrap();
 
-         // Zero withdrawal fee - too many outputs
-        let expected_err = SharedLibError::FormatError(String::from(
-                "Withdrawal fee is 0, expected withdrawal tx to have 1 output - withdrawal tx has 2 outputs.",
-        ));
-        match tx_withdraw_verify(&tx_psm_zero_fee_too_many_outputs, 
+        // Zero withdrawal fee - extra outputs - ok
+        tx_withdraw_verify(&tx_psm_zero_fee_too_many_outputs, 
             &[fee_info.address.as_str()], 
             &0
-        ) {
-            Ok(_) => panic!("expected Err: {}", &expected_err),
-            Err(err) => assert_eq!(&err, &expected_err)
-        }
+        ).unwrap();
     }
 
 }

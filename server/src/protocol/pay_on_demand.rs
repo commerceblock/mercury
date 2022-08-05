@@ -22,10 +22,10 @@ use rocket_contrib::json::Json;
 use rocket_okapi::openapi;
 use shared_lib::structs::Invoice;
 use std::collections::HashMap;
-use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use uuid::Uuid;
+use std::str::FromStr;
 
 //Generics cannot be used in Rocket State, therefore we define the concrete
 //type of StateChainEntity here
@@ -354,8 +354,8 @@ pub mod tests {
     use crate::error::DBErrorType;
     use crate::protocol::util::tests::test_sc_entity;
     use crate::rpc::lightning_client_factory::mock_constants as ln_consts;
+    use crate::rpc::bitcoin_client_factory::mock_constants as btc_consts;
     use clightningrpc::responses;
-    use std::str::FromStr;
 
     fn get_invoice_amount() -> bitcoin::Amount {
         ln_consts::invoice_amount()
@@ -388,7 +388,7 @@ pub mod tests {
         PODInfo {
             token_id,
             lightning_invoice: get_invoice(),
-            btc_payment_address: Address::from_str("1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h").unwrap(),
+            btc_payment_address: btc_consts::address(),
             value: get_invoice_amount().as_sat(),
         }
     }
@@ -407,7 +407,7 @@ pub mod tests {
         sce.database
             .expect_init_pay_on_demand_info()
             .return_const(Ok(()));
-        let address = Address::from_str("1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h").unwrap();
+        let address = btc_consts::address();
         let address_clone = address.clone();
         let mut bc = sce.bitcoin_client().unwrap();
         bc.expect_get_new_address()
@@ -430,7 +430,7 @@ pub mod tests {
     #[test]
     fn test_get_btc_payment_address() {
         let sce = get_test_sce();
-        let address = Address::from_str("1DTFRJ2XFb4AGP1Tfk54iZK1q2pPfK4n3h").unwrap();
+        let address = btc_consts::address();
         let address_clone = address.clone();
         let mut bc = sce.bitcoin_client().unwrap();
         bc.expect_get_new_address()
@@ -567,9 +567,9 @@ pub mod tests {
         let mut lc = sce.lightning_client().unwrap();
         lc.expect_waitinvoice()
             .return_once(move |id_str| Ok(get_waiting(id_str)));
+        lc.expect_waitinvoice()
+            .return_once(move |id_str| Ok(get_paid(id_str)));
         let lc_arc = Arc::new(Mutex::new(lc));
-        let lc_guard = lc_arc.as_ref().lock().unwrap();
-        drop(lc_guard);
         let mut bc = sce.bitcoin_client().unwrap();
         bc.expect_get_received_by_address()
             .returning(|_, _| Ok(bitcoin::Amount::from_sat(0)));
@@ -581,13 +581,7 @@ pub mod tests {
                 amount: 0
             })
         );
-
-        //Paid on second call
-        let mut lc_guard = lc_arc.as_ref().lock().unwrap();
-        lc_guard
-            .expect_waitinvoice()
-            .return_once(move |id_str| Ok(get_paid(id_str)));
-        drop(lc_guard);
+        
         let result_2 = sce.pod_token_verify(Some(&bc), Some(lc_arc), &id);
         assert_eq!(
             result_2,
@@ -612,13 +606,11 @@ pub mod tests {
         sce.database
             .expect_get_pay_on_demand_info()
             .return_const(Ok(get_pod_info(id.clone())));
-        let lc = sce.lightning_client().unwrap();
-        let lc_arc = Arc::new(Mutex::new(lc));
-        let mut lc_guard = lc_arc.as_ref().lock().unwrap();
-        lc_guard
-            .expect_waitinvoice()
+        let mut lc = sce.lightning_client().unwrap();
+        lc.expect_waitinvoice()
             .returning(|id_str| Ok(get_expired(id_str)));
-        drop(lc_guard);
+        let lc_arc = Arc::new(Mutex::new(lc));
+
         let mut bc = sce.bitcoin_client().unwrap();
         bc.expect_get_received_by_address()
             .returning(|_, _| Ok(bitcoin::Amount::from_sat(0)));
@@ -646,7 +638,7 @@ pub mod tests {
         let id = Uuid::from_fields(0, 1, 2, &[0, 1, 2, 3, 4, 5, 6, 7]).unwrap();
         sce.database
             .expect_get_pay_on_demand_status()
-            .times(1)
+            .times(2)
             .return_const(Ok(PODStatus {
                 confirmed: false,
                 amount: 0,
@@ -665,19 +657,20 @@ pub mod tests {
         sce.database
             .expect_get_pay_on_demand_info()
             .return_const(Ok(get_pod_info(id.clone())));
-        let lc = Arc::new(Mutex::new(sce.lightning_client().unwrap()));
-        let mut lc_guard = lc.as_ref().lock().unwrap();
-        lc_guard
-            .expect_waitinvoice()
-            .times(1)
+        let mut lc = sce.lightning_client().unwrap();
+        lc.expect_waitinvoice()
+            .times(2)
             .returning(|id_str| Ok(get_waiting(id_str)));
-        drop(lc_guard);
+        let lc_arc = Arc::new(Mutex::new(lc));
+        
         let mut bc = sce.bitcoin_client().unwrap();
         //full amount paid - expect confirmed
         bc.expect_get_received_by_address()
             .times(1)
             .returning(|_, _| Ok(get_invoice_amount()));
-        let result = sce.pod_token_verify(Some(&bc), Some(Arc::clone(&lc)), &id);
+
+        sce.pod_token_verify(Some(&bc), Some(Arc::clone(&lc_arc)), &id).unwrap();            
+        let result = sce.pod_token_verify(Some(&bc), Some(Arc::clone(&lc_arc)), &id);
         assert_eq!(
             result,
             Ok(PODStatus {

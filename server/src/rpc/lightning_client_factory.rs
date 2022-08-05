@@ -6,24 +6,31 @@ use crate::Result;
 use cfg_if::cfg_if;
 
 pub struct LightningClientFactory {}
+pub use shared_lib::mocks::mock_ln_rpc_client::MockLightningRPC;
 
-cfg_if!{
-    if #[cfg(any(test,feature="mocklightningrpc"))]{
-        pub use shared_lib::mocks::mock_ln_rpc_client::MockLightningRPC as LightningClient;
-
-        fn set_expectations(client: &mut LightningClient) {
+#[allow(dead_code)]
+fn set_expectations(client: &mut MockLightningRPC) {
+    cfg_if!{         
+            if #[cfg(feature="mocklightningrpc", not(test))]{
                 client.expect_invoice().returning(move |_,_,_,_|
                     Ok(mock_constants::invoice())
                 );
 
                 client.expect_waitinvoice()
                 .returning(move |id_str| Ok(mock_constants::paid(id_str)));
-        }
+            }
+    }
+}
+
+cfg_if!{
+    if #[cfg(any(test,feature="mocklightningrpc"))]{
+        pub use MockLightningRPC as LightningClient;
 
         impl LightningClientFactory {
             pub fn create(_rpc_path: &String) -> Result<LightningClient> {
                 let mut client = LightningClient::default();
-                set_expectations(&mut client);
+                //Don't set default expectations for unit tests
+                set_expectations(&mut client);    
                 Ok(client)
             }
         }

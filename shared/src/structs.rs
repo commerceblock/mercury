@@ -160,7 +160,7 @@ pub struct StateEntityFeeInfoAPI {
     /// The Bitcoin address that the SE fee must be paid to
     pub address: String, // Receive address for fee payments
     /// The deposit fee, which is specified as a proportion of the deposit amount in basis points
-    pub deposit: i64,    // basis points
+    pub deposit: u64,    // basis points
     /// The withdrawal fee, which is specified as a proportion of the deposit amount in basis points
     pub withdraw: u64,   // basis points
     /// The decementing nLocktime (block height) interval enforced for backup transactions

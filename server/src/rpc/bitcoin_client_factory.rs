@@ -4,26 +4,33 @@
 
 use crate::Result;
 use cfg_if::cfg_if;
+pub use shared_lib::mocks::mock_rpc_client::MockClient;
 
 pub struct BitcoinClientFactory {}
+                    
+       #[allow(dead_code)]
+       fn set_expectations(client: &mut MockClient) {
+            cfg_if!{   
+                if #[cfg(feature="mockbitcoinrpc", not(test))]{
+                    client.expect_get_new_address().returning(move |_,_|
+                        Ok(mock_constants::address())
+                    );
+                    client.expect_get_received_by_address()
+                    .returning(|_, _| Ok(bitcoin::Amount::from_sat(0)));
+                }
+            }
+        }
 
 cfg_if!{
     if #[cfg(any(test,feature="mockbitcoinrpc"))]{
-        pub use shared_lib::mocks::mock_rpc_client::MockClient as BitcoinClient;
+        pub use MockClient as BitcoinClient;
         pub use shared_lib::mocks::mock_rpc_client::RpcApi as BitcoinRpcApi;
-
-        fn set_expectations(client: &mut BitcoinClient) {
-            client.expect_get_new_address().returning(move |_,_|
-                Ok(mock_constants::address())
-            );
-            client.expect_get_received_by_address()
-            .returning(|_, _| Ok(bitcoin::Amount::from_sat(0)));
-        }
 
         impl BitcoinClientFactory {
             pub fn create(_rpc_path: &String) -> Result<BitcoinClient> {
                 let mut client = BitcoinClient::new();
-                set_expectations(&mut client);
+                //Don't set default expectations for unit tests
+                set_expectations(&mut client);             
                 Ok(client)
             }
         }

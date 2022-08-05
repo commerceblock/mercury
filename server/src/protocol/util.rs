@@ -102,7 +102,7 @@ impl Utilities for SCE {
         let fee_address_vec: Vec<&str> = self.config.fee_address.split(",").collect();
         Ok(StateEntityFeeInfoAPI {
             address: fee_address_vec[0].to_string().clone(),
-            deposit: self.config.fee_deposit as i64,
+            deposit: self.config.fee_deposit,
             withdraw: self.config.fee_withdraw,
             interval: self.config.lh_decrement,
             initlock: self.config.lockheight_init,
@@ -804,7 +804,6 @@ pub fn reset_inram_data(sc_entity: State<SCE>) -> Result<Json<()>> {
         "Cannot reset in-ram data when not in testing mode.",
     )));
 }
-
 
 // Utily functions for StateChainEntity to be used throughout codebase.
 impl SCE {

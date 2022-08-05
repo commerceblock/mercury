@@ -17,7 +17,8 @@ use shared_lib::structs::{DepositMsg1, DepositMsg1POD, DepositMsg2,
 };
 use shared_lib::util::{tx_backup_build, tx_funding_build, FEE, transaction_serialise};
 
-use super::api::{get_smt_proof, get_smt_root, get_statechain_fee_info};
+use super::api::{get_smt_proof, get_smt_root, get_statechain_fee_info,
+    pod_token_init, pod_token_verify};
 use crate::error::{CError, WalletErrorType};
 use crate::state_entity::util::{cosign_tx_input, verify_statechain_smt};
 use crate::utilities::requests;
@@ -45,8 +46,14 @@ pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<UserID> {
 
 /// Message to server initiating state entity protocol using pay on demand
 /// Shared wallet ID returned
-pub fn session_init_pod(wallet: &mut Wallet, proof_key: &String, amount: &u64) -> Result<UserID> {
-    let token_id = Uuid::new_v4();
+pub fn session_init_pod(wallet: &mut Wallet, proof_key: &String, amount: &u64,
+fee_info: &StateEntityFeeInfoAPI ) -> Result<UserID> {
+    let token_amount = (amount * fee_info.deposit as u64) / 10000 as u64;
+    let token_id = pod_token_init(&wallet.client_shim, &token_amount)?.token_id;
+    pod_token_verify(&wallet.client_shim, &token_id)?;
+    let pod_status = pod_token_verify(&wallet.client_shim, &token_id)?;
+    assert_eq!(pod_status.confirmed, true);
+    assert_eq!(pod_status.amount, token_amount);
     requests::postb(
         &wallet.client_shim,
         &format!("deposit/init/pod"),
@@ -62,12 +69,14 @@ pub fn session_init_pod(wallet: &mut Wallet, proof_key: &String, amount: &u64) -
 pub fn check_funds(
     deposit_amount: &u64, 
     se_fee_info: &StateEntityFeeInfoAPI
-) -> Result<u64> {
+) -> Result<(u64, u64)> {    
+    let deposit_fee = (deposit_amount * se_fee_info.deposit as u64) / 10000 as u64;
     let withdraw_fee = (deposit_amount * se_fee_info.withdraw as u64) / 10000 as u64;
+
      // Ensure funds cover fees before initiating protocol
     match withdraw_fee + FEE >= *deposit_amount {
         true => Err(CError::WalletError(WalletErrorType::NotEnoughFunds)),
-        false => Ok(withdraw_fee)
+        false => Ok((deposit_fee, withdraw_fee))
     }
 }
 
@@ -81,19 +90,18 @@ pub fn deposit(
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
 
     //calculate SE fee amount from rate
-    let withdraw_fee = check_funds(amount, &se_fee_info)?;
-    let deposit_fee = se_fee_info.deposit as u64;
+    let (deposit_fee, withdraw_fee ) = check_funds(amount, &se_fee_info)?;
     
     // Greedy coin selection.
     let (inputs, addrs, amounts) =
-        wallet.coin_selection_greedy(&(amount + deposit_fee + FEE))?;
+        wallet.coin_selection_greedy(&(amount + withdraw_fee + FEE))?;
 
     // Generate proof key
     let proof_key = wallet.se_proof_keys.get_new_key()?;
 
     // Init. session - Receive shared wallet ID
     let (shared_key_id, solution) : (UserID, Option<String>) = match deposit_fee > 0 {
-        true => (session_init_pod(wallet, &proof_key.to_string(), amount)?,
+        true => (session_init_pod(wallet, &proof_key.to_string(), amount, &se_fee_info)?,
             None),
         false => {
             let shared_key_id = session_init(wallet, &proof_key.to_string())?;
@@ -126,13 +134,13 @@ pub fn deposit(
     let p_addr =
         bitcoin::Address::p2wpkh(&to_bitcoin_public_key(pk), wallet.get_bitcoin_network())?;
     let change_addr = wallet.keys.get_new_address()?.to_string();
-    let change_amount = amounts.iter().sum::<u64>() - amount - deposit_fee - FEE;
+    let change_amount = amounts.iter().sum::<u64>() - amount - withdraw_fee - FEE;
     
     let tx_0 = tx_funding_build(
         &inputs,
         &p_addr.to_string(),
         amount,
-        &deposit_fee,
+        &withdraw_fee,
         &se_fee_info.address,
         &change_addr,
         &change_amount,

@@ -126,7 +126,7 @@ mod tests {
     #[serial]
     fn test_deposit() {
         time_test!();
-        let handle = start_server(None, None, Some(0), None);
+        start_server(None, None, Some(0), None);
         let wallet = gen_wallet_with_deposit(100000);
         //handle.join().expect("The thread being joined has panicked");
         let state_chains_info = wallet.get_state_chains_info().unwrap();
@@ -168,7 +168,6 @@ mod tests {
         assert_eq!(coins.values.get(&100000).unwrap().get(), 1);
         //Reset data
         reset_data(&wallet.client_shim).unwrap();
-        drop(handle);
     }
 
     #[test]
@@ -210,12 +209,13 @@ mod tests {
 
     #[test]
     #[serial]
+    #[ignore]
     fn test_deposit_pay_on_demand() {
         time_test!();
         //Start the server with deposit fee = 100, withdraw fee = 0
         let deposit_fee: u64 = 100;
         let withdraw_fee: u64 = 0;
-        let handle = start_server(None, None, Some(deposit_fee), Some(withdraw_fee));
+        start_server(None, None, Some(deposit_fee), Some(withdraw_fee));
         let wallet = gen_wallet_with_deposit(100000);
         //handle.join().expect("The thread being joined has panicked");
         let fee_info = state_entity::api::get_statechain_fee_info(&wallet.client_shim).unwrap();
@@ -261,7 +261,6 @@ mod tests {
         assert_eq!(coins.values.get(&100000).unwrap().get(), 1);
         //Reset data
         reset_data(&wallet.client_shim).unwrap();
-        drop(handle);
     }
 
     // #[test]
