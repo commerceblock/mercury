@@ -394,24 +394,25 @@ impl Utilities for SCE {
 
                 //for transfer (not deposit)
                 if prepare_sign_msg.protocol == Protocol::Transfer {
-                    //verify transfer locktime is correct
+
                     let statechain_id = self.database.get_statechain_id(user_id)?;
                     let current_locktime = self.database.get_backup_locktime(statechain_id.clone())?;
                     let owner_id = self.database.get_owner_id(statechain_id.clone())?;
 
+                    // check that the owner of the statechain is this user
                     if (owner_id != user_id) {
                         return Err(SEError::Generic(String::from(
                             "User ID not statecoin owner",
                         )));                        
                     }
 
+                    // verify locktime of new backup tx is correct
                     if (current_locktime as u32) != (tx.lock_time as u32) + (self.config.lh_decrement as u32) {
                         return Err(SEError::Generic(String::from(
                             "Backup tx locktime not correctly decremented.",
                         )));
                     }
-                    // add unsigned transaction to backup store
-                    // (this ensures that incompleted swaps also decrement the required locktime)
+                    // update new locktime in backup tx store
                     let new_locktime = current_locktime as u32 - self.config.lh_decrement as u32;
                     self.database.update_backup_locktime(statechain_id.clone(), new_locktime as i64)?;
                 }
