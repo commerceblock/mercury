@@ -170,6 +170,8 @@ pub trait Database {
     fn get_current_backup_txs(&self, locktime: i64) -> Result<Vec<BackupTxID>>;
     fn remove_backup_tx(&self, statechain_id: &Uuid) -> Result<()>;
     fn get_backup_transaction(&self, statechain_id: Uuid) -> Result<Transaction>;
+    fn get_backup_locktime(&self, statechain_id: Uuid) -> Result<i64>;
+    fn update_backup_locktime(&self, statechain_id: Uuid, locktime: i64) -> Result<()>;
     fn get_backup_transaction_and_proof_key(&self, user_id: Uuid) -> Result<(Transaction, String)>;
     fn get_proof_key(&self, user_id: Uuid) -> Result<String>;
     fn get_sc_locked_until(&self, statechain_id: Uuid) -> Result<NaiveDateTime>;
