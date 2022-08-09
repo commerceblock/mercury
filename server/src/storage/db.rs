@@ -1300,6 +1300,21 @@ impl Database for PGDatabase {
         Ok(tx_backup)
     }
 
+    fn get_backup_locktime(&self, statechain_id: Uuid) -> Result<i64> {
+        let backup_locktime =
+            self.get_1::<i64>(statechain_id, Table::BackupTxs, vec![Column::LockTime])?;
+        Ok(backup_locktime)
+    }
+
+    fn update_backup_locktime(&self,statechain_id: Uuid, locktime: i64) -> Result<()> {
+        self.update(
+            &statechain_id,
+            Table::BackupTxs,
+            vec![Column::LockTime],
+            vec![&(locktime)],
+        )
+    }    
+
     fn get_proof_key(&self, user_id: Uuid) -> Result<String> {
         let proof_key =
             self.get_1::<String>(user_id, Table::UserSession, vec![Column::ProofKey])?;

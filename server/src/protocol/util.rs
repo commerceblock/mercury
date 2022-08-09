@@ -394,18 +394,27 @@ impl Utilities for SCE {
 
                 //for transfer (not deposit)
                 if prepare_sign_msg.protocol == Protocol::Transfer {
-                    //verify transfer locktime is correct
-                    let statechain_id = self.database.get_statechain_id(user_id)?;
-                    let current_tx_backup = self.database.get_backup_transaction(statechain_id.clone())?;
 
-                    if (current_tx_backup.lock_time as u32) != (tx.lock_time as u32) + (self.config.lh_decrement as u32) {
+                    let statechain_id = self.database.get_statechain_id(user_id)?;
+                    let current_locktime = self.database.get_backup_locktime(statechain_id.clone())?;
+                    let owner_id = self.database.get_owner_id(statechain_id.clone())?;
+
+                    // check that the owner of the statechain is this user
+                    if (owner_id != user_id) {
+                        return Err(SEError::Generic(String::from(
+                            "User ID not statecoin owner",
+                        )));                        
+                    }
+
+                    // verify locktime of new backup tx is correct
+                    if (current_locktime as u32) != (tx.lock_time as u32) + (self.config.lh_decrement as u32) {
                         return Err(SEError::Generic(String::from(
                             "Backup tx locktime not correctly decremented.",
                         )));
                     }
-                    // add unsigned transaction to backup store
-                    // (this ensures that incompleted swaps also decrement the required locktime)
-                    self.database.update_backup_tx(&statechain_id, tx.clone())?;
+                    // update new locktime in backup tx store
+                    let new_locktime = current_locktime as u32 - self.config.lh_decrement as u32;
+                    self.database.update_backup_locktime(statechain_id.clone(), new_locktime as i64)?;
                 }
 
                 // Only in deposit case add backup tx to UserSession
@@ -1248,6 +1257,7 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
             }
 
         let tx_backup = self.database.get_backup_transaction(statechain_id.clone())?;
+        let lock_time = self.database.get_backup_locktime(statechain_id)?;
 
         let confirmed = self.database.is_confirmed(&statechain_id)?;
 
@@ -1255,7 +1265,7 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
             amount: state_chain.amount as u64,
             utxo: tx_backup.input.get(0).unwrap().previous_output,
             chain,
-            locktime: tx_backup.lock_time,
+            locktime: lock_time as u32,
             confirmed
         }});
     }
@@ -1281,7 +1291,8 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
             None => ()
         };
         
-        let tx_backup = self.database.get_backup_transaction(statechain_id)?;
+        let tx_backup = self.database.get_backup_transaction(statechain_id.clone())?;
+        let lock_time = self.database.get_backup_locktime(statechain_id)?;
 
         let confirmed = self.database.is_confirmed(&statechain_id)?;
 
@@ -1289,7 +1300,7 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
             amount: state_chain.amount as u64,
             utxo: tx_backup.input.get(0).unwrap().previous_output,
             statecoin: statecoin.to_owned(),
-            locktime: tx_backup.lock_time,
+            locktime: lock_time as u32,
             confirmed,
         }});
     }
@@ -1630,6 +1641,9 @@ pub mod tests {
                 &BACKUP_TX_SIGNED.to_string(),
             ).unwrap())
         });
+        db.expect_get_backup_locktime().returning(move |_| {
+            Ok(0 as i64)
+        });
         db.expect_get_public_master().returning(move |_| {
             Ok(Some(PARTY2PUBLIC.to_string()))
         });
@@ -1725,6 +1739,9 @@ pub mod tests {
             Ok(serde_json::from_str::<Transaction>(
                 &BACKUP_TX_SIGNED.to_string(),
             ).unwrap())
+        });
+        db.expect_get_backup_locktime().returning(move |_| {
+            Ok(0 as i64)
         });
         db.expect_get_public_master().returning(move |_| {
             Ok(Some(PARTY2PUBLIC.to_string()))
@@ -1880,6 +1897,9 @@ pub mod tests {
                 &BACKUP_TX_SIGNED.to_string(),
             ).unwrap())
         });
+        db.expect_get_backup_locktime().returning(move |_| {
+            Ok(0 as i64)
+        });
         db.expect_get_public_master().returning(move |_| {
             Ok(None)
         });
@@ -1955,6 +1975,10 @@ pub mod tests {
         db.expect_get_backup_transaction().returning(            
             move |_|  Ok(tx_backup.clone())
         );
+
+        db.expect_get_backup_locktime().returning(move |_| {
+            Ok(0 as i64)
+        });
         
         db.expect_is_confirmed().returning(|_| Ok(true));
         
@@ -1998,6 +2022,10 @@ pub mod tests {
             move |_|  Ok(tx_backup.clone())
         );
         
+        db.expect_get_backup_locktime().returning(move |_| {
+            Ok(0 as i64)
+        });
+
         db.expect_is_confirmed().returning(|_| Ok(true));
         
         let sc_entity = test_sc_entity(db, None, None, None, None);
