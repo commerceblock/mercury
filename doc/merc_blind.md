@@ -17,7 +17,7 @@ An owner wants to deposit an amount of BTC into the platform. The following step
 3. The SE then generates a private key: `s1` (the SE private key share), calculates the corresponding public key and sends it to Owner 1: `S1 = s1.G`
 4. Both SE and Owner 1 then multiply the public keys they receive by their own private key shares to obtain the same shared public key `P` (which corresponds to a shared private key of `p = o1*s1`): `P = o1.(s1.G) = s1.(o1.G)`
 
-> The above key sharing scheme is the same as that used in the 2P ECDSA protocol. The key generation routines of these existing 2P ECDSA implementations can be used in place of the above steps (which include additional verification and proof steps).
+> In the 2P-ECDSA protocol employed (Lindel 2018) the SE also sends the Paillier encryption of their private keyshare along with ZKPs that the Paillier encryption is valid and non-malicious. 
 
 7. Owner 1 then pays a specified value of bitcoin to an address derived from the shared public key (`P`) generating the statecoin UTXO (`Tx0`). 
 8. Owner 1 then creates a *backup transaction* (`Tx1`) that pays the `P` output of `Tx0` to an address derived from `O1`, and sets the `nLocktime` to the initial future block height `h0` (where `h0 = cheight + hinit`, `cheight` is the current Bitcoin block height and `hinit` is the specified initial locktime).
@@ -172,3 +172,47 @@ When it comes to withdrawal, the server can no longer verify that any fee has be
 The server no longer has the TxIDs of individual statecoins along with the user proof keys that it can compile into a sparse Merkle tree for publication. Instead, it takes each of the current public key shares for each coin (`S1` etc.) and generates a SMT with each as a leaf key. This is then updated with each new coin or coin ownership change. 
 
 To verify the uniqueness of the ownership of the shared public key, the current owner then derives the full shared public key from this commitment and their or key share (`P = o1.(s1.G)`) and verifies it against the coin. 
+
+## Swap transfer proofs
+
+During the unblinded swap, the SE must wait for each participant in a swap to separately and client-side verify that the key transfer data `t1` is valid for the key update before the swap can be finalised. In addition, the inability of the server to verify the validity of the key transfer value encrypted in `t1` prevents the server from being able to assign blame in the case that the transfer fails (it is impossible to determine if either the sender or the receiver is at fault for failure to complete the key transfer). 
+
+In order to prevent DoS attacks, statechains which fail (or repeatedly fail) to complete the transfer as part of a swap must be blacklisted by the SE. This will make any sustained DoS economically prohibitive, as BTC outputs will be locked up (from participating in swaps) each time a swap fails to complete. 
+
+The blinded key share (`t1`) is sent from the sender to the reciever via the SE, however it is encrypted with the reciever public key (proof key) when passing via the SE, since the statechain entity can determine the full output private key (`s1o1`) if they learn `t1 = x1o1` (since they know `x1` and `s1`). 
+
+The verification be the SE that the value `t1` is valid can be achieved via the public points of the intermediate key share values and a compact zero-knowledge proof that the encrypted value is equal to the private key corresponding to a known public point. 
+
+The additional transfer_sender step (as part of a swap) proceeds as follows:
+
+1. The sender computes `t1 = x1o1` after reciving `x1` from the StateChain entity from `transfer_sender()`. 
+2. The sender computes the EC point corresponding to `t1`: `T1 = t1.G`. 
+3. The sender encrypts `t1` with the reciver proof key `C2` using the ECIES algorithm:
+
+a. Sender generates ephemeral key `y` and `Y = y.G`
+b. Sender derives symetric key `k = H([y.C2]_x)` where `[y.C2]_x` is the x-coordinate of `y.C2`
+c. Sender encrypts `t1`: `c = E(k;t1)` where `E` is a symmetric algorithm. 
+d. Sender outputs `Y` and `c`
+
+4. The sender then computes a non-interactive proof of the following statement: "The value `c` is an encryption of a value `t1` (with a key `k` that is derived from `c2.Y` where `c2` is the private key of public point `C2`), which the multiplier of the public point `T1`" without revealing `c2`, `k`, `y` or `t1`. Writen as a function:
+
+```cpp
+bool verify(c,Y,C2,T1,k,c2,t1,y) {
+	if(T1 == t1.G && C2 == c2.G && Y = Y.G && k = H([y.C2]_x) && c = E(k;t1)) {
+		return true;
+	} else {
+		return false;
+	}
+}
+```
+
+This non-interactive proof is denoted `P`. 
+
+5. The sender then sends `c`, `Y`, `T1` and `P` to the reciever via the StateChain entity. 
+6. The StateChain entity then verifies the proof `P` against the given values `c`, `Y`, `T1` and also verifies that `T1 = x1.O1` where `O1 = o1.G`. 
+
+If the verification passes, then the values `c` and `Y` are forwarded to the reciever (along with the other transfer objects) and any failure will be the result of the reciever manipulating the recieved value of `t1`. If the verification fails, then this is proof that the sender has tampered with the value of `t1` and their output should be blacklisted. 
+
+The proof `P` can be generated and verified using a generalised zkp proof system/SDK. 
+
+An additional benefit of providing this proof at the `transfer_sender` stage (when all parties in a swap have completed transfer sender is that a swap can be finalised at that point - as all parties have valid information. 
