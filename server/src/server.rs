@@ -231,6 +231,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             transfer::transfer_get_msg,
             transfer::transfer_get_msg_addr,
             transfer::transfer_get_pubkey,
+            transfer::keyupdate_complete,
             transfer_batch::transfer_batch_init,
             transfer_batch::transfer_reveal_nonce,
             withdraw::withdraw_init,
@@ -271,6 +272,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             transfer::transfer_get_msg,
             transfer::transfer_get_msg_addr,
             transfer::transfer_get_pubkey,
+            transfer::keyupdate_complete,
             transfer_batch::transfer_batch_init,
             transfer_batch::transfer_reveal_nonce,
             withdraw::withdraw_init,
@@ -501,6 +503,7 @@ mock! {
         fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> transfer::Result<()>;
         fn transfer_get_msg(&self, statechain_id: Uuid) -> transfer::Result<TransferMsg3>;
         fn transfer_get_msg_addr(&self, receive_addr: String) -> transfer::Result<Vec<TransferMsg3>>;
+        fn keyupdate_complete(&self, statechain_id: Uuid, shared_key_id: Uuid) -> transfer::Result<()>;
     }
     trait BatchTransfer {
         fn transfer_batch_init(
