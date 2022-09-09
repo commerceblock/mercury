@@ -8,7 +8,6 @@ extern crate shared_lib;
 use crate::error::{SEError,DBErrorType};
 use crate::server::{StateChainEntity};
 use crate::protocol::util::RateLimiter;
-use crate::storage::db;
 use crate::storage::Storage;
 use crate::Database;
 use shared_lib::{state_chain::*, structs::*, util::FEE};
