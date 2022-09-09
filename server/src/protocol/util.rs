@@ -4,7 +4,7 @@
 //! utility functions.
 
 pub use super::super::Result;
-use super::{transfer_batch::{transfer_batch_is_ended, BatchTransfer}, withdraw::Withdraw};
+use super::transfer_batch::{transfer_batch_is_ended, BatchTransfer};
 use url::Url;
 extern crate shared_lib;
 use shared_lib::{
