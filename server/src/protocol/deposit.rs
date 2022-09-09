@@ -214,6 +214,7 @@ pub mod tests {
     };
     use bitcoin::Transaction;
     use std::str::FromStr;
+    use crate::storage::db;
 
     #[test]
     fn test_deposit_init() {
