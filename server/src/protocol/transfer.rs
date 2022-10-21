@@ -380,11 +380,6 @@ impl Transfer for SCE {
                 };
                 let path: &str = "ecdsa/keyupdate/second";
                 let ku_receive: KUAttest = post_lb(&l.0, path, &ku_send)?;
-                if(ku_receive.statechain_id != statechain_id) {
-                    return Err(SEError::Generic(format!(
-                        "Lockbox error: keyupdate/second not complete."
-                    )));      
-                }
                 self.database.update_lockbox_index(&new_user_id, &l.1)?;
             },
             None => ()
