@@ -113,6 +113,9 @@ pub trait Transfer {
 
     /// API: Get the transfer message 3 set by update_transfer_msg from the receiver address
     fn transfer_get_msg_addr(&self, receive_addr: String) -> Result<Vec<TransferMsg3>>;
+
+    /// API: finalize keyupdate if this was not completed
+    fn keyupdate_complete(&self, statechain_id: Uuid, shared_key_id: Uuid) -> Result<()>;
 }
 
 impl Transfer for SCE {
@@ -372,6 +375,21 @@ impl Transfer for SCE {
         let sco = self.database.get_statechain_owner(statechain_id)?;
         let lockbox_url: Option<(Url, usize)> = self.get_lockbox_url(&sco.owner_id).map_err(|e| {dbg!("{}",&e); e} )?;
 
+        //lockbox finalise and delete key
+        match lockbox_url {
+            Some(l) => {
+                dbg!("using lockbox", &l);
+                let ku_send = KUFinalize {
+                    statechain_id,
+                    shared_key_id: new_user_id,
+                };
+                let path: &str = "ecdsa/keyupdate/second";
+                let ku_receive: KUAttest = post_lb(&l.0, path, &ku_send)?;
+                self.database.update_lockbox_index(&new_user_id, &l.1)?;
+            },
+            None => ()
+        };
+
         self.database.update_statechain_owner(
             &statechain_id,
             state_chain.clone(),
@@ -386,21 +404,6 @@ impl Transfer for SCE {
             finalized_data.to_owned(),
             self.user_ids.clone()   
         )?;
-
-        //lockbox finalise and delete key
-        match lockbox_url {
-            Some(l) => {
-                dbg!("using lockbox", &l);
-                let ku_send = KUFinalize {
-                    statechain_id,
-                    shared_key_id: new_user_id,
-                };
-                let path: &str = "ecdsa/keyupdate/second";
-                let _ku_receive: KUAttest = post_lb(&l.0, path, &ku_send)?;
-                self.database.update_lockbox_index(&new_user_id, &l.1)?;
-            },
-            None => ()
-        };
 
         let new_tx_backup_hex = transaction_deserialise(&finalized_data.new_tx_backup_hex)?;
 
@@ -442,6 +445,41 @@ impl Transfer for SCE {
         //increment transfer counter
         TRANSFERS_COUNT.inc();
 
+        Ok(())
+    }
+
+    /// Finalize lockbox keyupdate
+    fn keyupdate_complete(&self, statechain_id: Uuid, shared_key_id: Uuid) -> Result<()> {
+              
+        let sco = self.database.get_statechain_owner(statechain_id)?;
+
+        if(sco.owner_id != shared_key_id) {
+            return Err(SEError::Generic(format!(
+                "Owner_id incorrect"
+            )));  
+        }
+
+        let lockbox_url: Option<(Url, usize)> = self.get_lockbox_url(&sco.owner_id).map_err(|e| {dbg!("{}",&e); e} )?;
+
+        //lockbox finalise and delete key
+        match lockbox_url {
+            Some(l) => {
+                dbg!("using lockbox", &l);
+                let ku_send = KUFinalize {
+                    statechain_id,
+                    shared_key_id,
+                };
+                let path: &str = "ecdsa/keyupdate/second";
+                let ku_receive: KUAttest = post_lb(&l.0, path, &ku_send)?;
+                if(ku_receive.statechain_id != statechain_id) {
+                    return Err(SEError::Generic(format!(
+                        "Lockbox error: keyupdate/second error or already completed"
+                    )));      
+                }
+                self.database.update_lockbox_index(&shared_key_id, &l.1)?;
+            },
+            None => ()
+        };
         Ok(())
     }
 
@@ -541,6 +579,20 @@ pub fn transfer_get_msg_addr(
 ) -> Result<Json<Vec<TransferMsg3>>> {
     sc_entity.check_rate_fast("info")?;
     match sc_entity.transfer_get_msg_addr(receive_addr) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Transfer completing by receiver: key share update and deletion
+#[post("/transfer/keyupdate_complete", format = "json", data = "<ku_finalize>")]
+pub fn keyupdate_complete(
+    sc_entity: State<SCE>,
+    ku_finalize: Json<KUFinalize>,
+) -> Result<Json<()>> {
+    sc_entity.check_rate_fast("transfer")?;
+    match sc_entity.keyupdate_complete(ku_finalize.statechain_id, ku_finalize.shared_key_id) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -994,6 +1046,67 @@ mod tests {
         }
         // Expected successful run
         sc_entity.transfer_receiver(transfer_msg_4.clone()).expect("expected transfer_receiver to return Ok");
+    }
+
+    #[test]
+    fn do_keyupdate_second() {
+        let mut transfer_msg_4 =
+            serde_json::from_str::<TransferMsg4>(&TRANSFER_MSG_4.to_string()).unwrap();
+        let shared_key_id = transfer_msg_4.shared_key_id;
+        let statechain_id = transfer_msg_4.statechain_id;
+
+        let mut db = MockDatabase::new();
+        db.expect_set_connection_from_config().returning(|_| Ok(()));
+        db.expect_get_statechain_owner() //Lockbox update
+        .with(predicate::eq(statechain_id))
+        .returning(move |_| {
+            Ok(StateChainOwner {
+                locked_until: Utc::now().naive_utc(),
+                owner_id: shared_key_id,
+                chain: serde_json::from_str::<StateChainUnchecked>(&STATE_CHAIN.to_string()).unwrap().try_into().unwrap(),
+            })
+        });
+        db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
+        db.expect_update_lockbox_index().returning(|_,_|Ok(()));
+
+        let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None, None, None);
+        let _m = mocks::ms::post_commitment().create(); //Mainstay post commitment mock
+
+        let ku_lb_fin_rec = KUAttest {
+            statechain_id,
+            attestation: "".to_string(),
+        };
+
+        let serialized_m2 = serde_json::to_string(&ku_lb_fin_rec).unwrap();
+
+        let _m_2 = mockito::mock("POST", "/ecdsa/keyupdate/second")
+          .with_header("content-type", "application/json")
+          .with_body(serialized_m2)
+          .create();
+
+        // Expected successful run
+        sc_entity.keyupdate_complete(statechain_id, shared_key_id).expect("expected transfer_receiver to return Ok");
+
+        let random_statecoin_id = Uuid::new_v4();
+
+        let ku_lb_fin_rec_2 = KUAttest {
+            statechain_id: random_statecoin_id,
+            attestation: "".to_string(),
+        };
+
+        let serialized_m2_2 = serde_json::to_string(&ku_lb_fin_rec_2).unwrap();
+
+        let _m_2 = mockito::mock("POST", "/ecdsa/keyupdate/second")
+          .with_header("content-type", "application/json")
+          .with_body(serialized_m2_2)
+          .create();
+
+        match sc_entity.keyupdate_complete(statechain_id, shared_key_id) {
+            Ok(_) => assert!(false, "Expected failure."),
+            Err(e) => assert!(e
+                .to_string()
+                .contains("Lockbox error: keyupdate/second error or already completed")),
+        }
     }
 
     #[test]

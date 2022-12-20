@@ -867,9 +867,11 @@ pub struct KUReceiveMsg {
     pub s2_pub: GE,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct KUFinalize {
+    #[schemars(with = "UuidDef")]
     pub statechain_id: Uuid,
+    #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
 }
 
