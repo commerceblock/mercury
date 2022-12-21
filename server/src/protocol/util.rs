@@ -102,7 +102,7 @@ impl Utilities for SCE {
         let fee_address_vec: Vec<&str> = self.config.fee_address.split(",").collect();
         Ok(StateEntityFeeInfoAPI {
             address: fee_address_vec[0].to_string().clone(),
-            deposit: self.config.fee_deposit as i64,
+            deposit: self.config.fee_deposit,
             withdraw: self.config.fee_withdraw,
             interval: self.config.lh_decrement,
             initlock: self.config.lockheight_init,
@@ -814,7 +814,6 @@ pub fn reset_inram_data(sc_entity: State<SCE>) -> Result<Json<()>> {
     )));
 }
 
-
 // Utily functions for StateChainEntity to be used throughout codebase.
 impl SCE {
     /// Query an Electrum Server for a transaction's confirmation status and address.
@@ -1447,11 +1446,30 @@ pub mod tests {
             rate_limit_fast: Option<NonZeroU32>,
             rate_limit_id: Option<NonZeroU32>
     ) -> SCE {
+        test_sc_entity_pod(db, lockbox_url, rate_limit_slow, 
+            rate_limit_fast, rate_limit_id, None, 
+            None)
+    }
+
+    pub fn test_sc_entity_pod(db: MockDatabase, 
+            lockbox_url: Option<String>, 
+            rate_limit_slow: Option<NonZeroU32>,
+            rate_limit_fast: Option<NonZeroU32>,
+            rate_limit_id: Option<NonZeroU32>,
+            fee_deposit: Option<u64>,
+            fee_withdraw: Option<u64>
+    ) -> SCE {
         let mut config = Config::load().unwrap();
         config.lockbox = lockbox_url;
         config.rate_limit_slow = rate_limit_slow;
         config.rate_limit_fast = rate_limit_fast;
         config.rate_limit_id = rate_limit_id;
+        if let Some(f) = fee_deposit {
+            config.fee_deposit = f;
+        }
+        if let Some(f) = fee_withdraw {
+            config.fee_withdraw = f;
+        }
 
         let mut sc_entity = SCE::load(db, MemoryDB::new(""),Some(config)).unwrap();
         sc_entity.config.testing_mode = true;
