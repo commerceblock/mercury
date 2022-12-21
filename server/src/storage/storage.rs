@@ -89,17 +89,6 @@ pub trait Storage {
    // fn insert<T,U>(&self, id: &T, data: U) -> Result<>;
    // fn remove<T,U>&self, id: &T, data: U) -> Result<()>;
 
-   //Create a new user session or update an existing one
-   //If Uuid is not None, that session is updated. Otherwise, a new one is created.
-   fn save_user_session(&self, id: Uuid, auth: String, proof_key: String)
-        -> Result<()>;
-
-   fn create_user_session(&self, auth: String, proof_key: String)
-        -> Result<()>{
-     let id = Uuid::new_v4();
-     self.save_user_session(&id, auth, proof_key)
-   }
-
    fn save_statechain(&self, statechain_id: Uuid, statechain: &StateChain,
                             amount: i64,
                             user_id: &Uuid) -> Result<()>;
