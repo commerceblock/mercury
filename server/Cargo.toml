@@ -62,9 +62,6 @@ governor = "0.3.2"
 nonzero_ext = "0.3.0"
 signal-hook = "0.3.10"
 versions = "3.0.3"
-clightningrpc = "0.2.0"
-clightningrpc-common = "0.3.0-beta.1"
-threadpool = "1.8.1"
 
 [dev-dependencies]
 mockito = "0.27.0"
@@ -98,5 +95,4 @@ path = "../shared"
 [features]
 mockdb = []
 mockbitcoinrpc = []
-mocklightningrpc = []
 

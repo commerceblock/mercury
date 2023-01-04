@@ -44,71 +44,12 @@ pub trait SchemaExample{
 #[schemars(remote = "Uuid")]
 pub struct UuidDef(String);
 
-
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
-pub struct Invoice{
-    pub payment_hash: String,
-    pub expires_at: u64,
-    pub bolt11: String
-}
-
-impl From<clightningrpc::responses::Invoice> for Invoice {
-    fn from(item: clightningrpc::responses::Invoice) -> Self {
-        Self {
-            payment_hash: item.payment_hash,
-            expires_at: item.expires_at,
-            bolt11: item.bolt11
-        }
-    }
-}
-
-
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
-pub struct PODInfo {
-    #[schemars(with = "UuidDef")]
-    pub token_id: Uuid,
-    pub lightning_invoice: Invoice,
-    #[schemars(with = "AddressDef")]
-    pub btc_payment_address: Address,
-    pub value: u64
-}
-
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
-pub struct PODStatus {
-    pub confirmed: bool,
-    pub amount: u64
-}
-
-impl PartialEq<bool> for PODStatus {
-    fn eq(&self, other: &bool) -> bool {
-        (self.confirmed && self.amount > 0) == *other
-    }
-}
-
-impl PartialEq<Self> for PODStatus {
-    fn eq(&self, other: &Self) -> bool {
-        (self.confirmed == other.confirmed) && (self.amount == other.amount)
-    }
-}
-
-impl PODStatus {
-    pub fn empty(&self) -> bool {
-        self.amount == 0
-    }
-}
-
 // structs for ids
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
 pub struct UserID {
     #[schemars(with = "UuidDef")]
     pub id: Uuid,
     pub challenge: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
-pub struct PODUserID {
-    #[schemars(with = "UuidDef")]
-    pub id: Uuid,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
@@ -160,7 +101,7 @@ pub struct StateEntityFeeInfoAPI {
     /// The Bitcoin address that the SE fee must be paid to
     pub address: String, // Receive address for fee payments
     /// The deposit fee, which is specified as a proportion of the deposit amount in basis points
-    pub deposit: u64,    // basis points
+    pub deposit: i64,    // basis points
     /// The withdrawal fee, which is specified as a proportion of the deposit amount in basis points
     pub withdraw: u64,   // basis points
     /// The decementing nLocktime (block height) interval enforced for backup transactions
@@ -669,7 +610,7 @@ pub struct EphKeyGenFirstMsg2Def(String);
 
 // 2P-ECDSA Co-signing algorithm structs
 
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct KeyGenMsg1 {
     #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
@@ -748,17 +689,7 @@ pub struct SignSecondMsgRequest {
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct DepositMsg1 {
     pub auth: String,
-    pub proof_key: String
-}
-
-/// Client -> SE
-#[derive(Serialize, Deserialize, JsonSchema, Debug)]
-pub struct DepositMsg1POD {
-    #[schemars(with = "UuidDef")]
-    pub token_id: Uuid,
-    pub auth: String,
     pub proof_key: String,
-    pub amount: u64
 }
 
 /// Client -> SE
@@ -1113,13 +1044,6 @@ impl SelfEncryptable for &mut TransferMsg4 {
     ) -> crate::ecies::Result<()> {
         (**self).encrypt_with_pubkey(pubkey)
     }
-}
-
-#[derive(Clone, Copy)]
-pub enum LightningInvoiceStatus {
-    Waiting,
-    Expired,
-    Paid
 }
 
 #[cfg(test)]

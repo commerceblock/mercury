@@ -206,9 +206,7 @@ impl Transfer for SCE {
         let statechain_id = transfer_msg4.statechain_id;
 
         // Get Transfer Data for statechain_id
-        let td = self.database.get_transfer_data(statechain_id).map_err(
-            |e| SEError::Generic(format!("transfer_receiver - get_transfer_data: {}", e))
-        )?;
+        let td = self.database.get_transfer_data(statechain_id)?;
 
         // Ensure statechain_sigs are the same
         if td.statechain_sig != transfer_msg4.statechain_sig.to_owned() {
@@ -238,9 +236,7 @@ impl Transfer for SCE {
 
         let s2: FE;
         let s2_pub: GE;
-        match &self.get_lockbox_url(&user_id).map_err(
-            |e| SEError::Generic(format!("transfer_receiver - get_lockbox_url: {}", e))
-        )? {
+        match &self.get_lockbox_url(&user_id)? {
             Some(l) => {
             let ku_send = KUSendMsg {
                 user_id,
@@ -255,8 +251,7 @@ impl Transfer for SCE {
             s2_pub = ku_receive.s2_pub;
         },
         None => {
-            let kp = self.database.get_ecdsa_keypair(user_id).
-                map_err(|e| SEError::Generic(format!("transfer_receiver - get_ecdsa_keypair: {}", e)))?;
+            let kp = self.database.get_ecdsa_keypair(user_id)?;
             let s1 = kp.party_1_private.get_private_key();
             let s1w = FEWrapped::from(s1.clone());
             let key: SecretKey = s1w.try_into()?;
