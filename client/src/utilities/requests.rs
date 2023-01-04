@@ -97,5 +97,5 @@ where
         return Err(CError::StateEntityError(value));
     }
 
-    Ok(serde_json::from_str(value.as_str())?)
+    Ok(serde_json::from_str(value.as_str()).unwrap())
 }

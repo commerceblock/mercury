@@ -7,7 +7,6 @@ use bitcoincore_rpc::Error;
 use bitcoin::consensus;
 use jsonrpc;
 use cfg_if::cfg_if;
-use crate::rpc::bitcoin_client_factory::{BitcoinClientFactory, BitcoinRpcApi};
 
 cfg_if! {
     if #[cfg(any(test))]{
@@ -36,8 +35,27 @@ pub fn watch_node(rpc_path: String) -> Result<()> {
 
     //check interval 
     let interval = time::Duration::from_millis(SCAN_INTERVAL);
+    let rpc_path_parts: Vec<&str> = rpc_path.split('@').collect();
+    if rpc_path_parts.len() != 2 {
+        panic!("Invalid bitcoind RPC path")
+    };
 
-    let rpc = BitcoinClientFactory::create(&rpc_path)?;
+    let rpc_cred: Vec<&str> = rpc_path_parts[0].split(':').collect();
+    if rpc_cred.len() != 2 {
+        panic!("Invalid bitcoind RPC credentials")
+    };
+
+    cfg_if! {
+        if #[cfg(any(test,feature="mockbitcoinrpc"))]{
+            use shared_lib::mocks::mock_rpc_client::MockBitcoinClient;
+            let mut rpc = MockBitcoinClient::new();
+        } else {
+            use bitcoincore_rpc::{Auth, Client, RpcApi};
+            let rpc = Client::new(rpc_path_parts[1].to_string(),
+                          Auth::UserPass(rpc_cred[0].to_string(),
+                                         rpc_cred[1].to_string())).unwrap();
+        }
+    }
 
     // main watch loop
     loop {
@@ -108,6 +126,7 @@ pub mod tests {
     use crate::MockDatabase;
     use uuid::Uuid;
     use crate::structs::BackupTxID;
+    use shared_lib::{mocks::mock_rpc_client::MockBitcoinClient};
     use bitcoin::consensus::encode;
 
     #[test]
@@ -130,9 +149,7 @@ pub mod tests {
         let mut db = MockDatabase::new();
         db.expect_get_current_backup_txs().returning(move |_| {Ok(backup_txs.clone())});
         db.expect_remove_backup_tx().returning(|_| Ok(()));
-        let astr = String::default();
-        let mut rpc = BitcoinClientFactory::create(&astr).unwrap();
-        rpc.expect_get_block_count().returning(|| Ok(147 as u64));
+        let mut rpc = MockBitcoinClient::new();
 
         assert_eq!(rpc.get_block_count().unwrap(), 147 as u64);
 

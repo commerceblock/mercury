@@ -96,9 +96,7 @@ pub trait SpawnServer {
         self,
         mainstay_config: Option<mainstay::MainstayConfig>,
         port: Option<u16>,
-        mode: Option<String>,
-        deposit_fee: Option<u64>,
-        withdrawal_fee: Option<u64>
+        mode: Option<String>
     ) -> thread::JoinHandle<SpawnError>;
 }
 
@@ -109,26 +107,20 @@ impl SpawnServer for PGDatabase {
         self,
         mainstay_config: Option<mainstay::MainstayConfig>,
         port: Option<u16>,
-        mode: Option<String>,
-        fee_deposit: Option<u64>,
-        fee_withdraw: Option<u64>
+        mode: Option<String>
     ) -> thread::JoinHandle<SpawnError> {
         // Set enviroment variable to testing_mode=true to override Settings.toml
         env::set_var("MERC_TESTING_MODE", "true");
         env::set_var("MERC_REQUIRED_CONFIRMATION", "0");
-        if let Some(p) = port {
-            env::set_var("MERC_ROCKET_PORT", &p.to_string()[..]);
+        match port {
+            Some(p) => env::set_var("MERC_ROCKET_PORT", &p.to_string()[..]),
+            None => ()
         };
 
-        if let Some(m) = mode {
-            env::set_var("MERC_MODE", &m[..]);
+        match mode {
+            Some(m) => env::set_var("MERC_MODE", &m[..]),
+            None => ()
         };
-        if let Some(f) = fee_deposit {
-            env::set_var("MERC_FEE_DEPOSIT", format!("{}",f));
-        }
-        if let Some(f) = fee_withdraw {
-            env::set_var("MERC_FEE_WITHDRAW", format!("{}",f));
-        }
         
         // Rocket server is blocking, so we spawn a new thread.
         let handle = thread::spawn(|| {
@@ -157,9 +149,7 @@ impl SpawnServer for MockDatabase {
         self,
         mainstay_config: Option<mainstay::MainstayConfig>,
         _port: Option<u16>,
-        _mode: Option<String>,
-        _deposit_fee: Option<u64>,
-        _withdrawal_fee: Option<u64>
+        _mode: Option<String>
     ) -> thread::JoinHandle<SpawnError> {
         // Set enviroment variable to testing_mode=true to override Settings.toml
         env::set_var("MERC_TESTING_MODE", "true");
@@ -235,6 +225,7 @@ pub fn run_deposit(
 
     resp
 }
+
 
 /// Run confirm_proofs on a wallet
 /// Returns Vec<shared_key_id> of the shared keys that remain unconfirmed
@@ -529,8 +520,7 @@ pub fn reset_inram_data(client: &ClientShim) -> Result<()> {
     Ok(())
 }
 
-pub fn start_server(port: Option<u16>, mode: Option<String>, 
-    deposit_fee: Option<u64>, withdrawal_fee: Option<u64>) -> thread::JoinHandle<SpawnError> {
-    PGDatabase::get_new().spawn_server(None, port, mode, deposit_fee, withdrawal_fee)
+pub fn start_server(port: Option<u16>, mode: Option<String>) -> thread::JoinHandle<SpawnError> {
+    PGDatabase::get_new().spawn_server(None, port, mode)
 }
 

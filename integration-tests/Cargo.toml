@@ -22,7 +22,6 @@ digest = "0.8.1"
 hex = "0.4.2"
 nix = "0.23.0"
 
-
 [dev-dependencies]
 mockito = "0.27.0"
 
@@ -44,7 +43,6 @@ default = ["mockdb"]
 
 [dependencies.server]
 path = "../server"
-features = ["mockbitcoinrpc", "mocklightningrpc"]
 
 [dependencies.client]
 path = "../client"
