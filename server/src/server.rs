@@ -110,19 +110,34 @@ impl Lockbox {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Clightning {
+    pub client: reqwest::blocking::Client,
+    pub endpoint: Url,
+    pub macaroon: String
+}
+
+impl Clightning {
+    pub fn new(endpoint: Url, macaroon: &str) -> Result<Lockbox> {
+        let endpoint = endpoint;
+        let client = reqwest::blocking::Client::new();
+        let macaroon = macaroon;
+        Ok(Clightning { client, endpoint, macaroon })
+    }
+}
+
 pub struct StateChainEntity<
     T: Database + Send + Sync + 'static,
     D: MonotreeDatabase + Send + Sync + 'static,
 > {
     pub config: Config,
     pub database: T,
-    pub lightning_waitinvoice_threads: Arc<Mutex<HashMap<Uuid, JoinHandle<()>>>>,
-    pub lightning_invoice_statuses: Arc<Mutex<HashMap<Uuid, LightningInvoiceStatus>>>,
     pub coin_value_info: Arc<Mutex<CoinValueInfo>>,
     pub user_ids: Arc<Mutex<UserIDs>>,
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
     pub scheduler: Option<Arc<Mutex<Scheduler>>>,
     pub lockbox: Option<Lockbox>,
+    pub cln: Option<Clightning>,
     pub rate_limiter_slow:
         Option<Arc<governor::RateLimiter<String, DashMapStateStore<String>, DefaultClock>>>,
     pub rate_limiter_fast:
@@ -181,6 +196,12 @@ impl<
             Mode::Core => (init_lb(&config_rs), None),
         };
 
+        if (&conf.lightningd) {
+            cln = Clightning::new(Url::parse(&conf.lightningd).unwrap(), &conf.macaroon);
+        } else {
+            cln = None
+        }
+
         let rate_limiter_slow = config_rs
             .rate_limit_slow
             .map(|r| Arc::new(governor::RateLimiter::dashmap(Quota::per_second(r))));
@@ -194,13 +215,12 @@ impl<
         let sce = Self {
             config: config_rs,
             database: db,
-            lightning_waitinvoice_threads: Arc::new(Mutex::new(Default::default())),
-            lightning_invoice_statuses: Arc::new(Mutex::new(Default::default())),
             coin_value_info: Arc::new(Mutex::new(Default::default())),
             user_ids: Arc::new(Mutex::new(Default::default())),
             smt: Arc::new(Mutex::new(smt)),
             scheduler,
             lockbox,
+            cln,
             rate_limiter_slow,
             rate_limiter_fast,
             rate_limiter_id,

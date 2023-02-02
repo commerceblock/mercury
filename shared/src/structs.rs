@@ -52,16 +52,12 @@ pub struct Invoice{
     pub bolt11: String
 }
 
-impl From<clightningrpc::responses::Invoice> for Invoice {
-    fn from(item: clightningrpc::responses::Invoice) -> Self {
-        Self {
-            payment_hash: item.payment_hash,
-            expires_at: item.expires_at,
-            bolt11: item.bolt11
-        }
-    }
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+pub struct ReqInvoice{
+    pub amount: u64,
+    pub label: String,
+    pub description: String
 }
-
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct PODInfo {

@@ -151,8 +151,10 @@ pub struct Config {
     pub watch_only: bool,
     /// bitcoind node connecton
     pub bitcoind: String,
-    /// lighting daemon node connecton
-    pub lightningd: String,
+    /// lighting node URL
+    pub lightningd: Option<String>,
+    /// ln_macaroon
+    pub lnmacaroon: Option<String>,
     /// VDF difficulty factor
     pub difficulty: u64,
     /// Storage config
@@ -195,7 +197,8 @@ impl Default for Config {
             batch_lifetime: 3600,     // 1 hour
             watch_only: false,
             bitcoind: String::from(""),
-            lightningd: String::from(""),
+            lightningd: None,
+            lnmacaroon: None,
             difficulty: 4,
             storage: StorageConfig::default(),
             mainstay: Some(MainstayConfig::default()),

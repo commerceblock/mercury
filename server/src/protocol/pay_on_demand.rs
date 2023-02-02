@@ -16,7 +16,6 @@ use crate::rpc::lightning_client_factory::LightningClient;
 use bitcoin::Address;
 use bitcoin::Amount;
 use cfg_if::cfg_if;
-use clightningrpc::responses::Invoice as LightningInvoice;
 use rocket::State;
 use rocket_contrib::json::Json;
 use rocket_okapi::openapi;
@@ -60,7 +59,7 @@ pub trait POD {
     fn pod_token_verify(
         &self,
         bitcoin_client: Option<&BitcoinClient>,
-        lightning_client: Option<Arc<Mutex<LightningClient>>>,
+        lightning_client: Option<&LightningClient>,
         token_id: &Uuid,
     ) -> Result<PODStatus>;
 
@@ -69,7 +68,7 @@ pub trait POD {
         lightning_client: Option<&LightningClient>,
         pod_token_id: &Uuid,
         value: &u64,
-    ) -> Result<LightningInvoice>;
+    ) -> Result<Invoice>;
 
     fn get_btc_payment_address(
         &self,
@@ -77,17 +76,11 @@ pub trait POD {
         pod_token_id: &Uuid,
     ) -> Result<Address>;
 
-    fn join_lightning_thread(&self, id: &Uuid) -> Result<()>;
-
-    fn check_lightning_invoice_status(&self, id: &Uuid) -> Result<Option<LightningInvoiceStatus>>;
-
     fn query_lightning_payment(
         &self,
-        lightning_client: Option<Arc<Mutex<LightningClient>>>,
+        lightning_client: Option<&LightningClient>,
         id: &Uuid,
-    ) -> Result<LightningInvoiceStatus>;
-
-    //fn wait_lightning_invoice(&self, label: &String) -> Result<()>;
+    ) -> Result<bool>;
 
     fn wait_lightning_invoices(&self) -> Result<()>;
 
@@ -98,11 +91,6 @@ pub trait POD {
         value: &u64,
     ) -> Result<bool>;
 
-    fn start_lightning_query_thread(
-        &self,
-        lightning_client: Option<Arc<Mutex<LightningClient>>>,
-        id: &Uuid,
-    ) -> Result<()>;
 }
 
 impl POD for SCE {
@@ -162,20 +150,19 @@ impl POD for SCE {
         let mut pod_status = self.database.get_pay_on_demand_status(token_id)?;
         if (!pod_status.confirmed) {
             let pod_info = &self.database.get_pay_on_demand_info(token_id)?;
-            match self.query_lightning_payment(lightning_client, &token_id)? {
-                LightningInvoiceStatus::Paid => {
-                    pod_status = confirm_payment(pod_info, statuses, database)?
-                }
-                _ => {
-                    if self.query_btc_payment(
-                        bitcoin_client,
-                        &pod_info.btc_payment_address,
-                        &pod_info.value,
-                    )? {
-                        pod_status = confirm_payment(&pod_info, statuses, database)?
-                    }
-                }
-            };
+
+            if self.query_btc_payment(
+                bitcoin_client,
+                &pod_info.btc_payment_address,
+                &pod_info.value,
+            )? {
+                pod_status = confirm_payment(&pod_info, statuses, database)?
+            }
+
+            if self.query_lightning_payment(lightning_client, &token_id)? {
+                pod_status = confirm_payment(&pod_info, statuses, database)?
+            }
+
         }
 
         Ok(pod_status)
@@ -186,7 +173,7 @@ impl POD for SCE {
         lightning_client: Option<&LightningClient>,
         pod_token_id: &Uuid,
         value: &u64,
-    ) -> Result<LightningInvoice> {
+    ) -> Result<Invoice> {
         let id_str = &pod_token_id.to_string();
         Ok(lightning_client
             .unwrap_or(&self.lightning_client()?)
@@ -207,107 +194,21 @@ impl POD for SCE {
         Ok(result)
     }
 
-    fn start_lightning_query_thread(
-        &self,
-        lightning_client: Option<Arc<Mutex<LightningClient>>>,
-        id: &Uuid,
-    ) -> Result<()> {
-        let id_clone = id.clone();
-        //let lightningd = self.config.lightningd.clone();
-        let statuses = Arc::clone(&self.lightning_invoice_statuses);
-        let lightning_rpc =
-            lightning_client.unwrap_or(Arc::new(Mutex::new(self.lightning_client()?)));
-        let handle = thread::spawn(move || {
-            let lc = lightning_rpc.as_ref().lock().unwrap();
-            let mut guard = statuses.as_ref().lock().unwrap();
-            guard.insert(id_clone.clone(), LightningInvoiceStatus::Waiting);
-            // Need to drop the mutex here so that other threads can access it.
-            drop(guard);
-            let invoice = lc
-                .waitinvoice(&id_clone.to_string())
-                .map_err(|e| SEError::from(e))
-                .expect("failed to retrieve invoice payment");
-            let status = match invoice.status.as_str() {
-                "paid" => LightningInvoiceStatus::Paid,
-                "expired" => LightningInvoiceStatus::Expired,
-                _ => LightningInvoiceStatus::Waiting,
-            };
-            let mut guard = statuses.as_ref().lock().unwrap();
-            guard.insert(id_clone.clone(), status);
-            ()
-        });
-        let mut threads_guard = self.lightning_waitinvoice_threads.as_ref().lock().unwrap();
-        threads_guard.insert(id.clone(), handle);
-        Ok(())
-    }
-
-    fn join_lightning_thread(&self, id: &Uuid) -> Result<()> {
-        let mut threads = self.lightning_waitinvoice_threads.as_ref().lock().unwrap();
-        if let Some(h) = threads.remove(id) {
-            h.join().unwrap();
-        };
-        Ok(())
-    }
-
-    //Returns some lightning invoice status.
-    //Joins and removes the thread if the status is not "waiting".
-    fn check_lightning_invoice_status(&self, id: &Uuid) -> Result<Option<LightningInvoiceStatus>> {
-        let guard = self.lightning_invoice_statuses.as_ref().lock().unwrap();
-        match guard.get(id) {
-            Some(s) => {
-                match s {
-                    //Thread should return immediately if expired or paid.
-                    LightningInvoiceStatus::Expired => {
-                        self.join_lightning_thread(id)?;
-                        Ok(Some(*s))
-                    }
-                    LightningInvoiceStatus::Paid => {
-                        self.join_lightning_thread(id)?;
-                        Ok(Some(*s))
-                    }
-                    LightningInvoiceStatus::Waiting => Ok(Some(*s)),
-                }
-            }
-            None => Ok(None),
-        }
-    }
-
     fn query_lightning_payment(
         &self,
-        lightning_client: Option<Arc<Mutex<LightningClient>>>,
+        lightning_client: Option<&LightningClient>,
         id: &Uuid,
-    ) -> Result<LightningInvoiceStatus> {
-        match self.check_lightning_invoice_status(id)? {
-            Some(s) => {
-                match s {
-                    LightningInvoiceStatus::Waiting => {
-                        let threads_guard =
-                            self.lightning_waitinvoice_threads.as_ref().lock().unwrap();
-                        match threads_guard.get(id) {
-                            Some(_handle) => Ok(s),
-                            //Restart the thread if it has stopped
-                            None => {
-                                self.start_lightning_query_thread(lightning_client, id)?;
-                                //Check if the thread has updated the status yet - if not, returning "waiting"
-                                self.check_lightning_invoice_status(id)
-                                    .map(|x| x.unwrap_or(LightningInvoiceStatus::Waiting))
-                            }
-                        }
-                    }
-                    _ => Ok(s),
-                }
-            }
-            None => {
-                self.start_lightning_query_thread(lightning_client, id)?;
-                //Check if the thread has updated the status yet - if not, returning "waiting"
-                self.check_lightning_invoice_status(id)
-                    .map(|x| x.unwrap_or(LightningInvoiceStatus::Waiting))
-            }
-        }
-    }
+    ) -> Result<bool> {
 
-    fn wait_lightning_invoices(&self) -> Result<()> {
-        unimplemented!()
+
+
+
+
+
+
+
+
+        
     }
 
     fn query_btc_payment(
@@ -376,7 +277,7 @@ pub mod tests {
         resp
     }
 
-    fn get_lightning_invoice() -> LightningInvoice {
+    fn get_lightning_invoice() -> Invoice {
         ln_consts::invoice()
     }
 

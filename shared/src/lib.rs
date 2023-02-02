@@ -28,9 +28,6 @@ extern crate bitcoincore_rpc_json;
 #[cfg(test)]
 extern crate mockito;
 
-extern crate clightningrpc;
-extern crate clightningrpc_common;
-
 extern crate mockall;
 
 pub mod mocks;

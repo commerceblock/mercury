@@ -44,8 +44,6 @@ extern crate mockall;
 #[cfg(test)]
 extern crate mockito;
 
-extern crate clightningrpc;
-extern crate clightningrpc_common;
 extern crate shared_lib;
 
 pub mod config;

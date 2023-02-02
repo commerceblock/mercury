@@ -62,19 +62,6 @@ impl From<String> for SEError {
     }
 }
 
-impl From<clightningrpc::Error> for SEError {
-    fn from(e: clightningrpc::Error) -> SEError {
-        SEError::Generic(e.to_string())
-    }
-}
-
-
-impl From<clightningrpc_common::errors::Error> for SEError {
-    fn from(e: clightningrpc_common::errors::Error) -> SEError {
-        SEError::Generic(e.to_string())
-    }
-}
-
 impl From<url::ParseError> for SEError {
     fn from(e: url::ParseError) -> SEError {
         SEError::Generic(e.to_string())
