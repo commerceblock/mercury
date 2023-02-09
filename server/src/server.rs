@@ -4,7 +4,7 @@ use crate::config::{Config, Mode};
 use crate::structs::{StateChainOwner, WithdrawConfirmData};
 use crate::Database;
 use shared_lib::{
-    mainstay, state_chain::StateChainSig, structs::LightningInvoiceStatus, swap_data::*,
+    mainstay, state_chain::StateChainSig, swap_data::*,
 };
 
 use log::LevelFilter;
@@ -16,7 +16,6 @@ use crate::watch::watch_node;
 use std::thread;
 
 use crate::rpc::bitcoin_client_factory::{BitcoinClient, BitcoinClientFactory};
-use crate::rpc::lightning_client_factory::{LightningClient, LightningClientFactory};
 use governor::{clock::DefaultClock, state::keyed::DashMapStateStore, Quota};
 use mockall::*;
 use monotree::database::Database as MonotreeDatabase;
@@ -37,7 +36,6 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::default::Default;
 use std::sync::{Arc, Mutex};
-use std::thread::JoinHandle;
 use url::Url;
 use uuid::Uuid;
 
@@ -118,11 +116,11 @@ pub struct Clightning {
 }
 
 impl Clightning {
-    pub fn new(endpoint: Url, macaroon: &str) -> Result<Lockbox> {
+    pub fn new(endpoint: Url, macaroon: &str) -> Result<Clightning> {
         let endpoint = endpoint;
         let client = reqwest::blocking::Client::new();
-        let macaroon = macaroon;
-        Ok(Clightning { client, endpoint, macaroon })
+        let macaroon_str = macaroon.to_string();
+        Ok(Clightning { client, endpoint, macaroon: macaroon_str })
     }
 }
 
@@ -137,7 +135,7 @@ pub struct StateChainEntity<
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
     pub scheduler: Option<Arc<Mutex<Scheduler>>>,
     pub lockbox: Option<Lockbox>,
-    pub cln: Option<Clightning>,
+    pub cln: Clightning,
     pub rate_limiter_slow:
         Option<Arc<governor::RateLimiter<String, DashMapStateStore<String>, DefaultClock>>>,
     pub rate_limiter_fast:
@@ -196,11 +194,7 @@ impl<
             Mode::Core => (init_lb(&config_rs), None),
         };
 
-        if (&conf.lightningd) {
-            cln = Clightning::new(Url::parse(&conf.lightningd).unwrap(), &conf.macaroon);
-        } else {
-            cln = None
-        }
+        let cln_cli = Clightning::new(Url::parse(&config_rs.lightningd).unwrap(), &config_rs.lnmacaroon).unwrap();
 
         let rate_limiter_slow = config_rs
             .rate_limit_slow
@@ -220,7 +214,7 @@ impl<
             smt: Arc::new(Mutex::new(smt)),
             scheduler,
             lockbox,
-            cln,
+            cln: cln_cli,
             rate_limiter_slow,
             rate_limiter_fast,
             rate_limiter_id,
@@ -234,9 +228,6 @@ impl<
         Ok(BitcoinClientFactory::create(&self.config.bitcoind)?)
     }
 
-    pub fn lightning_client(&self) -> Result<LightningClient> {
-        Ok(LightningClientFactory::create(&self.config.lightningd)?)
-    }
 }
 
 #[catch(500)]

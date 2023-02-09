@@ -22,5 +22,7 @@ mainstay_config = ""
 watch_only = false
 bitcoind = ""
 
+lightningd = "http://136.244.96.105:3001"
+
 #Rate limiter for certain API calls
 rate_limit = 9999999999999

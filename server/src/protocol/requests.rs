@@ -83,7 +83,7 @@ where
 
     // catch reqwest errors
     //let value = match client.post(&format!("{}/{}", url, path)).json(&body).send() 
-    let value = match client.post(url.join(path)?.as_str()).json(&body).send() 
+    let value = match client.post(url.join(path)?.as_str()).header("macaroon", macaroon).json(&body).send() 
     {
         Ok(v) => {
             //Reject responses that are too long
@@ -126,12 +126,13 @@ where
     let client = reqwest::blocking::Client::new();
 
     let mut b = client
-        .get(&format!("{}/{}", url.join(path)?.as_str()));
+        .get(&format!("{}/{}", url, path))
+        .header("macaroon", macaroon);
 
     // catch reqwest errors
     let value = match b.send() {
         Ok(v) => v.text().unwrap(),
-        Err(e) => return Err(CError::from(e)),
+        Err(e) => return Err(SEError::Generic(e.to_string())),
     };
 
     info!("GET return value: {:?}", value);
@@ -140,10 +141,15 @@ where
 
     // catch State entity errors
     if value.contains(&String::from("Error: ")) {
-        return Err(CError::StateEntityError(value));
+        return Err(SEError::Generic(value));
     }
 
-    Ok(serde_json::from_str(value.as_str())?)
+    serde_json::from_str(value.as_str())        
+        .map_err(|e| SEError::Generic(
+            format!("failed to deserialize response \"{}\" due to {}", 
+                &value.as_str(), e)
+            )
+        )
 }
 
 fn handle_error(e: reqwest::Error) -> SEError {

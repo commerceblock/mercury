@@ -43,8 +43,6 @@ schemars = { version = "0.8.0-alpha-4", features = ["chrono", "uuid"] }
 okapi = { version = "0.5.0-alpha-1", features = ["derive_json_schema"] }
 regex = "1"
 bitcoincore-rpc-json = "0.15.0"
-clightningrpc = "0.2.0"
-clightningrpc-common = "0.3.0-beta.1"
 
 [dev-dependencies]
 mockito = "0.27.0"

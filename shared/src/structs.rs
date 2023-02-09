@@ -60,6 +60,32 @@ pub struct ReqInvoice{
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+pub struct RTLInvoice{
+    pub payment_hash: String,
+    pub expires_at: u64,
+    pub bolt11: String,
+    pub payment_secret: String,
+    pub warning_capacity: String
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+pub struct RTLData{
+    pub label: String,
+    pub bolt11: String,
+    pub payment_hash: String,
+    pub msatoshi: u64,
+    pub amount_msat: String,
+    pub status: String,
+    pub description: String,
+    pub expires_at: u64
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+pub struct RTLQuery{
+    pub invoices: Vec<RTLData>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct PODInfo {
     #[schemars(with = "UuidDef")]
     pub token_id: Uuid,
