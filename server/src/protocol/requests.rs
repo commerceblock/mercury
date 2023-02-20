@@ -81,9 +81,17 @@ where
     let start = Instant::now();
     let client = reqwest::blocking::Client::new();
 
+    info!("CLN path {:?}", path);
+
+    info!("CLN macaroon {:?}", macaroon);
+
+    let msg = client.post(url.join(path)?.as_str()).header("macaroon", macaroon).header("encodingtype","hex").json(&body);
+
+    info!("CLN msg {:?}", msg);   
+
     // catch reqwest errors
     //let value = match client.post(&format!("{}/{}", url, path)).json(&body).send() 
-    let value = match client.post(url.join(path)?.as_str()).header("macaroon", macaroon).json(&body).send() 
+    let value = match msg.send() 
     {
         Ok(v) => {
             //Reject responses that are too long
@@ -126,8 +134,9 @@ where
     let client = reqwest::blocking::Client::new();
 
     let mut b = client
-        .get(&format!("{}/{}", url, path))
-        .header("macaroon", macaroon);
+        .get(&format!("{}{}", url, path))
+        .header("macaroon", macaroon)
+        .header("encodingtype","hex");
 
     // catch reqwest errors
     let value = match b.send() {
@@ -153,6 +162,7 @@ where
 }
 
 fn handle_error(e: reqwest::Error) -> SEError {
+    info!("Reqwest Error {:?}", e);
     match e.status() {
         Some(v) => SEError::LockboxError(format!("lockbox status code: {}", v)),
         None => SEError::LockboxError(String::from("no status code")),

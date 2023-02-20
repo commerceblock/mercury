@@ -97,13 +97,16 @@ impl POD for SCE {
         let lightning_invoice: Invoice = self
             .get_lightning_invoice(&token_id, value)?
             .into();
-        let btc_payment_address = self.get_btc_payment_address(bitcoin_client, &token_id)?;
+        info!("Invoice {:?}", lightning_invoice);
+        let btc_payment_address = "bc1".to_string();
+        // self.get_btc_payment_address(bitcoin_client, &token_id)?;
         let pod_info = PODInfo {
             token_id,
             lightning_invoice,
             btc_payment_address,
             value: value.to_owned(),
         };
+        info!("POD info {:?}", pod_info);        
         match self.database.init_pay_on_demand_info(&pod_info) {
             Ok(_) => Ok(pod_info),
             Err(e) => Err(SEError::Generic(format!(
@@ -138,13 +141,13 @@ impl POD for SCE {
         if (!pod_status.confirmed) {
             let pod_info = &self.database.get_pay_on_demand_info(token_id)?;
 
-            if self.query_btc_payment(
-                bitcoin_client,
-                &pod_info.btc_payment_address,
-                &pod_info.value,
-            )? {
-                pod_status = confirm_payment(&pod_info, database)?
-            }
+//            if self.query_btc_payment(
+//                bitcoin_client,
+//                &pod_info.btc_payment_address,
+//                &pod_info.value,
+//            )? {
+//                pod_status = confirm_payment(&pod_info, database)?
+//            }
 
             if self.query_lightning_payment(&token_id)? {
                 pod_status = confirm_payment(&pod_info, database)?

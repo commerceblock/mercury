@@ -91,7 +91,7 @@ pub struct PODInfo {
     pub token_id: Uuid,
     pub lightning_invoice: Invoice,
     #[schemars(with = "AddressDef")]
-    pub btc_payment_address: Address,
+    pub btc_payment_address: String,
     pub value: u64
 }
 
