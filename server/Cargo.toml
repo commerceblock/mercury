@@ -62,6 +62,9 @@ governor = "0.3.2"
 nonzero_ext = "0.3.0"
 signal-hook = "0.3.10"
 versions = "3.0.3"
+openssl = "0.10"
+postgres-openssl = "0.4.0"
+r2d2_postgres = "0.18.1"
 
 [dev-dependencies]
 mockito = "0.27.0"

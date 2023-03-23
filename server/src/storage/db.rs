@@ -23,7 +23,12 @@ use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Part
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
 use rocket_contrib::databases::postgres::{rows::Row, types::ToSql};
 use rocket_contrib::databases::r2d2;
-use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
+use r2d2_postgres::{PostgresConnectionManager};
+use openssl::ssl::{SslConnector, SslMethod};
+use postgres::types::Type;
+use postgres_openssl::MakeTlsConnector;
+use postgres::{Connection, TlsMode};
+use postgres::tls::native_tls::NativeTls;
 use shared_lib::mainstay::CommitmentInfo;
 use shared_lib::state_chain::*;
 use shared_lib::structs::{TransferMsg3,CoinValueInfo,TransferFinalizeData};
@@ -172,9 +177,12 @@ impl Column {
 impl PGDatabase {
     fn get_postgres_connection_pool(
         rocket_url: &String,
-    ) -> Result<r2d2::Pool<PostgresConnectionManager>> {
+    ) -> Result<r2d2::Pool<PostgresConnectionManager<T>>> {
         let url: String = rocket_url.clone().to_string();
-        let manager = PostgresConnectionManager::new(url.clone(), TlsMode::None)?;
+        let mut builder = SslConnector::builder(SslMethod::tls()).unwrap();
+        builder.set_ca_file("/etc/certs/ca-certificate.crt").expect("failed to load certificate");
+        let tls_connector = MakeTlsConnector::new(builder.build());
+        let manager = PostgresConnectionManager::new(url.clone(), tls_connector)?;
         match r2d2::Pool::new(manager) {
             Ok(m) => Ok(m),
             Err(e) => Err(SEError::DBError(
@@ -686,7 +694,7 @@ impl Database for PGDatabase {
         self.init_user_ids(user_ids)
     }
 
-    fn from_pool(pool: r2d2::Pool<PostgresConnectionManager>) -> Self {
+    fn from_pool(pool: r2d2::Pool<PostgresConnectionManager<T>>) -> Self {
         Self {
             pool: Some(pool),
             smt: PGDatabaseSmt {
