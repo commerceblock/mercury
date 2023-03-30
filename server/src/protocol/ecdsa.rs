@@ -194,9 +194,14 @@ impl Ecdsa for SCE {
                     None => return Err(SEError::Generic(format!("Lockbox index not found in database for user_id: {}", &user_id)))
                 };
                 
-                let path: &str = "ecdsa/keygen/second";
-                let kg_party_one_second_message: party1::KeyGenParty1Message2 = post_lb(&lockbox_url, path, &key_gen_msg2)?;
-                kg_party_one_second_msg = kg_party_one_second_message;
+                match db.get_keygen_second_msg(&user_id){
+                    Ok(r) => kg_party_one_second_msg = r,
+                    Err(_dberr) => { let path: &str = "ecdsa/keygen/second";
+                                    let kg_party_one_second_message: party1::KeyGenParty1Message2 = post_lb(&lockbox_url, path, &key_gen_msg2)?;
+                                    let _ = db.set_keygen_second_msg(&user_id, &kg_party_one_second_message);
+                                    kg_party_one_second_msg = kg_party_one_second_message;
+                    }
+                }
             },
             None => {
                 let party2_public: GE = key_gen_msg2.dlog_proof.pk.clone();
@@ -485,6 +490,8 @@ pub mod tests {
         db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
         db.expect_update_public_master().returning(|_,_| Ok(()));
         db.expect_get_challenge().returning(move |_| Ok(challenge.clone()));
+        db.expect_get_keygen_second_msg().returning(|_| Err(SEError::Generic("error".to_string())));
+        db.expect_set_keygen_second_msg().returning(|_,_| Ok(()));
 
         let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None, None, None);
 
@@ -563,6 +570,8 @@ pub mod tests {
         db.expect_get_user_auth()
            .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
+        db.expect_get_keygen_second_msg().returning(|_| Err(SEError::Generic("error".to_string())));
+        db.expect_set_keygen_second_msg().returning(|_,_| Ok(()));
 
         let kg_first_msg = party_one::KeyGenFirstMsg { pk_commitment: BigInt::from(0), zk_pok_commitment: BigInt::from(1) };
         
