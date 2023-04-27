@@ -198,7 +198,6 @@ impl Ecdsa for SCE {
                     Ok(r) => kg_party_one_second_msg = r,
                     Err(_dberr) => { let path: &str = "ecdsa/keygen/second";
                                     let kg_party_one_second_message: party1::KeyGenParty1Message2 = post_lb(&lockbox_url, path, &key_gen_msg2)?;
-                                    let _ = db.set_keygen_second_msg(&user_id, &kg_party_one_second_message);
                                     kg_party_one_second_msg = kg_party_one_second_message;
                     }
                 }
@@ -229,6 +228,8 @@ impl Ecdsa for SCE {
                 kg_party_one_second_msg = kg_party_one_second_message;
             }
         }
+
+        db.set_keygen_second_msg(&user_id, &kg_party_one_second_msg)?;
 
         db.update_s1_pubkey(&key_gen_msg2.shared_key_id, 
             &kg_party_one_second_msg
