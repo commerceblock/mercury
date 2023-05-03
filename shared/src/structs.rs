@@ -667,6 +667,7 @@ pub struct SignReply1 {
 pub struct BlindedSignReply {
     #[schemars(with = "BigIntDef")]
     pub blinded_s: BigInt,
+    pub server_pub_key: Vec<u8>
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]

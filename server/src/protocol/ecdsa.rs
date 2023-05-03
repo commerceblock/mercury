@@ -427,8 +427,11 @@ impl Ecdsa for SCE {
 
         // Ok(vec![vec![0; 32], vec![0; 32]])
 
+        let q_element = ssi.shared_key.public.q.get_element().serialize().to_vec();
+
         Ok(BlindedSignReply {
             blinded_s: signature.s,
+            server_pub_key: q_element
         })
 
     }
