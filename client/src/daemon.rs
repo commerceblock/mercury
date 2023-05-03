@@ -41,6 +41,7 @@ pub enum DaemonRequest {
     GetStateChain(Uuid),
     GetRecoveryData(String),
     Deposit(u64),
+    DepositBlinded(u64),
     Withdraw(Uuid),
     TransferSender(Uuid, String),
     TransferAny(String),
@@ -231,6 +232,12 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                         let deposit_res = state_entity::deposit::deposit(&mut wallet, &amount);
                         wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(deposit_res))
+                    }
+                    DaemonRequest::DepositBlinded(amount) => {
+                        debug!("Daemon: Deposit Blinded");
+                        let deposit_res = state_entity::deposit::blinded_deposit(&mut wallet, &amount);
+                        wallet.save();
+                        r.send(DaemonResponse::value_to_deamon_response(Ok("TEst")))
                     }
                     DaemonRequest::Withdraw(statechain_id) => {
                         debug!("Daemon: Withdraw");

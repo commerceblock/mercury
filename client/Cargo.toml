@@ -50,13 +50,13 @@ git = "https://github.com/commerceblock/zk-paillier"
 tag = "v0.3.10"
 
 [dependencies.kms]
-git = "https://github.com/commerceblock/kms-secp256k1"
-tag = "v0.1.14"
+git = "https://github.com/ssantos21/commerceblock-kms-secp256k1.git"
+tag = "v0.1.14-blind"
 default-features = false
 
 [dependencies.multi-party-ecdsa]
-git = "https://github.com/commerceblock/multi-party-ecdsa"
-tag = "v0.3.12"
+git = "https://github.com/ssantos21/commerceblock-multi-party-ecdsa.git"
+tag = "v0.3.12-blinded"
 
 [dependencies.curv]
 git = "https://github.com/commerceblock/curv"

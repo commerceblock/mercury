@@ -1,6 +1,10 @@
 use super::super::utilities::requests;
 use super::super::ClientShim;
 use super::super::Result;
+use curv::FE;
+use curv::elliptic::curves::traits::ECScalar;
+use shared_lib::structs::BlindedSignMsg2;
+use shared_lib::structs::BlindedSignSecondMsgRequest;
 use shared_lib::structs::{Protocol, SignMsg1, SignMsg2, SignSecondMsgRequest, SignReply1};
 
 use curv::BigInt;
@@ -48,6 +52,52 @@ pub fn sign(
     )?;
 
     Ok(signature)
+}
+
+pub fn blinded_sign(
+    client_shim: &ClientShim,
+    message: BigInt,
+    mk: &MasterKey2,
+    protocol: Protocol,
+    shared_key_id: &Uuid,
+) ->  Result<()>{
+    let (eph_key_gen_first_message_party_two, eph_comm_witness, eph_ec_key_pair_party2) =
+        MasterKey2::sign_first_message();
+
+    let sign_msg1 = SignMsg1 {
+        shared_key_id: *shared_key_id,
+        eph_key_gen_first_message_party_two,
+    };
+    let sign_party_one_first_message: SignReply1 =
+        requests::postb(client_shim, &format!("ecdsa/sign/first"), &sign_msg1)?;
+
+    let blinding_factor: FE = ECScalar::new_random();
+    let inv_blinding_factor = blinding_factor.invert();
+
+    let party_two_sign_message = mk.sign_second_message_with_blinding_factor(
+        &eph_ec_key_pair_party2,
+        eph_comm_witness.clone(),
+        &sign_party_one_first_message.msg,
+        &message,
+        &blinding_factor.to_big_int(),
+    );
+
+    let sign_msg2 = BlindedSignMsg2 {
+        shared_key_id: *shared_key_id,
+        sign_second_msg_request: BlindedSignSecondMsgRequest {
+            protocol,
+            message,
+            party_two_sign_message,
+        },
+    };
+
+    let signature = requests::postb::<&BlindedSignMsg2, Vec<Vec<u8>>>(
+        client_shim,
+        &format!("ecdsa/sign/second",),
+        &sign_msg2,
+    )?;
+
+    Ok(())
 }
 
 // use super::super::utilities::error_to_c_string;

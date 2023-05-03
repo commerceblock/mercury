@@ -1940,7 +1940,7 @@ dependencies = [
 [[package]]
 name = "kms"
 version = "0.1.14"
-source = "git+https://github.com/commerceblock/kms-secp256k1?tag=v0.1.14#e9d6873b42c403cd4f3ab1c79003943093a479a9"
+source = "git+https://github.com/ssantos21/commerceblock-kms-secp256k1.git?tag=v0.1.14-blind#bc4f8e92ab204708793d12b9d9b86b3e2a77455c"
 dependencies = [
  "centipede",
  "curv",
@@ -2387,7 +2387,7 @@ dependencies = [
 [[package]]
 name = "multi-party-ecdsa"
 version = "0.3.12"
-source = "git+https://github.com/commerceblock/multi-party-ecdsa?tag=v0.3.12#94128d3364a13687eb6353bd7e38a6523b798b7a"
+source = "git+https://github.com/ssantos21/commerceblock-multi-party-ecdsa.git?tag=v0.3.12-blinded#615c392b574011516873871f10715b404c971f54"
 dependencies = [
  "centipede",
  "curv",

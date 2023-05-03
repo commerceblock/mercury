@@ -662,6 +662,13 @@ pub struct SignReply1 {
     pub msg: party_one::EphKeyGenFirstMsg,
 }
 
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct BlindedSignReply {
+    #[schemars(with = "BigIntDef")]
+    pub blinded_s: BigInt,
+}
+
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct SignMsg1 {
     #[schemars(with = "UuidDef")]
@@ -684,6 +691,23 @@ pub struct SignSecondMsgRequest {
     pub message: BigInt,
     #[schemars(with = "SignMessageDef")]
     pub party_two_sign_message: party2::SignMessage,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct BlindedSignMsg2 {
+    #[schemars(with = "UuidDef")]
+    pub shared_key_id: Uuid,
+    pub sign_second_msg_request: BlindedSignSecondMsgRequest,
+}
+
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct BlindedSignSecondMsgRequest {
+    pub protocol: Protocol,
+    #[schemars(with = "BigIntDef")]
+    pub message: BigInt,
+    #[schemars(with = "SignMessageDef")]
+    pub party_two_sign_message: party2::BlindedSignMessage,
 }
 
 // Deposit algorithm structs

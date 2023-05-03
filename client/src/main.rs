@@ -102,6 +102,18 @@ fn main() {
                 }
             }
             println!("\nUnspent tx hashes: \n{}\n", hashes.join("\n"));
+        } else if matches.is_present("blinded-deposit") {
+            if let Some(matches) = matches.subcommand_matches("blinded-deposit") {
+                let amount = u64::from_str(matches.value_of("amount").unwrap()).unwrap();
+
+                let text: String = match query_wallet_daemon(DaemonRequest::DepositBlinded(amount)).unwrap() {
+                    DaemonResponse::Value(val) => val,
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
+                    DaemonResponse::None => panic!("None value returned."),
+                };
+
+                println!("\ttext result: {}", text);
+            }
         } else if matches.is_present("deposit") {
             if let Some(matches) = matches.subcommand_matches("deposit") {
                 let amount = u64::from_str(matches.value_of("amount").unwrap()).unwrap();

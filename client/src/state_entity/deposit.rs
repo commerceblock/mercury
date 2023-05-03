@@ -39,6 +39,13 @@ pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<UserID> {
     )
 }
 
+pub fn blinded_deposit(
+    wallet: &mut Wallet,
+    amount: &u64,
+) {
+    println!("Blinded deposit");
+}
+
 /// Deposit coins into state entity. Returns shared_key_id, statechain_id, funding txid,
 /// signed backup tx, back up transacion data and proof_key
 pub fn deposit(

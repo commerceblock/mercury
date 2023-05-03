@@ -468,6 +468,11 @@ mock! {
             &self,
             sign_msg2: SignMsg2,
         ) -> ecdsa::Result<Vec<Vec<u8>>>;
+
+        fn sign_second_blinded(
+            &self, 
+            sign_msg2: BlindedSignMsg2
+        ) -> ecdsa::Result<BlindedSignReply>;
     }
     trait Conductor {
         fn poll_utxo(&self, statechain_id: &Uuid) -> conductor::Result<SwapID>;

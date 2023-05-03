@@ -3,6 +3,7 @@ pub use super::super::Result;
 use crate::error::{DBErrorType, SEError};
 use crate::Database;
 use crate::{server::StateChainEntity, structs::*};
+use shared_lib::structs::{BlindedSignReply, BlindedSignMsg2};
 use shared_lib::{
     structs::{KeyGenMsg1, KeyGenMsg2, KeyGenReply1, KeyGenReply2, SignReply1, Protocol, SignMsg1, SignMsg2},
     util::reverse_hex_str,
@@ -50,6 +51,8 @@ pub trait Ecdsa {
     fn sign_first(&self, sign_msg1: SignMsg1) -> Result<SignReply1>;
 
     fn sign_second(&self, sign_msg2: SignMsg2) -> Result<Vec<Vec<u8>>>;
+
+    fn sign_second_blinded(&self, sign_msg2: BlindedSignMsg2) -> Result<BlindedSignReply>;
 }
 
 impl Ecdsa for SCE {
@@ -406,6 +409,29 @@ impl Ecdsa for SCE {
 
         Ok(ws)
     }
+
+    fn sign_second_blinded(&self, sign_msg2: BlindedSignMsg2) -> Result<BlindedSignReply> {
+        self.check_user_auth(&sign_msg2.shared_key_id)?;
+        let user_id = sign_msg2.shared_key_id;
+        let db = &self.database;
+
+        let message = sign_msg2.sign_second_msg_request.message;
+
+        let ssi: ECDSASignSecondInput = db.get_ecdsa_sign_second_input(user_id)?;
+
+        let signature = ssi.shared_key.sign_second_message_with_blinding_factor(
+            &sign_msg2.sign_second_msg_request.party_two_sign_message.second_message,
+            &message,
+            &ssi.eph_key_gen_first_message_party_two,
+            &ssi.eph_ec_key_pair_party1);
+
+        // Ok(vec![vec![0; 32], vec![0; 32]])
+
+        Ok(BlindedSignReply {
+            blinded_s: signature.s,
+        })
+
+    }
 }
 
 #[openapi]
@@ -456,6 +482,17 @@ pub fn sign_first(
 pub fn sign_second(sc_entity: State<SCE>, sign_msg2: Json<SignMsg2>) -> Result<Json<Vec<Vec<u8>>>> {
     sc_entity.check_rate_slow("ecdsa")?;
     match sc_entity.sign_second(sign_msg2.into_inner()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Second round of the 2P-ECDSA signing protocol: signature generation and verification
+#[post("/ecdsa/blinded_sign/second", format = "json", data = "<sign_msg2>")]
+pub fn sign_second_blinded(sc_entity: State<SCE>, sign_msg2: Json<BlindedSignMsg2>) -> Result<Json<BlindedSignReply>> {
+    sc_entity.check_rate_slow("ecdsa")?;
+    match sc_entity.sign_second_blinded(sign_msg2.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
