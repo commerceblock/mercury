@@ -105,14 +105,27 @@ fn main() {
         } else if matches.is_present("blinded-deposit") {
             if let Some(matches) = matches.subcommand_matches("blinded-deposit") {
                 let amount = u64::from_str(matches.value_of("amount").unwrap()).unwrap();
-
-                let text: String = match query_wallet_daemon(DaemonRequest::DepositBlinded(amount)).unwrap() {
-                    DaemonResponse::Value(val) => val,
+                let (_, statechain_id, funding_txid, tx_b, _, _): (
+                    Uuid,
+                    Uuid,
+                    String,
+                    Transaction,
+                    PrepareSignTxMsg,
+                    PublicKey,
+                ) = match query_wallet_daemon(DaemonRequest::DepositBlinded(amount)).unwrap() {
+                    DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
                     DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                     DaemonResponse::None => panic!("None value returned."),
                 };
-
-                println!("\ttext result: {}", text);
+                println!(
+                    "\nDeposited {} satoshi's. \nState Chain ID: {}",
+                    amount, statechain_id
+                );
+                println!("\nFunding Txid: {}", funding_txid);
+                println!(
+                    "\nBackup Transaction hex: {}",
+                    hex::encode(consensus::serialize(&tx_b))
+                );
             }
         } else if matches.is_present("deposit") {
             if let Some(matches) = matches.subcommand_matches("deposit") {

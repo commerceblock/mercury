@@ -600,6 +600,10 @@ pub struct BigIntDef(String);
 pub struct SignMessageDef(String);
 
 #[derive(JsonSchema)]
+#[schemars(remote = "party2::BlindedSignMessage")]
+pub struct BlindedSignMessageDef(String);
+
+#[derive(JsonSchema)]
 #[schemars(remote = "party_one::KeyGenFirstMsg")]
 pub struct KeyGenFirstMsgDef(String);
 
@@ -705,9 +709,7 @@ pub struct BlindedSignMsg2 {
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct BlindedSignSecondMsgRequest {
     pub protocol: Protocol,
-    #[schemars(with = "BigIntDef")]
-    pub message: BigInt,
-    #[schemars(with = "SignMessageDef")]
+    #[schemars(with = "BlindedSignMessageDef")]
     pub party_two_sign_message: party2::BlindedSignMessage,
 }
 

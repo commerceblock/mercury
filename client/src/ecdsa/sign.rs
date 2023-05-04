@@ -96,7 +96,6 @@ pub fn blinded_sign(
         shared_key_id: *shared_key_id,
         sign_second_msg_request: BlindedSignSecondMsgRequest {
             protocol,
-            message: message.clone(),
             party_two_sign_message,
         },
     };
@@ -110,7 +109,7 @@ pub fn blinded_sign(
     let q = FE::q();
 
     let unblinded_signature_s1 = BigInt::mod_mul(&blinded_signature.blinded_s, &inv_blinding_factor.to_big_int(), &q);
-
+    
     let unblinded_message_s = cmp::min(
         unblinded_signature_s1.clone(),
         FE::q() - unblinded_signature_s1,

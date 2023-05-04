@@ -229,15 +229,15 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                     }
                     DaemonRequest::Deposit(amount) => {
                         debug!("Daemon: Deposit");
-                        let deposit_res = state_entity::deposit::deposit(&mut wallet, &amount);
+                        let deposit_res = state_entity::deposit::deposit(&mut wallet, &amount, false);
                         wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(deposit_res))
                     }
                     DaemonRequest::DepositBlinded(amount) => {
                         debug!("Daemon: Deposit Blinded");
-                        let deposit_res = state_entity::deposit::blinded_deposit(&mut wallet, &amount);
+                        let deposit_res = state_entity::deposit::deposit(&mut wallet, &amount, true);
                         wallet.save();
-                        r.send(DaemonResponse::value_to_deamon_response(Ok("TEst")))
+                        r.send(DaemonResponse::value_to_deamon_response(deposit_res))
                     }
                     DaemonRequest::Withdraw(statechain_id) => {
                         debug!("Daemon: Withdraw");

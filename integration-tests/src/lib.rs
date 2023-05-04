@@ -220,7 +220,7 @@ pub fn run_deposit(
     amount: &u64,
 ) -> (Uuid, Uuid, String, Transaction, PrepareSignTxMsg, PublicKey) {
     let start = Instant::now();
-    let resp = state_entity::deposit::deposit(wallet, amount).unwrap();
+    let resp = state_entity::deposit::deposit(wallet, amount, false).unwrap();
     println!("(Deposit Took: {})", TimeFormat(start.elapsed()));
 
     resp

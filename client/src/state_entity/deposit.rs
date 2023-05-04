@@ -16,7 +16,7 @@ use shared_lib::util::{tx_backup_build, tx_funding_build, FEE, transaction_seria
 
 use super::api::{get_smt_proof, get_smt_root, get_statechain_fee_info};
 use crate::error::{CError, WalletErrorType};
-use crate::state_entity::util::{cosign_tx_input, verify_statechain_smt};
+use crate::state_entity::util::{cosign_tx_input, verify_statechain_smt, blindly_cosign_tx_input};
 use crate::utilities::requests;
 use crate::wallet::wallet::{to_bitcoin_public_key, Wallet};
 
@@ -39,18 +39,12 @@ pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<UserID> {
     )
 }
 
-pub fn blinded_deposit(
-    wallet: &mut Wallet,
-    amount: &u64,
-) {
-    println!("Blinded deposit");
-}
-
 /// Deposit coins into state entity. Returns shared_key_id, statechain_id, funding txid,
 /// signed backup tx, back up transacion data and proof_key
 pub fn deposit(
     wallet: &mut Wallet,
     amount: &u64,
+    blinded: bool,
 ) -> Result<(Uuid, Uuid, String, Transaction, PrepareSignTxMsg, PublicKey)> {
     // Get state entity fee info
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
@@ -152,7 +146,13 @@ pub fn deposit(
     };
 
     let witness = {
-        let tmp = cosign_tx_input(wallet, &tx_backup_psm)?;
+
+        let tmp = if blinded {
+            blindly_cosign_tx_input(wallet, &tx_backup_psm)?
+        } else {
+            cosign_tx_input(wallet, &tx_backup_psm)?
+        };
+
         if tmp.len() != 1 {
             return Err(CError::Generic(String::from("expected 1 witness from cosign_tx_input")));
         } else {
