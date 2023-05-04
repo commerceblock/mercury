@@ -153,6 +153,12 @@ pub trait Database {
         state_chain: &StateChain,
         amount: &i64,
     ) -> Result<()>;
+    fn create_statechain_without_amount(
+        &self,
+        statechain_id: &Uuid,
+        user_id: &Uuid,
+        state_chain: &StateChain,
+    ) -> Result<()>;
     fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain>;
     fn update_statechain_owner(
         &self,

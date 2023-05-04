@@ -441,6 +441,14 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
+    fn create_statechain_without_amount(
+        &self,
+        _statechain_id: &uuid::Uuid,
+        _user_id: &uuid::Uuid,
+        _state_chain: &super::StateChain,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
     fn get_statechain(&self, _statechain_id: uuid::Uuid) -> crate::Result<super::StateChain> {
         unimplemented!()
     }

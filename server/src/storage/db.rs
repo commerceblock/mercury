@@ -1174,6 +1174,30 @@ impl Database for PGDatabase {
         Ok(())
     }
 
+    fn create_statechain_without_amount(
+        &self,
+        statechain_id: &Uuid,
+        user_id: &Uuid,
+        state_chain: &StateChain,
+    ) -> Result<()> {
+        self.insert(statechain_id, Table::StateChain)?;
+        self.update(
+            statechain_id,
+            Table::StateChain,
+            vec![
+                Column::Chain,
+                Column::LockedUntil,
+                Column::OwnerId,
+            ],
+            vec![
+                &Self::ser(state_chain.to_owned())?,
+                &get_time_now(),
+                &user_id.to_owned(),
+            ],
+        )?;
+        Ok(())
+    }
+
     fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain> {
         let (_, state_chain_str) = self.get_2::<i64, String>(
             statechain_id,

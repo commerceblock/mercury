@@ -226,6 +226,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             ecdsa::sign_second_blinded,
             deposit::deposit_init,
             deposit::deposit_confirm,
+            deposit::blinded_deposit_confirm,
             transfer::transfer_sender,
             transfer::transfer_receiver,
             transfer::transfer_update_msg,
@@ -268,6 +269,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             ecdsa::sign_second_blinded,
             deposit::deposit_init,
             deposit::deposit_confirm,
+            deposit::blinded_deposit_confirm,
             transfer::transfer_sender,
             transfer::transfer_receiver,
             transfer::transfer_update_msg,
@@ -447,6 +449,7 @@ mock! {
             &self,
             deposit_msg2: DepositMsg2,
         ) -> deposit::Result<StatechainID>;
+        fn blinded_deposit_confirm(&self, deposit_msg2: DepositMsg2) -> deposit::Result<StatechainID>;
     }
     trait Ecdsa {
         fn master_key(&self, user_id: Uuid) -> ecdsa::Result<()>;
