@@ -415,13 +415,13 @@ impl Ecdsa for SCE {
         let user_id = sign_msg2.shared_key_id;
         let db = &self.database;
 
-        let message = sign_msg2.sign_second_msg_request.message;
+        let party_two_sign_message_partial_sig_c4 = sign_msg2.sign_second_msg_request.party_two_sign_message.partial_sig.c4;
 
         let ssi: ECDSASignSecondInput = db.get_ecdsa_sign_second_input(user_id)?;
 
         let signature = ssi.shared_key.sign_second_message_with_blinding_factor(
             &sign_msg2.sign_second_msg_request.party_two_sign_message.second_message,
-            &message,
+            &party_two_sign_message_partial_sig_c4,
             &ssi.eph_key_gen_first_message_party_two,
             &ssi.eph_ec_key_pair_party1);
 
