@@ -160,6 +160,8 @@ pub fn deposit(
         }
     };
 
+    println!("witness: {:?}", witness);
+
     // Add witness to back up tx
     let mut tx_backup_signed = tx_backup_unsigned.clone();
     tx_backup_signed.input[0].witness = witness;
@@ -171,6 +173,8 @@ pub fn deposit(
         .instance
         .broadcast_transaction(hex::encode(consensus::serialize(&tx_funding_signed)))?;
 
+    println!("funding_txid: {:?}", funding_txid);
+
     // Wait for server confirmation of funding tx and receive new StateChain's id
     let statechain_id: StatechainID = requests::postb(
         &wallet.client_shim,
@@ -179,6 +183,8 @@ pub fn deposit(
             shared_key_id: shared_key_id.id,
         },
     )?;
+
+    println!("statechain_id: {:?}", statechain_id);
     
     // Verify proof key inclusion in SE sparse merkle tree
     let root = get_smt_root(&wallet.client_shim)?.unwrap();
@@ -196,6 +202,8 @@ pub fn deposit(
         shared_key.tx_backup_psm = Some(tx_backup_psm.to_owned());
         shared_key.add_proof_data(&proof_key.to_string(), &root, &proof, &funding_txid);
     }
+
+    println!("Deposit: Shared key created: {}", shared_key_id.id);
 
     Ok((
         shared_key_id.id,
