@@ -195,7 +195,7 @@ impl Deposit for SCE {
             .database
             .get_proof_key(user_id)?;
 
-            let statechain_id: Uuid;
+        let statechain_id: Uuid;
 
         // check if we already have a statechain with this user ID (in case of deposit RBF)
         match self.database.get_statechain_id(user_id.clone()) {

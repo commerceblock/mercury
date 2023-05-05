@@ -160,8 +160,6 @@ pub fn deposit(
         }
     };
 
-    println!("witness: {:?}", witness);
-
     // Add witness to back up tx
     let mut tx_backup_signed = tx_backup_unsigned.clone();
     tx_backup_signed.input[0].witness = witness;
@@ -173,37 +171,36 @@ pub fn deposit(
         .instance
         .broadcast_transaction(hex::encode(consensus::serialize(&tx_funding_signed)))?;
 
-    println!("funding_txid: {:?}", funding_txid);
-
     // Wait for server confirmation of funding tx and receive new StateChain's id
     let statechain_id: StatechainID = requests::postb(
         &wallet.client_shim,
-        &format!("deposit/confirm"),
+        &format!("blinded/deposit/confirm"),
         &DepositMsg2 {
             shared_key_id: shared_key_id.id,
         },
     )?;
 
-    println!("statechain_id: {:?}", statechain_id);
+    if !blinded {
     
-    // Verify proof key inclusion in SE sparse merkle tree
-    let root = get_smt_root(&wallet.client_shim)?.unwrap();
-    let proof = get_smt_proof(&wallet.client_shim, &root, &funding_txid)?;
-    assert!(verify_statechain_smt(
-        &Some(root.hash()),
-        &proof_key.to_string(),
-        &proof
-    ));
+        // Verify proof key inclusion in SE sparse merkle tree
+        let root = get_smt_root(&wallet.client_shim)?.unwrap();
+        let proof = get_smt_proof(&wallet.client_shim, &root, &funding_txid)?;
+        assert!(verify_statechain_smt(
+            &Some(root.hash()),
+            &proof_key.to_string(),
+            &proof
+        ));
 
-    // Add proof and state chain id to Shared key
-    {
-        let shared_key = wallet.get_shared_key_mut(&shared_key_id.id)?;
-        shared_key.statechain_id = Some(statechain_id.id);
-        shared_key.tx_backup_psm = Some(tx_backup_psm.to_owned());
-        shared_key.add_proof_data(&proof_key.to_string(), &root, &proof, &funding_txid);
+        // Add proof and state chain id to Shared key
+        {
+            let shared_key = wallet.get_shared_key_mut(&shared_key_id.id)?;
+            shared_key.statechain_id = Some(statechain_id.id);
+            shared_key.tx_backup_psm = Some(tx_backup_psm.to_owned());
+            shared_key.add_proof_data(&proof_key.to_string(), &root, &proof, &funding_txid);
+        }
+
+        println!("Deposit: Shared key created: {}", shared_key_id.id);
     }
-
-    println!("Deposit: Shared key created: {}", shared_key_id.id);
 
     Ok((
         shared_key_id.id,

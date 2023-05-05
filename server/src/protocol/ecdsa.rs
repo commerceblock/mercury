@@ -429,6 +429,14 @@ impl Ecdsa for SCE {
 
         let q_element = ssi.shared_key.public.q.get_element().serialize().to_vec();
 
+        if (sign_msg2.sign_second_msg_request.protocol == Protocol::Deposit) {
+            let spk_vec = q_element.clone();
+            let pk = PK::from_slice(&spk_vec)?;
+            let serialized_pk = PK::serialize_uncompressed(&pk);
+            let shared_pk = GE::from_bytes(&serialized_pk[1..]);
+            db.update_shared_pubkey(user_id,shared_pk.unwrap())?;
+        }
+
         Ok(BlindedSignReply {
             blinded_s: signature.s,
             server_pub_key: q_element
