@@ -23,13 +23,15 @@ extern crate rocket_okapi;
 extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
-extern crate bitcoincore_rpc_json;
 
 #[cfg(test)]
 extern crate mockito;
 
+<<<<<<< HEAD
 extern crate mockall;
 
+=======
+>>>>>>> master
 pub mod mocks;
 
 pub mod blinded_token;

@@ -32,7 +32,7 @@ use uuid::Uuid;
 pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid, tx_fee: &u64) 
     -> Result<(String, Uuid, u64)> {
     println!("running withdraw init...");
-    let (shared_key_id, _address, tx_signed, amount) = withdraw_init(wallet, statechain_id, tx_fee)?;
+    let (shared_key_id, address, tx_signed, amount) = withdraw_init(wallet, statechain_id, tx_fee)?;
     println!("running withdraw confirm...");
     let tx_id = withdraw_confirm(wallet, &shared_key_id, &tx_signed)?;
     Ok((tx_id, statechain_id.clone(), amount))
@@ -40,7 +40,7 @@ pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid, tx_fee: &u64)
 
 pub fn batch_withdraw(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>, tx_fee: &u64) 
     -> Result<(String, Vec<Uuid>, u64)> {
-    let (shared_key_ids, _address, tx_signed, amount) = batch_withdraw_init(wallet, statechain_ids, tx_fee)?;
+    let (shared_key_ids, address, tx_signed, amount) = batch_withdraw_init(wallet, statechain_ids, tx_fee)?;
     let tx_id = batch_withdraw_confirm(wallet, &shared_key_ids, &tx_signed)?;
     Ok((tx_id, statechain_ids.clone(), amount))
 }

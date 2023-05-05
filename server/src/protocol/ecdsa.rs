@@ -76,29 +76,21 @@ impl Ecdsa for SCE {
         let user_id = key_gen_msg1.shared_key_id;
         let db = &self.database;
         
-        // if deposit and there is no pay on deposit fee, verify VDF
-        if (self.config.deposit_pow && self.config.fee_deposit == 0) {
+        // if deposit, verify VDF
+        if (self.config.deposit_pow) {
             if (key_gen_msg1.protocol == Protocol::Deposit) {
                 let mut hasher = Sha3_256::new();
-                let challenge: Option<String> = db.get_challenge(&user_id)?;
-                match key_gen_msg1.solution {
-                    Some(ref s) => {
-                        let solution = s.to_string();
-                        if let Some(c) = challenge{
-                            hasher.input(&format!("{}:{}", &c, &solution).as_bytes());
-                            let result = hex::encode(hasher.result_reset());
-                            let difficulty = self.config.difficulty.clone() as usize;
-                            if (result[..difficulty] != String::from_utf8(vec![b'0'; difficulty]).unwrap()) {
-                                return Err(SEError::Generic(String::from("PoW solution not valid")))
-                            }
-                        } else {
-                            return Err(SEError::Generic(String::from("PoW challenge missing on deposit")))
-                        }
-                    },
-                    None => {
-                        return Err(SEError::Generic(String::from("PoW solution missing on deposit")))                  
-                    }
-                };      
+                let challenge = db.get_challenge(&user_id)?;
+                let solution: String = match key_gen_msg1.solution {
+                    Some(ref s) => s.to_string(),
+                    None => return Err(SEError::Generic(String::from("PoW solution missing on deposit")))
+                };
+                hasher.input(&format!("{}:{}", challenge, solution).as_bytes());
+                let result = hex::encode(hasher.result_reset());
+                let difficulty = self.config.difficulty.clone() as usize;
+                if (result[..difficulty] != String::from_utf8(vec![b'0'; difficulty]).unwrap()) {
+                    return Err(SEError::Generic(String::from("PoW solution not valid")))
+                }
             // else check confirmed            
             } else {
                 let statechain_id = db.get_statechain_id(user_id.clone())?;
@@ -107,13 +99,6 @@ impl Ecdsa for SCE {
                 };
             };
         };
-
-        //It there is a pay on deposit fee, there should be a user session value present.
-        if (self.config.fee_deposit > 0) {
-            if db.get_user_session_value(user_id)?.is_none() {
-                return Err(SEError::Generic(String::from("User session value missing")))
-            }
-        }
 
         let kg_first_msg;
         let lockbox_url: Option<Url> = match self.get_lockbox_url(&user_id)?{
@@ -473,7 +458,7 @@ pub fn sign_second(sc_entity: State<SCE>, sign_msg2: Json<SignMsg2>) -> Result<J
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::protocol::util::tests::{test_sc_entity, test_sc_entity_pod};
+    use crate::protocol::util::tests::test_sc_entity;
     use shared_lib::structs::SignSecondMsgRequest;
     use crate::protocol::util::tests::BACKUP_TX_NOT_SIGNED;
     use bitcoin::Transaction;
@@ -491,8 +476,7 @@ pub mod tests {
         let challenge: String = "cc9391e5b30bfc533bafc5c7fa8d4af4".to_string();
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().return_const(Ok(()));
-        db.expect_create_user_session_pod().return_const(Ok(()));
+        db.expect_create_user_session().returning(|_, _, _, _, _| Ok(()));
         db.expect_get_user_auth()
            .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
@@ -500,7 +484,7 @@ pub mod tests {
         db.expect_update_keygen_first_msg().returning(|_,_| Ok(()));
         db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
         db.expect_update_public_master().returning(|_,_| Ok(()));
-        db.expect_get_challenge().returning(move |_| Ok(Some(challenge.clone())));
+        db.expect_get_challenge().returning(move |_| Ok(challenge.clone()));
 
         let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None, None, None);
 
@@ -570,109 +554,12 @@ pub mod tests {
     }
 
     #[test]
-    fn test_keygen_first_pay_on_demand() {
-        let user_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
-        let challenge: String = "cc9391e5b30bfc533bafc5c7fa8d4af4".to_string();
-        let mut db = MockDatabase::new();
-        let fee_deposit = Some(100);
-        let fee_withdraw = Some(0);
-        db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session_pod().return_const(Ok(()));
-        db.expect_get_user_auth()
-           .returning(|_user_id| Ok(String::from("user_auth")));
-        db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
-        db.expect_init_ecdsa().returning(|_user_id| Ok(0));
-        db.expect_update_keygen_first_msg().returning(|_,_| Ok(()));
-        db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
-        db.expect_update_public_master().returning(|_,_| Ok(()));
-        db.expect_get_challenge().returning(move |_| Ok(Some(challenge.clone())));
-        db.expect_get_user_session_value().once().return_const(Ok(None));
-        db.expect_get_user_session_value().once().return_const(Ok(fee_deposit));
-
-        let sc_entity = test_sc_entity_pod(db, Some(mockito::server_url()), 
-            None, None, None, fee_deposit, fee_withdraw);
-
-        let kg_first_msg = party_one::KeyGenFirstMsg { pk_commitment: BigInt::from(0 as u64), zk_pok_commitment: BigInt::from(1 as u64) };
-
-        let serialized_m1 = serde_json::to_string(&(&user_id,&kg_first_msg)).unwrap();
-
-        let _m_1 = mockito::mock("POST", "/ecdsa/keygen/first")
-          .with_header("content-type", "application/json")
-          .with_body(serialized_m1)
-          .create();
-
-        let kg_msg_1 = KeyGenMsg1 { shared_key_id: user_id, protocol: Protocol::Deposit, solution: None};
-        
-        // User session value missing
-        let expected_err = SEError::Generic("User session value missing".to_string());
-        assert_eq!(&sc_entity.first_message(kg_msg_1.clone()).
-            expect_err(&format!("expected error: {}", &expected_err)), &expected_err);
-        let return_msg = sc_entity.first_message(kg_msg_1).unwrap();
-        
-        assert_eq!(kg_first_msg.pk_commitment,return_msg.msg.pk_commitment);
-        assert_eq!(kg_first_msg.zk_pok_commitment,return_msg.msg.zk_pok_commitment);
-    }
-
-    #[test]
-    fn test_keygen_first_fail_challenge() {
-        let user_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
-        let challenge: String = "cc9391e5b30bfc533bafc5c7fa8d4af4".to_string();
-        let mut db = MockDatabase::new();
-        db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().return_const(Ok(()));
-        db.expect_get_user_auth()
-           .returning(|_user_id| Ok(String::from("user_auth")));
-        db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
-        db.expect_init_ecdsa().returning(|_user_id| Ok(0));
-        db.expect_update_keygen_first_msg().returning(|_,_| Ok(()));
-        db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
-        db.expect_update_public_master().returning(|_,_| Ok(()));
-        db.expect_get_challenge().once().return_const(Ok(None));
-        db.expect_get_challenge().times(2).return_const(Ok(Some(challenge)));
-        
-
-        let sc_entity = test_sc_entity_pod(db, Some(mockito::server_url()), 
-            None, None, None, None, None);
-
-        let kg_first_msg = party_one::KeyGenFirstMsg { pk_commitment: BigInt::from(0 as u64), zk_pok_commitment: BigInt::from(1 as u64) };
-
-        let serialized_m1 = serde_json::to_string(&(&user_id,&kg_first_msg)).unwrap();
-
-        let _m_1 = mockito::mock("POST", "/ecdsa/keygen/first")
-          .with_header("content-type", "application/json")
-          .with_body(serialized_m1)
-          .create();
-
-        let pow_solution: String = "3423".to_string();
-
-        let kg_msg_1 = KeyGenMsg1 { shared_key_id: user_id, protocol: Protocol::Deposit, solution: Some(pow_solution)};
-
-        // User session value missing
-        let expected_err = SEError::Generic("PoW challenge missing on deposit".to_string());
-        assert_eq!(&sc_entity.first_message(kg_msg_1.clone()).
-            expect_err(&format!("expected error: {}", &expected_err)), &expected_err);
-        
-        let kg_msg_1_no_solution = KeyGenMsg1 { shared_key_id: user_id, protocol: Protocol::Deposit, solution: None};
-        let expected_err = SEError::Generic("PoW solution missing on deposit".to_string());
-        assert_eq!(&sc_entity.first_message(kg_msg_1_no_solution.clone()).
-            expect_err(&format!("expected error: {}", &expected_err)), &expected_err);
-
-        let kg_msg_1_wrong_solution = KeyGenMsg1 { shared_key_id: user_id, protocol: Protocol::Deposit, solution: Some("3424".to_string())};
-        let expected_err = SEError::Generic("PoW solution not valid".to_string());
-        assert_eq!(&sc_entity.first_message(kg_msg_1_wrong_solution.clone()).
-            expect_err(&format!("expected error: {}", &expected_err)), &expected_err);
-        
-        
-    }
-
-    #[test]
     fn test_keygen_lockbox_kg1_completed() {
         let user_id = Uuid::from_str("001203c9-93f0-46f9-abda-0678c891b2d3").unwrap();
         let challenge: String = "cc9391e5b30bfc533bafc5c7fa8d4af4".to_string();
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().return_const(Ok(()));
-        db.expect_create_user_session_pod().return_const(Ok(()));
+        db.expect_create_user_session().returning(|_, _, _, _, _| Ok(()));
         db.expect_get_user_auth()
            .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
@@ -684,7 +571,7 @@ pub mod tests {
         db.expect_get_keygen_first_msg().returning(move |_| Ok(kgm1_clone.clone()));
         db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
         db.expect_update_public_master().returning(|_,_| Ok(()));
-        db.expect_get_challenge().returning(move |_| Ok(Some(challenge.clone())));
+        db.expect_get_challenge().returning(move |_| Ok(challenge.clone()));
 
         let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None, None, None);
 
@@ -758,7 +645,7 @@ pub mod tests {
         let challenge: String = "cc9391e5b30bfc533bafc5c7fa8d4af4".to_string();
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().return_const(Ok(()));
+        db.expect_create_user_session().returning(|_, _, _, _, _| Ok(()));
         db.expect_get_user_auth()
            .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
@@ -771,7 +658,7 @@ pub mod tests {
         db.expect_get_keygen_first_msg().returning(move |_| Err(kgm1_clone.clone()));
         db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
         db.expect_update_public_master().returning(|_,_| Ok(()));
-        db.expect_get_challenge().returning(move |_| Ok(Some(challenge.clone())));
+        db.expect_get_challenge().returning(move |_| Ok(challenge.clone()));
 
         let sc_entity = test_sc_entity(db, Some(mockito::server_url()), None, None, None);
 
@@ -806,7 +693,7 @@ pub mod tests {
         let tx_backup: Transaction = serde_json::from_str(&BACKUP_TX_NOT_SIGNED).unwrap();
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().return_const(Ok(()));
+        db.expect_create_user_session().returning(|_, _, _, _, _| Ok(()));
         db.expect_get_user_auth()
            .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));

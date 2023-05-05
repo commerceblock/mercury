@@ -44,7 +44,6 @@ pub trait SchemaExample{
 #[schemars(remote = "Uuid")]
 pub struct UuidDef(String);
 
-
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct Invoice{
     pub payment_hash: String,
@@ -128,12 +127,6 @@ pub struct UserID {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
-pub struct PODUserID {
-    #[schemars(with = "UuidDef")]
-    pub id: Uuid,
-}
-
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
 pub struct StatechainID {
     #[schemars(with = "UuidDef")]
     pub id: Uuid,
@@ -182,7 +175,7 @@ pub struct StateEntityFeeInfoAPI {
     /// The Bitcoin address that the SE fee must be paid to
     pub address: String, // Receive address for fee payments
     /// The deposit fee, which is specified as a proportion of the deposit amount in basis points
-    pub deposit: u64,    // basis points
+    pub deposit: i64,    // basis points
     /// The withdrawal fee, which is specified as a proportion of the deposit amount in basis points
     pub withdraw: u64,   // basis points
     /// The decementing nLocktime (block height) interval enforced for backup transactions
@@ -691,7 +684,7 @@ pub struct EphKeyGenFirstMsg2Def(String);
 
 // 2P-ECDSA Co-signing algorithm structs
 
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct KeyGenMsg1 {
     #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
@@ -770,17 +763,7 @@ pub struct SignSecondMsgRequest {
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct DepositMsg1 {
     pub auth: String,
-    pub proof_key: String
-}
-
-/// Client -> SE
-#[derive(Serialize, Deserialize, JsonSchema, Debug)]
-pub struct DepositMsg1POD {
-    #[schemars(with = "UuidDef")]
-    pub token_id: Uuid,
-    pub auth: String,
     pub proof_key: String,
-    pub amount: u64
 }
 
 /// Client -> SE
@@ -1135,13 +1118,6 @@ impl SelfEncryptable for &mut TransferMsg4 {
     ) -> crate::ecies::Result<()> {
         (**self).encrypt_with_pubkey(pubkey)
     }
-}
-
-#[derive(Clone, Copy)]
-pub enum LightningInvoiceStatus {
-    Waiting,
-    Expired,
-    Paid
 }
 
 #[cfg(test)]

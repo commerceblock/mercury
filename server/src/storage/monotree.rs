@@ -1,13 +1,13 @@
 //! Postgres implementation for Monotree
 
-use crate::server::UserIDs;
 use crate::storage::db::Table;
 use crate::Database;
 use crate::PGDatabase;
 use monotree::database::{Database as MonotreeDatabase, MemCache, MemoryDB};
 use monotree::Errors;
-use shared_lib::structs::{CoinValueInfo, PODInfo, PODStatus, TransferFinalizeData};
 use std::collections::HashMap;
+use shared_lib::structs::{CoinValueInfo,TransferFinalizeData};
+use crate::server::UserIDs;
 use std::sync::{Arc, Mutex};
 
 pub type Result<T> = std::result::Result<T, Errors>;
@@ -195,11 +195,10 @@ pub mod tests {
                 &[],
             )
             .unwrap();
-        let _ = db
-            .database_w()
+        let _ = db.database_w()
             .unwrap()
-            .execute(&format!("TRUNCATE {};", table_name), &[])
-            .expect("monotree - expected to truncate table");
+            .execute(&format!("TRUNCATE {};", table_name), &[]).
+                expect("monotree - expected to truncate table");
         // set PGDatabaseSMT table name to testing table
         db.smt.table_name = table_name;
         Monotree {
@@ -312,10 +311,7 @@ impl Database for MemoryDB {
     fn has_withdraw_sc_sig(&self, _user_id: uuid::Uuid) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_withdraw_sc_sig(
-        &self,
-        _user_id: uuid::Uuid,
-    ) -> crate::Result<shared_lib::state_chain::StateChainSig> {
+    fn get_withdraw_sc_sig(&self, _user_id: uuid::Uuid) -> crate::Result<shared_lib::state_chain::StateChainSig> {
         unimplemented!()
     }
 
@@ -346,17 +342,17 @@ impl Database for MemoryDB {
     fn update_s1_pubkey(&self, _user_id: &uuid::Uuid, _pubkey: &crate::GE) -> crate::Result<()> {
         unimplemented!()
     }
-
-    fn get_lockbox_index(&self, _user_id: &uuid::Uuid) -> crate::Result<Option<usize>> {
+    
+    fn get_lockbox_index(&self, _user_id: &uuid::Uuid) -> crate::Result<Option<usize>>{
         unimplemented!()
     }
 
-    fn update_lockbox_index(&self, _user_id: &uuid::Uuid, _index: &usize) -> crate::Result<()> {
+    fn update_lockbox_index(&self, _user_id: &uuid::Uuid, _index: &usize)->crate::Result<()>{
         unimplemented!()
     }
 
     fn get_s1_pubkey(&self, _user_id: &uuid::Uuid) -> crate::Result<crate::GE> {
-        unimplemented!()
+        unimplemented!()   
     }
     fn update_user_backup_tx(
         &self,
@@ -401,11 +397,8 @@ impl Database for MemoryDB {
     }
     fn get_owner_id(&self, _statechain_id: uuid::Uuid) -> crate::Result<uuid::Uuid> {
         unimplemented!()
-    }
+    }    
     fn get_user_auth(&self, _user_id: &uuid::Uuid) -> crate::Result<String> {
-        unimplemented!()
-    }
-    fn get_user_value(&self, _user_id: &uuid::Uuid) -> crate::Result<u64> {
         unimplemented!()
     }
     fn is_confirmed(&self, _statechain_id: &uuid::Uuid) -> crate::Result<bool> {
@@ -413,8 +406,8 @@ impl Database for MemoryDB {
     }
     fn set_confirmed(&self, _statechain_id: &uuid::Uuid) -> crate::Result<()> {
         unimplemented!()
-    }
-    fn get_challenge(&self, _user_id: &uuid::Uuid) -> crate::Result<Option<String>> {
+    }      
+    fn get_challenge(&self, _user_id: &uuid::Uuid) -> crate::Result<String> {
         unimplemented!()
     }
     fn update_statechain_id(
@@ -435,7 +428,7 @@ impl Database for MemoryDB {
         _statechain_id: &uuid::Uuid,
         _state_chain: super::StateChain,
         _amount: u64,
-        _coins_histo: Arc<Mutex<CoinValueInfo>>,
+        _coins_histo: Arc<Mutex<CoinValueInfo>>
     ) -> crate::Result<()> {
         unimplemented!()
     }
@@ -470,19 +463,13 @@ impl Database for MemoryDB {
         unimplemented!()
     }
 
-    fn get_current_backup_txs(
-        &self,
-        _locktime: i64,
-    ) -> crate::Result<Vec<crate::structs::BackupTxID>> {
-        unimplemented!()
+    fn get_current_backup_txs(&self, _locktime: i64) -> crate::Result<Vec<crate::structs::BackupTxID>> {
+        unimplemented!()        
     }
     fn remove_backup_tx(&self, _statechain_id: &uuid::Uuid) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_backup_transaction(
-        &self,
-        _statechain_id: uuid::Uuid,
-    ) -> crate::Result<bitcoin::Transaction> {
+    fn get_backup_transaction(&self, _statechain_id: uuid::Uuid) -> crate::Result<bitcoin::Transaction> {
         unimplemented!()
     }
     fn get_backup_locktime(
@@ -539,7 +526,7 @@ impl Database for MemoryDB {
         _statechain_id: &uuid::Uuid,
         _statechain_sig: &shared_lib::state_chain::StateChainSig,
         _x1: &curv::FE,
-        _batch_id: Option<uuid::Uuid>,
+        _batch_id: Option<uuid::Uuid>
     ) -> crate::Result<()> {
         unimplemented!()
     }
@@ -617,8 +604,8 @@ impl Database for MemoryDB {
     fn update_keygen_first_msg(
         &self,
         _user_id: &uuid::Uuid,
-        _key_gen_first_msg: &crate::protocol::ecdsa::party_one::KeyGenFirstMsg,
-    ) -> crate::Result<()> {
+        _key_gen_first_msg: &crate::protocol::ecdsa::party_one::KeyGenFirstMsg
+    ) -> crate::Result<()>{
         unimplemented!()
     }
     fn update_keygen_second_msg(
@@ -635,8 +622,8 @@ impl Database for MemoryDB {
     }
     fn get_keygen_first_msg(
         &self,
-        _user_id: &uuid::Uuid,
-    ) -> crate::Result<crate::protocol::ecdsa::party_one::KeyGenFirstMsg> {
+        _user_id: &uuid::Uuid
+    ) -> crate::Result<crate::protocol::ecdsa::party_one::KeyGenFirstMsg>{
         unimplemented!()
     }
     fn get_ecdsa_party_1_private(
@@ -659,15 +646,15 @@ impl Database for MemoryDB {
         unimplemented!()
     }
     fn get_transfer_batch_start_time(
-        &self,
-        _batch_id: &uuid::Uuid,
+        &self, 
+        _batch_id: &uuid::Uuid
     ) -> crate::Result<chrono::NaiveDateTime> {
         unimplemented!()
     }
     fn get_batch_transfer_statechain_ids(
-        &self,
-        _batch_id: &uuid::Uuid,
-    ) -> crate::Result<std::collections::HashSet<uuid::Uuid>> {
+        &self, 
+        _batch_id: &uuid::Uuid
+    ) -> crate::Result<std::collections::HashSet::<uuid::Uuid>>{
         unimplemented!()
     }
 
@@ -680,8 +667,9 @@ impl Database for MemoryDB {
 
     fn get_sc_transfer_finalize_data(
         &self,
-        _statechain_id: &uuid::Uuid,
-    ) -> crate::Result<TransferFinalizeData> {
+        _statechain_id: &uuid::Uuid
+        
+    ) -> crate::Result<TransferFinalizeData>{
         unimplemented!()
     }
 
@@ -706,9 +694,9 @@ impl Database for MemoryDB {
         unimplemented!()
     }
     fn get_recovery_data(
-        &self,
+        &self, 
         _proofkey: String,
-    ) -> crate::Result<Vec<(uuid::Uuid, Option<uuid::Uuid>, Option<bitcoin::Transaction>)>> {
+    ) -> crate::Result<Vec<(uuid::Uuid,Option<uuid::Uuid>,Option<bitcoin::Transaction>)>> {
         unimplemented!()
     }
     fn create_user_session(
@@ -716,23 +704,9 @@ impl Database for MemoryDB {
         _user_id: &uuid::Uuid,
         _auth: &String,
         _proof_key: &String,
-        _challenge: &Option<String>,
-        _user_ids: Arc<Mutex<UserIDs>>,
-        _value: &Option<u64>,
+        _challenge: &String,
+        _user_ids: Arc<Mutex<UserIDs>>
     ) -> crate::Result<()> {
-        unimplemented!()
-    }
-    fn create_user_session_pod(
-        &self,
-        _user_id: &uuid::Uuid,
-        _auth: &String,
-        _proof_key: &String,
-        _user_ids: Arc<Mutex<UserIDs>>,
-        _value: &u64,
-    ) -> crate::Result<()> {
-        unimplemented!()
-    }
-    fn get_user_session_value(&self, _user_id: uuid::Uuid) -> crate::Result<Option<u64>> {
         unimplemented!()
     }
     fn transfer_init_user_session(
@@ -740,7 +714,7 @@ impl Database for MemoryDB {
         _new_user_id: &uuid::Uuid,
         _statechain_id: &uuid::Uuid,
         _finalized_data: TransferFinalizeData,
-        _user_ids: Arc<Mutex<UserIDs>>,
+        _user_ids: Arc<Mutex<UserIDs>>
     ) -> crate::Result<()> {
         unimplemented!()
     }
@@ -771,11 +745,7 @@ impl Database for MemoryDB {
     fn reset(&self) -> crate::Result<()> {
         unimplemented!()
     }
-    fn init(
-        &self,
-        _coins_histo: &Mutex<CoinValueInfo>,
-        _user_ids: &Mutex<UserIDs>,
-    ) -> crate::Result<()> {
+    fn init(&self, _coins_histo: &Mutex<CoinValueInfo>, _user_ids: &Mutex<UserIDs> ) -> crate::Result<()> {
         unimplemented!()
     }
     fn get_ecdsa_master_key_input(
@@ -784,12 +754,20 @@ impl Database for MemoryDB {
     ) -> crate::Result<crate::structs::ECDSAMasterKeyInput> {
         unimplemented!()
     }
-    fn update_shared_pubkey(&self, _user_id: uuid::Uuid, _pubkey: curv::GE) -> crate::Result<()> {
+    fn update_shared_pubkey(
+        &self, 
+        _user_id: uuid::Uuid, 
+        _pubkey: curv::GE,
+    ) -> crate::Result<()> {
         unimplemented!()
     }
-    fn set_shared_pubkey(&self, _statechain_id: uuid::Uuid, _pubkey: &String) -> crate::Result<()> {
+    fn set_shared_pubkey(
+        &self, 
+        _statechain_id: uuid::Uuid, 
+        _pubkey: &String,
+    ) -> crate::Result<()> {
         unimplemented!()
-    }
+    }    
     fn update_public_master(
         &self,
         _user_id: &uuid::Uuid,
@@ -805,38 +783,6 @@ impl Database for MemoryDB {
         unimplemented!()
     }
     fn get_sighash(&self, _user_id: uuid::Uuid) -> crate::Result<bitcoin::hashes::sha256d::Hash> {
-        unimplemented!()
-    }
-    fn init_pay_on_demand_info(&self, _pod_info: &PODInfo) -> crate::Result<()> {
-        unimplemented!()
-    }
-    fn get_pay_on_demand_info(&self, _token_id: &uuid::Uuid) -> crate::Result<PODInfo> {
-        unimplemented!()
-    }
-    fn get_pay_on_demand_status(&self, _token_id: &uuid::Uuid) -> crate::Result<PODStatus> {
-        unimplemented!()
-    }
-    fn set_pay_on_demand_status(
-        &self,
-        _token_id: &uuid::Uuid,
-        _pod_status: &PODStatus,
-    ) -> crate::Result<()> {
-        unimplemented!()
-    }
-    fn get_pay_on_demand_confirmed(&self, _token_id: &uuid::Uuid) -> crate::Result<bool> {
-        unimplemented!()
-    }
-    fn set_pay_on_demand_confirmed(
-        &self,
-        _token_id: &uuid::Uuid,
-        _confirmed: &bool,
-    ) -> crate::Result<()> {
-        unimplemented!()
-    }
-    fn get_pay_on_demand_amount(&self, _token_id: &uuid::Uuid) -> crate::Result<u64> {
-        unimplemented!()
-    }
-    fn set_pay_on_demand_amount(&self, _token_id: &uuid::Uuid, _amount: &u64) -> crate::Result<()> {
         unimplemented!()
     }
 }

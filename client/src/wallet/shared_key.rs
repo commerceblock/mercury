@@ -40,7 +40,7 @@ impl SharedKey {
         secret_key: &SecretKey,
         value: &u64,
         protocol: Protocol,
-        solution: &Option<String>,
+        solution: String,
     ) -> Result<SharedKey> {
         Self::new_repeat_keygen(id, client_shim, secret_key, value, protocol, solution, 0)
     }
@@ -51,7 +51,7 @@ impl SharedKey {
         secret_key: &SecretKey,
         value: &u64,
         protocol: Protocol,
-        solution: &Option<String>,
+        solution: String,
         keygen_reps: u32
     ) -> Result<SharedKey> {
         let mut key_share_priv: FE = ECScalar::zero(); // convert to curv lib

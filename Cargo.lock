@@ -212,12 +212,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dabbe35f96fb9507f7330793dc490461b2962659ac5d427181e451a623751d1"
 
 [[package]]
-name = "bech32"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf9ff0bbfd639f15c74af777d81383cf53efb7c93613f6cab67c6c11e05bbf8b"
-
-[[package]]
 name = "bisetmap"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -238,21 +232,9 @@ version = "0.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aefc9be9f17185f4ebccae6575d342063f775924d57df0000edb1880c0fb7095"
 dependencies = [
- "bech32 0.7.3",
- "bitcoin_hashes 0.9.4",
- "secp256k1 0.19.0",
- "serde 1.0.125",
-]
-
-[[package]]
-name = "bitcoin"
-version = "0.28.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05bba324e6baf655b882df672453dbbc527bc938cadd27750ae510aaccc3a66a"
-dependencies = [
- "bech32 0.8.1",
- "bitcoin_hashes 0.10.0",
- "secp256k1 0.22.1",
+ "bech32",
+ "bitcoin_hashes",
+ "secp256k1",
  "serde 1.0.125",
 ]
 
@@ -266,21 +248,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "bitcoin_hashes"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "006cc91e1a1d99819bc5b8214be3555c1f0611b169f527a1fdc54ed1f2b745b0"
-dependencies = [
- "serde 1.0.125",
-]
-
-[[package]]
 name = "bitcoincore-rpc"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02ef687583cf0445fdce53765e0479a6f21a422cf6604103246e759f75af87c1"
 dependencies = [
- "bitcoincore-rpc-json 0.12.0",
+ "bitcoincore-rpc-json",
  "jsonrpc",
  "log 0.4.14",
  "serde 1.0.125",
@@ -293,19 +266,8 @@ version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76d488ec31e9cb6726c361be5160f7d2aaace89a0681acf1f476b8fada770b6e"
 dependencies = [
- "bitcoin 0.25.2",
+ "bitcoin",
  "hex 0.3.2",
- "serde 1.0.125",
- "serde_json",
-]
-
-[[package]]
-name = "bitcoincore-rpc-json"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e2ae16202721ba8c3409045681fac790a5ddc791f05731a2df22c0c6bffc0f1"
-dependencies = [
- "bitcoin 0.28.1",
  "serde 1.0.125",
  "serde_json",
 ]
@@ -540,9 +502,9 @@ name = "client"
 version = "0.2.11"
 dependencies = [
  "base64 0.12.3",
- "bech32 0.7.3",
- "bitcoin 0.25.2",
- "bitcoin_hashes 0.9.4",
+ "bech32",
+ "bitcoin",
+ "bitcoin_hashes",
  "centipede",
  "clap",
  "config",
@@ -572,27 +534,6 @@ dependencies = [
  "tokio 0.1.22",
  "uuid 0.5.1",
  "zk-paillier",
-]
-
-[[package]]
-name = "clightningrpc"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98ae583d1efb5a0cb21d77ef53f872f104c872b5e05cc150b277d15afe13e974"
-dependencies = [
- "serde 1.0.125",
- "serde_derive",
- "serde_json",
-]
-
-[[package]]
-name = "clightningrpc-common"
-version = "0.3.0-beta.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f498c91a3a33156710c0ed81dbebbb56b3ba2bba6eed14e4fbbfa047b86a8df"
-dependencies = [
- "serde 1.0.125",
- "serde_json",
 ]
 
 [[package]]
@@ -925,7 +866,7 @@ dependencies = [
  "rand 0.6.5",
  "rust-crypto",
  "rust-gmp 0.5.1",
- "secp256k1 0.19.0",
+ "secp256k1",
  "serde 1.0.125",
  "serde_derive",
  "sha2 0.8.2",
@@ -1118,7 +1059,7 @@ name = "electrumx_client"
 version = "0.1.0"
 source = "git+https://github.com/commerceblock/rust-electrumx-client?tag=v0.1.3#e8298f91807468e68d2d501fb4b0455420a74cea"
 dependencies = [
- "bitcoin 0.25.2",
+ "bitcoin",
  "clap",
  "hex 0.3.2",
  "serde 1.0.125",
@@ -3869,17 +3810,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6179428c22c73ac0fbb7b5579a56353ce78ba29759b3b8575183336ea74cdfb"
 dependencies = [
  "rand 0.6.5",
- "secp256k1-sys 0.3.0",
- "serde 1.0.125",
-]
-
-[[package]]
-name = "secp256k1"
-version = "0.22.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26947345339603ae8395f68e2f3d85a6b0a8ddfe6315818e80b8504415099db0"
-dependencies = [
- "secp256k1-sys 0.5.2",
+ "secp256k1-sys",
  "serde 1.0.125",
 ]
 
@@ -3888,15 +3819,6 @@ name = "secp256k1-sys"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11553d210db090930f4432bea123b31f70bbf693ace14504ea2a35e796c28dd2"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "secp256k1-sys"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "152e20a0fd0519390fc43ab404663af8a0b794273d2a91d60ad4a39f13ffe110"
 dependencies = [
  "cc",
 ]
@@ -4092,12 +4014,10 @@ name = "server"
 version = "0.3.26"
 dependencies = [
  "bisetmap",
- "bitcoin 0.25.2",
+ "bitcoin",
  "bitcoincore-rpc",
  "cfg-if 0.1.10",
  "chrono",
- "clightningrpc",
- "clightningrpc-common",
  "config",
  "curv",
  "digest 0.8.1",
@@ -4137,7 +4057,6 @@ dependencies = [
  "shared",
  "signal-hook",
  "stoppable_thread",
- "threadpool",
  "time-test",
  "unborrow",
  "url 2.2.2",
@@ -4208,13 +4127,10 @@ version = "0.2.10"
 dependencies = [
  "arrayvec",
  "base64 0.12.3",
- "bitcoin 0.25.2",
- "bitcoin_hashes 0.9.4",
+ "bitcoin",
+ "bitcoin_hashes",
  "bitcoincore-rpc",
- "bitcoincore-rpc-json 0.15.0",
  "chrono",
- "clightningrpc",
- "clightningrpc-common",
  "curv",
  "ecies",
  "electrumx_client",
@@ -4226,7 +4142,6 @@ dependencies = [
  "libsecp256k1 0.5.0",
  "log 0.4.14",
  "merkletree",
- "mockall",
  "mockito",
  "monotree",
  "multi-party-ecdsa",
@@ -4495,7 +4410,7 @@ dependencies = [
 name = "tests"
 version = "0.1.9"
 dependencies = [
- "bitcoin 0.25.2",
+ "bitcoin",
  "client",
  "curv",
  "digest 0.8.1",
@@ -4559,15 +4474,6 @@ dependencies = [
  "libc",
  "redox_syscall 0.1.57",
  "winapi 0.3.9",
-]
-
-[[package]]
-name = "threadpool"
-version = "1.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d050e60b33d41c19108b32cea32164033a9013fe3b46cbd4457559bfbf77afaa"
-dependencies = [
- "num_cpus",
 ]
 
 [[package]]

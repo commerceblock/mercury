@@ -411,12 +411,12 @@ impl Wallet {
     }
 
     /// create new 2P-ECDSA key with state entity
-    pub fn gen_shared_key(&mut self, id: &Uuid, value: &u64, solution: &Option<String>) -> Result<&SharedKey> {
+    pub fn gen_shared_key(&mut self, id: &Uuid, value: &u64, solution: String) -> Result<&SharedKey> {
         self.gen_shared_key_repeat_keygen(id, value, solution, 0)
     }
 
      /// create new 2P-ECDSA key with state entity
-     pub fn gen_shared_key_repeat_keygen(&mut self, id: &Uuid, value: &u64, solution: &Option<String>, kg1_reps: u32) -> Result<&SharedKey> {
+     pub fn gen_shared_key_repeat_keygen(&mut self, id: &Uuid, value: &u64, solution: String, kg1_reps: u32) -> Result<&SharedKey> {
         let key_share_pub = self.se_key_shares.get_new_key()?;
         let key_share_priv = self
             .se_key_shares
@@ -462,7 +462,7 @@ impl Wallet {
                 secret_key,
                 value,
                 Protocol::Transfer,
-                &Some("".to_string()),
+                "".to_string(),
                 rep_kg1
             )?);
             Ok(())

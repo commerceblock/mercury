@@ -28,7 +28,7 @@ use governor::{NotUntil, clock::{QuantaInstant}};
 
 
 /// State Entity library specific errors
-#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
 pub enum SEError {
     /// Generic error from string error message
     Generic(String),
@@ -64,12 +64,6 @@ impl From<String> for SEError {
 
 impl From<url::ParseError> for SEError {
     fn from(e: url::ParseError) -> SEError {
-        SEError::Generic(e.to_string())
-    }
-}
-
-impl From<bitcoincore_rpc::Error> for SEError {
-    fn from(e: bitcoincore_rpc::Error) -> SEError {
         SEError::Generic(e.to_string())
     }
 }
@@ -144,29 +138,6 @@ impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, CoinValueInfo>>>
     }
 }
 
-/* 
-impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, ThreadPool>>>
-    for SEError
-{
-    fn from(
-        e: std::sync::PoisonError<std::sync::MutexGuard<'_, ThreadPool>>,
-    ) -> SEError {
-        SEError::Generic(e.to_string())
-    }
-}
-
-impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, 
-    std::collections::HashMap<uuid::Uuid, shared_lib::structs::LightningInvoiceStatus>>>>
-    for SEError
-{
-    fn from(
-        e: std::sync::PoisonError<std::sync::MutexGuard<'_, 
-            std::collections::HashMap<uuid::Uuid, shared_lib::structs::LightningInvoiceStatus>>>,
-    ) -> SEError {
-        SEError::Generic(e.to_string())
-    }
-}
-*/
 impl From<std::sync::PoisonError<std::sync::MutexGuard<'_, crate::server::UserIDs>>>
     for SEError
 {
@@ -209,7 +180,7 @@ impl From<NotUntil<'_, QuantaInstant>>
 
 
 /// DB error types
-#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
 pub enum DBErrorType {
     /// No identifier
     NoDataForID,

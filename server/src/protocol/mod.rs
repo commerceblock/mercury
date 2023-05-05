@@ -7,4 +7,3 @@ pub mod transfer_batch;
 pub mod util;
 pub mod withdraw;
 pub mod requests;
-pub mod pay_on_demand;
