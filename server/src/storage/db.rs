@@ -297,7 +297,7 @@ impl PGDatabase {
                 epheckeypair varchar,
                 ephkeygenfirstmsg varchar,
                 complete bool NOT NULL DEFAULT false,
-                keygensecondmessage varchar,
+                keygensecondmsg varchar,
                 PRIMARY KEY (id)
             );",
                 Table::Ecdsa.to_string(),
