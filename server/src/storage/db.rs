@@ -149,6 +149,7 @@ pub enum Column {
     Party1MasterKey,
     EphEcKeyPair,
     EphKeyGenFirstMsg,
+    KeyGenSecondMsg,
     POS,
 
     // Root
@@ -296,6 +297,7 @@ impl PGDatabase {
                 epheckeypair varchar,
                 ephkeygenfirstmsg varchar,
                 complete bool NOT NULL DEFAULT false,
+                keygensecondmsg varchar,
                 PRIMARY KEY (id)
             );",
                 Table::Ecdsa.to_string(),
@@ -1583,6 +1585,31 @@ impl Database for PGDatabase {
         user_id: &Uuid
     ) -> Result<party_one::KeyGenFirstMsg> {
         Self::deser(self.get_1(*user_id, Table::Ecdsa, vec![Column::KeyGenFirstMsg])?)
+    }
+
+  fn set_keygen_second_msg(
+        &self,
+        user_id: &Uuid,
+        key_gen_second_msg: &party1::KeyGenParty1Message2
+    ) -> Result<()> {
+        self.update(
+            user_id,
+            Table::Ecdsa,
+            vec![
+                Column::KeyGenSecondMsg,
+            ],
+            vec![
+                &Self::ser(key_gen_second_msg.to_owned())?,
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn get_keygen_second_msg(
+        &self,
+        user_id: &Uuid
+    ) -> Result<party1::KeyGenParty1Message2> {
+        Self::deser(self.get_1(*user_id, Table::Ecdsa, vec![Column::KeyGenSecondMsg])?)
     }
 
     fn update_keygen_second_msg(

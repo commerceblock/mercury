@@ -626,6 +626,16 @@ impl Database for MemoryDB {
     ) -> crate::Result<crate::protocol::ecdsa::party_one::KeyGenFirstMsg>{
         unimplemented!()
     }
+    fn set_keygen_second_msg(
+        &self,
+        _user_id: &uuid::Uuid,
+        _key_gen_second_msg: &crate::protocol::ecdsa::party1::KeyGenParty1Message2
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_keygen_second_msg(&self,_user_id: &uuid::Uuid) -> crate::Result<crate::protocol::ecdsa::party1::KeyGenParty1Message2> {
+        unimplemented!()
+    }
     fn get_ecdsa_party_1_private(
         &self,
         _user_id: uuid::Uuid,

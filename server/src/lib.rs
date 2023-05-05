@@ -226,6 +226,14 @@ pub trait Database {
     ) -> Result<()>;
     fn init_ecdsa(&self, user_id: &Uuid) -> Result<u64>;
     fn get_keygen_first_msg(&self,user_id: &Uuid) -> Result<party_one::KeyGenFirstMsg>;
+    fn set_keygen_second_msg(
+        &self,
+        user_id: &Uuid,
+        key_gen_second_msg: &party1::KeyGenParty1Message2
+    ) -> Result<()>;
+    fn get_keygen_second_msg(&self,user_id: &Uuid) -> Result<party1::KeyGenParty1Message2>;
+
+
     fn get_ecdsa_party_1_private(&self, user_id: Uuid) -> Result<party_one::Party1Private>;
     fn get_ecdsa_keypair(&self, user_id: Uuid) -> Result<ECDSAKeypair>;
     fn update_punished(&self, batch_id: &Uuid, punished_state_chains: Vec<Uuid>) -> Result<()>;
