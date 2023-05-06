@@ -42,7 +42,7 @@ pub enum DaemonRequest {
     GetRecoveryData(String),
     Deposit(u64),
     DepositBlinded(u64),
-    Withdraw(Uuid),
+    Withdraw(Uuid, bool),
     TransferSender(Uuid, String),
     TransferAny(String),
     TransferReceiver(String),
@@ -239,10 +239,10 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                         wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(deposit_res))
                     }
-                    DaemonRequest::Withdraw(statechain_id) => {
+                    DaemonRequest::Withdraw(statechain_id, blinded) => {
                         debug!("Daemon: Withdraw");
                         let deposit_res =
-                            state_entity::withdraw::withdraw(&mut wallet, &statechain_id, &FEE);
+                            state_entity::withdraw::withdraw(&mut wallet, &statechain_id, &FEE, blinded);
                         wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(deposit_res))
                     }

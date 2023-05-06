@@ -180,26 +180,56 @@ pub fn deposit(
         },
     )?;
 
-    if !blinded {
+    // if !blinded {
     
+    //     // Verify proof key inclusion in SE sparse merkle tree
+    //     let root = get_smt_root(&wallet.client_shim)?.unwrap();
+    //     let proof = get_smt_proof(&wallet.client_shim, &root, &funding_txid)?;
+    //     assert!(verify_statechain_smt(
+    //         &Some(root.hash()),
+    //         &proof_key.to_string(),
+    //         &proof
+    //     ));
+
+    //     // Add proof and state chain id to Shared key
+    //     {
+    //         let shared_key = wallet.get_shared_key_mut(&shared_key_id.id)?;
+    //         shared_key.statechain_id = Some(statechain_id.id);
+    //         shared_key.tx_backup_psm = Some(tx_backup_psm.to_owned());
+    //         shared_key.add_proof_data(&proof_key.to_string(), &root, &proof, &funding_txid);
+    //     }
+
+    //     println!("Deposit: Shared key created: {}", shared_key_id.id);
+    // }
+
+    // Add proof and state chain id to Shared key
+    {
         // Verify proof key inclusion in SE sparse merkle tree
-        let root = get_smt_root(&wallet.client_shim)?.unwrap();
-        let proof = get_smt_proof(&wallet.client_shim, &root, &funding_txid)?;
-        assert!(verify_statechain_smt(
-            &Some(root.hash()),
-            &proof_key.to_string(),
-            &proof
-        ));
+        let root = get_smt_root(&wallet.client_shim)?;
+        let proof: Option<Vec<(bool, Vec<u8>)>> = None;
 
-        // Add proof and state chain id to Shared key
-        {
-            let shared_key = wallet.get_shared_key_mut(&shared_key_id.id)?;
-            shared_key.statechain_id = Some(statechain_id.id);
-            shared_key.tx_backup_psm = Some(tx_backup_psm.to_owned());
-            shared_key.add_proof_data(&proof_key.to_string(), &root, &proof, &funding_txid);
+        if root.is_some() && !blinded {
+            let root = root.clone().unwrap();
+            let proof = get_smt_proof(&wallet.client_shim, &root, &funding_txid)?;
+            assert!(verify_statechain_smt(
+                &Some(root.hash()),
+                &proof_key.to_string(),
+                &proof
+            ));
         }
+        
+        let shared_key = wallet.get_shared_key_mut(&shared_key_id.id)?;
+        shared_key.statechain_id = Some(statechain_id.id);
+        shared_key.tx_backup_psm = Some(tx_backup_psm.to_owned());
 
-        println!("Deposit: Shared key created: {}", shared_key_id.id);
+        if proof.is_some() && root.is_some() && !blinded {
+            let root = root.unwrap();
+            println!("Deposit: Adding proof data to shared key: {}", shared_key_id.id);
+            shared_key.add_proof_data(&proof_key.to_string(), &root, &proof, &funding_txid);
+        } else {
+            println!("Deposit: No proof data to add to shared key: {}", shared_key_id.id);
+        }
+        
     }
 
     Ok((

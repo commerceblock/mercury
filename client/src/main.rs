@@ -156,7 +156,22 @@ fn main() {
             if let Some(matches) = matches.subcommand_matches("withdraw") {
                 let statechain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
                 let (txid, statechain_id, amount): (String, Uuid, u64) =
-                    match query_wallet_daemon(DaemonRequest::Withdraw(statechain_id)).unwrap() {
+                    match query_wallet_daemon(DaemonRequest::Withdraw(statechain_id, false)).unwrap() {
+                        DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                        DaemonResponse::Error(e) => panic!("{}", e.to_string()),
+                        DaemonResponse::None => panic!("None value returned."),
+                    };
+                println!(
+                    "\nWithdrawn {} satoshi's. \nFrom StateChain ID: {}",
+                    amount, statechain_id
+                );
+                println!("\nWithdraw Txid: {}", txid);
+            }
+        } else if matches.is_present("blinded-withdraw") {
+            if let Some(matches) = matches.subcommand_matches("withdraw") {
+                let statechain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
+                let (txid, statechain_id, amount): (String, Uuid, u64) =
+                    match query_wallet_daemon(DaemonRequest::Withdraw(statechain_id, true)).unwrap() {
                         DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
                         DaemonResponse::Error(e) => panic!("{}", e.to_string()),
                         DaemonResponse::None => panic!("None value returned."),

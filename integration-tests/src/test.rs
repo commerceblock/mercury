@@ -637,7 +637,7 @@ mod tests {
         );
 
         // Try withdraw wrong key
-        assert!(state_entity::withdraw::withdraw(&mut wallet, &Uuid::new_v4(), &FEE).is_err());
+        assert!(state_entity::withdraw::withdraw(&mut wallet, &Uuid::new_v4(), &FEE, false).is_err());
 
         // Check withdraw method completes without Err
 
@@ -674,7 +674,7 @@ mod tests {
         );
 
         // Try again after funds already withdrawn
-        let err = state_entity::withdraw::withdraw(&mut wallet, shared_key_id, &FEE);
+        let err = state_entity::withdraw::withdraw(&mut wallet, shared_key_id, &FEE, false);
         assert!(err.is_err());
         reset_data(&wallet.client_shim).unwrap();
     }
@@ -758,7 +758,7 @@ mod tests {
         );
 
         // Try again after funds already withdrawn
-        let err = state_entity::withdraw::withdraw(&mut wallet, shared_key_id, &FEE);
+        let err = state_entity::withdraw::withdraw(&mut wallet, shared_key_id, &FEE, false);
         assert!(err.is_err());
         reset_data(&wallet.client_shim).unwrap();
     }
@@ -828,7 +828,7 @@ mod tests {
             );
 
             // Try again after funds already withdrawn
-            let err = state_entity::withdraw::withdraw(&mut wallet, sk_id, &FEE);
+            let err = state_entity::withdraw::withdraw(&mut wallet, sk_id, &FEE, false);
             assert!(err.is_err());
         }
         reset_data(&wallet.client_shim).unwrap();

@@ -240,7 +240,7 @@ pub fn run_confirm_proofs(wallet: &mut Wallet) -> Vec<Uuid> {
 /// Run withdraw of shared key ID given
 pub fn run_withdraw(wallet: &mut Wallet, statechain_id: &Uuid) -> (String, Uuid, u64) {
     let start = Instant::now();
-    let resp = state_entity::withdraw::withdraw(wallet, &statechain_id, &FEE).unwrap();
+    let resp = state_entity::withdraw::withdraw(wallet, &statechain_id, &FEE, false).unwrap();
     println!("(Withdraw Took: {})", TimeFormat(start.elapsed()));
     
     resp

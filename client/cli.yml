@@ -51,6 +51,15 @@ subcommands:
                   required: true
                   value_name: StateChain ID
                   help: ID of StateChain holding funds on State Entity
+        - blinded-withdraw:
+            about: Blinded Withdraw from State Entity
+            version: "1.0"
+            args:
+              - id:
+                  short: i
+                  required: true
+                  value_name: StateChain ID
+                  help: ID of StateChain holding funds on State Entity
         - transfer-sender:
             about: Transfer StateChain - Send
             version: "1.0"

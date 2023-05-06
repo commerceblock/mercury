@@ -29,7 +29,7 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 /// Withdraw coins from state entity. Returns signed withdraw transaction, statechain_id and withdrawn amount.
-pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid, tx_fee: &u64) 
+pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid, tx_fee: &u64, blinded: bool) 
     -> Result<(String, Uuid, u64)> {
     println!("running withdraw init...");
     let (shared_key_id, address, tx_signed, amount) = withdraw_init(wallet, statechain_id, tx_fee)?;
