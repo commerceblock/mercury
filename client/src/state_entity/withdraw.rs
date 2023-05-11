@@ -147,12 +147,6 @@ pub fn blinded_batch_withdraw_init(wallet: &mut Wallet, statechain_ids: &Vec<Uui
 pub fn blinded_batch_withdraw_confirm(wallet: &mut Wallet, shared_key_ids: &Vec<Uuid>, 
     tx_withdraw_signed: &bitcoin::Transaction) 
     -> Result<String> {
-    // Mark shared keys as spent
-    for shared_key_id in shared_key_ids
-    {
-        let mut shared_key = wallet.get_shared_key_mut(&shared_key_id)?;
-        shared_key.unspent = false;
-    }
 
     // Broadcast transcation
     let withdraw_txid = wallet
@@ -160,6 +154,21 @@ pub fn blinded_batch_withdraw_confirm(wallet: &mut Wallet, shared_key_ids: &Vec<
         .instance
         .broadcast_transaction(hex::encode(consensus::serialize(&tx_withdraw_signed.to_owned())))?;
     debug!("Withdraw: Withdrawal tx broadcast. txid: {}", withdraw_txid);
+
+    // Mark shared keys as spent
+    for shared_key_id in shared_key_ids
+    {
+        let mut shared_key = wallet.get_shared_key_mut(&shared_key_id)?;
+        shared_key.unspent = false;
+    }
+
+    requests::postb(
+        &wallet.client_shim,
+        &format!("blinded/withdraw"),
+        &WithdrawMsg2 {
+            shared_key_ids: shared_key_ids.clone(),
+        },
+    )?;
 
     Ok(withdraw_txid)
 }

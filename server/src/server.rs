@@ -238,6 +238,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             transfer_batch::transfer_reveal_nonce,
             withdraw::withdraw_init,
             withdraw::withdraw_confirm,
+            withdraw::blinded_withdraw,
             conductor::poll_utxo,
             conductor::poll_swap,
             conductor::get_swap_info,
@@ -280,7 +281,8 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             transfer_batch::transfer_batch_init,
             transfer_batch::transfer_reveal_nonce,
             withdraw::withdraw_init,
-            withdraw::withdraw_confirm],
+            withdraw::withdraw_confirm,
+            withdraw::blinded_withdraw],
         Mode::Conductor => routes_with_openapi![
             util::reset_test_dbs,
             util::reset_inram_data,
@@ -566,6 +568,7 @@ mock! {
             &self,
             withdraw_msg2: WithdrawMsg2,
         ) -> withdraw::Result<Vec<Vec<Vec<u8>>>>;
+        fn blinded_withdraw(&self, withdraw_msg2: WithdrawMsg2) -> withdraw::Result<()>;
             /// Get withdraw confirm data if signed for withdrawal
         fn get_if_signed_for_withdrawal(&self, user_id: &Uuid) 
             -> withdraw::Result<Option<WithdrawConfirmData>>;

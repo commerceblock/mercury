@@ -50,6 +50,9 @@ pub trait Withdraw {
     ///     - Return withdraw tx signature
     fn withdraw_confirm(&self, withdraw_msg2: WithdrawMsg2) -> Result<Vec<Vec<Vec<u8>>>>;
 
+    /// Blinded withdrawal:
+    ///     - Remove statechain_id from user session to signal end of session
+    fn blinded_withdraw(&self, withdraw_msg2: WithdrawMsg2) -> Result<()>;
 
     /// Get withdraw confirm data if signed for withdrawal
     fn get_if_signed_for_withdrawal(&self, user_id: &Uuid) -> Result<Option<WithdrawConfirmData>>;
@@ -218,6 +221,16 @@ impl Withdraw for SCE {
 
         Ok(result)
     }
+
+    fn blinded_withdraw(&self, withdraw_msg2: WithdrawMsg2) -> Result<()> {
+
+        for user_id in withdraw_msg2.shared_key_ids.iter() {
+            // Remove statechain_id from user session to signal end of session
+            self.database.remove_statechain_id(&user_id)?;
+        }
+
+        Ok(())
+    }
 }
 
 #[openapi]
@@ -240,6 +253,20 @@ pub fn withdraw_confirm(
 ) -> Result<Json<Vec<Vec<Vec<u8>>>>> {
     sc_entity.check_rate_fast("withdraw")?;
     match sc_entity.withdraw_confirm(withdraw_msg2.into_inner()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Notify to the server the blinded withdrawal
+#[post("/blinded/withdraw", format = "json", data = "<withdraw_msg2>")]
+pub fn blinded_withdraw(
+    sc_entity: State<SCE>,
+    withdraw_msg2: Json<WithdrawMsg2>,
+) -> Result<Json<()>> {
+    sc_entity.check_rate_fast("withdraw")?;
+    match sc_entity.blinded_withdraw(withdraw_msg2.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
