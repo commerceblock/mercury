@@ -204,6 +204,28 @@ fn main() {
                     transfer_msg.to_string()
                 );
             }
+        } else if matches.is_present("blinded-transfer-sender") {
+            if let Some(matches) = matches.subcommand_matches("blinded-transfer-sender") {
+                let statechain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
+                let receiver_addr: String = matches.value_of("addr").unwrap().to_string();
+                let transfer_msg: String = match query_wallet_daemon(
+                    DaemonRequest::BlindedTransferSender(statechain_id, receiver_addr),
+                )
+                .unwrap()
+                {
+                    DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
+                    DaemonResponse::None => panic!("None value returned."),
+                };
+                println!(
+                    "\nTransfer initiated for StateChain ID: {}.",
+                    statechain_id
+                );
+                println!(
+                    "\nTransfer message: {:?}",
+                    transfer_msg.to_string()
+                );
+            }
         } else if matches.is_present("transfer-receiver") {
             if let Some(matches) = matches.subcommand_matches("transfer-receiver") {
                 let transfer_msg: String = matches.value_of("message").unwrap().to_string();

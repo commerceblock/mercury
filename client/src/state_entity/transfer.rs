@@ -17,6 +17,7 @@
 //      e. Verify o2*S2 = P
 
 use super::super::Result;
+use super::util::blindly_cosign_tx_input;
 
 use crate::error::{CError, WalletErrorType};
 use crate::state_entity::{
@@ -137,6 +138,133 @@ pub fn get_transfer_finalize_data_for_recovery(wallet: &mut Wallet,
         statechain_id: tfd_api.statechain_id.to_owned(),
         tx_backup_hex: recovery_data.tx_hex.as_ref().expect("expected some recovery_data.tx_hex").to_owned(),
     })
+}
+
+/// Transfer coins to new Owner from this wallet
+pub fn blinded_transfer_sender(
+    wallet: &mut Wallet,
+    statechain_id: &Uuid,
+    receiver_addr: SCEAddress,
+    batch_id: Option<Uuid>
+) -> Result<TransferMsg3> {
+    // Get required shared key data
+    let shared_key_id;
+    let mut prepare_sign_msg;
+    let proof_key_derivation;
+    {
+        let shared_key = wallet.get_shared_key_by_statechain_id(statechain_id)?;
+
+        println!("shared_key.id: {:#?}", shared_key.id);
+        println!("shared_key.proof_key: {:#?}", shared_key.proof_key);
+
+        shared_key_id = shared_key.id.clone();
+        prepare_sign_msg = shared_key
+            .tx_backup_psm
+            .clone()
+            .ok_or(CError::WalletError(WalletErrorType::KeyMissingData))?;
+
+        // Get proof key for signing
+        proof_key_derivation = wallet
+            .se_proof_keys
+            .get_key_derivation(&PublicKey::from_str(&shared_key.proof_key.as_ref().unwrap()).unwrap());
+    }
+
+    // Get state entity fee and locktime info
+    let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
+
+    // First sign state chain
+    // let statecoin_data: StateCoinDataAPI = get_statecoin(&wallet.client_shim, &statechain_id)?;
+    
+    let statechain_sig = StateChainSig::new(
+        &proof_key_derivation
+            .ok_or(CError::WalletError(WalletErrorType::KeyNotFound))?
+            .private_key
+            .key,
+        &String::from("TRANSFER"),
+        &receiver_addr.proof_key.clone().to_string(),
+    )?;
+
+    // Init transfer: Send statechain signature or batch data
+    let mut transfer_msg2: TransferMsg2 = requests::postb(
+        &wallet.client_shim,
+        &format!("transfer/sender"),
+        &TransferMsg1 {
+            shared_key_id: shared_key_id.to_owned(),
+            statechain_sig: statechain_sig.clone(),
+            batch_id: batch_id,
+        },
+    )?;
+
+    wallet.decrypt(&mut transfer_msg2)?;
+
+    let mut tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
+
+    // Update prepare_sign_msg with new owners address, proof key
+    prepare_sign_msg.protocol = Protocol::Transfer;
+    match tx.output.get_mut(0) {
+        Some(v) => match receiver_addr.tx_backup_addr.clone() {
+            Some(v2) => v.script_pubkey = v2.script_pubkey(),
+            None => (),
+        },
+        None => (),
+    };
+    prepare_sign_msg.proof_key = Some(receiver_addr.proof_key.clone().to_string());
+    //set updated decremented locktime
+    // tx.lock_time = statecoin_data.locktime - se_fee_info.interval;
+    tx.lock_time = tx.lock_time - se_fee_info.interval;
+    prepare_sign_msg.tx_hex = transaction_serialise(&tx);
+
+    // Sign new back up tx
+    let new_backup_witness = {
+        let tmp = blindly_cosign_tx_input(wallet, &prepare_sign_msg)?;
+        if tmp.len() != 1 {return Err(CError::Generic(String::from("expected one tx input witness")));}
+        tmp[0].to_owned()
+    };
+
+    let mut tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
+    // Update back up tx with new witness
+    tx.input[0].witness = new_backup_witness;
+    prepare_sign_msg.tx_hex = transaction_serialise(&tx);
+
+    // Get o1 priv key
+    let shared_key = wallet.get_shared_key(&shared_key_id)?;
+    let o1 = shared_key.share.private.get_private_key();
+
+    // t1 = o1x1
+    let x1 = transfer_msg2.x1.get_fe()?;
+    let t1 = o1 * x1;
+    let t1_encryptable = FESer::from_fe(&t1);
+
+    let mut transfer_msg3 = TransferMsg3 {
+        shared_key_id: shared_key_id.to_owned(),
+        t1: t1_encryptable,
+        statechain_sig,
+        statechain_id: statechain_id.to_owned(),
+        tx_backup_psm: prepare_sign_msg.to_owned(),
+        rec_se_addr: receiver_addr,
+    };
+
+    //encrypt then make immutable
+    transfer_msg3.encrypt()?;
+    let transfer_msg3 = transfer_msg3;
+
+    // Mark funds as spent in wallet
+    {
+        let mut shared_key = wallet.get_shared_key_mut(&shared_key_id)?;
+        shared_key.unspent = false;
+    }
+
+    //store transfer_msg_3 in db
+
+    // Update server database with transfer message 3 so that
+    // the receiver can get the message
+    // requests::postb(
+    //     &wallet.client_shim,
+    //     &format!("transfer/update_msg"),
+    //     &transfer_msg3,
+    // )?;
+
+    Ok(transfer_msg3)
 }
 
 /// Transfer coins to new Owner from this wallet

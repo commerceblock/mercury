@@ -74,6 +74,20 @@ subcommands:
                   required: true
                   value_name: Recipient Address
                   help: State Entity Address for recipient
+        - blinded-transfer-sender:
+            about: Transfer StateChain - Send
+            version: "1.0"
+            args:
+              - id:
+                  short: i
+                  required: true
+                  value_name: StateChain ID
+                  help: ID of StateChain with funds on State Entity
+              - addr:
+                  short: a
+                  required: true
+                  value_name: Recipient Address
+                  help: State Entity Address for recipient
         - transfer-receiver:
             about: Transfer State Chain - Receive
             version: "1.0"

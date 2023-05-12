@@ -74,6 +74,16 @@ impl SharedKey {
         self.funding_txid = funding_txid.clone();
     }
 
+    // used in blind deposit where there is no InclusionProofSMT
+    pub fn add_proof_key_and_funding_txid(
+        &mut self,
+        proof_key: &String,
+        funding_txid: &String,
+    ) {
+        self.proof_key = Some(proof_key.to_owned());
+        self.funding_txid = funding_txid.clone();
+    }
+
     pub fn update_proof(&mut self, root: &Root, proof: &Option<Proof>) {
         self.smt_proof = Some(InclusionProofSMT {
             root: root.clone(),
