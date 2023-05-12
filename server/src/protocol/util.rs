@@ -108,6 +108,7 @@ impl Utilities for SCE {
             initlock: self.config.lockheight_init,
             wallet_version: self.config.wallet_version.clone(),
             wallet_message: self.config.wallet_message.clone(),
+            backup_fee_rate: self.confin.backup_fee_rate.clone(),
         })
     }
 
