@@ -273,14 +273,7 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                     }
                     DaemonRequest::BlindedTransferSender(statechain_id, receiver_addr) => {
                         debug!("Daemon: Blinded TransferSender");
-                        println!("Daemon: Blinded TransferSender");
                         let sce_address = encoding::decode_address(receiver_addr,&network).unwrap();
-                        // let _ = state_entity::transfer::blinded_transfer_sender(
-                        //     &mut wallet,
-                        //     &statechain_id,
-                        //     sce_address, 
-                        //     None
-                        // );
                         let transfer_sender_resp = state_entity::transfer::blinded_transfer_sender(
                             &mut wallet,
                             &statechain_id,
@@ -288,7 +281,6 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                             None
                         );
                         let encoded_message = encoding::encode_message(transfer_sender_resp.unwrap());
-                        // let encoded_message = Ok("teste".to_string());
                         wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(
                             encoded_message,

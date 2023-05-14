@@ -228,6 +228,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             deposit::deposit_confirm,
             deposit::blinded_deposit_confirm,
             transfer::transfer_sender,
+            transfer::blinded_transfer_sender,
             transfer::transfer_receiver,
             transfer::transfer_update_msg,
             transfer::transfer_get_msg,
@@ -272,6 +273,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             deposit::deposit_confirm,
             deposit::blinded_deposit_confirm,
             transfer::transfer_sender,
+            transfer::blinded_transfer_sender,
             transfer::transfer_receiver,
             transfer::transfer_update_msg,
             transfer::transfer_get_msg,
@@ -497,6 +499,10 @@ mock! {
 
     trait Transfer {
         fn transfer_sender(
+            &self,
+            transfer_msg1: TransferMsg1,
+        ) -> transfer::Result<TransferMsg2>;
+        fn blinded_transfer_sender(
             &self,
             transfer_msg1: TransferMsg1,
         ) -> transfer::Result<TransferMsg2>;

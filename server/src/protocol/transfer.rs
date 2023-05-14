@@ -91,6 +91,8 @@ pub trait Transfer {
     ///     - Store transfer parameters
     fn transfer_sender(&self, transfer_msg1: TransferMsg1) -> Result<TransferMsg2>;
 
+    fn blinded_transfer_sender(&self, transfer_msg1: TransferMsg1) -> Result<TransferMsg2>;
+
     /// API: Get the current SE/Lockbox public key share
     fn transfer_get_pubkey(&self, user_id: Uuid) -> Result<S1PubKey>;
 
@@ -140,6 +142,72 @@ impl Transfer for SCE {
             let mut guard = self.coin_value_info.as_ref().lock()?;
             guard.increment(&sc_amount.amount);
         }
+
+        // Check if state chain is owned by user and not locked
+        let sco = self.database.get_statechain_owner(statechain_id.clone())?;
+
+        is_locked(sco.locked_until)?;
+        if sco.owner_id != user_id {
+            return Err(SEError::Generic(format!(
+                "State Chain not owned by User ID: {}.",
+                user_id
+            )));
+        }
+
+        // verify statechain sig
+        // TODO
+
+        // Generate x1
+        let x1: FE = ECScalar::new_random();
+        let x1_ser = FESer::from_fe(&x1);
+
+        self.database
+            .create_transfer(&statechain_id, &transfer_msg1.statechain_sig, &x1, transfer_msg1.batch_id)?;
+
+        info!(
+            "TRANSFER: Sender side complete. Previous shared key ID: {}. State Chain ID: {}",
+            user_id.to_string(),
+            statechain_id
+        );
+        debug!("TRANSFER: Sender side complete. State Chain ID: {}. State Chain Signature: {:?}. x1: {:?}.", statechain_id, transfer_msg1.statechain_sig, x1);
+
+        // encrypt x1 with Senders proof key
+        let proof_key = match ecies::PublicKey::from_str(&self.database.get_proof_key(user_id)?) {
+            Ok(k) => k,
+            Err(e) => {
+                return Err(SEError::SharedLibError(format!(
+                    "error deserialising proof key: {}",
+                    e
+                )))
+            }
+        };
+
+        let mut msg2 = TransferMsg2 {
+            x1: x1_ser,
+            proof_key,
+        };
+
+        match msg2.encrypt() {
+            Ok(_) => (),
+            Err(e) => return Err(SEError::SharedLibError(format!("{}", e))),
+        };
+
+        let msg2 = msg2;
+
+        Ok(msg2)
+    }
+
+    fn blinded_transfer_sender(&self, transfer_msg1: TransferMsg1) -> Result<TransferMsg2> {
+        self.check_user_auth(&transfer_msg1.shared_key_id)?;
+        let user_id = transfer_msg1.shared_key_id;
+        debug!("TRANSFER: Sender Side. Shared Key ID: {}", user_id);
+
+        if(self.get_if_signed_for_withdrawal(&user_id)?.is_some()) {
+            return Err(SEError::Generic(format!("transfer_sender - shared key id: {} is signed for withdrawal", &user_id)));
+        }
+
+        // Get state_chain id
+        let statechain_id = self.database.get_statechain_id(user_id)?;
 
         // Check if state chain is owned by user and not locked
         let sco = self.database.get_statechain_owner(statechain_id.clone())?;
@@ -504,6 +572,20 @@ pub fn transfer_sender(
 ) -> Result<Json<TransferMsg2>> {
     sc_entity.check_rate_fast("transfer")?;
     match sc_entity.transfer_sender(transfer_msg1.into_inner()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Transfer initiation by sender: get x1 and new backup transaction
+#[post("/blinded/transfer/sender", format = "json", data = "<transfer_msg1>")]
+pub fn blinded_transfer_sender(
+    sc_entity: State<SCE>,
+    transfer_msg1: Json<TransferMsg1>,
+) -> Result<Json<TransferMsg2>> {
+    sc_entity.check_rate_fast("transfer")?;
+    match sc_entity.blinded_transfer_sender(transfer_msg1.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }

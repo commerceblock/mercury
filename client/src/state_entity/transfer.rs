@@ -187,7 +187,7 @@ pub fn blinded_transfer_sender(
     // Init transfer: Send statechain signature or batch data
     let mut transfer_msg2: TransferMsg2 = requests::postb(
         &wallet.client_shim,
-        &format!("transfer/sender"),
+        &format!("blinded/transfer/sender"),
         &TransferMsg1 {
             shared_key_id: shared_key_id.to_owned(),
             statechain_sig: statechain_sig.clone(),
@@ -258,11 +258,11 @@ pub fn blinded_transfer_sender(
 
     // Update server database with transfer message 3 so that
     // the receiver can get the message
-    // requests::postb(
-    //     &wallet.client_shim,
-    //     &format!("transfer/update_msg"),
-    //     &transfer_msg3,
-    // )?;
+    requests::postb(
+        &wallet.client_shim,
+        &format!("transfer/update_msg"),
+        &transfer_msg3,
+    )?;
 
     Ok(transfer_msg3)
 }
