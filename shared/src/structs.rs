@@ -782,6 +782,15 @@ pub struct TransferMsg3 {
     pub rec_se_addr: SCEAddress, // receivers state entity address (btc address and proof key)
 }
 
+/// Sender -> Receiver
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+pub struct EncryptedTransferMsg3 {
+    #[schemars(with = "UuidDef")]
+    pub statechain_id: Uuid,
+    pub proof_key: String,
+    pub encrypted_transfer_msg3: String,
+}
+
 #[derive(JsonSchema)]
 #[schemars(remote = "FE")]
 pub struct FEDef(Vec<u8>);

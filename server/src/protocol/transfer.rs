@@ -110,6 +110,9 @@ pub trait Transfer {
     /// API: Update the state entity database with transfer message 3
     fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> Result<()>;
 
+    /// API: Update the state entity database with encrypted transfer message 3
+    fn blinded_transfer_update_msg(&self, transfer_msg3: EncryptedTransferMsg3) -> Result<()>;
+
     /// API: Get the transfer message 3 set by update_transfer_msg
     fn transfer_get_msg(&self, statechain_id: Uuid) -> Result<TransferMsg3>;
 
@@ -552,6 +555,12 @@ impl Transfer for SCE {
             .update_transfer_msg(&transfer_msg3.statechain_id, &transfer_msg3)
     }
 
+    /// API: Update the state entity database with encrypted transfer message 3
+    fn blinded_transfer_update_msg(&self, transfer_msg3: EncryptedTransferMsg3) -> Result<()> {
+        self.database
+            .update_blinded_transfer_msg(&transfer_msg3)
+    }
+
     /// API: Get the transfer message 3 set by update_transfer_msg
     fn transfer_get_msg(&self, statechain_id: Uuid) -> Result<TransferMsg3> {
         self.database.get_transfer_msg(&statechain_id)
@@ -628,6 +637,20 @@ pub fn transfer_update_msg(
 ) -> Result<Json<()>> {
     sc_entity.check_rate_fast("transfer")?;
     match sc_entity.transfer_update_msg(transfer_msg3.into_inner()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Update stored transfer message (TransferMsg3)
+#[post("/blinded/transfer/update_msg", format = "json", data = "<transfer_msg3>")]
+pub fn blinded_transfer_update_msg(
+    sc_entity: State<SCE>,
+    transfer_msg3: Json<EncryptedTransferMsg3>,
+) -> Result<Json<()>> {
+    sc_entity.check_rate_fast("transfer")?;
+    match sc_entity.blinded_transfer_update_msg(transfer_msg3.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }

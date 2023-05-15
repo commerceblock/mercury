@@ -231,6 +231,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             transfer::blinded_transfer_sender,
             transfer::transfer_receiver,
             transfer::transfer_update_msg,
+            transfer::blinded_transfer_update_msg,
             transfer::transfer_get_msg,
             transfer::transfer_get_msg_addr,
             transfer::transfer_get_pubkey,
@@ -276,6 +277,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             transfer::blinded_transfer_sender,
             transfer::transfer_receiver,
             transfer::transfer_update_msg,
+            transfer::blinded_transfer_update_msg,
             transfer::transfer_get_msg,
             transfer::transfer_get_msg_addr,
             transfer::transfer_get_pubkey,
@@ -519,6 +521,7 @@ mock! {
             finalized_data: &TransferFinalizeData,
         ) -> transfer::Result<()>;
         fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> transfer::Result<()>;
+        fn blinded_transfer_update_msg(&self, transfer_msg3: EncryptedTransferMsg3) -> transfer::Result<()>;
         fn transfer_get_msg(&self, statechain_id: Uuid) -> transfer::Result<TransferMsg3>;
         fn transfer_get_msg_addr(&self, receive_addr: String) -> transfer::Result<Vec<TransferMsg3>>;
         fn keyupdate_complete(&self, statechain_id: Uuid, shared_key_id: Uuid) -> transfer::Result<()>;

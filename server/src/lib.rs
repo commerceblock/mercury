@@ -58,6 +58,7 @@ pub type Hash = bitcoin::hashes::sha256d::Hash;
 
 use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::PostgresConnectionManager;
+use shared_lib::structs::EncryptedTransferMsg3;
 
 use crate::storage::db::Alpha;
 use bitcoin::hashes::sha256d;
@@ -194,6 +195,7 @@ pub trait Database {
         batch_id: Option<Uuid>
     ) -> Result<()>;
     fn update_transfer_msg(&self, statechain_id: &Uuid, msg: &TransferMsg3) -> Result<()>;
+    fn update_blinded_transfer_msg(&self, transfer_msg3: &EncryptedTransferMsg3) -> Result<()>;
     fn get_transfer_msg(&self, statechain_id: &Uuid) -> Result<TransferMsg3>;
     fn get_transfer_msg_addr(&self, receive_addr: &str) -> Result<Vec<TransferMsg3>>;
     fn create_transfer_batch_data(

@@ -26,6 +26,8 @@ use crate::state_entity::{
 };
 use crate::wallet::{key_paths::funding_txid_to_int, wallet::Wallet};
 use crate::{utilities::requests, ClientShim};
+use bitcoin_hashes::hex::ToHex;
+use shared_lib::ecies::Encryptable;
 use shared_lib::{ecies::WalletDecryptable, ecies::SelfEncryptable, state_chain::StateChainSig, structs::*, util::{transaction_serialise, transaction_deserialise}};
 use bitcoin::{Address, PublicKey};
 use curv::elliptic::curves::traits::{ECPoint, ECScalar};
@@ -244,6 +246,16 @@ pub fn blinded_transfer_sender(
         rec_se_addr: receiver_addr,
     };
 
+    let msg3_pubkey = transfer_msg3.get_public_key().unwrap().unwrap();
+    let encrypted_msg3_bytes = transfer_msg3.to_encrypted_bytes(&msg3_pubkey).unwrap();
+    let encrypted_msg3 = encrypted_msg3_bytes.to_hex();
+
+    let encrypted_transfer_msg3 = EncryptedTransferMsg3 {
+        statechain_id: transfer_msg3.statechain_id,
+        proof_key: transfer_msg3.statechain_sig.data.clone(),
+        encrypted_transfer_msg3: encrypted_msg3,
+    };
+
     //encrypt then make immutable
     transfer_msg3.encrypt()?;
     let transfer_msg3 = transfer_msg3;
@@ -260,8 +272,8 @@ pub fn blinded_transfer_sender(
     // the receiver can get the message
     requests::postb(
         &wallet.client_shim,
-        &format!("transfer/update_msg"),
-        &transfer_msg3,
+        &format!("blinded/transfer/update_msg"),
+        &encrypted_transfer_msg3,
     )?;
 
     Ok(transfer_msg3)

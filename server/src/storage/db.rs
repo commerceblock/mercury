@@ -26,7 +26,7 @@ use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
 use shared_lib::mainstay::CommitmentInfo;
 use shared_lib::state_chain::*;
-use shared_lib::structs::{TransferMsg3,CoinValueInfo,TransferFinalizeData};
+use shared_lib::structs::{TransferMsg3,CoinValueInfo,TransferFinalizeData, EncryptedTransferMsg3};
 use shared_lib::Root;
 use shared_lib::util::transaction_deserialise;
 use rocket_okapi::JsonSchema;
@@ -1382,6 +1382,18 @@ impl Database for PGDatabase {
             vec![
                 &Self::ser(msg.to_owned())?,
                 &proof_key.to_owned(),
+            ],
+        )
+    }
+
+    fn update_blinded_transfer_msg(&self, transfer_msg3: &EncryptedTransferMsg3) -> Result<()> {
+        self.update(
+            &transfer_msg3.statechain_id,
+            Table::Transfer,
+            vec![Column::TransferMsg, Column::ProofKey],
+            vec![
+                &transfer_msg3.encrypted_transfer_msg3,
+                &transfer_msg3.proof_key,
             ],
         )
     }

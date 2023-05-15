@@ -5,6 +5,7 @@ use crate::Database;
 use crate::PGDatabase;
 use monotree::database::{Database as MonotreeDatabase, MemCache, MemoryDB};
 use monotree::Errors;
+use shared_lib::structs::EncryptedTransferMsg3;
 use std::collections::HashMap;
 use shared_lib::structs::{CoinValueInfo,TransferFinalizeData};
 use crate::server::UserIDs;
@@ -543,6 +544,9 @@ impl Database for MemoryDB {
         _statechain_id: &uuid::Uuid,
         _msg: &shared_lib::structs::TransferMsg3,
     ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn update_blinded_transfer_msg(&self, transfer_msg3: &EncryptedTransferMsg3) -> crate::Result<()> {
         unimplemented!()
     }
     fn get_transfer_msg(
