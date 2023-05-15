@@ -111,7 +111,7 @@ impl Deposit for SCE {
         for output in &tx_backup.output {
             total += output.value;
         }
-        let amount = (total + FEE) as i64;
+        let amount = (total + FEE*self.config.backup_fee_rate) as i64;
 
         let statechain_id: Uuid;
 
