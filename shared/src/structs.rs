@@ -113,7 +113,7 @@ pub struct StateEntityFeeInfoAPI {
     /// Message to display to all wallet users on startup
     pub wallet_message: String,
     /// Current backup tx fee rate
-    pub backup_fee_rate: u32,
+    pub backup_fee_rate: u64,
 }
 
 impl StateEntityFeeInfoAPI{

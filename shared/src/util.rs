@@ -189,7 +189,7 @@ pub fn tx_backup_build(
     locktime: &u32,
     fee: &u64,
     fee_addr: &String,
-    backup_fee_rate: &u32
+    backup_fee_rate: &u64
 ) -> Result<Transaction> {
     if *fee + FEE*(*backup_fee_rate) >= *amount {
         return Err(SharedLibError::FormatError(String::from(

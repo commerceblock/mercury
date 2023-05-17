@@ -29,6 +29,10 @@ ENV MERC_MS_TEST_SLOT=$MERC_MS_TEST_SLOT \
 
 ENV BITCOIN_VERSION=0.20.1
 
+RUN sed -i s/deb.debian.org/archive.debian.org/g /etc/apt/sources.list
+RUN sed -i 's|security.debian.org|archive.debian.org/|g' /etc/apt/sources.list
+RUN sed -i '/stretch-updates/d' /etc/apt/sources.list
+
 COPY . /mercury
 WORKDIR /mercury
 
@@ -49,6 +53,10 @@ COPY --from=bitcoin /opt/bitcoin-${BITCOIN_VERSION}/bin/bitcoin-cli /usr/local/b
 COPY --from=bitcoin /opt/bitcoin-${BITCOIN_VERSION}/bin/bitcoind /usr/local/bin/
 COPY --from=bitcoin /opt/bitcoin-${BITCOIN_VERSION}/bin/bitcoin-tx /usr/local/bin/
 COPY --from=bitcoin /opt/bitcoin-${BITCOIN_VERSION}/bin/bitcoin-wallet /usr/local/bin/
+
+RUN sed -i s/deb.debian.org/archive.debian.org/g /etc/apt/sources.list
+RUN sed -i 's|security.debian.org|archive.debian.org/|g' /etc/apt/sources.list
+RUN sed -i '/stretch-updates/d' /etc/apt/sources.list
 
 RUN set -ex \
     && bitcoind \

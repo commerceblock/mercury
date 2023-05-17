@@ -174,7 +174,7 @@ pub struct Config {
     /// Server message for wallet users
     pub wallet_message: String,
     /// backup tx fee rate
-    pub backup_fee_rate: u32,
+    pub backup_fee_rate: u64,
 }
 
 impl Default for Config {
