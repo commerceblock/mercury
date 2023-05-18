@@ -48,6 +48,7 @@ pub enum DaemonRequest {
     BlindedTransferSender(Uuid, String),
     TransferAny(String),
     TransferReceiver(String),
+    BlindedTransferReceiver(String),
     Swap(Uuid, u64, bool),
 }
 
@@ -311,6 +312,19 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                         debug!("Daemon: TransferReceiver");
                         let mut transfer_msg = encoding::decode_message(transfer_msg_bech32,&network).unwrap();
                         let transfer_receiver_resp = state_entity::transfer::transfer_receiver(
+                            &mut wallet,
+                            &mut transfer_msg,
+                            &None,
+                        );
+                        wallet.save();
+                        r.send(DaemonResponse::value_to_deamon_response(
+                            transfer_receiver_resp,
+                        ))
+                    }
+                    DaemonRequest::BlindedTransferReceiver(transfer_msg_bech32) => {
+                        debug!("Daemon: TransferReceiver");
+                        let mut transfer_msg = encoding::decode_message(transfer_msg_bech32,&network).unwrap();
+                        let transfer_receiver_resp = state_entity::transfer::blinded_transfer_receiver(
                             &mut wallet,
                             &mut transfer_msg,
                             &None,

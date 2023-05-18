@@ -431,6 +431,15 @@ pub fn transfer_receiver(
 }
 
 /// Receiver side of Transfer protocol.
+pub fn blinded_transfer_receiver(
+    wallet: &mut Wallet,
+    transfer_msg3: &mut TransferMsg3,
+    batch_data: &Option<BatchData>,
+) -> Result<TransferFinalizeData> {
+    blinded_transfer_receiver_repeat_keygen(wallet,transfer_msg3,batch_data,0)
+}
+
+/// Receiver side of Transfer protocol.
 pub fn transfer_receiver_repeat_keygen(
     wallet: &mut Wallet,
     transfer_msg3: &mut TransferMsg3,
@@ -566,6 +575,167 @@ pub fn transfer_receiver_repeat_keygen(
 
     let transfer_msg5: TransferMsg5 =
         requests::postb(&wallet.client_shim, &format!("transfer/receiver"), msg4)?;
+
+    // Update tx_backup_psm shared_key_id with new one
+    let mut tx_backup_psm = transfer_msg3.tx_backup_psm.clone();
+    tx_backup_psm.shared_key_ids = vec![transfer_msg5.new_shared_key_id.clone()];
+
+    // Data to update wallet with transfer. Should only be applied after StateEntity has finalized.
+    let mut finalize_data = TransferFinalizeData {
+        new_shared_key_id: transfer_msg5.new_shared_key_id,
+        o2,
+        s2_pub: transfer_msg5.s2_pub,
+        statechain_data,
+        proof_key: transfer_msg3.rec_se_addr.proof_key.clone().to_string(),
+        statechain_id: transfer_msg3.statechain_id,
+        tx_backup_psm,
+    };
+
+    // In batch case this step is performed once all other transfers in the batch are complete.
+    if batch_data.is_none() {
+        // Finalize protocol run by generating new shared key and updating wallet.
+        transfer_receiver_finalize_repeat_keygen(wallet, &mut finalize_data, keygen1_reps)?;
+    }
+
+    Ok(finalize_data)
+}
+
+/// Receiver side of Transfer protocol.
+pub fn blinded_transfer_receiver_repeat_keygen(
+    wallet: &mut Wallet,
+    transfer_msg3: &mut TransferMsg3,
+    batch_data: &Option<BatchData>,
+    keygen1_reps: u32
+) -> Result<TransferFinalizeData> {
+    //Decrypt the message on receipt
+    match wallet.decrypt(transfer_msg3) {
+        Ok(_) => (),
+        Err(e) => {
+            return Err(CError::Generic(format!(
+                "error decrypting message: {}",
+                e.to_string()
+            )))
+        }
+    };
+    //Make immutable
+    let transfer_msg3 = &*transfer_msg3;
+    // Get statechain data (will Err if statechain not yet finalized)
+    let statechain_data: StateChainDataAPI =
+        get_statechain(&wallet.client_shim, &transfer_msg3.statechain_id)?;
+
+    let tx_backup = transaction_deserialise(&transfer_msg3.tx_backup_psm.tx_hex)?;
+    // Ensure backup tx funds are sent to address owned by this wallet
+    let back_up_rec_se_addr = Address::from_script(
+        &tx_backup.output[0].script_pubkey,
+        wallet.get_bitcoin_network(),
+    )
+    .ok_or(CError::Generic(String::from(
+        "Failed to decode ScriptpubKey.",
+    )))?;
+    wallet
+        .se_proof_keys
+        .get_key_derivation_address(&back_up_rec_se_addr.to_string())
+        .ok_or(CError::Generic(String::from(
+            "Backup Tx receiving address not found in this wallet!",
+        )))?;
+
+    // Check locktime of recieved backup transaction
+    let chaintip = wallet
+        .electrumx_client
+        .instance
+        .get_tip_header()?;
+    debug!("Transfer receiver: Got current best block height: {}", chaintip.height.to_string());
+    if tx_backup.lock_time <= (chaintip.height as u32) {
+            return Err(CError::Generic(format!(
+                "Error: backup tx locktime ({:?}) expired, blockheight {:?}",tx_backup.lock_time,chaintip.height
+            )));
+    }
+
+    // Check validity of the backup transaction
+    // check inputs
+    // check signatures
+    // TODO
+
+    // Verify state chain represents this address as new owner
+    let prev_owner_proof_key = statechain_data.get_tip()?.data.clone();
+    transfer_msg3
+        .statechain_sig
+        .verify(&prev_owner_proof_key)?;
+    debug!("State chain signature is valid.");
+
+    // Check signature is for proof key owned by this wallet
+    let new_owner_proof_key = transfer_msg3.statechain_sig.data.clone();
+    wallet
+        .se_proof_keys
+        .get_key_derivation(&PublicKey::from_str(&new_owner_proof_key).unwrap())
+        .ok_or(CError::Generic(String::from(
+            "Transfer Error: StateChain is signed over to proof key not owned by this wallet!",
+        )))?;
+
+    // t1 in transfer_msg3 is ECIES encrypted.
+    let t1 = match transfer_msg3.t1.get_fe() {
+        Ok(r) => r,
+        Err(e) => {
+            return Err(CError::Generic(format!(
+                "Failed to get FE from transfer_msg_3 {:?} error: {}",
+                transfer_msg3,
+                e.to_string()
+            )))
+        }
+    };
+
+    // generate o2 private key and corresponding 02 public key
+    let funding_txid_int = match funding_txid_to_int(&statechain_data.utxo.txid.to_string()) {
+        Ok(r) => r,
+        Err(e) => {
+            return Err(CError::Generic(format!(
+                "Failed to get funding txid int from statechain_data: {:?} error: {}",
+                statechain_data,
+                e.to_string()
+            )))
+        }
+    };
+    let mut o2: FE = ECScalar::zero();
+    let _key_share_pub = match wallet
+        .se_key_shares
+        .get_new_key_encoded_id(funding_txid_int, Some(&mut o2))
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return Err(CError::Generic(format!(
+                "Failed to get new key encoded id from funding_txid_int: {} error: {}",
+                funding_txid_int,
+                e.to_string()
+            )))
+        }
+    };
+
+    let g: GE = ECPoint::generator();
+    let o2_pub: GE = g * o2;
+
+    let t2 = t1 * (o2.invert());
+    let t2_encryptable = FESer::from_fe(&t2);
+
+    // get SE/lockbox public key share
+    let s1_pub: S1PubKey =
+        requests::postb(&wallet.client_shim, &format!("transfer/pubkey"), UserID { id: transfer_msg3.shared_key_id, challenge: None })?;
+
+    let msg4 = &mut TransferMsg4 {
+        shared_key_id: transfer_msg3.shared_key_id,
+        statechain_id: transfer_msg3.statechain_id,
+        t2: t2_encryptable,
+        statechain_sig: transfer_msg3.statechain_sig.clone(),
+        o2_pub,
+        tx_backup_hex: transfer_msg3.tx_backup_psm.tx_hex.clone(),
+        batch_data: batch_data.to_owned(),
+    };
+
+    //encrypt then make immutable
+    msg4.encrypt_with_pubkey(&PublicKey::from_str(&s1_pub.key).unwrap())?;
+    let msg4 = msg4;
+
+    let transfer_msg5: TransferMsg5 =
+        requests::postb(&wallet.client_shim, &format!("blinded/transfer/receiver"), msg4)?;
 
     // Update tx_backup_psm shared_key_id with new one
     let mut tx_backup_psm = transfer_msg3.tx_backup_psm.clone();
