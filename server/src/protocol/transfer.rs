@@ -223,6 +223,17 @@ impl Transfer for SCE {
         // Get state_chain id
         let statechain_id = self.database.get_statechain_id(user_id)?;
 
+        // Check that the funding transaction has the required number of confirmations and is valid
+        if !self.database.is_confirmed(&statechain_id)? {
+            // should be done on client / receiver side
+            // self.verify_tx_confirmed(&statechain_id)?;
+            self.database.set_confirmed(&statechain_id)?;
+            // add to histogram
+            let sc_amount = self.database.get_statechain_amount(statechain_id.clone())?;
+            let mut guard = self.coin_value_info.as_ref().lock()?;
+            guard.increment(&sc_amount.amount);
+        }
+
         // Check if state chain is owned by user and not locked
         let sco = self.database.get_statechain_owner(statechain_id.clone())?;
 
@@ -660,8 +671,8 @@ impl Transfer for SCE {
                 "TRANSFER: Single (non-batch) transfer. State Chain ID: {}",
                  statechain_id
             );
-            // Update DB and SMT with new transfer data
-            self.transfer_finalize(&finalized_data)?;
+            // Update DB with new transfer data
+            self.blinded_transfer_finalize(&finalized_data)?;
         }
 
         info!(

@@ -755,7 +755,7 @@ pub fn blinded_transfer_receiver_repeat_keygen(
     // In batch case this step is performed once all other transfers in the batch are complete.
     if batch_data.is_none() {
         // Finalize protocol run by generating new shared key and updating wallet.
-        transfer_receiver_finalize_repeat_keygen(wallet, &mut finalize_data, keygen1_reps)?;
+        blinded_transfer_receiver_finalize_repeat_keygen(wallet, &mut finalize_data, keygen1_reps)?;
     }
 
     Ok(finalize_data)
@@ -771,6 +771,15 @@ pub fn transfer_receiver_finalize(
     transfer_receiver_finalize_repeat_keygen(wallet, &mut finalize_data, 0)
 } 
 
+/// Finalize protocol run by generating new shared key and updating wallet.
+/// This function is called immediately in the regular transfer case or after confirmation of atomic
+/// transfers completion in the batch transfer case.
+pub fn blinded_transfer_receiver_finalize(
+    wallet: &mut Wallet,
+    mut finalize_data: TransferFinalizeData,
+) -> Result<()> {
+    blinded_transfer_receiver_finalize_repeat_keygen(wallet, &mut finalize_data, 0)
+}
 
 pub fn transfer_receiver_finalize_repeat_keygen(
     wallet: &mut Wallet,
@@ -821,6 +830,61 @@ pub fn transfer_receiver_finalize_repeat_keygen(
         shared_key.statechain_id = Some(finalize_data.statechain_id);
         shared_key.tx_backup_psm = Some(finalize_data.tx_backup_psm.clone());
         shared_key.add_proof_data(&rec_proof_key, &root, &proof, funding_txid);
+    }
+
+    Ok(())
+}
+
+pub fn blinded_transfer_receiver_finalize_repeat_keygen(
+    wallet: &mut Wallet,
+    mut finalize_data: &mut TransferFinalizeData,
+    keygen1_reps: u32
+) -> Result<()> {
+    // Make shared key with new private share
+    wallet.gen_shared_key_fixed_secret_key_repeat_keygen(
+        &finalize_data.new_shared_key_id,
+        &finalize_data.o2.get_element(),
+        &finalize_data.statechain_data.amount,
+        keygen1_reps
+    )?;
+
+    // shared pk
+    let pk = wallet.get_shared_key(&finalize_data.new_shared_key_id)?.share.public.q.get_element();
+
+    // Check shared key master public key == private share * SE public share
+    if (finalize_data.s2_pub * finalize_data.o2).get_element()
+        != pk
+    {
+        return Err(CError::StateEntityError(String::from(
+            "Transfer failed. Incorrect master public key generated.",
+        )));
+    }
+
+    // TODO when node is integrated: Should also check that funding tx output address is address derived from shared key.
+    let rec_proof_key = finalize_data.proof_key.clone();
+
+    // Verify proof key inclusion in SE sparse merkle tree
+    // let root = get_smt_root(&wallet.client_shim)?.unwrap();
+    let funding_txid = &finalize_data.statechain_data.utxo.txid.to_string();
+    // let proof = get_smt_proof(&wallet.client_shim, &root, funding_txid)?;
+    // assert!(verify_statechain_smt(
+    //     &Some(root.hash()),
+    //     &rec_proof_key,
+    //     &proof
+    // ));
+
+    let amount = finalize_data.statechain_data.amount.clone();
+
+    finalize_data.tx_backup_psm.input_addrs = vec![pk];
+    finalize_data.tx_backup_psm.input_amounts = vec![amount];
+
+    // Add state chain id, proof key and SMT inclusion proofs to local SharedKey data
+    {
+        let shared_key = wallet.get_shared_key_mut(&finalize_data.new_shared_key_id)?;
+        shared_key.statechain_id = Some(finalize_data.statechain_id);
+        shared_key.tx_backup_psm = Some(finalize_data.tx_backup_psm.clone());
+        //shared_key.add_proof_data(&rec_proof_key, &root, &proof, funding_txid);
+        shared_key.add_proof_key_and_funding_txid(&rec_proof_key, funding_txid);
     }
 
     Ok(())
