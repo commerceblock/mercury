@@ -1258,16 +1258,29 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
                 }
             }
 
-        let tx_backup = self.database.get_backup_transaction(statechain_id.clone())?;
-        let lock_time = self.database.get_backup_locktime(statechain_id)?;
+        let tx_backup = self.database.get_backup_transaction(statechain_id.clone());
+
+        let utxo: OutPoint = match tx_backup {
+            Ok(tx) => {
+                tx.input.get(0).unwrap().previous_output
+            },
+            Err(_) => OutPoint::null(),
+        };
+
+        let lock_time = self.database.get_backup_locktime(statechain_id);
+
+        let locktime  = match lock_time {
+            Ok(value) => value as u32,
+            Err(_) => 0 as u32,
+        };
 
         let confirmed = self.database.is_confirmed(&statechain_id)?;
 
         return Ok({StateChainDataAPI {
             amount: state_chain.amount as u64,
-            utxo: tx_backup.input.get(0).unwrap().previous_output,
+            utxo,
             chain,
-            locktime: lock_time as u32,
+            locktime,
             confirmed
         }});
     }

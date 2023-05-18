@@ -51,7 +51,7 @@ pub trait Deposit {
     /// API: Complete deposit protocol (blind):
     ///     - Wait for confirmation of funding tx in blockchain
     ///     - Create StateChain DB object
-    fn blinded_deposit_confirm(&self, deposit_msg2: DepositMsg2) -> Result<StatechainID>;
+    fn blinded_deposit_confirm(&self, deposit_msg2: BlindedDepositMsg2) -> Result<StatechainID>;
 }
 
 impl Deposit for SCE {
@@ -184,10 +184,12 @@ impl Deposit for SCE {
         Ok(StatechainID {id: statechain_id})
     }
 
-    fn blinded_deposit_confirm(&self, deposit_msg2: DepositMsg2) -> Result<StatechainID> {
+    fn blinded_deposit_confirm(&self, deposit_msg2: BlindedDepositMsg2) -> Result<StatechainID> {
         // let shared_key_id = deposit_msg2.shared_key_id.clone();
         self.check_user_auth(&deposit_msg2.shared_key_id)?;
         let user_id = deposit_msg2.shared_key_id;
+
+        let amount = deposit_msg2.amount;
 
         info!("DEPOSIT: Protocol confirmation initiated for user ID: {}", user_id);
 
@@ -208,7 +210,8 @@ impl Deposit for SCE {
                     statechain_id = Uuid::new_v4();
                     let state_chain = StateChain::new(proof_key.clone());
                     // Insert into StateChain table
-                    self.database.create_statechain_without_amount(&statechain_id, &user_id, &state_chain)?;
+                    // self.database.create_statechain_without_amount(&statechain_id, &user_id, &state_chain)?;
+                    self.database.create_statechain(&statechain_id, &user_id, &state_chain, &amount)?;
                 },
                 _ => return Err(e),
 
@@ -265,7 +268,7 @@ pub fn deposit_confirm(
 #[post("/blinded/deposit/confirm", format = "json", data = "<deposit_msg2>")]
 pub fn blinded_deposit_confirm(
     sc_entity: State<SCE>,
-    deposit_msg2: Json<DepositMsg2>,
+    deposit_msg2: Json<BlindedDepositMsg2>,
 ) -> Result<Json<StatechainID>> {
     sc_entity.check_rate_fast("deposit_confirm")?;
     match sc_entity.blinded_deposit_confirm(deposit_msg2.into_inner()) {

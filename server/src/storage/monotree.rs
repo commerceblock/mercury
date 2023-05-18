@@ -546,7 +546,7 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
-    fn update_blinded_transfer_msg(&self, transfer_msg3: &EncryptedTransferMsg3) -> crate::Result<()> {
+    fn update_blinded_transfer_msg(&self, _msg: &EncryptedTransferMsg3) -> crate::Result<()> {
         unimplemented!()
     }
     fn get_transfer_msg(

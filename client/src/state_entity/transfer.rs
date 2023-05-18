@@ -250,6 +250,10 @@ pub fn blinded_transfer_sender(
     let encrypted_msg3_bytes = transfer_msg3.to_encrypted_bytes(&msg3_pubkey).unwrap();
     let encrypted_msg3 = encrypted_msg3_bytes.to_hex();
 
+    // let encrypted_msg3_bytes_2 = Vec::<u8>::from_hex(&encrypted_msg3).unwrap();
+
+    // assert!(encrypted_msg3_bytes == encrypted_msg3_bytes_2);
+
     let encrypted_transfer_msg3 = EncryptedTransferMsg3 {
         statechain_id: transfer_msg3.statechain_id,
         proof_key: transfer_msg3.statechain_sig.data.clone(),

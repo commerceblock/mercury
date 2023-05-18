@@ -729,6 +729,15 @@ pub struct DepositMsg2 {
     pub shared_key_id: Uuid,
 }
 
+/// As the server does not know the transaction, the client has to send the amount
+/// Client -> SE
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct BlindedDepositMsg2 {
+    #[schemars(with = "UuidDef")]
+    pub shared_key_id: Uuid,
+    pub amount: i64,
+}
+
 #[derive(JsonSchema)]
 #[schemars(remote = "Address")]
 pub struct AddressDef(String);

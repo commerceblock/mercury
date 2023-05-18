@@ -455,7 +455,7 @@ mock! {
             &self,
             deposit_msg2: DepositMsg2,
         ) -> deposit::Result<StatechainID>;
-        fn blinded_deposit_confirm(&self, deposit_msg2: DepositMsg2) -> deposit::Result<StatechainID>;
+        fn blinded_deposit_confirm(&self, deposit_msg2: BlindedDepositMsg2) -> deposit::Result<StatechainID>;
     }
     trait Ecdsa {
         fn master_key(&self, user_id: Uuid) -> ecdsa::Result<()>;
@@ -516,7 +516,15 @@ mock! {
             &self,
             transfer_msg4: TransferMsg4,
         ) -> transfer::Result<TransferMsg5>;
+        fn blinded_transfer_receiver(
+            &self,
+            transfer_msg4: TransferMsg4,
+        ) -> transfer::Result<TransferMsg5>;
         fn transfer_finalize(
+            &self,
+            finalized_data: &TransferFinalizeData,
+        ) -> transfer::Result<()>;
+        fn blinded_transfer_finalize(
             &self,
             finalized_data: &TransferFinalizeData,
         ) -> transfer::Result<()>;

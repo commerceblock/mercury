@@ -11,7 +11,7 @@
 
 use super::super::Result;
 extern crate shared_lib;
-use shared_lib::structs::{DepositMsg1, DepositMsg2, PrepareSignTxMsg, Protocol, UserID, StatechainID};
+use shared_lib::structs::{DepositMsg1, DepositMsg2, PrepareSignTxMsg, Protocol, UserID, StatechainID, BlindedDepositMsg2};
 use shared_lib::util::{tx_backup_build, tx_funding_build, FEE, transaction_serialise};
 
 use super::api::{get_smt_proof, get_smt_root, get_statechain_fee_info};
@@ -171,20 +171,39 @@ pub fn deposit(
         .instance
         .broadcast_transaction(hex::encode(consensus::serialize(&tx_funding_signed)))?;
 
-    let endpoint = if blinded {
-        "blinded/deposit/confirm"
-    } else {
-        "deposit/confirm"
-    };
+    // let endpoint = if blinded {
+    //     "blinded/deposit/confirm"
+    // } else {
+    //     "deposit/confirm"
+    // };
 
-    // Wait for server confirmation of funding tx and receive new StateChain's id
-    let statechain_id: StatechainID = requests::postb(
-        &wallet.client_shim,
-        &format!("{}", endpoint),
-        &DepositMsg2 {
-            shared_key_id: shared_key_id.id,
-        },
-    )?;
+    // // Wait for server confirmation of funding tx and receive new StateChain's id
+    // let statechain_id: StatechainID = requests::postb(
+    //     &wallet.client_shim,
+    //     &format!("{}", endpoint),
+    //     &DepositMsg2 {
+    //         shared_key_id: shared_key_id.id,
+    //     },
+    // )?;
+
+    let statechain_id: StatechainID = if blinded {
+        requests::postb(
+            &wallet.client_shim,
+            &format!("blinded/deposit/confirm"),
+            &BlindedDepositMsg2 {
+                shared_key_id: shared_key_id.id,
+                amount: *amount as i64,
+            },
+        )?
+    } else {
+        requests::postb(
+            &wallet.client_shim,
+            &format!("deposit/confirm"),
+            &DepositMsg2 {
+                shared_key_id: shared_key_id.id,
+            },
+        )?
+    };
 
     // if !blinded {
     
