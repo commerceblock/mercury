@@ -259,6 +259,39 @@ fn main() {
                     finalized_data.tx_backup_psm.tx_hex
                 );
             }
+        } else if matches.is_present("blinded-transfer-receiver") {
+            if let Some(matches) = matches.subcommand_matches("blinded-transfer-receiver") {
+                let transfer_msg: String = matches.value_of("message").unwrap().to_string();
+                let finalized_data: TransferFinalizeData =
+                    match query_wallet_daemon(DaemonRequest::BlindedTransferReceiver(transfer_msg))
+                        .unwrap()
+                    {
+                        DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                        DaemonResponse::Error(e) => panic!("{}", e.to_string()),
+                        DaemonResponse::None => panic!("None value returned."),
+                    };
+
+                let tx = transaction_deserialise(&finalized_data.tx_backup_psm.tx_hex).unwrap();
+                println!(
+                    "\nTransfer complete for StateChain ID: {}.",
+                    finalized_data.statechain_id
+                );
+
+                println!(
+                    "\nValue: {}",
+                    tx.output[0].value
+                );
+
+                println!(
+                    "\nLocktime: {}",
+                    tx.lock_time
+                );
+
+                println!(
+                    "\nBackup Transaction hex: {}",
+                    finalized_data.tx_backup_psm.tx_hex
+                );
+            }
         } else if matches.is_present("transfer-any") {
             if let Some(matches) = matches.subcommand_matches("transfer-any") {
                 let receiver_addr: String = matches.value_of("addr").unwrap().to_string();

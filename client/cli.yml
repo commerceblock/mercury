@@ -97,6 +97,15 @@ subcommands:
                   required: true
                   value_name: message
                   help: Transfer message from sender
+        - blinded-transfer-receiver:
+            about: Transfer State Chain - Receive
+            version: "1.0"
+            args:
+              - message:
+                  short: m
+                  required: true
+                  value_name: message
+                  help: Transfer message from sender
         - transfer-any:
             about: Transfer any Statecoin - Send
             version: "1.0"
