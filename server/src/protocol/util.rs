@@ -640,6 +640,20 @@ pub fn get_coin_info(sc_entity: State<SCE>) -> Result<Json<CoinValueInfo>> {
 }
 
 #[openapi]
+/// # Get current statecoin (statechain tip) information for specified statechain ID
+#[get("/info/blinded/statechain/<statechain_id>", format = "json")]
+pub fn get_blinded_statecoin(
+    sc_entity: State<SCE>,
+    statechain_id: String,
+) -> Result<Json<BlindedStateChainData>> {
+    sc_entity.check_rate_fast("info")?;
+    match sc_entity.get_blinded_statechain(Uuid::from_str(&statechain_id).unwrap()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
 /// # Get current statechain information for specified statechain ID
 #[get("/info/statechain/<statechain_id>", format = "json")]
 pub fn get_statechain(
@@ -1218,6 +1232,16 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
 
     //fn update_root(&self, root: &Root) -> Result<i64>;
 
+    fn get_blinded_statechain(&self, statechain_id: Uuid) -> Result<BlindedStateChainData> {
+        let state_chain = self.database.get_statechain_amount(statechain_id)?;
+        let chain = state_chain.chain.get_chain().clone();
+
+        Ok(BlindedStateChainData {
+            amount: state_chain.amount as u64,
+            chain,
+        })
+    }
+
     fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain> {
         self.database.get_statechain(statechain_id)
     }
@@ -1258,29 +1282,16 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
                 }
             }
 
-        let tx_backup = self.database.get_backup_transaction(statechain_id.clone());
-
-        let utxo: OutPoint = match tx_backup {
-            Ok(tx) => {
-                tx.input.get(0).unwrap().previous_output
-            },
-            Err(_) => OutPoint::null(),
-        };
-
-        let lock_time = self.database.get_backup_locktime(statechain_id);
-
-        let locktime  = match lock_time {
-            Ok(value) => value as u32,
-            Err(_) => 0 as u32,
-        };
+        let tx_backup = self.database.get_backup_transaction(statechain_id.clone())?;
+        let lock_time = self.database.get_backup_locktime(statechain_id)?;
 
         let confirmed = self.database.is_confirmed(&statechain_id)?;
 
         return Ok({StateChainDataAPI {
             amount: state_chain.amount as u64,
-            utxo,
+            utxo: tx_backup.input.get(0).unwrap().previous_output,
             chain,
-            locktime,
+            locktime: lock_time as u32,
             confirmed
         }});
     }

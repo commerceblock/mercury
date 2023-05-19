@@ -20,6 +20,7 @@ use super::super::Result;
 use super::util::blindly_cosign_tx_input;
 
 use crate::error::{CError, WalletErrorType};
+use crate::state_entity::api::get_blinded_statechain;
 use crate::state_entity::{
     api::{get_smt_proof, get_smt_root, get_statecoin, get_statechain, get_statechain_fee_info},
     util::{cosign_tx_input, verify_statechain_smt},
@@ -42,6 +43,18 @@ pub struct TransferFinalizeData {
     pub o2: FE,
     pub s2_pub: GE,
     pub statechain_data: StateChainDataAPI,
+    pub proof_key: String,
+    pub statechain_id: Uuid,
+    pub tx_backup_psm: PrepareSignTxMsg,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BlindedTransferFinalizeData {
+    pub new_shared_key_id: Uuid,
+    pub o2: FE,
+    pub s2_pub: GE,
+    pub amount: u64,
+    pub funding_txid: String,
     pub proof_key: String,
     pub statechain_id: Uuid,
     pub tx_backup_psm: PrepareSignTxMsg,
@@ -435,7 +448,7 @@ pub fn blinded_transfer_receiver(
     wallet: &mut Wallet,
     transfer_msg3: &mut TransferMsg3,
     batch_data: &Option<BatchData>,
-) -> Result<TransferFinalizeData> {
+) -> Result<BlindedTransferFinalizeData> {
     blinded_transfer_receiver_repeat_keygen(wallet,transfer_msg3,batch_data,0)
 }
 
@@ -606,7 +619,7 @@ pub fn blinded_transfer_receiver_repeat_keygen(
     transfer_msg3: &mut TransferMsg3,
     batch_data: &Option<BatchData>,
     keygen1_reps: u32
-) -> Result<TransferFinalizeData> {
+) -> Result<BlindedTransferFinalizeData> {
     //Decrypt the message on receipt
     match wallet.decrypt(transfer_msg3) {
         Ok(_) => (),
@@ -620,8 +633,8 @@ pub fn blinded_transfer_receiver_repeat_keygen(
     //Make immutable
     let transfer_msg3 = &*transfer_msg3;
     // Get statechain data (will Err if statechain not yet finalized)
-    let statechain_data: StateChainDataAPI =
-        get_statechain(&wallet.client_shim, &transfer_msg3.statechain_id)?;
+    let statechain_data: BlindedStateChainData =
+        get_blinded_statechain(&wallet.client_shim, &transfer_msg3.statechain_id)?;
 
     let tx_backup = transaction_deserialise(&transfer_msg3.tx_backup_psm.tx_hex)?;
     // Ensure backup tx funds are sent to address owned by this wallet
@@ -685,30 +698,20 @@ pub fn blinded_transfer_receiver_repeat_keygen(
     };
 
     // generate o2 private key and corresponding 02 public key
-    let funding_txid_int = match funding_txid_to_int(&statechain_data.utxo.txid.to_string()) {
+    let (_key_share_pub, _key_share_priv) = match wallet
+        .se_key_shares
+        .get_new_key_priv()
+    {
         Ok(r) => r,
         Err(e) => {
             return Err(CError::Generic(format!(
-                "Failed to get funding txid int from statechain_data: {:?} error: {}",
-                statechain_data,
+                "Failed to get new private key. Error: {}",
                 e.to_string()
             )))
         }
     };
     let mut o2: FE = ECScalar::zero();
-    let _key_share_pub = match wallet
-        .se_key_shares
-        .get_new_key_encoded_id(funding_txid_int, Some(&mut o2))
-    {
-        Ok(r) => r,
-        Err(e) => {
-            return Err(CError::Generic(format!(
-                "Failed to get new key encoded id from funding_txid_int: {} error: {}",
-                funding_txid_int,
-                e.to_string()
-            )))
-        }
-    };
+    o2.set_element(_key_share_priv.key);
 
     let g: GE = ECPoint::generator();
     let o2_pub: GE = g * o2;
@@ -742,11 +745,12 @@ pub fn blinded_transfer_receiver_repeat_keygen(
     tx_backup_psm.shared_key_ids = vec![transfer_msg5.new_shared_key_id.clone()];
 
     // Data to update wallet with transfer. Should only be applied after StateEntity has finalized.
-    let mut finalize_data = TransferFinalizeData {
+    let mut finalize_data = BlindedTransferFinalizeData {
         new_shared_key_id: transfer_msg5.new_shared_key_id,
         o2,
         s2_pub: transfer_msg5.s2_pub,
-        statechain_data,
+        amount: statechain_data.amount,
+        funding_txid: "0000".to_owned(), // TODO: 402 should solve this
         proof_key: transfer_msg3.rec_se_addr.proof_key.clone().to_string(),
         statechain_id: transfer_msg3.statechain_id,
         tx_backup_psm,
@@ -776,7 +780,7 @@ pub fn transfer_receiver_finalize(
 /// transfers completion in the batch transfer case.
 pub fn blinded_transfer_receiver_finalize(
     wallet: &mut Wallet,
-    mut finalize_data: TransferFinalizeData,
+    mut finalize_data: BlindedTransferFinalizeData,
 ) -> Result<()> {
     blinded_transfer_receiver_finalize_repeat_keygen(wallet, &mut finalize_data, 0)
 }
@@ -837,14 +841,14 @@ pub fn transfer_receiver_finalize_repeat_keygen(
 
 pub fn blinded_transfer_receiver_finalize_repeat_keygen(
     wallet: &mut Wallet,
-    mut finalize_data: &mut TransferFinalizeData,
+    mut finalize_data: &mut BlindedTransferFinalizeData,
     keygen1_reps: u32
 ) -> Result<()> {
     // Make shared key with new private share
     wallet.gen_shared_key_fixed_secret_key_repeat_keygen(
         &finalize_data.new_shared_key_id,
         &finalize_data.o2.get_element(),
-        &finalize_data.statechain_data.amount,
+        &finalize_data.amount,
         keygen1_reps
     )?;
 
@@ -865,7 +869,7 @@ pub fn blinded_transfer_receiver_finalize_repeat_keygen(
 
     // Verify proof key inclusion in SE sparse merkle tree
     // let root = get_smt_root(&wallet.client_shim)?.unwrap();
-    let funding_txid = &finalize_data.statechain_data.utxo.txid.to_string();
+    let funding_txid = &finalize_data.funding_txid;
     // let proof = get_smt_proof(&wallet.client_shim, &root, funding_txid)?;
     // assert!(verify_statechain_smt(
     //     &Some(root.hash()),
@@ -873,7 +877,7 @@ pub fn blinded_transfer_receiver_finalize_repeat_keygen(
     //     &proof
     // ));
 
-    let amount = finalize_data.statechain_data.amount.clone();
+    let amount = finalize_data.amount.clone();
 
     finalize_data.tx_backup_psm.input_addrs = vec![pk];
     finalize_data.tx_backup_psm.input_amounts = vec![amount];

@@ -368,6 +368,35 @@ impl OutPointDef{
     }
 }
 
+// /blinded/info/statechain return struct
+/// Statechain data
+/// This struct is returned containing the statechain of the specified statechain ID
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+#[schemars(example = "Self::example")]
+pub struct BlindedStateChainData {
+    /// The value of the statecoin (in satoshis)
+    pub amount: u64,
+    /// The statechain of owner proof keys and signatures
+    pub chain: Vec<State>,
+}
+
+impl BlindedStateChainData {
+    pub fn example() -> Self{
+        Self{
+            amount: 1000000,
+            chain: vec![State::example()],
+        }
+    }
+
+    pub fn get_tip(&self) -> super::Result<State> {
+        Ok(self
+            .chain
+            .last()
+            .ok_or(SharedLibError::Generic(String::from("StateChain empty")))?
+            .clone())
+    }
+}
+
 // /info/statechain return struct
 /// Statechain data
 /// This struct is returned containing the statechain of the specified statechain ID

@@ -6,7 +6,7 @@ use super::super::Result;
 use shared_lib::structs::{
     SmtProofMsgAPI, StateChainDataAPI, StateEntityFeeInfoAPI, 
     TransferBatchDataAPI, RecoveryDataMsg, RecoveryRequest, 
-    CoinValueInfo, StateCoinDataAPI, TransferFinalizeData
+    CoinValueInfo, StateCoinDataAPI, TransferFinalizeData, BlindedStateChainData
 };
 use shared_lib::Root;
 
@@ -38,6 +38,14 @@ pub fn get_statechain(
     statechain_id: &Uuid,
 ) -> Result<StateChainDataAPI> {
     requests::get(client_shim, &format!("info/statechain/{}", statechain_id))
+}
+
+/// Get blinded state chain by ID
+pub fn get_blinded_statechain(
+    client_shim: &ClientShim,
+    statechain_id: &Uuid,
+) -> Result<BlindedStateChainData> {
+    requests::get(client_shim, &format!("info/blinded/statechain/{}", statechain_id))
 }
 
 /// Get state chain by ID to depth

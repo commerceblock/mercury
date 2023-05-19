@@ -602,6 +602,7 @@ mock! {
         fn update_root(&self, root: &storage::Root) -> storage::Result<i64>;
         fn get_statechain_data_api(&self,statechain_id: Uuid) -> storage::Result<StateChainDataAPI>;
         fn get_statechain_data_api_depth(&self,statechain_id: Uuid, depth: Option<usize>) -> storage::Result<StateChainDataAPI>;
+        fn get_blinded_statechain(&self, statechain_id: Uuid) -> storage::Result<BlindedStateChainData>;
         fn get_statecoin_data_api(&self, statechain_id: Uuid) -> storage::Result<StateCoinDataAPI>;
         fn get_sc_transfer_finalize_data(&self, statechain_id: Uuid)-> storage::Result<TransferFinalizeData>;
         fn get_statechain(&self, statechain_id: Uuid) -> storage::Result<storage::StateChain>;
