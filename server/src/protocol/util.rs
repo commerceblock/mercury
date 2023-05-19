@@ -642,7 +642,7 @@ pub fn get_coin_info(sc_entity: State<SCE>) -> Result<Json<CoinValueInfo>> {
 #[openapi]
 /// # Get current statecoin (statechain tip) information for specified statechain ID
 #[get("/info/blinded/statechain/<statechain_id>", format = "json")]
-pub fn get_blinded_statecoin(
+pub fn get_blinded_statechain(
     sc_entity: State<SCE>,
     statechain_id: String,
 ) -> Result<Json<BlindedStateChainData>> {

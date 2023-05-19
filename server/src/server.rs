@@ -206,6 +206,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
     match mode {
         Mode::Both => routes_with_openapi![
             util::get_statechain,
+            util::get_blinded_statechain,
             util::get_statechain_depth,
             util::get_statecoin,
             util::get_owner_id,
@@ -253,6 +254,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             conductor::get_group_info],
         Mode::Core => routes_with_openapi![
             util::get_statechain,
+            util::get_blinded_statechain,
             util::get_statechain_depth,
             util::get_statecoin,
             util::get_owner_id,

@@ -7,7 +7,7 @@ extern crate uuid;
 
 use client_lib::{
     daemon::{query_wallet_daemon, DaemonRequest, DaemonResponse},
-    state_entity::transfer::TransferFinalizeData,
+    state_entity::transfer::{TransferFinalizeData, BlindedTransferFinalizeData},
 };
 use shared_lib::{util::transaction_deserialise, structs::{
     PrepareSignTxMsg, StateChainDataAPI, StateEntityFeeInfoAPI, CoinValueInfo, RecoveryDataMsg
@@ -262,7 +262,7 @@ fn main() {
         } else if matches.is_present("blinded-transfer-receiver") {
             if let Some(matches) = matches.subcommand_matches("blinded-transfer-receiver") {
                 let transfer_msg: String = matches.value_of("message").unwrap().to_string();
-                let finalized_data: TransferFinalizeData =
+                let finalized_data: BlindedTransferFinalizeData =
                     match query_wallet_daemon(DaemonRequest::BlindedTransferReceiver(transfer_msg))
                         .unwrap()
                     {
