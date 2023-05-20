@@ -637,6 +637,8 @@ pub fn blinded_transfer_receiver_repeat_keygen(
         get_blinded_statechain(&wallet.client_shim, &transfer_msg3.statechain_id)?;
 
     let tx_backup = transaction_deserialise(&transfer_msg3.tx_backup_psm.tx_hex)?;
+    let tx_backup_id = tx_backup.txid();
+
     // Ensure backup tx funds are sent to address owned by this wallet
     let back_up_rec_se_addr = Address::from_script(
         &tx_backup.output[0].script_pubkey,
@@ -750,7 +752,7 @@ pub fn blinded_transfer_receiver_repeat_keygen(
         o2,
         s2_pub: transfer_msg5.s2_pub,
         amount: statechain_data.amount,
-        funding_txid: "0000".to_owned(), // TODO: 402 should solve this
+        funding_txid: tx_backup_id.to_hex(),
         proof_key: transfer_msg3.rec_se_addr.proof_key.clone().to_string(),
         statechain_id: transfer_msg3.statechain_id,
         tx_backup_psm,
