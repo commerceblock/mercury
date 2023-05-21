@@ -173,6 +173,8 @@ pub struct Config {
     pub wallet_version: String,
     /// Server message for wallet users
     pub wallet_message: String,
+    /// backup tx fee rate
+    pub backup_fee_rate: u64,
 }
 
 impl Default for Config {
@@ -204,6 +206,7 @@ impl Default for Config {
             deposit_pow: true,
             wallet_version: "0.6.0".to_string(),
             wallet_message: "".to_string(),
+            backup_fee_rate: 1,
         }
     }
 }

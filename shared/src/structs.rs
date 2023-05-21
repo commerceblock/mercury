@@ -112,6 +112,8 @@ pub struct StateEntityFeeInfoAPI {
     pub wallet_version: String,
     /// Message to display to all wallet users on startup
     pub wallet_message: String,
+    /// Current backup tx fee rate
+    pub backup_fee_rate: u64,
 }
 
 impl StateEntityFeeInfoAPI{
@@ -124,6 +126,7 @@ impl StateEntityFeeInfoAPI{
             initlock: 14400,
             wallet_version: "0.4.65".to_string(),
             wallet_message: "Warning".to_string(),
+            backup_fee_rate: 1,
         }
     }
 }
@@ -132,8 +135,8 @@ impl fmt::Display for StateEntityFeeInfoAPI {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Fee address: {},\nDeposit fee rate: {}\nWithdrawal fee rate: {}\nLock interval: {}\nInitial lock: {}",
-            self.address, self.deposit, self.withdraw, self.interval, self.initlock
+            "Fee address: {},\nDeposit fee rate: {}\nWithdrawal fee rate: {}\nLock interval: {}\nInitial lock: {}\nBackup fee rate: {}",
+            self.address, self.deposit, self.withdraw, self.interval, self.initlock, self.backup_fee_rate
         )
     }
 }

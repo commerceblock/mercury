@@ -189,8 +189,9 @@ pub fn tx_backup_build(
     locktime: &u32,
     fee: &u64,
     fee_addr: &String,
+    backup_fee_rate: &u64
 ) -> Result<Transaction> {
-    if *fee + FEE >= *amount {
+    if *fee + FEE*(*backup_fee_rate) >= *amount {
         return Err(SharedLibError::FormatError(String::from(
             "Not enough value to cover fee.",
         )));
@@ -211,7 +212,7 @@ pub fn tx_backup_build(
         output: vec![
             TxOut {
                 script_pubkey: b_address.script_pubkey(),
-                value: amount - *fee - FEE,
+                value: amount - *fee - FEE*(*backup_fee_rate),
             },
             TxOut {
                 script_pubkey: Address::from_str(fee_addr)?.script_pubkey(),

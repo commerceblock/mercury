@@ -49,7 +49,7 @@ pub fn deposit(
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
 
     // Ensure funds cover fees before initiating protocol
-    if FEE + se_fee_info.deposit as u64 >= *amount {
+    if FEE*se_fee_info.backup_fee_rate + se_fee_info.deposit as u64 >= *amount {
         return Err(CError::WalletError(WalletErrorType::NotEnoughFunds));
     }
 
@@ -59,7 +59,7 @@ pub fn deposit(
 
     // Greedy coin selection.
     let (inputs, addrs, amounts) =
-        wallet.coin_selection_greedy(&(amount + deposit_fee + FEE))?;
+        wallet.coin_selection_greedy(&(amount + deposit_fee + FEE*se_fee_info.backup_fee_rate))?;
 
     // Generate proof key
     let proof_key = wallet.se_proof_keys.get_new_key()?;
@@ -96,7 +96,7 @@ pub fn deposit(
     let p_addr =
         bitcoin::Address::p2wpkh(&to_bitcoin_public_key(pk), wallet.get_bitcoin_network())?;
     let change_addr = wallet.keys.get_new_address()?.to_string();
-    let change_amount = amounts.iter().sum::<u64>() - amount - deposit_fee - FEE;
+    let change_amount = amounts.iter().sum::<u64>() - amount - deposit_fee - FEE*se_fee_info.backup_fee_rate;
     
     let tx_0 = tx_funding_build(
         &inputs,
@@ -129,7 +129,7 @@ pub fn deposit(
     let backup_receive_addr = wallet.se_backup_keys.get_new_address()?;
     
     let tx_backup_unsigned =
-        tx_backup_build(&tx_funding_signed.txid(), &backup_receive_addr, &amount, &init_locktime, &withdraw_fee, &se_fee_info.address)?;
+        tx_backup_build(&tx_funding_signed.txid(), &backup_receive_addr, &amount, &init_locktime, &withdraw_fee, &se_fee_info.address, &se_fee_info.backup_fee_rate)?;
 
     // Co-sign tx backup tx
     let tx_backup_psm = PrepareSignTxMsg {
