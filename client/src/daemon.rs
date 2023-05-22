@@ -281,7 +281,12 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                             sce_address,
                             None
                         );
-                        let encoded_message = encoding::encode_message(transfer_sender_resp.unwrap());
+                        let transfer_sender_resp = transfer_sender_resp.unwrap();
+                        let blinded_encoded_message = encoding::blinded_encode_message(&transfer_sender_resp);
+                        let encoded_message = encoding::encode_message(transfer_sender_resp);
+
+                        println!("Blinded encoded message: {}", blinded_encoded_message.unwrap());
+
                         wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(
                             encoded_message,

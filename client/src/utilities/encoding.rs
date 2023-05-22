@@ -77,6 +77,48 @@ pub fn encode_message(message: TransferMsg3) -> Result<String> {
 	Ok(bech32_encoded)
 }
 
+// Encode a mercury transaction message in bech32 format
+pub fn blinded_encode_message(message: &TransferMsg3) -> Result<String> {
+	if message.tx_backup_psm.shared_key_ids.len() != 1 {
+		return Err(CError::Generic(String::from(
+	        "Cannot encode transfer message - length of PrepareSignTxMsg != 1",
+	    )));
+	}
+
+	let mut sig_bytes = hex::decode(message.statechain_sig.sig.clone()).unwrap();
+	let mut tx_bytes = hex::decode(message.tx_backup_psm.clone().tx_hex).unwrap();
+
+	// compact messgae serialisation to byte vector
+	let mut ser_bytes = Vec::new();
+	//bytes 0..129 encrypted t1
+	ser_bytes.append(&mut message.t1.secret_bytes.clone());
+	//bytes 129..162 (33 bytes) compressed proof key
+	ser_bytes.append(&mut message.rec_se_addr.proof_key.clone().serialize().to_vec());
+	//bytes 162..178 (16 bytes) statechain_id
+	ser_bytes.append(&mut hex::decode(message.statechain_id.clone().simple().to_string()).unwrap());
+	//bytes 178..194 (16 bytes) shared_key_id
+	ser_bytes.append(&mut hex::decode(message.tx_backup_psm.shared_key_ids[0].clone().simple().to_string()).unwrap());
+	//byte 194 is statechain signature length (variable)
+	ser_bytes.push(sig_bytes.len() as u8);
+	//byte 195..sig_len is statechain signature
+	ser_bytes.append(&mut sig_bytes);
+	//byte sig_len is backup tx length (variable)
+	ser_bytes.push(tx_bytes.len() as u8);
+	//remaining bytes backup tx
+	ser_bytes.append(&mut tx_bytes);
+	
+	ser_bytes.push(message.tx_backup_list.len() as u8);
+	for tx_backup in message.tx_backup_list.iter() {
+		let mut tx_backup_bytes = hex::decode(&tx_backup.tx_hex).unwrap();
+		ser_bytes.push(tx_backup_bytes.len() as u8);
+		ser_bytes.append(&mut tx_backup_bytes);
+	}
+
+	let bech32_encoded = bech32::encode("mm",ser_bytes.to_base32()).unwrap();
+
+	Ok(bech32_encoded)
+}
+
 // Decode a mercury transaction message from bech32 format
 pub fn decode_message(message: String, network: &String) -> Result<TransferMsg3> {
 
@@ -134,6 +176,7 @@ pub fn decode_message(message: String, network: &String) -> Result<TransferMsg3>
 	    	tx_backup_addr,
 	    	proof_key: proof_key,
 	    },
+		tx_backup_list: vec![]
 	};
 
 	Ok(transfer_msg3)

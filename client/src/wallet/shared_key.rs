@@ -31,6 +31,7 @@ pub struct SharedKey {
     pub smt_proof: Option<InclusionProofSMT>,
     pub unspent: bool,
     pub funding_txid: String,
+    pub tx_backup_list: Vec<PrepareSignTxMsg>, // chain of backup transactions (used in the blind version)
 }
 
 impl SharedKey {

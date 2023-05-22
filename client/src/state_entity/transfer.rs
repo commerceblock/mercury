@@ -58,6 +58,7 @@ pub struct BlindedTransferFinalizeData {
     pub proof_key: String,
     pub statechain_id: Uuid,
     pub tx_backup_psm: PrepareSignTxMsg,
+    pub tx_backup_list: Vec<PrepareSignTxMsg>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -241,8 +242,12 @@ pub fn blinded_transfer_sender(
     tx.input[0].witness = new_backup_witness;
     prepare_sign_msg.tx_hex = transaction_serialise(&tx);
 
+    //shared_key.tx_backup_list.push(prepare_sign_msg.clone());
+
     // Get o1 priv key
-    let shared_key = wallet.get_shared_key(&shared_key_id)?;
+    //let shared_key = wallet.get_shared_key(&shared_key_id)?; get_shared_key_mut
+    let shared_key = wallet.get_shared_key_mut(&shared_key_id)?; 
+    shared_key.tx_backup_list.push(prepare_sign_msg.clone());
     let o1 = shared_key.share.private.get_private_key();
 
     // t1 = o1x1
@@ -257,6 +262,7 @@ pub fn blinded_transfer_sender(
         statechain_id: statechain_id.to_owned(),
         tx_backup_psm: prepare_sign_msg.to_owned(),
         rec_se_addr: receiver_addr,
+        tx_backup_list: shared_key.tx_backup_list.clone(),
     };
 
     let msg3_pubkey = transfer_msg3.get_public_key().unwrap().unwrap();
@@ -393,6 +399,7 @@ pub fn transfer_sender(
         statechain_id: statechain_id.to_owned(),
         tx_backup_psm: prepare_sign_msg.to_owned(),
         rec_se_addr: receiver_addr,
+        tx_backup_list: vec![],
     };
 
     //encrypt then make immutable
@@ -756,6 +763,7 @@ pub fn blinded_transfer_receiver_repeat_keygen(
         proof_key: transfer_msg3.rec_se_addr.proof_key.clone().to_string(),
         statechain_id: transfer_msg3.statechain_id,
         tx_backup_psm,
+        tx_backup_list: transfer_msg3.tx_backup_list.clone(),
     };
 
     // In batch case this step is performed once all other transfers in the batch are complete.
@@ -890,6 +898,7 @@ pub fn blinded_transfer_receiver_finalize_repeat_keygen(
         shared_key.statechain_id = Some(finalize_data.statechain_id);
         shared_key.tx_backup_psm = Some(finalize_data.tx_backup_psm.clone());
         //shared_key.add_proof_data(&rec_proof_key, &root, &proof, funding_txid);
+        shared_key.tx_backup_list.push(finalize_data.tx_backup_psm.clone());
         shared_key.add_proof_key_and_funding_txid(&rec_proof_key, funding_txid);
     }
 

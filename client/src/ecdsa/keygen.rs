@@ -94,5 +94,6 @@ pub fn get_master_key_repeat_keygen(
         smt_proof: None,
         unspent: true,
         funding_txid: String::default(),
+        tx_backup_list: vec![],
     })
 }
