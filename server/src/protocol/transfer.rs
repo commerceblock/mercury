@@ -355,7 +355,7 @@ impl Transfer for SCE {
     /// This function is called immediately in the regular transfer case or after confirmation of atomic
     /// transfers completion in the batch transfer case.
     fn transfer_finalize(&self, finalized_data: &TransferFinalizeData) -> Result<()> {
-              
+
         let statechain_id = finalized_data.statechain_id;
 
         info!("TRANSFER_FINALIZE: State Chain ID: {}", statechain_id);
@@ -369,21 +369,6 @@ impl Transfer for SCE {
 
         let sco = self.database.get_statechain_owner(statechain_id)?;
         let lockbox_url: Option<(Url, usize)> = self.get_lockbox_url(&sco.owner_id).map_err(|e| {dbg!("{}",&e); e} )?;
-
-        //lockbox finalise and delete key
-        match lockbox_url {
-            Some(l) => {
-                dbg!("using lockbox", &l);
-                let ku_send = KUFinalize {
-                    statechain_id,
-                    shared_key_id: new_user_id,
-                };
-                let path: &str = "ecdsa/keyupdate/second";
-                let ku_receive: KUAttest = post_lb(&l.0, path, &ku_send)?;
-                self.database.update_lockbox_index(&new_user_id, &l.1)?;
-            },
-            None => ()
-        };
 
         self.database.update_statechain_owner(
             &statechain_id,
@@ -399,6 +384,21 @@ impl Transfer for SCE {
             finalized_data.to_owned(),
             self.user_ids.clone()   
         )?;
+
+        //lockbox finalise and delete key
+        match lockbox_url {
+            Some(l) => {
+                dbg!("using lockbox", &l);
+                let ku_send = KUFinalize {
+                    statechain_id,
+                    shared_key_id: new_user_id,
+                };
+                let path: &str = "ecdsa/keyupdate/second";
+                let ku_receive: KUAttest = post_lb(&l.0, path, &ku_send)?;
+                self.database.update_lockbox_index(&new_user_id, &l.1)?;
+            },
+            None => ()
+        };
 
         let new_tx_backup_hex = transaction_deserialise(&finalized_data.new_tx_backup_hex)?;
 
