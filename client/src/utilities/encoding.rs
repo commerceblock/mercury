@@ -110,7 +110,7 @@ pub fn blinded_encode_message(message: &TransferMsg3) -> Result<String> {
 	assert!(message.previous_txs.len() < u8::MAX.into());
 	ser_bytes.push(message.previous_txs.len() as u8);
 	for tx_backup in message.previous_txs.iter() {
-		let mut tx_backup_bytes = hex::decode(&tx_backup.tx_hex).unwrap();
+		let mut tx_backup_bytes = hex::decode(&tx_backup).unwrap();
 		assert!(tx_backup_bytes.len() < u8::MAX.into());
 		ser_bytes.push(tx_backup_bytes.len() as u8);
 		ser_bytes.append(&mut tx_backup_bytes);

@@ -213,7 +213,7 @@ pub fn blinded_transfer_sender(
 
     wallet.decrypt(&mut transfer_msg2)?;
 
-    let previous_tx = prepare_sign_msg.tx_hex;
+    let previous_tx = prepare_sign_msg.tx_hex.clone();
 
     let mut tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
 
