@@ -242,12 +242,12 @@ pub fn blinded_transfer_sender(
     tx.input[0].witness = new_backup_witness;
     prepare_sign_msg.tx_hex = transaction_serialise(&tx);
 
-    //shared_key.tx_backup_list.push(prepare_sign_msg.clone());
-
     // Get o1 priv key
     //let shared_key = wallet.get_shared_key(&shared_key_id)?; get_shared_key_mut
     let shared_key = wallet.get_shared_key_mut(&shared_key_id)?; 
-    shared_key.tx_backup_list.push(prepare_sign_msg.clone());
+
+    shared_key.tx_backup_list.insert(0, prepare_sign_msg.clone());
+    
     let o1 = shared_key.share.private.get_private_key();
 
     // t1 = o1x1
