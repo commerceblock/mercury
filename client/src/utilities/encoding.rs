@@ -107,9 +107,9 @@ pub fn blinded_encode_message(message: &TransferMsg3) -> Result<String> {
 	//remaining bytes backup tx
 	ser_bytes.append(&mut tx_bytes);
 	
-	assert!(message.tx_backup_list.len() < u8::MAX.into());
-	ser_bytes.push(message.tx_backup_list.len() as u8);
-	for tx_backup in message.tx_backup_list.iter() {
+	assert!(message.previous_txs.len() < u8::MAX.into());
+	ser_bytes.push(message.previous_txs.len() as u8);
+	for tx_backup in message.previous_txs.iter() {
 		let mut tx_backup_bytes = hex::decode(&tx_backup.tx_hex).unwrap();
 		assert!(tx_backup_bytes.len() < u8::MAX.into());
 		ser_bytes.push(tx_backup_bytes.len() as u8);
@@ -178,7 +178,7 @@ pub fn decode_message(message: String, network: &String) -> Result<TransferMsg3>
 	    	tx_backup_addr,
 	    	proof_key: proof_key,
 	    },
-		tx_backup_list: vec![]
+		previous_txs: vec![]
 	};
 
 	Ok(transfer_msg3)
@@ -270,7 +270,7 @@ pub fn blinded_decode_message(message: String, network: &String) -> Result<Trans
 	    	tx_backup_addr,
 	    	proof_key: proof_key,
 	    },
-		tx_backup_list: vec![]
+		previous_txs: vec![]
 	};
 
 	Ok(transfer_msg3)

@@ -252,7 +252,6 @@ pub fn deposit(
             if !blinded {
                 shared_key.add_proof_data(&proof_key.to_string(), &root.unwrap(), &proof, &funding_txid);
             } else {
-                shared_key.tx_backup_list.push(tx_backup_psm.to_owned());
                 shared_key.add_proof_key_and_funding_txid(&proof_key.to_string(), &funding_txid);
             }
         }

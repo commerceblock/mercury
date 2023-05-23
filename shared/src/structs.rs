@@ -818,7 +818,7 @@ pub struct TransferMsg3 {
     pub statechain_id: Uuid,
     pub tx_backup_psm: PrepareSignTxMsg,
     pub rec_se_addr: SCEAddress, // receivers state entity address (btc address and proof key)
-    pub tx_backup_list: Vec<PrepareSignTxMsg>, // chain of backup transactions (used in the blind version)
+    pub previous_txs: Vec<String>, // chain of backup transactions (used in the blind version)
 }
 
 /// Sender -> Receiver
