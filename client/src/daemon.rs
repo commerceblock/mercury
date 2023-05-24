@@ -283,13 +283,10 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                         );
                         let transfer_sender_resp = transfer_sender_resp.unwrap();
                         let blinded_encoded_message = encoding::blinded_encode_message(&transfer_sender_resp);
-                        let encoded_message = encoding::encode_message(transfer_sender_resp);
-
-                        println!("Blinded encoded message: {}", blinded_encoded_message.unwrap());
 
                         wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(
-                            encoded_message,
+                            blinded_encoded_message,
                         ))
                     }
                     DaemonRequest::TransferAny(receiver_addr) => {
@@ -328,7 +325,7 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                     }
                     DaemonRequest::BlindedTransferReceiver(transfer_msg_bech32) => {
                         debug!("Daemon: TransferReceiver");
-                        let mut transfer_msg = encoding::decode_message(transfer_msg_bech32,&network).unwrap();
+                        let mut transfer_msg = encoding::blinded_decode_message(transfer_msg_bech32,&network).unwrap();
                         let transfer_receiver_resp = state_entity::transfer::blinded_transfer_receiver(
                             &mut wallet,
                             &mut transfer_msg,

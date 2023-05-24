@@ -170,9 +170,6 @@ pub fn blinded_transfer_sender(
     {
         let shared_key = wallet.get_shared_key_by_statechain_id(statechain_id)?;
 
-        println!("shared_key.id: {:#?}", shared_key.id);
-        println!("shared_key.proof_key: {:#?}", shared_key.proof_key);
-
         shared_key_id = shared_key.id.clone();
         prepare_sign_msg = shared_key
             .tx_backup_psm
@@ -679,6 +676,13 @@ pub fn blinded_transfer_receiver_repeat_keygen(
     // check inputs
     // check signatures
     // TODO
+
+    // Validate all previous txs
+    println!("Total previous txs: {}", transfer_msg3.previous_txs.len());
+    println!("----------");
+    for tx in &transfer_msg3.previous_txs {
+        println!("{}",tx);
+    }
 
     // Verify state chain represents this address as new owner
     let prev_owner_proof_key = statechain_data.get_tip()?.data.clone();

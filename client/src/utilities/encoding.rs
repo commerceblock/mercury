@@ -213,8 +213,8 @@ pub fn blinded_decode_message(message: String, network: &String) -> Result<Trans
 	//byte 195..sig_len is statechain signature
 	let sig_bytes = &decoded_bytes[191..sig_len];
 
-	println!("sig_len: {}", sig_len);
-	println!("sig_bytes: {}", hex::encode(sig_bytes));
+	// println!("sig_len: {}", sig_len);
+	// println!("sig_bytes: {}", hex::encode(sig_bytes));
 
 
 	//byte sig_len is backup tx length (variable)
@@ -228,16 +228,19 @@ pub fn blinded_decode_message(message: String, network: &String) -> Result<Trans
 
 	let mut tx_backups_pointer = tx_len + 1;
 
+	let mut previous_txs = vec![];
 	for _ in 0..tx_bckps_len[0] {
 		let bckp_tx_len = decoded_bytes[tx_backups_pointer] as usize;
-		println!("---\nbckp_tx_len: {}", bckp_tx_len);
+		//println!("---\nbckp_tx_len: {}", bckp_tx_len);
 		let bckp_tx_end = tx_backups_pointer + bckp_tx_len + 1;
 		let bckp_tx_bytes = &decoded_bytes[(tx_backups_pointer + 1)..bckp_tx_end];
-		println!("bckp_tx_bytes: {}", hex::encode(bckp_tx_bytes));
+		let bckp_tx = hex::encode(bckp_tx_bytes);
+		//println!("bckp_tx_bytes: {}", bckp_tx);
+		previous_txs.push(bckp_tx);
 		tx_backups_pointer = bckp_tx_end;
     }
 
-	println!("tx_backups_pointer: {}", tx_backups_pointer);
+	//println!("tx_backups_pointer: {}", tx_backups_pointer);
 
 	assert!(tx_backups_pointer == decoded_bytes.len());
 
@@ -271,7 +274,7 @@ pub fn blinded_decode_message(message: String, network: &String) -> Result<Trans
 	    	tx_backup_addr,
 	    	proof_key: proof_key,
 	    },
-		previous_txs: vec![]
+		previous_txs
 	};
 
 	Ok(transfer_msg3)
