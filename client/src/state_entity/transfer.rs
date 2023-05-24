@@ -25,6 +25,7 @@ use crate::state_entity::{
     api::{get_smt_proof, get_smt_root, get_statecoin, get_statechain, get_statechain_fee_info},
     util::{cosign_tx_input, verify_statechain_smt},
 };
+use crate::utilities::validation;
 use crate::wallet::{key_paths::funding_txid_to_int, wallet::Wallet};
 use crate::{utilities::requests, ClientShim};
 use bitcoin_hashes::hex::ToHex;
@@ -245,7 +246,8 @@ pub fn blinded_transfer_sender(
     //let shared_key = wallet.get_shared_key(&shared_key_id)?; get_shared_key_mut
     let shared_key = wallet.get_shared_key_mut(&shared_key_id)?; 
 
-    shared_key.previous_txs.insert(0, previous_tx);
+    // shared_key.previous_txs.insert(0, previous_tx);
+    shared_key.previous_txs.push(previous_tx);
     
     let o1 = shared_key.share.private.get_private_key();
 
@@ -673,6 +675,10 @@ pub fn blinded_transfer_receiver_repeat_keygen(
     }
 
     // Check validity of the backup transaction
+    let first_tx_hex = &transfer_msg3.previous_txs[0];
+    let first_tx = transaction_deserialise(first_tx_hex)?;
+    validation::verify_tx_backup_confirmed(&mut wallet.electrumx_client, &first_tx)?;
+
     // check inputs
     // check signatures
     // TODO

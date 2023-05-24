@@ -7,3 +7,4 @@
 
 pub mod requests;
 pub mod encoding;
+pub mod validation;
