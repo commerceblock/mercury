@@ -239,6 +239,7 @@ pub fn blinded_decode_message(message: String, network: &String) -> Result<Trans
 
 	println!("tx_backups_pointer: {}", tx_backups_pointer);
 
+	assert!(tx_backups_pointer == decoded_bytes.len());
 
 	// let tx_bckps_len = tx_bckps_len_pos + 1;
 	// println!("tx_bckps_len: {}", tx_bckps_len);
