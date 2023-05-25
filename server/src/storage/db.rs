@@ -119,6 +119,7 @@ pub enum Column {
     TransferReady,
     SharedPublic,
     Confirmed,
+    SigCount,
 
     // BackupTxs
     //Id,
@@ -318,6 +319,7 @@ impl PGDatabase {
                 transferready bool,
                 sharedpublic varchar,
                 confirmed bool NOT NULL DEFAULT false,
+                sigcount int8 NOT NULL DEFAULT 1,
                 PRIMARY KEY (id)
             );",
                 Table::StateChain.to_string(),
@@ -1195,6 +1197,26 @@ impl Database for PGDatabase {
                 &user_id.to_owned(),
             ],
         )?;
+        Ok(())
+    }
+
+    fn increment_statechain_sigcount(
+        &self,
+        owner_id: &Uuid
+    ) -> Result<()> {
+        let dbw = self.database_w()?;
+        let statement = dbw.prepare(&format!(
+            "UPDATE {} SET {} = {} + 1 WHERE {} = $1",
+            Table::StateChain.to_string(),
+            Column::SigCount.to_string(),
+            Column::SigCount.to_string(),
+            Column::OwnerId.to_string(),
+        ))?;
+
+        if statement.execute(&[owner_id])? == 0 {
+            return Err(SEError::DBError(UpdateFailed, owner_id.to_string()));
+        }
+
         Ok(())
     }
 

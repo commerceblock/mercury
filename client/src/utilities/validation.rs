@@ -1,5 +1,4 @@
 use bitcoin::Transaction;
-use uuid::Uuid;
 use crate::{error::CError, wallet::wallet::ElectrumxBox};
 
 use super::super::Result;

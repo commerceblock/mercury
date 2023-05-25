@@ -450,6 +450,12 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
+    fn increment_statechain_sigcount(
+        &self,
+        _owner_id: &uuid::Uuid
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
     fn get_statechain(&self, _statechain_id: uuid::Uuid) -> crate::Result<super::StateChain> {
         unimplemented!()
     }

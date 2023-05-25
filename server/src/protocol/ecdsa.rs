@@ -435,6 +435,10 @@ impl Ecdsa for SCE {
             let serialized_pk = PK::serialize_uncompressed(&pk);
             let shared_pk = GE::from_bytes(&serialized_pk[1..]);
             db.update_shared_pubkey(user_id,shared_pk.unwrap())?;
+        } else {
+            // upon deposit, this function is called before creating the statechain item in the table,
+            // so the default value for sigcount is 1
+            db.increment_statechain_sigcount(&user_id)?;
         }
 
         Ok(BlindedSignReply {

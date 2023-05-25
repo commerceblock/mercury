@@ -160,6 +160,10 @@ pub trait Database {
         user_id: &Uuid,
         state_chain: &StateChain,
     ) -> Result<()>;
+    fn increment_statechain_sigcount(
+        &self,
+        owner_id: &Uuid
+    ) -> Result<()>;
     fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain>;
     fn update_statechain_owner(
         &self,
