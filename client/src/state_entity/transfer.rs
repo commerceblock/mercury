@@ -644,8 +644,8 @@ pub fn blinded_transfer_receiver_repeat_keygen(
     let statechain_data: BlindedStateChainData =
         get_blinded_statechain(&wallet.client_shim, &transfer_msg3.statechain_id)?;
 
-    println!("statechain_data.sigcount: {}", statechain_data.sigcount);
-
+    // Check that the number of signatures matches the number of backup transactions
+    // (1 for the tx_backup_psm and 1 for each previous tx)
     if statechain_data.sigcount as usize != transfer_msg3.previous_txs.len() + 1 {
         return Err(CError::Generic(
             "The number of signatures for this statecoin obtained from SE does not match the number of backup transactions in the message".to_string()
@@ -683,9 +683,9 @@ pub fn blinded_transfer_receiver_repeat_keygen(
     }
 
     // Check validity of the backup transaction
-    let first_tx_hex = &transfer_msg3.previous_txs[0];
-    let first_tx = transaction_deserialise(first_tx_hex)?;
-    validation::verify_tx_backup_confirmed(&mut wallet.electrumx_client, &first_tx)?;
+    // let first_tx_hex = &transfer_msg3.previous_txs[0];
+    // let first_tx = transaction_deserialise(first_tx_hex)?;
+    // validation::verify_tx_backup_confirmed(&mut wallet.electrumx_client, &first_tx)?;
 
     // check inputs
     // check signatures
