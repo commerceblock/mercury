@@ -1220,6 +1220,12 @@ impl Database for PGDatabase {
         Ok(())
     }
 
+    fn get_statechain_sigcount(&self, statechain_id: Uuid) -> Result<i64> {
+        let sig_count =
+            self.get_1::<i64>(statechain_id, Table::StateChain, vec![Column::SigCount])?;
+        Ok(sig_count)
+    }
+
     fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain> {
         let (_, state_chain_str) = self.get_2::<i64, String>(
             statechain_id,

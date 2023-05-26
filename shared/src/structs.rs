@@ -378,6 +378,8 @@ pub struct BlindedStateChainData {
     pub amount: u64,
     /// The statechain of owner proof keys and signatures
     pub chain: Vec<State>,
+    /// The number of signatures generated for this statechain
+    pub sigcount: u64,
 }
 
 impl BlindedStateChainData {
@@ -385,6 +387,7 @@ impl BlindedStateChainData {
         Self{
             amount: 1000000,
             chain: vec![State::example()],
+            sigcount: 1,
         }
     }
 

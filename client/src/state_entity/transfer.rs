@@ -644,6 +644,14 @@ pub fn blinded_transfer_receiver_repeat_keygen(
     let statechain_data: BlindedStateChainData =
         get_blinded_statechain(&wallet.client_shim, &transfer_msg3.statechain_id)?;
 
+    println!("statechain_data.sigcount: {}", statechain_data.sigcount);
+
+    if statechain_data.sigcount as usize != transfer_msg3.previous_txs.len() + 1 {
+        return Err(CError::Generic(
+            "The number of signatures for this statecoin obtained from SE does not match the number of backup transactions in the message".to_string()
+        ))
+    }
+
     let tx_backup = transaction_deserialise(&transfer_msg3.tx_backup_psm.tx_hex)?;
     let tx_backup_id = tx_backup.txid();
 

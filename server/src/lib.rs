@@ -164,6 +164,7 @@ pub trait Database {
         &self,
         owner_id: &Uuid
     ) -> Result<()>;
+    fn get_statechain_sigcount(&self, statechain_id: Uuid) -> Result<i64>;
     fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain>;
     fn update_statechain_owner(
         &self,

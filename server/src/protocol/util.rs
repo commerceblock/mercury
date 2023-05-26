@@ -1235,10 +1235,12 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
     fn get_blinded_statechain(&self, statechain_id: Uuid) -> Result<BlindedStateChainData> {
         let state_chain = self.database.get_statechain_amount(statechain_id)?;
         let chain = state_chain.chain.get_chain().clone();
+        let sigcount = self.database.get_statechain_sigcount(statechain_id)?;
 
         Ok(BlindedStateChainData {
             amount: state_chain.amount as u64,
             chain,
+            sigcount: sigcount as u64,
         })
     }
 

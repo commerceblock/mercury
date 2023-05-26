@@ -456,6 +456,9 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
+    fn get_statechain_sigcount(&self, _statechain_id: uuid::Uuid) -> crate::Result<i64> {
+        unimplemented!()
+    }
     fn get_statechain(&self, _statechain_id: uuid::Uuid) -> crate::Result<super::StateChain> {
         unimplemented!()
     }
