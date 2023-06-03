@@ -319,8 +319,8 @@ pub fn transfer_receiver_repeat_keygen(
         "Failed to decode ScriptpubKey.",
     )))?;
     wallet
-        .se_backup_keys
-        .get_address_derivation(&back_up_rec_se_addr.to_string())
+        .se_proof_keys
+        .get_key_derivation_address(&back_up_rec_se_addr.to_string())
         .ok_or(CError::Generic(String::from(
             "Backup Tx receiving address not found in this wallet!",
         )))?;
