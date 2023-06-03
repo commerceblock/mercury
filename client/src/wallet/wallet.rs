@@ -67,7 +67,6 @@ pub struct Wallet {
 
     pub master_priv_key: ExtendedPrivKey,
     pub keys: KeyPathWithAddresses,           // Keys for general usage
-    pub se_backup_keys: KeyPathWithAddresses, // keys for use in State Entity back up transactions
     pub se_proof_keys: KeyPath,               // for use as State Entity proof keys
     pub se_key_shares: KeyPath, // for derivation of private key shares used in shared_keys
 
@@ -84,11 +83,6 @@ impl Wallet {
             .ckd_priv(&secp, ChildNumber::from_hardened_idx(0).unwrap())
             .unwrap();
         let keys = KeyPathWithAddresses::new(keys_master_ext_key);
-
-        let se_backup_keys_master_ext_key = master_priv_key
-            .ckd_priv(&secp, ChildNumber::from_hardened_idx(1).unwrap())
-            .unwrap();
-        let se_backup_keys = KeyPathWithAddresses::new(se_backup_keys_master_ext_key);
 
         let se_proof_keys_master_ext_key = master_priv_key
             .ckd_priv(&secp, ChildNumber::from_hardened_idx(2).unwrap())
@@ -110,7 +104,6 @@ impl Wallet {
             wallet_data_loc: wallet_data_loc.to_string(),
             master_priv_key,
             keys,
-            se_backup_keys,
             se_proof_keys,
             se_key_shares,
             shared_keys: vec![],
@@ -137,12 +130,6 @@ impl Wallet {
     /// serialize wallet to json
     pub fn to_json(&self) -> serde_json::Value {
         // get all encoded child indices for KeyPaths used in state entity protocols
-        let mut se_backup_keys_pos_encoded = Vec::new();
-        for (_, addr_derivation) in &self.se_backup_keys.addresses_derivation_map {
-            if addr_derivation.pos > self.se_backup_keys.last_derived_pos {
-                se_backup_keys_pos_encoded.push(addr_derivation.pos);
-            }
-        }
         let mut se_proof_keys_pos_encoded = Vec::new();
         for (_, key_derivation) in &self.se_proof_keys.key_derivation_map {
             if key_derivation.pos > self.se_proof_keys.last_derived_pos {
@@ -161,8 +148,6 @@ impl Wallet {
             "wallet_data_loc": self.wallet_data_loc,
             "master_priv_key": self.master_priv_key.to_string(),
             "keys_last_derived_pos": self.keys.last_derived_pos,
-            "se_backup_keys_last_derived_pos": self.se_backup_keys.last_derived_pos,
-            "se_backup_keys_pos_encoded": serde_json::to_string(&se_backup_keys_pos_encoded).unwrap(),
             "se_proof_keys_last_derivation_pos": self.se_proof_keys.last_derived_pos,
             "se_proof_keys_pos_encoded": serde_json::to_string(&se_proof_keys_pos_encoded).unwrap(),
             "se_key_shares_last_derivation_pos": self.se_key_shares.last_derived_pos,
@@ -189,13 +174,6 @@ impl Wallet {
         keys_master_ext_key.network = network.parse::<Network>().unwrap();
         let keys = KeyPathWithAddresses::new(keys_master_ext_key);
 
-        // se_backup_keys
-        let mut se_backup_keys_master_ext_key = master_priv_key
-            .ckd_priv(&secp, ChildNumber::from_hardened_idx(1).unwrap())
-            .unwrap();
-        se_backup_keys_master_ext_key.network = network.parse::<Network>().unwrap();
-        let se_backup_keys = KeyPathWithAddresses::new(se_backup_keys_master_ext_key);
-
         // se_proof_keys
         let mut se_proof_keys_master_ext_key = master_priv_key
             .ckd_priv(&secp, ChildNumber::from_hardened_idx(2).unwrap())
@@ -220,7 +198,6 @@ impl Wallet {
             wallet_data_loc: json["wallet_data_loc"].as_str().unwrap().to_string(),
             master_priv_key,
             keys,
-            se_backup_keys,
             se_proof_keys,
             se_key_shares,
             shared_keys: vec![],
@@ -231,24 +208,11 @@ impl Wallet {
         for _ in 0..json["keys_last_derived_pos"].as_u64().unwrap() {
             wallet.keys.get_new_address()?;
         }
-        for _ in 0..json["se_backup_keys_last_derived_pos"].as_u64().unwrap() {
-            wallet.se_backup_keys.get_new_address()?;
-        }
         for _ in 0..json["se_proof_keys_last_derivation_pos"].as_u64().unwrap() {
             wallet.se_proof_keys.get_new_key()?;
         }
         for _ in 0..json["se_key_shares_last_derivation_pos"].as_u64().unwrap() {
             wallet.se_key_shares.get_new_key()?;
-        }
-
-        let se_backup_keys_pos_str = json["se_backup_keys_pos_encoded"].as_str().unwrap();
-        if se_backup_keys_pos_str.len() != 2 {
-            // is not empty
-            let se_backup_keys_pos: Vec<u32> =
-                serde_json::from_str(se_backup_keys_pos_str).unwrap();
-            for pos in se_backup_keys_pos {
-                wallet.se_backup_keys.get_new_address_encoded_id(pos)?;
-            }
         }
 
         let se_proof_keys_pos_str = json["se_proof_keys_pos_encoded"].as_str().unwrap();
@@ -336,8 +300,11 @@ impl Wallet {
         let (proof_key, priv_key) = self
             .se_proof_keys
             .get_new_key_priv()?;
-        // add proof key to address map
-        let tx_backup_addr = Some(self.se_backup_keys.add_address(proof_key,priv_key)?);
+
+        let tx_backup_addr = Some(bitcoin::Address::p2wpkh(
+            &proof_key,
+            self.se_proof_keys.ext_priv_key.network,
+        )?);
 
         Ok(SCEAddress {tx_backup_addr, proof_key: proof_key.key})
     }
@@ -548,9 +515,7 @@ impl Wallet {
 
     /// return list of all addresses derived from keys in wallet
     fn get_all_wallet_addresses(&self) -> Vec<bitcoin::Address> {
-        let mut addresses = self.keys.get_all_addresses();
-        addresses.append(&mut self.se_backup_keys.get_all_addresses());
-        addresses
+        self.keys.get_all_addresses()
     }
 
     pub fn get_all_addresses_balance(
@@ -745,8 +710,6 @@ mod tests {
 
         let addr1 = wallet.keys.get_new_address().unwrap();
         let addr2 = wallet.keys.get_new_address().unwrap();
-        let backup_addr1 = wallet.se_backup_keys.get_new_address().unwrap();
-        let backup_addr2 = wallet.se_backup_keys.get_new_address().unwrap();
         let proof_key1 = wallet.se_proof_keys.get_new_key().unwrap();
         let proof_key2 = wallet.se_proof_keys.get_new_key().unwrap();
         let key_shares1 = wallet
@@ -791,27 +754,6 @@ mod tests {
             .keys
             .addresses_derivation_map
             .contains_key(&addr2.to_string()));
-
-        assert_eq!(
-            wallet.se_backup_keys.ext_priv_key.private_key.to_bytes(),
-            wallet_rebuilt
-                .se_backup_keys
-                .ext_priv_key
-                .private_key
-                .to_bytes()
-        );
-        assert_eq!(
-            wallet.se_backup_keys.last_derived_pos,
-            wallet_rebuilt.se_backup_keys.last_derived_pos
-        );
-        assert!(wallet_rebuilt
-            .se_backup_keys
-            .addresses_derivation_map
-            .contains_key(&backup_addr1.to_string()));
-        assert!(wallet_rebuilt
-            .se_backup_keys
-            .addresses_derivation_map
-            .contains_key(&backup_addr2.to_string()));
 
         assert_eq!(
             wallet.se_proof_keys.ext_priv_key.private_key.to_bytes(),
