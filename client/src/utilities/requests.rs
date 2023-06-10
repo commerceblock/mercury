@@ -4,6 +4,7 @@
 
 use floating_duration::TimeFormat;
 use serde;
+use std::time::Duration;
 use std::time::Instant;
 
 use super::super::ClientShim;
@@ -33,6 +34,8 @@ where
     if client_shim.auth_token.is_some() {
         b = b.bearer_auth(client_shim.auth_token.clone().unwrap());
     }
+
+    b = b.timeout(Duration::from_secs(300));
 
     // catch reqwest errors
     let value = match b.json(&body).send() {
@@ -81,6 +84,8 @@ where
     if client_shim.auth_token.is_some() {
         b = b.bearer_auth(client_shim.auth_token.clone().unwrap());
     }
+
+    b = b.timeout(Duration::from_secs(300));
 
     // catch reqwest errors
     let value = match b.send() {
