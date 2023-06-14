@@ -248,6 +248,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             conductor::get_swap_info,
             conductor::get_blinded_spend_signature,
             conductor::register_utxo,
+            conductor::blinded_register_utxo,
             conductor::deregister_utxo,
             conductor::swap_first_message,
             conductor::swap_second_message,
@@ -299,6 +300,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             conductor::get_swap_info,
             conductor::get_blinded_spend_signature,
             conductor::register_utxo,
+            conductor::blinded_register_utxo,
             conductor::deregister_utxo,
             conductor::swap_first_message,
             conductor::swap_second_message,
@@ -494,6 +496,7 @@ mock! {
         fn poll_swap(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapStatus>>;
         fn get_swap_info(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapInfo>>;
         fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> conductor::Result<()>;
+        fn blinded_register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> conductor::Result<()>;
         fn deregister_utxo(&self, statechain_id: &Uuid) -> conductor::Result<()>;
         fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> conductor::Result<()>;
         fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> conductor::Result<SCEAddress>;

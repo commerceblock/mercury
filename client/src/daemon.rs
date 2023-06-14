@@ -50,6 +50,7 @@ pub enum DaemonRequest {
     TransferReceiver(String),
     BlindedTransferReceiver(String),
     Swap(Uuid, u64, bool),
+    BlindedSwap(Uuid, u64, bool),
 }
 
 /// Example response object
@@ -342,6 +343,21 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                             statechain_id, swap_size
                         );
                         state_entity::conductor::do_swap(
+                            &mut wallet,
+                            &statechain_id,
+                            &swap_size,
+                            force_no_tor,
+                        )
+                        .unwrap();
+                        wallet.save();
+                        r.send(DaemonResponse::None)
+                    }
+                    DaemonRequest::BlindedSwap(statechain_id, swap_size, force_no_tor) => {
+                        debug!(
+                            "Daemon: Swapping {} with swap size {}",
+                            statechain_id, swap_size
+                        );
+                        state_entity::blinded_conductor::do_swap(
                             &mut wallet,
                             &statechain_id,
                             &swap_size,

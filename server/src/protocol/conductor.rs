@@ -80,6 +80,8 @@ pub trait Conductor {
     fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> Result<()>;
     fn deregister_utxo(&self, statechain_id: &Uuid) -> Result<()>;
 
+    fn blinded_register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> Result<()>;
+
     // Phase 1: Conductor waits until there is a large enough pool of registered UTXOs of the same size, when
     // such a pool is found Conductor generates a SwapToken and marks each UTXO as "in phase 1 of swap with id: x".
     // When a participant calls poll_utxo they see that their UTXO is involved in a swap. When they call
@@ -993,6 +995,53 @@ impl Conductor for SCE {
         };
     }
 
+    fn blinded_register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> Result<()> {
+
+        let mut guard = self.scheduler.as_ref().expect("scheduler is None").lock()?;
+        if guard.shutdown_requested {
+            return Err(SEError::SwapError(String::from("unable to register for swap - conductor is shutting down - please try later")));
+        }
+        let sig = &register_utxo_msg.signature;
+        let key_id = &register_utxo_msg.statechain_id;
+        let swap_size = &register_utxo_msg.swap_size;
+
+        let wall_version = Versioning::new(&register_utxo_msg.wallet_version).expect("invalid wallet version number");
+        let req_version = Versioning::new(&guard.wallet_requirement).expect("invalid wallet version number");
+
+        if wall_version < req_version {
+            return Err(SEError::SwapError(String::from("Incompatible wallet version: please upgrade to latest version")));
+        }
+
+        //Verify the signature
+        let _ = self.verify_statechain_sig(key_id, sig, None)?;
+
+        let sc_amount = self.database.get_statechain_amount(*key_id)?;
+        let amount: u64 = sc_amount.amount.clone() as u64;
+
+        // check if amount permitted
+        if !guard.permitted_groups.contains(&amount) {
+            return Err(SEError::SwapError(format!("Invalid coin amount for swap registration: {}. Permitted amounts: {:#?}",&amount,&guard.permitted_groups)));
+        }
+
+        /*
+        if !self.database.is_confirmed(&key_id)? {
+            self.verify_tx_confirmed(&key_id)?;
+            self.database.set_confirmed(&key_id)?;
+            // add to histogram
+            let mut guard = self.coin_value_info.as_ref().lock()?;
+            guard.increment(&sc_amount.amount);
+        }
+         */
+
+        let mut guard_coin_value_info = self.coin_value_info.as_ref().lock()?;
+        guard_coin_value_info.increment(&sc_amount.amount);
+
+        let _res = match guard.register_amount_swap_size(key_id, amount, *swap_size) {
+            Ok(_res) => return Ok(()),
+            Err(err) => return Err(err),
+        };
+    }
+
     fn deregister_utxo(&self, statechain_id: &Uuid) -> Result<()> {
         let mut guard = self.scheduler.as_ref().expect("scheduler is None").lock()?;
         guard.remove_statechain_info(statechain_id);
@@ -1283,6 +1332,23 @@ pub fn register_utxo(
 ) -> Result<Json<()>> {
     sc_entity.check_rate_fast("swap")?;
     match sc_entity.register_utxo(&register_utxo_msg.into_inner()) {
+        Ok(res) => {
+            let _ = sc_entity.update_swap_info();
+            return Ok(Json(res))
+        },
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Phase 0 of coinswap: Notify conductor of desire to take part in a swap with signature to prove ownership of statecoin.
+#[post("/blinded/swap/register-utxo", format = "json", data = "<register_utxo_msg>")]
+pub fn blinded_register_utxo(
+    sc_entity: State<SCE>,
+    register_utxo_msg: Json<RegisterUtxo>,
+) -> Result<Json<()>> {
+    sc_entity.check_rate_fast("swap")?;
+    match sc_entity.blinded_register_utxo(&register_utxo_msg.into_inner()) {
         Ok(res) => {
             let _ = sc_entity.update_swap_info();
             return Ok(Json(res))

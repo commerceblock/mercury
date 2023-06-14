@@ -25,7 +25,6 @@ use crate::state_entity::{
     api::{get_smt_proof, get_smt_root, get_statecoin, get_statechain, get_statechain_fee_info},
     util::{cosign_tx_input, verify_statechain_smt},
 };
-use crate::utilities::validation;
 use crate::wallet::{key_paths::funding_txid_to_int, wallet::Wallet};
 use crate::{utilities::requests, ClientShim};
 use bitcoin_hashes::hex::ToHex;

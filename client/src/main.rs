@@ -324,6 +324,24 @@ fn main() {
                 };
                 println!("\nSwap complete from StateChain ID: {}.", statechain_id);
             }
+        } else if matches.is_present("blinded-swap") {
+            if let Some(matches) = matches.subcommand_matches("blinded-swap") {
+                let statechain_id =
+                    Uuid::from_str(matches.value_of("state-chain-id").unwrap()).unwrap();
+                let swap_size = u64::from_str(matches.value_of("swap-size").unwrap()).unwrap();
+                let force_no_tor: bool = matches.is_present("force-no-tor");
+                match query_wallet_daemon(DaemonRequest::BlindedSwap(
+                    statechain_id,
+                    swap_size,
+                    force_no_tor,
+                ))
+                .unwrap()
+                {
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
+                    _ => {}
+                };
+                println!("\nBlinded Swap complete from StateChain ID: {}.", statechain_id);
+            }
         }
     //
     //     // backup
