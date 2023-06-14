@@ -44,12 +44,92 @@ pub trait SchemaExample{
 #[schemars(remote = "Uuid")]
 pub struct UuidDef(String);
 
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+pub struct Invoice{
+    pub payment_hash: String,
+    pub expires_at: u64,
+    pub bolt11: String
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+pub struct ReqInvoice{
+    pub amount: u64,
+    pub label: String,
+    pub description: String
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+pub struct RTLInvoice{
+    pub payment_hash: String,
+    pub expires_at: u64,
+    pub bolt11: String,
+    pub payment_secret: String,
+    pub warning_capacity: String
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+pub struct RTLData{
+    pub label: String,
+    pub bolt11: String,
+    pub payment_hash: String,
+    pub msatoshi: u64,
+    pub amount_msat: String,
+    pub status: String,
+    pub description: String,
+    pub expires_at: u64
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+pub struct RTLQuery{
+    pub invoices: Vec<RTLData>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+pub struct PODInfo {
+    #[schemars(with = "UuidDef")]
+    pub token_id: Uuid,
+    pub lightning_invoice: Invoice,
+    #[schemars(with = "AddressDef")]
+    pub btc_payment_address: String,
+    pub value: u64
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct PODStatus {
+    pub confirmed: bool,
+    pub amount: u64
+}
+
+impl PartialEq<bool> for PODStatus {
+    fn eq(&self, other: &bool) -> bool {
+        (self.confirmed && self.amount > 0) == *other
+    }
+}
+
+impl PartialEq<Self> for PODStatus {
+    fn eq(&self, other: &Self) -> bool {
+        (self.confirmed == other.confirmed) && (self.amount == other.amount)
+    }
+}
+
+impl PODStatus {
+    pub fn empty(&self) -> bool {
+        self.amount == 0
+    }
+}
+
 // structs for ids
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
 pub struct UserID {
     #[schemars(with = "UuidDef")]
     pub id: Uuid,
     pub challenge: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
+pub struct PODUserID {
+    #[schemars(with = "UuidDef")]
+    pub id: Uuid,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq, Default)]
@@ -693,6 +773,16 @@ pub struct SignSecondMsgRequest {
 pub struct DepositMsg1 {
     pub auth: String,
     pub proof_key: String,
+}
+
+/// Client -> SE
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct DepositMsg1POD {
+    #[schemars(with = "UuidDef")]
+    pub token_id: Uuid,
+    pub auth: String,
+    pub proof_key: String,
+    pub amount: u64
 }
 
 /// Client -> SE

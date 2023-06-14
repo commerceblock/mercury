@@ -70,7 +70,12 @@ use mockall::*;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::party_one::Party1Private;
 use multi_party_ecdsa::protocols::two_party_ecdsa::lindell_2017::{party_one, party_two};
 use rocket_contrib::databases::postgres;
-use shared_lib::{state_chain::*, structs::{TransferMsg3,TransferFinalizeData}, Root, structs::CoinValueInfo};
+use shared_lib::{
+    state_chain::*,
+    structs::CoinValueInfo,
+    structs::{PODInfo, PODStatus, TransferFinalizeData, TransferMsg3},
+    Root,
+};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 use crate::server::UserIDs;
@@ -115,7 +120,7 @@ pub trait Database {
     fn update_sighash(&self, user_id: &Uuid, sig_hash: Hash) -> Result<()>;
     fn update_s1_pubkey(&self, user_id: &Uuid, pubkey: &GE) -> Result<()>;
     fn get_lockbox_index(&self, user_id: &Uuid) -> Result<Option<usize>>;
-    fn update_lockbox_index(&self, user_id: &Uuid, lockbox_index: &usize)->Result<()>;
+    fn update_lockbox_index(&self, user_id: &Uuid, lockbox_index: &usize) -> Result<()>;
     fn get_s1_pubkey(&self, user_id: &Uuid) -> Result<GE>;
     fn update_user_backup_tx(&self, user_id: &Uuid, tx: Transaction) -> Result<()>;
     fn get_user_backup_tx(&self, user_id: Uuid) -> Result<Transaction>;
@@ -136,7 +141,7 @@ pub trait Database {
     fn get_user_auth(&self, user_id: &Uuid) -> Result<String>;
     fn is_confirmed(&self, statechain_id: &Uuid) -> Result<bool>;
     fn set_confirmed(&self, statechain_id: &Uuid) -> Result<()>;
-    fn get_challenge(&self, user_id: &Uuid) -> Result<String>;
+    fn get_challenge(&self, user_id: &Uuid) -> Result<Option<String>>;
     fn update_statechain_id(&self, user_id: &Uuid, statechain_id: &Uuid) -> Result<()>;
     fn get_statechain_amount(&self, statechain_id: Uuid) -> Result<StateChainAmount>;
     fn update_statechain_amount(
@@ -286,6 +291,14 @@ pub trait Database {
     fn get_statecoin_pubkey(&self, statechain_id: Uuid) -> Result<Option<String>>;
     fn update_ecdsa_master(&self, user_id: &Uuid, master_key: MasterKey1) -> Result<()>;
     fn get_sighash(&self, user_id: Uuid) -> Result<sha256d::Hash>;
+    fn init_pay_on_demand_info(&self, pod_info: &PODInfo) -> Result<()>;
+    fn get_pay_on_demand_info(&self, token_id: &Uuid) -> Result<PODInfo>;
+    fn get_pay_on_demand_status(&self, token_id: &Uuid) -> Result<PODStatus>;
+    fn set_pay_on_demand_status(&self, token_id: &Uuid, pod_status: &PODStatus) -> Result<()>;
+    fn get_pay_on_demand_confirmed(&self, token_id: &Uuid) -> Result<bool>;
+    fn set_pay_on_demand_confirmed(&self, token_id: &Uuid, confirmed: &bool) -> Result<()>;
+    fn get_pay_on_demand_amount(&self, token_id: &Uuid) -> Result<u64>;
+    fn set_pay_on_demand_amount(&self, token_id: &Uuid, amount: &u64) -> Result<()>;
 }
 
 pub mod structs {

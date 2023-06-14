@@ -305,7 +305,12 @@ pub fn transfer_receiver_repeat_keygen(
     let transfer_msg3 = &*transfer_msg3;
     // Get statechain data (will Err if statechain not yet finalized)
     let statechain_data: StateChainDataAPI =
-        get_statechain(&wallet.client_shim, &transfer_msg3.statechain_id)?;
+        match get_statechain(&wallet.client_shim, &transfer_msg3.statechain_id)
+        {
+            Ok(s) => s,
+            Err(e) => return Err(CError::StateEntityError(format!(
+            "get_statechain error: {}", &e)))
+    };
 
     let tx_backup = transaction_deserialise(&transfer_msg3.tx_backup_psm.tx_hex)?;
     // Ensure backup tx funds are sent to address owned by this wallet
@@ -402,8 +407,9 @@ pub fn transfer_receiver_repeat_keygen(
 
     // get SE/lockbox public key share
     let s1_pub: S1PubKey =
-        requests::postb(&wallet.client_shim, &format!("transfer/pubkey"), UserID { id: transfer_msg3.shared_key_id, challenge: None })?;
-
+        requests::postb(&wallet.client_shim, &format!("transfer/pubkey"), 
+        UserID { id: transfer_msg3.shared_key_id, challenge: None })?;
+        
     let msg4 = &mut TransferMsg4 {
         shared_key_id: transfer_msg3.shared_key_id,
         statechain_id: transfer_msg3.statechain_id,
@@ -418,8 +424,13 @@ pub fn transfer_receiver_repeat_keygen(
     msg4.encrypt_with_pubkey(&PublicKey::from_str(&s1_pub.key).unwrap())?;
     let msg4 = msg4;
 
-    let transfer_msg5: TransferMsg5 =
-        requests::postb(&wallet.client_shim, &format!("transfer/receiver"), msg4)?;
+    let transfer_msg5: TransferMsg5 = 
+        match requests::postb(&wallet.client_shim, &format!("transfer/receiver"), 
+        msg4) {
+            Ok(m) => m,
+            Err(e) => return Err(CError::StateEntityError(format!(
+            "transfer/receiver error: {}", &e)))
+    };
 
     // Update tx_backup_psm shared_key_id with new one
     let mut tx_backup_psm = transfer_msg3.tx_backup_psm.clone();

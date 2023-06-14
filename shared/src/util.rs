@@ -101,14 +101,7 @@ pub fn tx_withdraw_verify(
     
     // Check fee info
     let tx = transaction_deserialise(&tx_psm.tx_hex)?;
-    // If there is no withdrawal fee there should be 1 output only
     if fee_withdraw.to_owned() == 0 {
-        if tx.output.len() != 1 {
-              return Err(SharedLibError::FormatError(format!(
-                "Withdrawal fee is 0, expected withdrawal tx to have 1 output - withdrawal tx has {} outputs.",
-            tx.output.len()
-            )));
-        }
         return Ok(())
     }
 

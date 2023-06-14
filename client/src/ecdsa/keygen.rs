@@ -16,7 +16,7 @@ pub fn get_master_key(
     secret_key: &FE,
     value: &u64,
     protocol: Protocol,
-    solution: String
+    solution: &Option<String>
 ) -> Result<SharedKey> {
     get_master_key_repeat_keygen(shared_key_id, 
         client_shim, secret_key, value, protocol, solution, 0)
@@ -28,7 +28,7 @@ pub fn get_master_key_repeat_keygen(
     secret_key: &FE,
     value: &u64,
     protocol: Protocol,
-    solution: String,
+    solution: &Option<String>
     kg_reps: u32
 ) -> Result<SharedKey> {
     let mut key_gen_reply_1: KeyGenReply1;
@@ -41,7 +41,7 @@ pub fn get_master_key_repeat_keygen(
             KeyGenMsg1 {
                 shared_key_id: *shared_key_id,
                 protocol, 
-                solution: Some(solution.clone())
+                solution: solution.clone()
             },
         )?;
 
