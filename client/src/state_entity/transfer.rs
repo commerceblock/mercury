@@ -949,6 +949,30 @@ pub fn transfer_batch_sign(
     }
 }
 
+/// Sign data signalling intention to carry out transfer_batch protocol with given state chain
+pub fn blinded_transfer_batch_sign(
+    wallet: &mut Wallet,
+    statechain_id: &Uuid,
+    batch_id: &Uuid,
+) -> Result<StateChainSig> {
+    // First sign state chain
+    let shared_key = wallet.get_shared_key_by_statechain_id(statechain_id)?;
+
+    // Get proof key for signing
+    let proof_key_derivation = wallet
+        .se_proof_keys
+        .get_key_derivation(&PublicKey::from_str(&shared_key.proof_key.as_ref().unwrap()).unwrap());
+
+    match StateChainSig::new_transfer_batch_sig(
+        &proof_key_derivation.unwrap().private_key.key,
+        &batch_id,
+        &statechain_id,
+    ) {
+        Ok(r) => Ok(r),
+        Err(e) => Err(e.into()),
+    }
+}
+
 /// Request StateEntity start transfer_batch protocol
 pub fn transfer_batch_init(
     client_shim: &ClientShim,
