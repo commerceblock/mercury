@@ -506,7 +506,6 @@ pub mod tests {
         db.expect_update_keygen_first_msg().returning(|_,_| Ok(()));
         db.expect_update_s1_pubkey().returning(|_, _| Ok(()));
         db.expect_update_public_master().returning(|_,_| Ok(()));
-        db.expect_get_challenge().returning(move |_| Ok(challenge.clone()));
         db.expect_get_challenge().returning(move |_| Ok(Some(challenge.clone())));
         db.expect_get_keygen_second_msg().returning(|_| Err(SEError::Generic("error".to_string())));
         db.expect_set_keygen_second_msg().returning(|_,_| Ok(()));
@@ -680,7 +679,7 @@ pub mod tests {
         let challenge: String = "cc9391e5b30bfc533bafc5c7fa8d4af4".to_string();
         let mut db = MockDatabase::new();
         db.expect_set_connection_from_config().returning(|_| Ok(()));
-        db.expect_create_user_session().returning(|_, _, _, _, _| Ok(()));
+        db.expect_create_user_session().returning(|_, _, _, _, _, _| Ok(()));
         db.expect_get_user_auth()
            .returning(|_user_id| Ok(String::from("user_auth")));
         db.expect_get_lockbox_index().returning(|_| Ok(Some(0)));
