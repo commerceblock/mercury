@@ -177,7 +177,7 @@ impl POD for SCE {
 pub fn pod_token_init(sc_entity: State<SCE>, value: u64) -> Result<Json<PODInfo>> {
     sc_entity.check_rate_slow("pod_token_init")?;
     let token_id = Uuid::new_v4();
-    match sc_entity.pod_token_init(token_id, &value, None) {
+    match sc_entity.pod_token_init(token_id, &value) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -189,7 +189,7 @@ pub fn pod_token_init(sc_entity: State<SCE>, value: u64) -> Result<Json<PODInfo>
 pub fn pod_token_verify(sc_entity: State<SCE>, pod_token_id: String) -> Result<Json<PODStatus>> {
     sc_entity.check_rate_fast("pod_token_verify")?;
     let id = Uuid::from_str(&pod_token_id)?.into();
-    match sc_entity.pod_token_verify(None, &id) {
+    match sc_entity.pod_token_verify(&id) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }

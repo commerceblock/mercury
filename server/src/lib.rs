@@ -139,6 +139,7 @@ pub trait Database {
     fn get_statechain_id(&self, user_id: Uuid) -> Result<Uuid>;
     fn get_owner_id(&self, statechain_id: Uuid) -> Result<Uuid>;
     fn get_user_auth(&self, user_id: &Uuid) -> Result<String>;
+    fn get_user_value(&self, user_id: &Uuid) -> Result<u64>;
     fn is_confirmed(&self, statechain_id: &Uuid) -> Result<bool>;
     fn set_confirmed(&self, statechain_id: &Uuid) -> Result<()>;
     fn get_challenge(&self, user_id: &Uuid) -> Result<Option<String>>;
@@ -284,6 +285,7 @@ pub trait Database {
         finalized_data: TransferFinalizeData,
         user_ids: Arc<Mutex<UserIDs>>
     ) -> Result<()>;
+    fn get_user_session_value(&self, user_id: Uuid) -> Result<Option<u64>>;
     fn update_ecdsa_sign_first(
         &self,
         user_id: Uuid,

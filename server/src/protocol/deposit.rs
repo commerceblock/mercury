@@ -340,7 +340,7 @@ pub mod tests {
     use super::*;
     use crate::protocol::util::{
         mocks,
-        tests::{test_sc_entity, BACKUP_TX_NOT_SIGNED, BACKUP_TX_SIGNED},
+        tests::{test_sc_entity, test_sc_entity_pod, BACKUP_TX_NOT_SIGNED, BACKUP_TX_SIGNED},
     };
     use bitcoin::Transaction;
     use std::str::FromStr;

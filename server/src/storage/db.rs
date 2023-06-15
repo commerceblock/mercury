@@ -54,6 +54,7 @@ pub struct HDPos {
 pub enum Schema {
     StateChainEntity,
     Watcher,
+    PayOnDemand
 }
 impl Schema {
     pub fn to_string(&self) -> String {
