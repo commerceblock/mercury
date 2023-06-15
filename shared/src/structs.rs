@@ -701,7 +701,7 @@ pub struct KeyGenMsg1 {
     pub solution: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct KeyGenMsg2 {
     #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
@@ -709,7 +709,7 @@ pub struct KeyGenMsg2 {
     pub dlog_proof: DLogProof,
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct KeyGenReply2 {
     #[schemars(with = "KeyGenParty1Message2Def")]
     pub msg: party1::KeyGenParty1Message2,
