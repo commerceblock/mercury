@@ -179,7 +179,7 @@ impl From<NotUntil<'_, QuantaInstant>>
 
 
 /// DB error types
-#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone, PartialEq)]
 pub enum DBErrorType {
     /// No identifier
     NoDataForID,
