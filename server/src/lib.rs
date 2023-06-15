@@ -259,9 +259,23 @@ pub trait Database {
     fn get_recovery_data(&self, proofkey: String) -> Result<Vec<(Uuid,Option<Uuid>,Option<Transaction>)>>;
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
-    fn create_user_session(&self, user_id: &Uuid, auth: &String, 
-        proof_key: &String, challenge: &String, 
-        user_ids: Arc<Mutex<UserIDs>>) -> Result<()>;
+    fn create_user_session(
+        &self,
+        user_id: &Uuid,
+        auth: &String,
+        proof_key: &String,
+        challenge: &Option<String>,
+        user_ids: Arc<Mutex<UserIDs>>,
+        value: &Option<u64>,
+    ) -> Result<()>;
+    fn create_user_session_pod(
+        &self,
+        user_id: &Uuid,
+        auth: &String,
+        proof_key: &String,
+        user_ids: Arc<Mutex<UserIDs>>,
+        value: &u64,
+    ) -> Result<()>;
     // Create new UserSession to allow new owner to generate shared wallet
     fn transfer_init_user_session(
         &self,

@@ -32,7 +32,6 @@ use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 use std::collections::HashMap;
 use url::Url;
-use uuid::Uuid;
 use std::collections::HashSet;
 use std::default::Default;
 use governor::{Quota, clock::DefaultClock, state::keyed::DashMapStateStore};
@@ -267,8 +266,8 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             conductor::swap_first_message,
             conductor::swap_second_message,
             conductor::get_group_info,
-            pay_on_demand::pod_token_init,
-            pay_on_demand::pod_token_verify],
+            pay_on_deposit::pod_token_init,
+            pay_on_deposit::pod_token_verify],
         Mode::Core => routes_with_openapi![
             util::get_statechain,
             util::get_statechain_depth,
@@ -302,8 +301,8 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             transfer_batch::transfer_reveal_nonce,
             withdraw::withdraw_init,
             withdraw::withdraw_confirm,
-            pay_on_demand::pod_token_init,
-            pay_on_demand::pod_token_verify],
+            pay_on_deposit::pod_token_init,
+            pay_on_deposit::pod_token_verify],
         Mode::Conductor => routes_with_openapi![
             util::reset_test_dbs,
             util::reset_inram_data,

@@ -715,8 +715,6 @@ impl Database for MemoryDB {
         _auth: &String,
         _proof_key: &String,
         _challenge: &String,
-        _user_ids: Arc<Mutex<UserIDs>>
-        _challenge: &Option<String>,
         _user_ids: Arc<Mutex<UserIDs>>,
         _value: &Option<u64>,
     ) -> crate::Result<()> {

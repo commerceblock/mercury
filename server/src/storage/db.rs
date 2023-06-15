@@ -77,7 +77,6 @@ pub enum Table {
 }
 impl Table {
     pub fn to_string(&self) -> String {
-        match self {
         match self { 
             Table::PayOnDemand => format!(
                 "{:?}.{:?}",
@@ -2135,5 +2134,4 @@ impl Database for PGDatabase {
         )
     }
 
-}
 }
