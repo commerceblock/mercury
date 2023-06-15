@@ -28,7 +28,7 @@ use governor::{NotUntil, clock::{QuantaInstant}};
 
 
 /// State Entity library specific errors
-#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone, PartialEq)]
 pub enum SEError {
     /// Generic error from string error message
     Generic(String),
