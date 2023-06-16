@@ -7,7 +7,7 @@ use core::time;
 use std::thread;
 
 use bitcoin_hashes::hex::ToHex;
-use shared_lib::{swap_data::{SwapInfo, SwapStatus}, structs::{SCEAddress, SwapID}};
+use shared_lib::{swap_data::{SwapInfo, SwapStatus}, structs::{SCEAddress, SwapID}, commitment};
 use uuid::Uuid;
 
 use super::{super::Result, transfer};
@@ -110,7 +110,33 @@ pub fn do_swap(
 
     let receiver_addr = phase2::swap_second_message(&wallet, &swap_id, &my_bst_data, &bss)?;
 
-    println!("Receiver address: {}", receiver_addr.proof_key.to_hex());
+    // --- Phase 3 ---
+    //Wait until swap is in phase4 then transfer sender
+    loop {
+        match swap_poll_swap(&wallet.conductor_shim, &swap_id)? {
+            Some(v) => match v {
+                SwapStatus::Phase4 => {
+                    break;
+                }
+                _ => (),
+            },
+            None => (),
+        };
+        thread::sleep(time::Duration::from_secs(3));
+    }
+
+    let _ = transfer::blinded_transfer_sender(&mut wallet, statechain_id, receiver_addr, Some(swap_id.clone()) )?;
+
+    let mut commitment_data = statechain_id.to_string();
+    let mut sorted_sc_ids = info.swap_token.statechain_ids.clone();
+    sorted_sc_ids.sort();
+    for id in sorted_sc_ids {
+        commitment_data.push_str(&id.to_string());
+    }
+
+    let (commit, _nonce) = commitment::make_commitment(&commitment_data);
+
+    println!("Commitment: {}", commit);
 
     Ok(())
 
