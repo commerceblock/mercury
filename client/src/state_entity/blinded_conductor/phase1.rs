@@ -1,16 +1,12 @@
 use std::str::FromStr;
 
 use bitcoin::PublicKey;
-use shared_lib::{swap_data::{SwapStatus, SwapInfo, SwapMsg1}, structs::{SwapID, SCEAddress}, state_chain::StateChainSig, blinded_token::{BSTRequestorData, BlindedSpentTokenMessage}};
+use shared_lib::{swap_data::{SwapInfo, SwapMsg1}, structs::{SwapID, SCEAddress}, state_chain::StateChainSig, blinded_token::{BSTRequestorData, BlindedSpentTokenMessage}};
 use uuid::Uuid;
 
 use super::super::super::Result;
 
 use crate::{ClientShim, utilities::requests, wallet::wallet::Wallet, error::{CError, WalletErrorType}};
-
-pub fn swap_poll_swap(client_shim: &ClientShim, swap_id: &Uuid) -> Result<Option<SwapStatus>> {
-    requests::postb(&client_shim, &String::from("swap/poll/swap"), &SwapID{id: Some(*swap_id)})
-}
 
 pub fn swap_info(client_shim: &ClientShim, swap_id: &Uuid) -> Result<Option<SwapInfo>> {
     requests::postb(&client_shim, &String::from("swap/info"), &SwapID{id: Some(*swap_id)})

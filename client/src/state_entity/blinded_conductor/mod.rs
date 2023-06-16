@@ -1,16 +1,22 @@
 pub mod swap_init;
 pub mod phase0;
 pub mod phase1;
+pub mod phase2;
 
 use core::time;
 use std::thread;
 
-use shared_lib::{swap_data::SwapInfo, structs::SCEAddress};
+use bitcoin_hashes::hex::ToHex;
+use shared_lib::{swap_data::{SwapInfo, SwapStatus}, structs::{SCEAddress, SwapID}};
 use uuid::Uuid;
 
 use super::{super::Result, transfer};
 
-use crate::{wallet::wallet::Wallet, error::CError};
+use crate::{wallet::wallet::Wallet, error::CError, ClientShim, utilities::requests};
+
+pub fn swap_poll_swap(client_shim: &ClientShim, swap_id: &Uuid) -> Result<Option<SwapStatus>> {
+    requests::postb(&client_shim, &String::from("swap/poll/swap"), &SwapID{id: Some(*swap_id)})
+}
 
 pub fn do_swap(
     mut wallet: &mut Wallet,
@@ -23,8 +29,11 @@ pub fn do_swap(
         return Err(CError::SwapError("tor not enabled".to_string()));
     }
 
+    // --- Phase Swap Init ---
     // step 1
     swap_init::swap_register_utxo(&wallet, &statechain_id, &swap_size)?;
+
+    // --- Phase 0 ---
     let swap_id;
     //Wait for swap to commence
 
@@ -42,7 +51,8 @@ pub fn do_swap(
         thread::sleep(time::Duration::from_secs(3));
     }
 
-    //Wait for swap info to become available
+    // --- Phase 1 ---
+    // Wait for swap info to become available
     let info: SwapInfo;
 
     loop {
@@ -74,6 +84,33 @@ pub fn do_swap(
         &transfer_batch_sig,
         &address,
     )?;
+
+    // --- Phase 2 ---
+    //Wait until swap is in phase4 then transfer sender
+
+    loop {
+        match swap_poll_swap(&wallet.conductor_shim, &swap_id)? {
+            Some(v) => match v {
+                SwapStatus::Phase2 => {
+                    break;
+                }
+                _ => (),
+            },
+            None => (),
+        };
+        thread::sleep(time::Duration::from_secs(3));
+    }
+
+    let bss = phase2::swap_get_blinded_spend_signature(&wallet.conductor_shim, &swap_id, &statechain_id)?;
+
+    if with_tor {
+        wallet.client_shim.new_tor_id()?;
+        wallet.conductor_shim.new_tor_id()?;
+    }
+
+    let receiver_addr = phase2::swap_second_message(&wallet, &swap_id, &my_bst_data, &bss)?;
+
+    println!("Receiver address: {}", receiver_addr.proof_key.to_hex());
 
     Ok(())
 
