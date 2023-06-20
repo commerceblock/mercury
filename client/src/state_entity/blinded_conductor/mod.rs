@@ -2,6 +2,7 @@ pub mod swap_init;
 pub mod phase0;
 pub mod phase1;
 pub mod phase2;
+pub mod phase4;
 
 use core::time;
 use std::thread;
@@ -66,9 +67,9 @@ pub fn do_swap(
         thread::sleep(time::Duration::from_secs(3));
     }
 
-    let proof_key = wallet.se_proof_keys.get_new_key()?;
+    let (pub_proof_key, priv_proof_key) = wallet.se_proof_keys.get_new_key_priv()?;
 
-    let proof_key = bitcoin::secp256k1::PublicKey::from_slice(&proof_key.to_bytes().as_slice())?;
+    let proof_key = bitcoin::secp256k1::PublicKey::from_slice(&pub_proof_key.to_bytes().as_slice())?;
 
     let address = SCEAddress {
         tx_backup_addr: None,
@@ -136,7 +137,19 @@ pub fn do_swap(
 
     let (commit, _nonce) = commitment::make_commitment(&commitment_data);
 
-    println!("Commitment: {}", commit);
+    let batch_id = &swap_id;
+
+    // --- Phase 4 ---
+    let transfer_finalized_data = phase4::do_transfer_receiver(
+        &priv_proof_key,
+        wallet,
+        batch_id,
+        &commit,
+        &info.swap_token.statechain_ids,
+        &address,
+    )?;
+
+    // println!("Transfer finalized data: {:?}", transfer_finalized_data);
 
     Ok(())
 

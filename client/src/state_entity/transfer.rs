@@ -27,7 +27,7 @@ use crate::state_entity::{
 };
 use crate::wallet::{key_paths::funding_txid_to_int, wallet::Wallet};
 use crate::{utilities::requests, ClientShim};
-use bitcoin_hashes::hex::ToHex;
+use bitcoin_hashes::hex::{ToHex, FromHex};
 use shared_lib::ecies::Encryptable;
 use shared_lib::{ecies::WalletDecryptable, ecies::SelfEncryptable, state_chain::StateChainSig, structs::*, util::{transaction_serialise, transaction_deserialise}};
 use bitcoin::{Address, PublicKey};
@@ -261,11 +261,12 @@ pub fn blinded_transfer_sender(
         statechain_sig,
         statechain_id: statechain_id.to_owned(),
         tx_backup_psm: prepare_sign_msg.to_owned(),
-        rec_se_addr: receiver_addr,
+        rec_se_addr: receiver_addr.clone(),
         previous_txs: shared_key.previous_txs.clone(),
     };
 
-    let msg3_pubkey = transfer_msg3.get_public_key().unwrap().unwrap();
+    // let msg3_pubkey = transfer_msg3.get_public_key().unwrap().unwrap();
+    let msg3_pubkey = PublicKey::from_slice(&receiver_addr.proof_key.clone().serialize()).unwrap();
     let encrypted_msg3_bytes = transfer_msg3.to_encrypted_bytes(&msg3_pubkey).unwrap();
     let encrypted_msg3 = encrypted_msg3_bytes.to_hex();
 
@@ -431,6 +432,16 @@ pub fn transfer_get_msg(wallet: &mut Wallet, statechain_id: &Uuid) -> Result<Tra
     requests::postb(
         &wallet.client_shim,
         &format!("transfer/get_msg"),
+        &StatechainID {id: *statechain_id},
+    )
+}
+
+// Get the encrypted transfer message 3
+// created by the sender and stored in the SE database
+pub fn transfer_get_encrypted_msg(wallet: &mut Wallet, statechain_id: &Uuid) -> Result<String> {
+    requests::postb(
+        &wallet.client_shim,
+        &format!("transfer/get_encrypted_msg"),
         &StatechainID {id: *statechain_id},
     )
 }
@@ -642,6 +653,22 @@ pub fn blinded_transfer_receiver_repeat_keygen(
     // Get statechain data (will Err if statechain not yet finalized)
     let statechain_data: BlindedStateChainData =
         get_blinded_statechain(&wallet.client_shim, &transfer_msg3.statechain_id)?;
+
+    // let encrypted_msg3 = transfer_get_encrypted_msg(wallet, &transfer_msg3.statechain_id).unwrap();
+    
+    // let proof_key = bitcoin::PublicKey::from_slice(&transfer_msg3.rec_se_addr.proof_key.serialize()).unwrap();
+
+    // let key_der = wallet
+    //     .se_proof_keys
+    //     .get_key_derivation(&proof_key).unwrap();
+
+    // let priv_proof_key = key_der.private_key;
+
+    // let encrypted_msg3_bytes = Vec::<u8>::from_hex(&encrypted_msg3).unwrap();
+    // let msg3_from_server = TransferMsg3::from_encrypted_bytes(&priv_proof_key, &encrypted_msg3_bytes.as_slice());
+    // println!("Got transfer message from server: {:?}", msg3_from_server);
+    // println!("---");
+    // println!("Got transfer message from sender: {:?}", transfer_msg3);
 
     // Check that the number of signatures matches the number of backup transactions
     // (1 for the tx_backup_psm and 1 for each previous tx)
