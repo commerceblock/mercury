@@ -1435,6 +1435,15 @@ impl Database for PGDatabase {
         Self::deser(msg)
     }
 
+    fn get_encrypted_transfer_msg(&self, statechain_id: &Uuid) -> Result<String> {
+        let msg = self.get_1(
+            statechain_id.to_owned(),
+            Table::Transfer,
+            vec![Column::TransferMsg],
+        )?;
+        Ok(msg)
+    }
+
     fn get_transfer_msg_addr(&self, receive_addr: &str) -> Result<Vec<TransferMsg3>> {
         let dbr = self.database_r()?;
         let statement =

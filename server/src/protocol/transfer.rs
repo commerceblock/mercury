@@ -127,6 +127,9 @@ pub trait Transfer {
     /// API: Get the transfer message 3 set by update_transfer_msg
     fn transfer_get_msg(&self, statechain_id: Uuid) -> Result<TransferMsg3>;
 
+    /// API: Get the encrypted transfer message 3 set by update_transfer_msg from the receiver address
+    fn transfer_get_encrypted_msg(&self, statechain_id: Uuid) -> Result<String>;
+
     /// API: Get the transfer message 3 set by update_transfer_msg from the receiver address
     fn transfer_get_msg_addr(&self, receive_addr: String) -> Result<Vec<TransferMsg3>>;
 
@@ -833,6 +836,10 @@ impl Transfer for SCE {
         self.database.get_transfer_msg(&statechain_id)
     }
 
+    fn transfer_get_encrypted_msg(&self, statechain_id: Uuid) -> Result<String> {
+        self.database.get_encrypted_transfer_msg(&statechain_id)
+    }
+
     /// API: Get the transfer message 3 set by update_transfer_msg from the receiver address
     fn transfer_get_msg_addr(&self, receive_addr: String) -> Result<Vec<TransferMsg3>> {
         self.database.get_transfer_msg_addr(&receive_addr)
@@ -946,6 +953,20 @@ pub fn transfer_get_msg(
 ) -> Result<Json<TransferMsg3>> {
     sc_entity.check_rate_fast("transfer")?;
     match sc_entity.transfer_get_msg(statechain_id.id) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Get stored encrypted transfer message (TransferMsg3)
+#[post("/transfer/get_encrypted_msg", format = "json", data = "<statechain_id>")]
+pub fn transfer_get_encrypted_msg(
+    sc_entity: State<SCE>,
+    statechain_id: Json<StatechainID>,
+) -> Result<Json<String>> {
+    sc_entity.check_rate_fast("info")?;
+    match sc_entity.transfer_get_encrypted_msg(statechain_id.id) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }

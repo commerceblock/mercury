@@ -564,6 +564,12 @@ impl Database for MemoryDB {
     ) -> crate::Result<shared_lib::structs::TransferMsg3> {
         unimplemented!()
     }
+    fn get_encrypted_transfer_msg(
+        &self,
+        _statechain_id: &uuid::Uuid,
+    ) ->  crate::Result<String> {
+        unimplemented!()
+    }
     fn get_transfer_msg_addr(
         &self,
         _receive_addr: &str,

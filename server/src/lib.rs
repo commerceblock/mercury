@@ -202,6 +202,7 @@ pub trait Database {
     fn update_transfer_msg(&self, statechain_id: &Uuid, msg: &TransferMsg3) -> Result<()>;
     fn update_blinded_transfer_msg(&self, transfer_msg3: &EncryptedTransferMsg3) -> Result<()>;
     fn get_transfer_msg(&self, statechain_id: &Uuid) -> Result<TransferMsg3>;
+    fn get_encrypted_transfer_msg(&self, statechain_id: &Uuid) -> Result<String>;
     fn get_transfer_msg_addr(&self, receive_addr: &str) -> Result<Vec<TransferMsg3>>;
     fn create_transfer_batch_data(
         &self,
