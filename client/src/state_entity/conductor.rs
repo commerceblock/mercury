@@ -223,14 +223,7 @@ pub fn do_swap(
         thread::sleep(time::Duration::from_secs(3));
     }
 
-    let proof_key = wallet.se_proof_keys.get_new_key()?;
-
-    let proof_key = bitcoin::secp256k1::PublicKey::from_slice(&proof_key.to_bytes().as_slice())?;
-
-    let address = SCEAddress {
-        tx_backup_addr: None,
-        proof_key,
-    };
+    let address = wallet.get_new_state_entity_address()?;
 
     let transfer_batch_sig = transfer::transfer_batch_sign(wallet, &statechain_id, &swap_id)?;
 
