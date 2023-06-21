@@ -192,13 +192,15 @@ pub fn transfer_sender(
 
     let mut tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
 
+    let backup_receive_addr = bitcoin::Address::p2wpkh(
+        &PublicKey::from_slice(&receiver_addr.proof_key.serialize()).unwrap(),
+        wallet.get_bitcoin_network(),
+    )?;
+
     // Update prepare_sign_msg with new owners address, proof key
     prepare_sign_msg.protocol = Protocol::Transfer;
     match tx.output.get_mut(0) {
-        Some(v) => match receiver_addr.tx_backup_addr.clone() {
-            Some(v2) => v.script_pubkey = v2.script_pubkey(),
-            None => (),
-        },
+        Some(v) => v.script_pubkey = backup_receive_addr.script_pubkey(),
         None => (),
     };
     prepare_sign_msg.proof_key = Some(receiver_addr.proof_key.clone().to_string());
