@@ -126,7 +126,10 @@ pub fn deposit(
     debug!("Deposit: Set initial locktime: {}", init_locktime.to_string());
 
     // Make unsigned backup tx
-    let backup_receive_addr = wallet.se_backup_keys.get_new_address()?;
+    let backup_receive_addr = bitcoin::Address::p2wpkh(
+        &proof_key,
+        wallet.get_bitcoin_network(),
+    )?;
     
     let tx_backup_unsigned =
         tx_backup_build(&tx_funding_signed.txid(), &backup_receive_addr, &amount, &init_locktime, &withdraw_fee, &se_fee_info.address, &se_fee_info.backup_fee_rate)?;
