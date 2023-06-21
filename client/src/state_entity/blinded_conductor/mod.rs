@@ -76,6 +76,13 @@ pub fn do_swap(
         proof_key,
     };
 
+    let test_address = &bitcoin::Address::p2wpkh(
+        &pub_proof_key,
+        wallet.get_bitcoin_network(),
+    )?;
+
+    println!("--- test address: {}", test_address.to_string());
+
     let transfer_batch_sig = transfer::blinded_transfer_batch_sign(wallet, &statechain_id, &swap_id)?;
 
     let my_bst_data = phase1::swap_first_message(
@@ -149,7 +156,7 @@ pub fn do_swap(
         &address,
     )?;
 
-    // println!("Transfer finalized data: {:?}", transfer_finalized_data);
+    println!("Transfer finalized data: {:?}", transfer_finalized_data);
 
     Ok(())
 

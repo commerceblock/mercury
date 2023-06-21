@@ -214,13 +214,15 @@ pub fn blinded_transfer_sender(
 
     let mut tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
 
+    let backup_receive_addr = bitcoin::Address::p2wpkh(
+        &PublicKey::from_slice(&receiver_addr.proof_key.serialize()).unwrap(),
+        wallet.get_bitcoin_network(),
+    )?;
+
     // Update prepare_sign_msg with new owners address, proof key
     prepare_sign_msg.protocol = Protocol::Transfer;
     match tx.output.get_mut(0) {
-        Some(v) => match receiver_addr.tx_backup_addr.clone() {
-            Some(v2) => v.script_pubkey = v2.script_pubkey(),
-            None => (),
-        },
+        Some(v) => v.script_pubkey = backup_receive_addr.script_pubkey(),
         None => (),
     };
     prepare_sign_msg.proof_key = Some(receiver_addr.proof_key.clone().to_string());
@@ -265,24 +267,24 @@ pub fn blinded_transfer_sender(
         previous_txs: shared_key.previous_txs.clone(),
     };
 
+    // let encrypted_msg3_bytes_2 = Vec::<u8>::from_hex(&encrypted_msg3).unwrap();
+
+    // assert!(encrypted_msg3_bytes == encrypted_msg3_bytes_2);
+
+    //encrypt then make immutable
+    transfer_msg3.encrypt()?;
+    let transfer_msg3 = transfer_msg3;
+
     // let msg3_pubkey = transfer_msg3.get_public_key().unwrap().unwrap();
     let msg3_pubkey = PublicKey::from_slice(&receiver_addr.proof_key.clone().serialize()).unwrap();
     let encrypted_msg3_bytes = transfer_msg3.to_encrypted_bytes(&msg3_pubkey).unwrap();
     let encrypted_msg3 = encrypted_msg3_bytes.to_hex();
-
-    // let encrypted_msg3_bytes_2 = Vec::<u8>::from_hex(&encrypted_msg3).unwrap();
-
-    // assert!(encrypted_msg3_bytes == encrypted_msg3_bytes_2);
 
     let encrypted_transfer_msg3 = EncryptedTransferMsg3 {
         statechain_id: transfer_msg3.statechain_id,
         proof_key: transfer_msg3.statechain_sig.data.clone(),
         encrypted_transfer_msg3: encrypted_msg3,
     };
-
-    //encrypt then make immutable
-    transfer_msg3.encrypt()?;
-    let transfer_msg3 = transfer_msg3;
 
     // Mark funds as spent in wallet
     {
@@ -689,6 +691,9 @@ pub fn blinded_transfer_receiver_repeat_keygen(
     .ok_or(CError::Generic(String::from(
         "Failed to decode ScriptpubKey.",
     )))?;
+
+    println!("--- back_up_rec_se_addr: {}", back_up_rec_se_addr.to_string());
+
     wallet
         .se_proof_keys
         .get_key_derivation_address(&back_up_rec_se_addr.to_string())
