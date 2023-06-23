@@ -407,6 +407,12 @@ impl Transfer for SCE {
         // This is so the transfers can be finalized when all transfers in the batch are complete.
         if transfer_msg4.batch_data.is_some() {
             let batch_id = transfer_msg4.batch_data.clone().unwrap().id;
+
+            println!(
+                "[transfer] -- TRANSFER: Transfer as part of batch {}. State Chain ID: {}",
+                batch_id, statechain_id
+            );
+
             debug!(
                 "TRANSFER: Transfer as part of batch {}. State Chain ID: {}",
                 batch_id, statechain_id
@@ -427,6 +433,11 @@ impl Transfer for SCE {
 
         // If not batch then finalize transfer now
         } else {
+            println!(
+                "[transfer] -- TRANSFER: Single (non-batch) transfer. State Chain ID: {}",
+                 statechain_id
+            );
+
             debug!(
                 "TRANSFER: Single (non-batch) transfer. State Chain ID: {}",
                  statechain_id
@@ -454,6 +465,7 @@ impl Transfer for SCE {
 
         let statechain_id = finalized_data.statechain_id;
 
+        println!("TRANSFER_FINALIZE: State Chain ID: {}", statechain_id);
         info!("TRANSFER_FINALIZE: State Chain ID: {}", statechain_id);
 
         // Update state chain
@@ -466,6 +478,7 @@ impl Transfer for SCE {
         let sco = self.database.get_statechain_owner(statechain_id)?;
         let lockbox_url: Option<(Url, usize)> = self.get_lockbox_url(&sco.owner_id).map_err(|e| {dbg!("{}",&e); e} )?;
 
+        info!("---> TRANSFER_FINALIZE: Calling update_statechain_owner");
         self.database.update_statechain_owner(
             &statechain_id,
             state_chain.clone(),
@@ -650,6 +663,9 @@ impl Transfer for SCE {
         // This is so the transfers can be finalized when all transfers in the batch are complete.
         if transfer_msg4.batch_data.is_some() {
             let batch_id = transfer_msg4.batch_data.clone().unwrap().id;
+
+            println!("---> TRANSFER: Batch transfer. Batch ID: {}", batch_id);
+
             debug!(
                 "TRANSFER: Transfer as part of batch {}. State Chain ID: {}",
                 batch_id, statechain_id
@@ -670,6 +686,11 @@ impl Transfer for SCE {
 
         // If not batch then finalize transfer now
         } else {
+            println!(
+                "---> TRANSFER: Single (non-batch) transfer. State Chain ID: {}",
+                 statechain_id
+            );
+
             debug!(
                 "TRANSFER: Single (non-batch) transfer. State Chain ID: {}",
                  statechain_id
@@ -702,6 +723,7 @@ impl Transfer for SCE {
         // Update state chain
         let mut state_chain: StateChain = self.database.get_statechain(statechain_id)?;
 
+        println!("--- [state_chain] statechain_id: {:?}", statechain_id);
         state_chain.add(&finalized_data.statechain_sig)?;
 
         let new_user_id = finalized_data.new_shared_key_id;

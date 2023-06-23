@@ -216,6 +216,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             util::prepare_sign_tx,
             util::get_recovery_data,
             util::get_transfer_batch_status,
+            util::get_blinded_transfer_batch_status,
             util::get_coin_info,
             util::reset_test_dbs,
             util::reset_inram_data,
@@ -266,6 +267,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             util::prepare_sign_tx,
             util::get_recovery_data,
             util::get_transfer_batch_status,
+            util::get_blinded_transfer_batch_status,
             util::get_coin_info,
             util::reset_test_dbs,
             util::reset_inram_data,
@@ -550,6 +552,10 @@ mock! {
             transfer_batch_init_msg: TransferBatchInitMsg,
         ) -> transfer_batch::Result<()>;
         fn finalize_batch(
+            &self,
+            batch_id: Uuid,
+        ) -> transfer_batch::Result<()>;
+        fn finalize_blinded_batch(
             &self,
             batch_id: Uuid,
         ) -> transfer_batch::Result<()>;

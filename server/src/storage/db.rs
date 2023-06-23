@@ -1243,6 +1243,9 @@ impl Database for PGDatabase {
         state_chain: StateChain,
         new_user_id: &Uuid,
     ) -> Result<()> {
+
+        println!("[db] --- Updating statechain owner");
+
         self.update(
             statechain_id,
             Table::StateChain,
