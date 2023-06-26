@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use super::{super::Result, transfer};
 
-use crate::{wallet::wallet::Wallet, error::CError, ClientShim, utilities::requests};
+use crate::{wallet::wallet::Wallet, error::CError, ClientShim, utilities::requests, state_entity::api::{get_transfer_batch_status, get_blinded_transfer_batch_status}};
 
 pub fn swap_poll_swap(client_shim: &ClientShim, swap_id: &Uuid) -> Result<Option<SwapStatus>> {
     requests::postb(&client_shim, &String::from("swap/poll/swap"), &SwapID{id: Some(*swap_id)})
@@ -75,13 +75,6 @@ pub fn do_swap(
         tx_backup_addr: None,
         proof_key,
     };
-
-    let test_address = &bitcoin::Address::p2wpkh(
-        &pub_proof_key,
-        wallet.get_bitcoin_network(),
-    )?;
-
-    println!("--- test address: {}", test_address.to_string());
 
     let transfer_batch_sig = transfer::blinded_transfer_batch_sign(wallet, &statechain_id, &swap_id)?;
 
@@ -156,7 +149,32 @@ pub fn do_swap(
         &address,
     )?;
 
-    println!("Transfer finalized data: {:?}", transfer_finalized_data);
+    //Wait until swap is in phase End
+    loop {
+        match swap_poll_swap(&wallet.conductor_shim, &swap_id)? {
+            Some(v) => match v {
+                SwapStatus::End => {
+                    break;
+                }
+                _ => (),
+            },
+            None => break,
+        };
+        thread::sleep(time::Duration::from_secs(3));
+    }
+
+    //Confirm batch transfer status and finalize the transfer in the wallet
+    let bt_status = get_blinded_transfer_batch_status(&wallet.client_shim, &batch_id)?;
+
+    if !bt_status.finalized {
+        return Err(CError::SwapError(
+            "batch transfer not finalized".to_string(),
+        ));
+    }
+
+    transfer::blinded_transfer_receiver_finalize(&mut wallet, transfer_finalized_data)?;
+
+    println!("Swap completed");
 
     Ok(())
 

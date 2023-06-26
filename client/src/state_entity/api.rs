@@ -132,6 +132,14 @@ pub fn get_transfer_batch_status(
     requests::get(client_shim, &format!("info/transfer-batch/{}", batch_id))
 }
 
+/// Get blinded transaction batch session status
+pub fn get_blinded_transfer_batch_status(
+    client_shim: &ClientShim,
+    batch_id: &Uuid,
+) -> Result<TransferBatchDataAPI> {
+    requests::get(client_shim, &format!("/blinded/info/transfer-batch/{}", batch_id))
+}
+
 /// Reset the state entity's database and in-memory data
 pub fn reset_data(client_shim: &ClientShim) -> Result<()> {
     requests::get(client_shim, "test/reset-db")

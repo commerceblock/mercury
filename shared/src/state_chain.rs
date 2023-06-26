@@ -114,7 +114,23 @@ impl StateChain {
     pub fn add(&mut self, statechain_sig: &StateChainSig) -> Result<()> {
         // verify previous state has signature and signs for new proof_key
         let prev_proof_key: &String = &self.get_tip().data;
-        statechain_sig.verify(prev_proof_key)?;
+
+        // println!("---");
+        // for c in &self.chain {
+        //     println!("--- [state_chain] statechain vector: {:?}", c);
+        // }
+        // println!("---");      
+
+        // println!("--- [state_chain] statechain tip: {:?}", &self.get_tip()); 
+
+        // println!("--- [state_chain] prev_proof_key used to verify statechain_sig: {}", prev_proof_key);
+        // println!("--- [state_chain] statechain_sig.sig: {:?}", statechain_sig.sig);
+        let y = statechain_sig.verify(prev_proof_key);
+
+        match y {
+            Ok(_) => { println!("statechain_sig.verify OK"); },
+            Err(e) => { println!("ERROR statechain_sig.verify: {:?}", e); return Err(e); },
+        }
 
         // add sig to current tip
         self.get_mut_tip().next_state = Some(statechain_sig.clone());

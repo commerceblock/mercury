@@ -27,10 +27,11 @@ use crate::state_entity::{
 };
 use crate::wallet::{key_paths::funding_txid_to_int, wallet::Wallet};
 use crate::{utilities::requests, ClientShim};
+use bitcoin::secp256k1::{Secp256k1, All};
 use bitcoin_hashes::hex::{ToHex, FromHex};
 use shared_lib::ecies::Encryptable;
 use shared_lib::{ecies::WalletDecryptable, ecies::SelfEncryptable, state_chain::StateChainSig, structs::*, util::{transaction_serialise, transaction_deserialise}};
-use bitcoin::{Address, PublicKey};
+use bitcoin::{Address, PublicKey, secp256k1};
 use curv::elliptic::curves::traits::{ECPoint, ECScalar};
 use curv::{FE, GE};
 use std::str::FromStr;
@@ -197,6 +198,15 @@ pub fn blinded_transfer_sender(
         &receiver_addr.proof_key.clone().to_string(),
     )?;
 
+    let pubkey = 
+        proof_key_derivation
+        .ok_or(CError::WalletError(WalletErrorType::KeyNotFound))?
+        .private_key.public_key(&Secp256k1::<All>::new());
+
+    println!("--- [blinded_transfer] statechain_id: {:?}", statechain_id);
+    println!("--- [blinded_transfer] pubkey derived from privkey used to sign the statechain_sig: {}", pubkey.to_string());
+    println!("--- [blinded_transfer] statechain_sig.sig: {:?}", statechain_sig.sig);
+
     // Init transfer: Send statechain signature or batch data
     let mut transfer_msg2: TransferMsg2 = requests::postb(
         &wallet.client_shim,
@@ -342,6 +352,15 @@ pub fn transfer_sender(
         &String::from("TRANSFER"),
         &receiver_addr.proof_key.clone().to_string(),
     )?;
+
+    let pubkey = 
+        proof_key_derivation
+        .ok_or(CError::WalletError(WalletErrorType::KeyNotFound))?
+        .private_key.public_key(&Secp256k1::<All>::new());
+
+    println!("--- [transfer] statechain_id: {:?}", statechain_id);
+    println!("--- [transfer] pubkey derived from privkey used to sign the statechain_sig: {}", pubkey.to_string());
+    println!("--- [transfer] statechain_sig.sig: {:?}", statechain_sig.sig);
 
     // Init transfer: Send statechain signature or batch data
     let mut transfer_msg2: TransferMsg2 = requests::postb(
