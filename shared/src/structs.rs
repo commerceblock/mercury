@@ -863,6 +863,21 @@ pub struct TransferMsg4 {
     pub batch_data: Option<BatchData>,
 }
 
+/// Receiver -> State Entity
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct BlindedTransferMsg4 {
+    #[schemars(with = "UuidDef")]
+    pub shared_key_id: Uuid,
+    #[schemars(with = "UuidDef")]
+    pub statechain_id: Uuid,
+    #[schemars(with = "FEDef")]
+    pub t2: FESer, // t2 = t1*o2_inv = o1*x1*o2_inv
+    pub statechain_sig: StateChainSig,
+    #[schemars(with = "GEDef")]
+    pub o2_pub: GE,
+    pub batch_data: Option<BatchData>,
+}
+
 /// State Entity -> Lockbox
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct KUSendMsg {
@@ -956,6 +971,31 @@ impl TransferFinalizeData{
     }
 }
 
+/// Struct holds data when transfer is complete but not yet finalized
+#[derive(Serialize, Deserialize, Debug, Clone, JsonSchema, PartialEq)]
+#[schemars(example = "Self::example")]
+pub struct BlindedTransferFinalizeData {
+    #[schemars(with = "UuidDef")]
+    pub new_shared_key_id: Uuid,
+    #[schemars(with = "UuidDef")]
+    pub statechain_id: Uuid,
+    pub statechain_sig: StateChainSig,
+    #[schemars(with = "FEDef")]
+    pub s2: FE,
+    pub batch_data: Option<BatchData>,
+}
+
+impl BlindedTransferFinalizeData{
+    pub fn example() -> Self{
+        Self{
+            new_shared_key_id: Uuid::new_v4(), 
+            statechain_id: Uuid::new_v4(),
+            statechain_sig: StateChainSig::example(),
+            s2: FE::new_random(),
+            batch_data: None
+        }
+    }
+}
 
 /// Data present if transfer is part of an atomic batch transfer
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
@@ -1116,6 +1156,32 @@ impl SelfEncryptable for TransferMsg4 {
 }
 
 impl SelfEncryptable for &mut TransferMsg4 {
+    fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) -> crate::ecies::Result<()> {
+        (**self).decrypt(privkey)
+    }
+    fn encrypt_with_pubkey(
+        &mut self,
+        pubkey: &crate::ecies::PublicKey,
+    ) -> crate::ecies::Result<()> {
+        (**self).encrypt_with_pubkey(pubkey)
+    }
+}
+
+impl Encryptable for BlindedTransferMsg4 {}
+impl SelfEncryptable for BlindedTransferMsg4 {
+    fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) -> crate::ecies::Result<()> {
+        self.t2.decrypt(privkey)
+    }
+
+    fn encrypt_with_pubkey(
+        &mut self,
+        pubkey: &crate::ecies::PublicKey,
+    ) -> crate::ecies::Result<()> {
+        self.t2.encrypt_with_pubkey(pubkey)
+    }
+}
+
+impl SelfEncryptable for &mut BlindedTransferMsg4 {
     fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) -> crate::ecies::Result<()> {
         (**self).decrypt(privkey)
     }

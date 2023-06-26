@@ -106,7 +106,7 @@ pub trait Transfer {
     ///     - Check new Owner's state chain is correct
     ///     - Perform 2P-ECDSA key rotation
     ///     - Return new public shared key S2
-    fn blinded_transfer_receiver(&self, transfer_msg4: TransferMsg4) -> Result<TransferMsg5>;
+    fn blinded_transfer_receiver(&self, transfer_msg4: BlindedTransferMsg4) -> Result<TransferMsg5>;
 
     /// Update DB and SMT after successful transfer.
     /// This function is called immediately in the regular transfer case or after confirmation of atomic
@@ -116,7 +116,7 @@ pub trait Transfer {
     /// Update DB
     /// This function is called immediately in the regular transfer case or after confirmation of atomic
     /// transfers completion in the batch transfer case.
-    fn blinded_transfer_finalize(&self, finalized_data: &TransferFinalizeData) -> Result<()>;
+    fn blinded_transfer_finalize(&self, finalized_data: &BlindedTransferFinalizeData) -> Result<()>;
 
     /// API: Update the state entity database with transfer message 3
     fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> Result<()>;
@@ -552,7 +552,7 @@ impl Transfer for SCE {
         Ok(())
     }
 
-    fn blinded_transfer_receiver(&self, mut transfer_msg4: TransferMsg4) -> Result<TransferMsg5> {
+    fn blinded_transfer_receiver(&self, mut transfer_msg4: BlindedTransferMsg4) -> Result<TransferMsg5> {
 
         let user_id = transfer_msg4.shared_key_id;
         let statechain_id = transfer_msg4.statechain_id;
@@ -650,12 +650,11 @@ impl Transfer for SCE {
         // Create user ID for new UserSession (receiver of transfer)
         let new_shared_key_id = Uuid::new_v4();
 
-        let finalized_data = TransferFinalizeData {
+        let finalized_data = BlindedTransferFinalizeData {
             new_shared_key_id: new_shared_key_id.clone(),
             statechain_id: statechain_id.clone(),
             statechain_sig: td.statechain_sig,
             s2,
-            new_tx_backup_hex: transfer_msg4.tx_backup_hex,
             batch_data: transfer_msg4.batch_data.clone(),
         };
 
@@ -663,8 +662,6 @@ impl Transfer for SCE {
         // This is so the transfers can be finalized when all transfers in the batch are complete.
         if transfer_msg4.batch_data.is_some() {
             let batch_id = transfer_msg4.batch_data.clone().unwrap().id;
-
-            println!("---> TRANSFER: Batch transfer. Batch ID: {}", batch_id);
 
             debug!(
                 "TRANSFER: Transfer as part of batch {}. State Chain ID: {}",
@@ -679,18 +676,13 @@ impl Transfer for SCE {
                 )));
             }
 
-            self.database.update_finalize_batch_data(
+            self.database.update_blinded_finalize_batch_data(
                 &statechain_id,
                 &finalized_data,
             )?;
 
         // If not batch then finalize transfer now
         } else {
-            println!(
-                "---> TRANSFER: Single (non-batch) transfer. State Chain ID: {}",
-                 statechain_id
-            );
-
             debug!(
                 "TRANSFER: Single (non-batch) transfer. State Chain ID: {}",
                  statechain_id
@@ -714,7 +706,7 @@ impl Transfer for SCE {
     /// Update DB 
     /// This function is called immediately in the regular transfer case or after confirmation of atomic
     /// transfers completion in the batch transfer case.
-    fn blinded_transfer_finalize(&self, finalized_data: &TransferFinalizeData) -> Result<()> {
+    fn blinded_transfer_finalize(&self, finalized_data: &BlindedTransferFinalizeData) -> Result<()> {
               
         let statechain_id = finalized_data.statechain_id;
 
@@ -754,7 +746,7 @@ impl Transfer for SCE {
 
         // Create new UserSession to allow new owner to generate shared wallet
 
-        self.database.transfer_init_user_session(
+        self.database.transfer_init_blinded_user_session(
             &new_user_id,
             &statechain_id,
             finalized_data.to_owned(),
@@ -929,7 +921,7 @@ pub fn transfer_receiver(
 #[post("/blinded/transfer/receiver", format = "json", data = "<transfer_msg4>")]
 pub fn blinded_transfer_receiver(
     sc_entity: State<SCE>,
-    transfer_msg4: Json<TransferMsg4>,
+    transfer_msg4: Json<BlindedTransferMsg4>,
 ) -> Result<Json<TransferMsg5>> {
     sc_entity.check_rate_fast("transfer")?;
     match sc_entity.blinded_transfer_receiver(transfer_msg4.into_inner()) {

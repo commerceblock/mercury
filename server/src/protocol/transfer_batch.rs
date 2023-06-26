@@ -108,16 +108,13 @@ impl BatchTransfer for SCE {
     }
 
     fn finalize_batch(&self, batch_id: Uuid) -> Result<()> {
-        println!("TRANSFER_FINALIZE_BATCH: ID: {}", batch_id);
         debug!("TRANSFER_FINALIZE_BATCH: ID: {}", batch_id);
 
         let fbd = self.database.get_finalize_batch_data(batch_id)?;
 
-        println!("TRANSFER_FINALIZE_BATCH: data:");
         debug!("TRANSFER_FINALIZE_BATCH: data: {:?}", fbd);
 
         for finalized_data in fbd.finalized_data_vec.clone() {
-            println!("TRANSFER_FINALIZE_BATCH: doing transfer_finalize for");
             debug!("TRANSFER_FINALIZE_BATCH: doing transfer_finalize for {:?}", finalized_data);
             self.transfer_finalize(&finalized_data)?;
         }
@@ -131,21 +128,17 @@ impl BatchTransfer for SCE {
 
     fn finalize_blinded_batch(&self, batch_id: Uuid) -> Result<()> {
         debug!("TRANSFER_FINALIZE_BATCH: ID: {}", batch_id);
-        //println!("---> TRANSFER_FINALIZE_BATCH: ID");
-
-        let fbd = self.database.get_finalize_batch_data(batch_id)?;
+        
+        let fbd = self.database.get_blinded_finalize_batch_data(batch_id)?;
 
         debug!("TRANSFER_FINALIZE_BATCH: data: {:?}", fbd);
-        //println!("---> TRANSFER_FINALIZE_BATCH: data");
 
         for finalized_data in fbd.finalized_data_vec.clone() {
             debug!("TRANSFER_FINALIZE_BATCH: doing transfer_finalize for {:?}", finalized_data);
-            //println!("---> TRANSFER_FINALIZE_BATCH: doing transfer_finalize for");
             self.blinded_transfer_finalize(&finalized_data)?;
         }
 
         debug!("TRANSFER_FINALIZE_BATCH: updating database for batch ID: {}", batch_id);
-        //println!("---> TRANSFER_FINALIZE_BATCH: updating database for batch ID");
         self.database
             .update_transfer_batch_finalized(&batch_id, &true)?;
 

@@ -3,8 +3,10 @@
 use crate::storage::db::Table;
 use crate::Database;
 use crate::PGDatabase;
+use crate::structs::BlindedTransferFinalizeBatchData;
 use monotree::database::{Database as MonotreeDatabase, MemCache, MemoryDB};
 use monotree::Errors;
+use shared_lib::structs::BlindedTransferFinalizeData;
 use shared_lib::structs::EncryptedTransferMsg3;
 use std::collections::HashMap;
 use shared_lib::structs::{CoinValueInfo,TransferFinalizeData};
@@ -702,6 +704,14 @@ impl Database for MemoryDB {
         unimplemented!()
     }
 
+
+    fn get_blinded_finalize_batch_data(
+        &self, 
+        _batch_id: uuid::Uuid
+    ) -> crate::Result<BlindedTransferFinalizeBatchData> {
+        unimplemented!()
+    }
+
     fn get_sc_transfer_finalize_data(
         &self,
         _statechain_id: &uuid::Uuid
@@ -710,10 +720,24 @@ impl Database for MemoryDB {
         unimplemented!()
     }
 
+    fn get_sc_blinded_transfer_finalize_data(
+        &self,
+        _statechain_id: &uuid::Uuid
+    ) -> crate::Result<BlindedTransferFinalizeData>{
+        unimplemented!()
+    }
+
     fn update_finalize_batch_data(
         &self,
-        _batch_id: &uuid::Uuid,
+        _statechain_id: &uuid::Uuid,
         _finalized_data: &TransferFinalizeData,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn update_blinded_finalize_batch_data(
+        &self,
+        _statechain_id: &uuid::Uuid,
+        _finalized_data: &BlindedTransferFinalizeData,
     ) -> crate::Result<()> {
         unimplemented!()
     }
@@ -751,6 +775,15 @@ impl Database for MemoryDB {
         _new_user_id: &uuid::Uuid,
         _statechain_id: &uuid::Uuid,
         _finalized_data: TransferFinalizeData,
+        _user_ids: Arc<Mutex<UserIDs>>
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn transfer_init_blinded_user_session(
+        &self,
+        _new_user_id: &uuid::Uuid,
+        _statechain_id: &uuid::Uuid,
+        _finalized_data: BlindedTransferFinalizeData,
         _user_ids: Arc<Mutex<UserIDs>>
     ) -> crate::Result<()> {
         unimplemented!()

@@ -802,13 +802,12 @@ pub fn blinded_transfer_receiver_repeat_keygen(
     let s1_pub: S1PubKey =
         requests::postb(&wallet.client_shim, &format!("transfer/pubkey"), UserID { id: transfer_msg3.shared_key_id, challenge: None })?;
 
-    let msg4 = &mut TransferMsg4 {
+    let msg4 = &mut BlindedTransferMsg4 {
         shared_key_id: transfer_msg3.shared_key_id,
         statechain_id: transfer_msg3.statechain_id,
         t2: t2_encryptable,
         statechain_sig: transfer_msg3.statechain_sig.clone(),
         o2_pub,
-        tx_backup_hex: transfer_msg3.tx_backup_psm.tx_hex.clone(),
         batch_data: batch_data.to_owned(),
     };
 

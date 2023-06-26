@@ -529,7 +529,7 @@ mock! {
         ) -> transfer::Result<TransferMsg5>;
         fn blinded_transfer_receiver(
             &self,
-            transfer_msg4: TransferMsg4,
+            transfer_msg4: BlindedTransferMsg4,
         ) -> transfer::Result<TransferMsg5>;
         fn transfer_finalize(
             &self,
@@ -537,7 +537,7 @@ mock! {
         ) -> transfer::Result<()>;
         fn blinded_transfer_finalize(
             &self,
-            finalized_data: &TransferFinalizeData,
+            finalized_data: &BlindedTransferFinalizeData,
         ) -> transfer::Result<()>;
         fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> transfer::Result<()>;
         fn blinded_transfer_update_msg(&self, transfer_msg3: EncryptedTransferMsg3) -> transfer::Result<()>;

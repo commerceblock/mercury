@@ -58,7 +58,7 @@ pub type Hash = bitcoin::hashes::sha256d::Hash;
 
 use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::PostgresConnectionManager;
-use shared_lib::structs::EncryptedTransferMsg3;
+use shared_lib::structs::{EncryptedTransferMsg3, BlindedTransferFinalizeData};
 
 use crate::storage::db::Alpha;
 use bitcoin::hashes::sha256d;
@@ -254,14 +254,24 @@ pub trait Database {
     fn get_transfer_batch_start_time(&self, batch_id: &Uuid) -> Result<NaiveDateTime> ;
     fn get_batch_transfer_statechain_ids(&self, batch_id: &Uuid) -> Result<HashSet<Uuid>>;
     fn get_finalize_batch_data(&self, batch_id: Uuid) -> Result<TransferFinalizeBatchData>;
+    fn get_blinded_finalize_batch_data(&self, batch_id: Uuid) -> Result<BlindedTransferFinalizeBatchData>;
     fn get_sc_transfer_finalize_data(
         &self,
         statechain_id: &Uuid
     ) -> Result<TransferFinalizeData>;
+    fn get_sc_blinded_transfer_finalize_data(
+        &self,
+        statechain_id: &Uuid
+    ) -> Result<BlindedTransferFinalizeData>;
     fn update_finalize_batch_data(
         &self,
         statechain_id: &Uuid,
         finalized_data: &TransferFinalizeData,
+    ) -> Result<()>;
+    fn update_blinded_finalize_batch_data(
+        &self,
+        statechain_id: &Uuid,
+        finalized_data: &BlindedTransferFinalizeData,
     ) -> Result<()>;
     fn update_transfer_batch_finalized(&self, batch_id: &Uuid, b_finalized: &bool) -> Result<()>;
     fn get_statechain_owner(&self, statechain_id: Uuid) -> Result<StateChainOwner>;
@@ -277,6 +287,13 @@ pub trait Database {
         new_user_id: &Uuid,
         statechain_id: &Uuid,
         finalized_data: TransferFinalizeData,
+        user_ids: Arc<Mutex<UserIDs>>
+    ) -> Result<()>;
+    fn transfer_init_blinded_user_session(
+        &self,
+        new_user_id: &Uuid,
+        statechain_id: &Uuid,
+        finalized_data: BlindedTransferFinalizeData,
         user_ids: Arc<Mutex<UserIDs>>
     ) -> Result<()>;
     fn update_ecdsa_sign_first(
@@ -322,6 +339,12 @@ pub mod structs {
     #[derive(Clone, Debug)]
     pub struct TransferFinalizeBatchData {
         pub finalized_data_vec: Vec<TransferFinalizeData>,
+        pub start_time: NaiveDateTime,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct BlindedTransferFinalizeBatchData {
+        pub finalized_data_vec: Vec<BlindedTransferFinalizeData>,
         pub start_time: NaiveDateTime,
     }
 
