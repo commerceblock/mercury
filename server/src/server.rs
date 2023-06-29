@@ -206,6 +206,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
     match mode {
         Mode::Both => routes_with_openapi![
             util::get_statechain,
+            util::get_blinded_statechain,
             util::get_statechain_depth,
             util::get_statecoin,
             util::get_owner_id,
@@ -215,6 +216,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             util::prepare_sign_tx,
             util::get_recovery_data,
             util::get_transfer_batch_status,
+            util::get_blinded_transfer_batch_status,
             util::get_coin_info,
             util::reset_test_dbs,
             util::reset_inram_data,
@@ -223,12 +225,18 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             ecdsa::second_message,
             ecdsa::sign_first,
             ecdsa::sign_second,
+            ecdsa::sign_second_blinded,
             deposit::deposit_init,
             deposit::deposit_confirm,
+            deposit::blinded_deposit_confirm,
             transfer::transfer_sender,
+            transfer::blinded_transfer_sender,
             transfer::transfer_receiver,
+            transfer::blinded_transfer_receiver,
             transfer::transfer_update_msg,
+            transfer::blinded_transfer_update_msg,
             transfer::transfer_get_msg,
+            transfer::transfer_get_encrypted_msg,
             transfer::transfer_get_msg_addr,
             transfer::transfer_get_pubkey,
             transfer::keyupdate_complete,
@@ -236,17 +244,20 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             transfer_batch::transfer_reveal_nonce,
             withdraw::withdraw_init,
             withdraw::withdraw_confirm,
+            withdraw::blinded_withdraw,
             conductor::poll_utxo,
             conductor::poll_swap,
             conductor::get_swap_info,
             conductor::get_blinded_spend_signature,
             conductor::register_utxo,
+            conductor::blinded_register_utxo,
             conductor::deregister_utxo,
             conductor::swap_first_message,
             conductor::swap_second_message,
             conductor::get_group_info],
         Mode::Core => routes_with_openapi![
             util::get_statechain,
+            util::get_blinded_statechain,
             util::get_statechain_depth,
             util::get_statecoin,
             util::get_owner_id,
@@ -256,6 +267,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             util::prepare_sign_tx,
             util::get_recovery_data,
             util::get_transfer_batch_status,
+            util::get_blinded_transfer_batch_status,
             util::get_coin_info,
             util::reset_test_dbs,
             util::reset_inram_data,
@@ -264,19 +276,26 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             ecdsa::second_message,
             ecdsa::sign_first,
             ecdsa::sign_second,
+            ecdsa::sign_second_blinded,
             deposit::deposit_init,
             deposit::deposit_confirm,
+            deposit::blinded_deposit_confirm,
             transfer::transfer_sender,
+            transfer::blinded_transfer_sender,
             transfer::transfer_receiver,
+            transfer::blinded_transfer_receiver,
             transfer::transfer_update_msg,
+            transfer::blinded_transfer_update_msg,
             transfer::transfer_get_msg,
+            transfer::transfer_get_encrypted_msg,
             transfer::transfer_get_msg_addr,
             transfer::transfer_get_pubkey,
             transfer::keyupdate_complete,
             transfer_batch::transfer_batch_init,
             transfer_batch::transfer_reveal_nonce,
             withdraw::withdraw_init,
-            withdraw::withdraw_confirm],
+            withdraw::withdraw_confirm,
+            withdraw::blinded_withdraw],
         Mode::Conductor => routes_with_openapi![
             util::reset_test_dbs,
             util::reset_inram_data,
@@ -285,6 +304,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             conductor::get_swap_info,
             conductor::get_blinded_spend_signature,
             conductor::register_utxo,
+            conductor::blinded_register_utxo,
             conductor::deregister_utxo,
             conductor::swap_first_message,
             conductor::swap_second_message,
@@ -445,6 +465,7 @@ mock! {
             &self,
             deposit_msg2: DepositMsg2,
         ) -> deposit::Result<StatechainID>;
+        fn blinded_deposit_confirm(&self, deposit_msg2: BlindedDepositMsg2) -> deposit::Result<StatechainID>;
     }
     trait Ecdsa {
         fn master_key(&self, user_id: Uuid) -> ecdsa::Result<()>;
@@ -468,12 +489,18 @@ mock! {
             &self,
             sign_msg2: SignMsg2,
         ) -> ecdsa::Result<Vec<Vec<u8>>>;
+
+        fn sign_second_blinded(
+            &self, 
+            sign_msg2: BlindedSignMsg2
+        ) -> ecdsa::Result<BlindedSignReply>;
     }
     trait Conductor {
         fn poll_utxo(&self, statechain_id: &Uuid) -> conductor::Result<SwapID>;
         fn poll_swap(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapStatus>>;
         fn get_swap_info(&self, swap_id: &Uuid) -> conductor::Result<Option<SwapInfo>>;
         fn register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> conductor::Result<()>;
+        fn blinded_register_utxo(&self, register_utxo_msg: &RegisterUtxo) -> conductor::Result<()>;
         fn deregister_utxo(&self, statechain_id: &Uuid) -> conductor::Result<()>;
         fn swap_first_message(&self, swap_msg1: &SwapMsg1) -> conductor::Result<()>;
         fn swap_second_message(&self, swap_msg2: &SwapMsg2) -> conductor::Result<SCEAddress>;
@@ -488,6 +515,10 @@ mock! {
             &self,
             transfer_msg1: TransferMsg1,
         ) -> transfer::Result<TransferMsg2>;
+        fn blinded_transfer_sender(
+            &self,
+            transfer_msg1: TransferMsg1,
+        ) -> transfer::Result<TransferMsg2>;
         fn transfer_get_pubkey(
             &self,
             user_id: Uuid,
@@ -496,12 +527,22 @@ mock! {
             &self,
             transfer_msg4: TransferMsg4,
         ) -> transfer::Result<TransferMsg5>;
+        fn blinded_transfer_receiver(
+            &self,
+            transfer_msg4: BlindedTransferMsg4,
+        ) -> transfer::Result<TransferMsg5>;
         fn transfer_finalize(
             &self,
             finalized_data: &TransferFinalizeData,
         ) -> transfer::Result<()>;
+        fn blinded_transfer_finalize(
+            &self,
+            finalized_data: &BlindedTransferFinalizeData,
+        ) -> transfer::Result<()>;
         fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> transfer::Result<()>;
+        fn blinded_transfer_update_msg(&self, transfer_msg3: EncryptedTransferMsg3) -> transfer::Result<()>;
         fn transfer_get_msg(&self, statechain_id: Uuid) -> transfer::Result<TransferMsg3>;
+        fn transfer_get_encrypted_msg(&self, statechain_id: Uuid) -> transfer::Result<String>;
         fn transfer_get_msg_addr(&self, receive_addr: String) -> transfer::Result<Vec<TransferMsg3>>;
         fn keyupdate_complete(&self, statechain_id: Uuid, shared_key_id: Uuid) -> transfer::Result<()>;
     }
@@ -511,6 +552,10 @@ mock! {
             transfer_batch_init_msg: TransferBatchInitMsg,
         ) -> transfer_batch::Result<()>;
         fn finalize_batch(
+            &self,
+            batch_id: Uuid,
+        ) -> transfer_batch::Result<()>;
+        fn finalize_blinded_batch(
             &self,
             batch_id: Uuid,
         ) -> transfer_batch::Result<()>;
@@ -556,6 +601,7 @@ mock! {
             &self,
             withdraw_msg2: WithdrawMsg2,
         ) -> withdraw::Result<Vec<Vec<Vec<u8>>>>;
+        fn blinded_withdraw(&self, withdraw_msg2: WithdrawMsg2) -> withdraw::Result<()>;
             /// Get withdraw confirm data if signed for withdrawal
         fn get_if_signed_for_withdrawal(&self, user_id: &Uuid) 
             -> withdraw::Result<Option<WithdrawConfirmData>>;
@@ -570,6 +616,7 @@ mock! {
         fn update_root(&self, root: &storage::Root) -> storage::Result<i64>;
         fn get_statechain_data_api(&self,statechain_id: Uuid) -> storage::Result<StateChainDataAPI>;
         fn get_statechain_data_api_depth(&self,statechain_id: Uuid, depth: Option<usize>) -> storage::Result<StateChainDataAPI>;
+        fn get_blinded_statechain(&self, statechain_id: Uuid) -> storage::Result<BlindedStateChainData>;
         fn get_statecoin_data_api(&self, statechain_id: Uuid) -> storage::Result<StateCoinDataAPI>;
         fn get_sc_transfer_finalize_data(&self, statechain_id: Uuid)-> storage::Result<TransferFinalizeData>;
         fn get_statechain(&self, statechain_id: Uuid) -> storage::Result<storage::StateChain>;

@@ -11,12 +11,12 @@
 
 use super::super::Result;
 extern crate shared_lib;
-use shared_lib::structs::{DepositMsg1, DepositMsg2, PrepareSignTxMsg, Protocol, UserID, StatechainID};
+use shared_lib::structs::{DepositMsg1, DepositMsg2, PrepareSignTxMsg, Protocol, UserID, StatechainID, BlindedDepositMsg2};
 use shared_lib::util::{tx_backup_build, tx_funding_build, FEE, transaction_serialise};
 
 use super::api::{get_smt_proof, get_smt_root, get_statechain_fee_info};
 use crate::error::{CError, WalletErrorType};
-use crate::state_entity::util::{cosign_tx_input, verify_statechain_smt};
+use crate::state_entity::util::{cosign_tx_input, verify_statechain_smt, blindly_cosign_tx_input};
 use crate::utilities::requests;
 use crate::wallet::wallet::{to_bitcoin_public_key, Wallet};
 
@@ -44,6 +44,7 @@ pub fn session_init(wallet: &mut Wallet, proof_key: &String) -> Result<UserID> {
 pub fn deposit(
     wallet: &mut Wallet,
     amount: &u64,
+    blinded: bool,
 ) -> Result<(Uuid, Uuid, String, Transaction, PrepareSignTxMsg, PublicKey)> {
     // Get state entity fee info
     let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
@@ -145,7 +146,13 @@ pub fn deposit(
     };
 
     let witness = {
-        let tmp = cosign_tx_input(wallet, &tx_backup_psm)?;
+
+        let tmp = if blinded {
+            blindly_cosign_tx_input(wallet, &tx_backup_psm)?
+        } else {
+            cosign_tx_input(wallet, &tx_backup_psm)?
+        };
+
         if tmp.len() != 1 {
             return Err(CError::Generic(String::from("expected 1 witness from cosign_tx_input")));
         } else {
@@ -164,30 +171,90 @@ pub fn deposit(
         .instance
         .broadcast_transaction(hex::encode(consensus::serialize(&tx_funding_signed)))?;
 
-    // Wait for server confirmation of funding tx and receive new StateChain's id
-    let statechain_id: StatechainID = requests::postb(
-        &wallet.client_shim,
-        &format!("deposit/confirm"),
-        &DepositMsg2 {
-            shared_key_id: shared_key_id.id,
-        },
-    )?;
+    // let endpoint = if blinded {
+    //     "blinded/deposit/confirm"
+    // } else {
+    //     "deposit/confirm"
+    // };
+
+    // // Wait for server confirmation of funding tx and receive new StateChain's id
+    // let statechain_id: StatechainID = requests::postb(
+    //     &wallet.client_shim,
+    //     &format!("{}", endpoint),
+    //     &DepositMsg2 {
+    //         shared_key_id: shared_key_id.id,
+    //     },
+    // )?;
+
+    let statechain_id: StatechainID = if blinded {
+        requests::postb(
+            &wallet.client_shim,
+            &format!("blinded/deposit/confirm"),
+            &BlindedDepositMsg2 {
+                shared_key_id: shared_key_id.id,
+                amount: *amount as i64,
+            },
+        )?
+    } else {
+        requests::postb(
+            &wallet.client_shim,
+            &format!("deposit/confirm"),
+            &DepositMsg2 {
+                shared_key_id: shared_key_id.id,
+            },
+        )?
+    };
+
+    // if !blinded {
     
-    // Verify proof key inclusion in SE sparse merkle tree
-    let root = get_smt_root(&wallet.client_shim)?.unwrap();
-    let proof = get_smt_proof(&wallet.client_shim, &root, &funding_txid)?;
-    assert!(verify_statechain_smt(
-        &Some(root.hash()),
-        &proof_key.to_string(),
-        &proof
-    ));
+    //     // Verify proof key inclusion in SE sparse merkle tree
+    //     let root = get_smt_root(&wallet.client_shim)?.unwrap();
+    //     let proof = get_smt_proof(&wallet.client_shim, &root, &funding_txid)?;
+    //     assert!(verify_statechain_smt(
+    //         &Some(root.hash()),
+    //         &proof_key.to_string(),
+    //         &proof
+    //     ));
+
+    //     // Add proof and state chain id to Shared key
+    //     {
+    //         let shared_key = wallet.get_shared_key_mut(&shared_key_id.id)?;
+    //         shared_key.statechain_id = Some(statechain_id.id);
+    //         shared_key.tx_backup_psm = Some(tx_backup_psm.to_owned());
+    //         shared_key.add_proof_data(&proof_key.to_string(), &root, &proof, &funding_txid);
+    //     }
+
+    //     println!("Deposit: Shared key created: {}", shared_key_id.id);
+    // }
 
     // Add proof and state chain id to Shared key
     {
-        let shared_key = wallet.get_shared_key_mut(&shared_key_id.id)?;
-        shared_key.statechain_id = Some(statechain_id.id);
-        shared_key.tx_backup_psm = Some(tx_backup_psm.to_owned());
-        shared_key.add_proof_data(&proof_key.to_string(), &root, &proof, &funding_txid);
+        // Verify proof key inclusion in SE sparse merkle tree
+        let root = get_smt_root(&wallet.client_shim)?;
+        let mut proof: Option<Vec<(bool, Vec<u8>)>> = None;
+
+        if !blinded {
+            assert!(root.is_some());
+            let root = root.clone().unwrap();
+            proof = get_smt_proof(&wallet.client_shim, &root, &funding_txid)?;
+            assert!(verify_statechain_smt(
+                &Some(root.hash()),
+                &proof_key.to_string(),
+                &proof
+            ));
+        }
+        
+        // Add proof and state chain id to Shared key
+        {
+            let shared_key = wallet.get_shared_key_mut(&shared_key_id.id)?;
+            shared_key.statechain_id = Some(statechain_id.id);
+            shared_key.tx_backup_psm = Some(tx_backup_psm.to_owned());
+            if !blinded {
+                shared_key.add_proof_data(&proof_key.to_string(), &root.unwrap(), &proof, &funding_txid);
+            } else {
+                shared_key.add_proof_key_and_funding_txid(&proof_key.to_string(), &funding_txid);
+            }
+        }
     }
 
     Ok((

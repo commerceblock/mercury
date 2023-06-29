@@ -91,6 +91,8 @@ pub trait Transfer {
     ///     - Store transfer parameters
     fn transfer_sender(&self, transfer_msg1: TransferMsg1) -> Result<TransferMsg2>;
 
+    fn blinded_transfer_sender(&self, transfer_msg1: TransferMsg1) -> Result<TransferMsg2>;
+
     /// API: Get the current SE/Lockbox public key share
     fn transfer_get_pubkey(&self, user_id: Uuid) -> Result<S1PubKey>;
 
@@ -100,16 +102,33 @@ pub trait Transfer {
     ///     - Return new public shared key S2
     fn transfer_receiver(&self, transfer_msg4: TransferMsg4) -> Result<TransferMsg5>;
 
+     /// API: Blinded Transfer shared wallet to new Owner:
+    ///     - Check new Owner's state chain is correct
+    ///     - Perform 2P-ECDSA key rotation
+    ///     - Return new public shared key S2
+    fn blinded_transfer_receiver(&self, transfer_msg4: BlindedTransferMsg4) -> Result<TransferMsg5>;
+
     /// Update DB and SMT after successful transfer.
     /// This function is called immediately in the regular transfer case or after confirmation of atomic
     /// transfers completion in the batch transfer case.
     fn transfer_finalize(&self, finalized_data: &TransferFinalizeData) -> Result<()>;
 
+    /// Update DB
+    /// This function is called immediately in the regular transfer case or after confirmation of atomic
+    /// transfers completion in the batch transfer case.
+    fn blinded_transfer_finalize(&self, finalized_data: &BlindedTransferFinalizeData) -> Result<()>;
+
     /// API: Update the state entity database with transfer message 3
     fn transfer_update_msg(&self, transfer_msg3: TransferMsg3) -> Result<()>;
 
+    /// API: Update the state entity database with encrypted transfer message 3
+    fn blinded_transfer_update_msg(&self, transfer_msg3: EncryptedTransferMsg3) -> Result<()>;
+
     /// API: Get the transfer message 3 set by update_transfer_msg
     fn transfer_get_msg(&self, statechain_id: Uuid) -> Result<TransferMsg3>;
+
+    /// API: Get the encrypted transfer message 3 set by update_transfer_msg from the receiver address
+    fn transfer_get_encrypted_msg(&self, statechain_id: Uuid) -> Result<String>;
 
     /// API: Get the transfer message 3 set by update_transfer_msg from the receiver address
     fn transfer_get_msg_addr(&self, receive_addr: String) -> Result<Vec<TransferMsg3>>;
@@ -134,6 +153,83 @@ impl Transfer for SCE {
         // Check that the funding transaction has the required number of confirmations and is valid
         if !self.database.is_confirmed(&statechain_id)? {
             self.verify_tx_confirmed(&statechain_id)?;
+            self.database.set_confirmed(&statechain_id)?;
+            // add to histogram
+            let sc_amount = self.database.get_statechain_amount(statechain_id.clone())?;
+            let mut guard = self.coin_value_info.as_ref().lock()?;
+            guard.increment(&sc_amount.amount);
+        }
+
+        // Check if state chain is owned by user and not locked
+        let sco = self.database.get_statechain_owner(statechain_id.clone())?;
+
+        is_locked(sco.locked_until)?;
+        if sco.owner_id != user_id {
+            return Err(SEError::Generic(format!(
+                "State Chain not owned by User ID: {}.",
+                user_id
+            )));
+        }
+
+        // verify statechain sig
+        // TODO
+
+        // Generate x1
+        let x1: FE = ECScalar::new_random();
+        let x1_ser = FESer::from_fe(&x1);
+
+        self.database
+            .create_transfer(&statechain_id, &transfer_msg1.statechain_sig, &x1, transfer_msg1.batch_id)?;
+
+        info!(
+            "TRANSFER: Sender side complete. Previous shared key ID: {}. State Chain ID: {}",
+            user_id.to_string(),
+            statechain_id
+        );
+        debug!("TRANSFER: Sender side complete. State Chain ID: {}. State Chain Signature: {:?}. x1: {:?}.", statechain_id, transfer_msg1.statechain_sig, x1);
+
+        // encrypt x1 with Senders proof key
+        let proof_key = match ecies::PublicKey::from_str(&self.database.get_proof_key(user_id)?) {
+            Ok(k) => k,
+            Err(e) => {
+                return Err(SEError::SharedLibError(format!(
+                    "error deserialising proof key: {}",
+                    e
+                )))
+            }
+        };
+
+        let mut msg2 = TransferMsg2 {
+            x1: x1_ser,
+            proof_key,
+        };
+
+        match msg2.encrypt() {
+            Ok(_) => (),
+            Err(e) => return Err(SEError::SharedLibError(format!("{}", e))),
+        };
+
+        let msg2 = msg2;
+
+        Ok(msg2)
+    }
+
+    fn blinded_transfer_sender(&self, transfer_msg1: TransferMsg1) -> Result<TransferMsg2> {
+        self.check_user_auth(&transfer_msg1.shared_key_id)?;
+        let user_id = transfer_msg1.shared_key_id;
+        debug!("TRANSFER: Sender Side. Shared Key ID: {}", user_id);
+
+        if(self.get_if_signed_for_withdrawal(&user_id)?.is_some()) {
+            return Err(SEError::Generic(format!("transfer_sender - shared key id: {} is signed for withdrawal", &user_id)));
+        }
+
+        // Get state_chain id
+        let statechain_id = self.database.get_statechain_id(user_id)?;
+
+        // Check that the funding transaction has the required number of confirmations and is valid
+        if !self.database.is_confirmed(&statechain_id)? {
+            // should be done on client / receiver side
+            // self.verify_tx_confirmed(&statechain_id)?;
             self.database.set_confirmed(&statechain_id)?;
             // add to histogram
             let sc_amount = self.database.get_statechain_amount(statechain_id.clone())?;
@@ -311,6 +407,12 @@ impl Transfer for SCE {
         // This is so the transfers can be finalized when all transfers in the batch are complete.
         if transfer_msg4.batch_data.is_some() {
             let batch_id = transfer_msg4.batch_data.clone().unwrap().id;
+
+            println!(
+                "[transfer] -- TRANSFER: Transfer as part of batch {}. State Chain ID: {}",
+                batch_id, statechain_id
+            );
+
             debug!(
                 "TRANSFER: Transfer as part of batch {}. State Chain ID: {}",
                 batch_id, statechain_id
@@ -331,6 +433,11 @@ impl Transfer for SCE {
 
         // If not batch then finalize transfer now
         } else {
+            println!(
+                "[transfer] -- TRANSFER: Single (non-batch) transfer. State Chain ID: {}",
+                 statechain_id
+            );
+
             debug!(
                 "TRANSFER: Single (non-batch) transfer. State Chain ID: {}",
                  statechain_id
@@ -358,6 +465,7 @@ impl Transfer for SCE {
 
         let statechain_id = finalized_data.statechain_id;
 
+        println!("TRANSFER_FINALIZE: State Chain ID: {}", statechain_id);
         info!("TRANSFER_FINALIZE: State Chain ID: {}", statechain_id);
 
         // Update state chain
@@ -370,6 +478,7 @@ impl Transfer for SCE {
         let sco = self.database.get_statechain_owner(statechain_id)?;
         let lockbox_url: Option<(Url, usize)> = self.get_lockbox_url(&sco.owner_id).map_err(|e| {dbg!("{}",&e); e} )?;
 
+        info!("---> TRANSFER_FINALIZE: Calling update_statechain_owner");
         self.database.update_statechain_owner(
             &statechain_id,
             state_chain.clone(),
@@ -443,6 +552,252 @@ impl Transfer for SCE {
         Ok(())
     }
 
+    fn blinded_transfer_receiver(&self, mut transfer_msg4: BlindedTransferMsg4) -> Result<TransferMsg5> {
+
+        let user_id = transfer_msg4.shared_key_id;
+        let statechain_id = transfer_msg4.statechain_id;
+
+        // Get Transfer Data for statechain_id
+        let td = self.database.get_transfer_data(statechain_id)?;
+
+        // Ensure statechain_sigs are the same
+        if td.statechain_sig != transfer_msg4.statechain_sig.to_owned() {
+            return Err(SEError::Generic(format!(
+                "State chain siganture provided does not match state chain at id {}",
+                statechain_id
+            )));
+        }
+
+        // Check if batch transfer and batch ID matches
+        if td.batch_id.is_some() {
+            if transfer_msg4.batch_data.is_some() {
+                let batch_id = transfer_msg4.batch_data.clone().unwrap().id;
+                if batch_id != td.batch_id.unwrap() {
+                    return Err(SEError::Generic(format!(
+                        "Incorrect batch ID for receive. Expected {}",
+                        td.batch_id.unwrap()
+                    )));                
+                }
+            } else {
+                return Err(SEError::Generic(format!(
+                    "Expect receive in batch ID {}",
+                    td.batch_id.unwrap()
+                )));
+            }
+        }
+
+        let s2: FE;
+        let s2_pub: GE;
+        match &self.get_lockbox_url(&user_id)? {
+            Some(l) => {
+            let ku_send = KUSendMsg {
+                user_id,
+                statechain_id,
+                x1: td.x1,
+                t2: transfer_msg4.t2,
+                o2_pub: transfer_msg4.o2_pub,
+            };
+            let path: &str = "ecdsa/keyupdate/first";
+            let ku_receive: KUReceiveMsg = post_lb(&l.0, path, &ku_send)?;
+            s2 = FE::new_random();
+            s2_pub = ku_receive.s2_pub;
+        },
+        None => {
+            let kp = self.database.get_ecdsa_keypair(user_id)?;
+            let s1 = kp.party_1_private.get_private_key();
+            let s1w = FEWrapped::from(s1.clone());
+            let key: SecretKey = s1w.try_into()?;
+            
+            let s1_priv = PrivateKey {
+                compressed: true,
+                network: Network::Regtest,
+                key
+            };
+
+            match transfer_msg4.decrypt(&s1_priv) {
+                Ok(_) => (),
+                Err(e) => return Err(SEError::SharedLibError(format!("Failed to decrypt t2 in transfer_msg4. Error: {}", e.to_string()))),
+            };
+
+            let t2 = match transfer_msg4.t2.get_fe() {
+                Ok(r) => r,
+                Err(e) => {
+                    return Err(SEError::Generic(format!(
+                        "Failed to get FE from transfer_msg_4 {:?} error: {}",
+                        transfer_msg4,
+                        e.to_string()
+                    )))
+                }
+            };
+
+            s2 = t2 * (td.x1.invert()) * s1;
+
+            let g: GE = ECPoint::generator();
+            s2_pub = g * s2;
+
+            let p1_pub = kp.party_2_public * s1;
+            let p2_pub = transfer_msg4.o2_pub * s2;
+
+            // Check P1 = o1_pub*s1 === p2 = o2_pub*s2
+            if p1_pub != p2_pub {
+                error!("TRANSFER: Protocol failed. P1 != P2.");
+                return Err(SEError::Generic(String::from(
+                    "Transfer protocol error: P1 != P2",
+                )));
+            }
+        }}
+
+        // Create user ID for new UserSession (receiver of transfer)
+        let new_shared_key_id = Uuid::new_v4();
+
+        let finalized_data = BlindedTransferFinalizeData {
+            new_shared_key_id: new_shared_key_id.clone(),
+            statechain_id: statechain_id.clone(),
+            statechain_sig: td.statechain_sig,
+            s2,
+            batch_data: transfer_msg4.batch_data.clone(),
+        };
+
+        // If batch transfer then mark StateChain as complete and store finalized data in TransferBatch table.
+        // This is so the transfers can be finalized when all transfers in the batch are complete.
+        if transfer_msg4.batch_data.is_some() {
+            let batch_id = transfer_msg4.batch_data.clone().unwrap().id;
+
+            debug!(
+                "TRANSFER: Transfer as part of batch {}. State Chain ID: {}",
+                batch_id, statechain_id
+            );
+
+            // Ensure batch transfer is still active
+            if transfer_batch_is_ended(self.database.get_transfer_batch_start_time(&batch_id)?,
+                                       self.config.batch_lifetime as i64) {
+                return Err(SEError::TransferBatchEnded(String::from(
+                    "Too late to complete transfer.",
+                )));
+            }
+
+            self.database.update_blinded_finalize_batch_data(
+                &statechain_id,
+                &finalized_data,
+            )?;
+
+        // If not batch then finalize transfer now
+        } else {
+            debug!(
+                "TRANSFER: Single (non-batch) transfer. State Chain ID: {}",
+                 statechain_id
+            );
+            // Update DB with new transfer data
+            self.blinded_transfer_finalize(&finalized_data)?;
+        }
+
+        info!(
+            "TRANSFER: Receiver side complete. New shared key ID: {}",
+            new_shared_key_id
+        );
+        debug!("TRANSFER: Receiver side complete. State Chain ID: {}. New Shared Key ID: {}. Finalized data: {:?}",statechain_id,statechain_id,finalized_data);
+
+        Ok(TransferMsg5 {
+            new_shared_key_id,
+            s2_pub,
+        })
+    }
+
+    /// Update DB 
+    /// This function is called immediately in the regular transfer case or after confirmation of atomic
+    /// transfers completion in the batch transfer case.
+    fn blinded_transfer_finalize(&self, finalized_data: &BlindedTransferFinalizeData) -> Result<()> {
+              
+        let statechain_id = finalized_data.statechain_id;
+
+        info!("TRANSFER_FINALIZE: State Chain ID: {}", statechain_id);
+
+        // Update state chain
+        let mut state_chain: StateChain = self.database.get_statechain(statechain_id)?;
+
+        println!("--- [state_chain] statechain_id: {:?}", statechain_id);
+        state_chain.add(&finalized_data.statechain_sig)?;
+
+        let new_user_id = finalized_data.new_shared_key_id;
+
+        let sco = self.database.get_statechain_owner(statechain_id)?;
+        let lockbox_url: Option<(Url, usize)> = self.get_lockbox_url(&sco.owner_id).map_err(|e| {dbg!("{}",&e); e} )?;
+
+        //lockbox finalise and delete key
+        match lockbox_url {
+            Some(l) => {
+                dbg!("using lockbox", &l);
+                let ku_send = KUFinalize {
+                    statechain_id,
+                    shared_key_id: new_user_id,
+                };
+                let path: &str = "ecdsa/keyupdate/second";
+                let ku_receive: KUAttest = post_lb(&l.0, path, &ku_send)?;
+                self.database.update_lockbox_index(&new_user_id, &l.1)?;
+            },
+            None => ()
+        };
+
+        self.database.update_statechain_owner(
+            &statechain_id,
+            state_chain.clone(),
+            &new_user_id,
+        )?;
+
+        // Create new UserSession to allow new owner to generate shared wallet
+
+        self.database.transfer_init_blinded_user_session(
+            &new_user_id,
+            &statechain_id,
+            finalized_data.to_owned(),
+            self.user_ids.clone()   
+        )?;
+
+        /*
+        let new_tx_backup_hex = transaction_deserialise(&finalized_data.new_tx_backup_hex)?;
+
+        self.database
+            .update_backup_tx(&statechain_id, new_tx_backup_hex.clone())?;
+
+        info!(
+            "TRANSFER: Finalized. New shared key ID: {}. State Chain ID: {}",
+            finalized_data.new_shared_key_id, statechain_id
+        );
+
+        // Update sparse merkle tree with new StateChain entry
+        let (prev_root, new_root) = self.update_smt(
+            &new_tx_backup_hex
+                .input
+                .get(0)
+                .unwrap()
+                .previous_output
+                .txid
+                .to_string(),
+            &state_chain
+                .get_tip()
+                .data
+                .clone(),
+        )?;
+
+        info!(
+            "TRANSFER: Included in sparse merkle tree. State Chain ID: {}",
+            statechain_id
+        );
+        debug!(
+            "TRANSFER: State Chain ID: {}. New root: {:?}. Previous root: {:?}.",
+            statechain_id, &new_root, &prev_root
+        );
+        */
+
+        // Remove TransferData for this transfer
+        self.database.remove_transfer_data(&statechain_id)?;
+
+        //increment transfer counter
+        TRANSFERS_COUNT.inc();
+
+        Ok(())
+    }
+
     /// Finalize lockbox keyupdate
     fn keyupdate_complete(&self, statechain_id: Uuid, shared_key_id: Uuid) -> Result<()> {
               
@@ -484,9 +839,19 @@ impl Transfer for SCE {
             .update_transfer_msg(&transfer_msg3.statechain_id, &transfer_msg3)
     }
 
+    /// API: Update the state entity database with encrypted transfer message 3
+    fn blinded_transfer_update_msg(&self, transfer_msg3: EncryptedTransferMsg3) -> Result<()> {
+        self.database
+            .update_blinded_transfer_msg(&transfer_msg3)
+    }
+
     /// API: Get the transfer message 3 set by update_transfer_msg
     fn transfer_get_msg(&self, statechain_id: Uuid) -> Result<TransferMsg3> {
         self.database.get_transfer_msg(&statechain_id)
+    }
+
+    fn transfer_get_encrypted_msg(&self, statechain_id: Uuid) -> Result<String> {
+        self.database.get_encrypted_transfer_msg(&statechain_id)
     }
 
     /// API: Get the transfer message 3 set by update_transfer_msg from the receiver address
@@ -504,6 +869,20 @@ pub fn transfer_sender(
 ) -> Result<Json<TransferMsg2>> {
     sc_entity.check_rate_fast("transfer")?;
     match sc_entity.transfer_sender(transfer_msg1.into_inner()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Transfer initiation by sender: get x1 and new backup transaction
+#[post("/blinded/transfer/sender", format = "json", data = "<transfer_msg1>")]
+pub fn blinded_transfer_sender(
+    sc_entity: State<SCE>,
+    transfer_msg1: Json<TransferMsg1>,
+) -> Result<Json<TransferMsg2>> {
+    sc_entity.check_rate_fast("transfer")?;
+    match sc_entity.blinded_transfer_sender(transfer_msg1.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -538,6 +917,20 @@ pub fn transfer_receiver(
 }
 
 #[openapi]
+/// # Transfer completing by receiver: key share update and deletion
+#[post("/blinded/transfer/receiver", format = "json", data = "<transfer_msg4>")]
+pub fn blinded_transfer_receiver(
+    sc_entity: State<SCE>,
+    transfer_msg4: Json<BlindedTransferMsg4>,
+) -> Result<Json<TransferMsg5>> {
+    sc_entity.check_rate_fast("transfer")?;
+    match sc_entity.blinded_transfer_receiver(transfer_msg4.into_inner()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
 /// # Update stored transfer message (TransferMsg3)
 #[post("/transfer/update_msg", format = "json", data = "<transfer_msg3>")]
 pub fn transfer_update_msg(
@@ -552,6 +945,20 @@ pub fn transfer_update_msg(
 }
 
 #[openapi]
+/// # Update stored transfer message (TransferMsg3)
+#[post("/blinded/transfer/update_msg", format = "json", data = "<transfer_msg3>")]
+pub fn blinded_transfer_update_msg(
+    sc_entity: State<SCE>,
+    transfer_msg3: Json<EncryptedTransferMsg3>,
+) -> Result<Json<()>> {
+    sc_entity.check_rate_fast("transfer")?;
+    match sc_entity.blinded_transfer_update_msg(transfer_msg3.into_inner()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
 /// # Get stored transfer message (TransferMsg3)
 #[post("/transfer/get_msg", format = "json", data = "<statechain_id>")]
 pub fn transfer_get_msg(
@@ -560,6 +967,20 @@ pub fn transfer_get_msg(
 ) -> Result<Json<TransferMsg3>> {
     sc_entity.check_rate_fast("transfer")?;
     match sc_entity.transfer_get_msg(statechain_id.id) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Get stored encrypted transfer message (TransferMsg3)
+#[post("/transfer/get_encrypted_msg", format = "json", data = "<statechain_id>")]
+pub fn transfer_get_encrypted_msg(
+    sc_entity: State<SCE>,
+    statechain_id: Json<StatechainID>,
+) -> Result<Json<String>> {
+    sc_entity.check_rate_fast("info")?;
+    match sc_entity.transfer_get_encrypted_msg(statechain_id.id) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }

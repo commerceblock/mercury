@@ -423,6 +423,7 @@ mod tests {
                 &mut wallets[i],
                 &deposits[i].1, // state chain id
                 &FEE,
+                false,
             ) {
                 Err(e) => assert!(e.to_string().contains("State Chain locked for")),
                 _ => assert!(false),
@@ -463,6 +464,7 @@ mod tests {
             &mut wallets[0],
             &deposits[0].1, // state chain id
             &FEE,
+            false,
         ) {
             Err(e) => assert!(e.to_string().contains("State Chain locked for")),
             _ => assert!(false),
@@ -472,6 +474,7 @@ mod tests {
             &mut wallets[1],
             &deposits[1].1, // state chain id
             &FEE,
+            false,
         )
         .is_ok());
 
@@ -479,6 +482,7 @@ mod tests {
             &mut wallets[2],
             &deposits[2].1, // state chain id
             &FEE,
+            false,
         ) {
             Err(e) => assert!(e.to_string().contains("State Chain locked for")),
             _ => assert!(false),

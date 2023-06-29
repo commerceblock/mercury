@@ -77,6 +77,50 @@ pub fn encode_message(message: TransferMsg3) -> Result<String> {
 	Ok(bech32_encoded)
 }
 
+// Encode a mercury transaction message in bech32 format
+pub fn blinded_encode_message(message: &TransferMsg3) -> Result<String> {
+	if message.tx_backup_psm.shared_key_ids.len() != 1 {
+		return Err(CError::Generic(String::from(
+	        "Cannot encode transfer message - length of PrepareSignTxMsg != 1",
+	    )));
+	}
+
+	let mut sig_bytes = hex::decode(message.statechain_sig.sig.clone()).unwrap();
+	let mut tx_bytes = hex::decode(message.tx_backup_psm.clone().tx_hex).unwrap();
+
+	// compact messgae serialisation to byte vector
+	let mut ser_bytes = Vec::new();
+	//bytes 0..129 encrypted t1
+	ser_bytes.append(&mut message.t1.secret_bytes.clone());
+	//bytes 129..162 (33 bytes) compressed proof key
+	ser_bytes.append(&mut message.rec_se_addr.proof_key.clone().serialize().to_vec());
+	//bytes 162..178 (16 bytes) statechain_id
+	ser_bytes.append(&mut hex::decode(message.statechain_id.clone().simple().to_string()).unwrap());
+	//bytes 178..194 (16 bytes) shared_key_id
+	ser_bytes.append(&mut hex::decode(message.tx_backup_psm.shared_key_ids[0].clone().simple().to_string()).unwrap());
+	//byte 194 is statechain signature length (variable)
+	ser_bytes.push(sig_bytes.len() as u8);
+	//byte 195..sig_len is statechain signature
+	ser_bytes.append(&mut sig_bytes);
+	//byte sig_len is backup tx length (variable)
+	ser_bytes.push(tx_bytes.len() as u8);
+	//remaining bytes backup tx
+	ser_bytes.append(&mut tx_bytes);
+	
+	assert!(message.previous_txs.len() < u8::MAX.into());
+	ser_bytes.push(message.previous_txs.len() as u8);
+	for tx_backup in message.previous_txs.iter() {
+		let mut tx_backup_bytes = hex::decode(&tx_backup).unwrap();
+		assert!(tx_backup_bytes.len() < u8::MAX.into());
+		ser_bytes.push(tx_backup_bytes.len() as u8);
+		ser_bytes.append(&mut tx_backup_bytes);
+	}
+
+	let bech32_encoded = bech32::encode("mm",ser_bytes.to_base32()).unwrap();
+
+	Ok(bech32_encoded)
+}
+
 // Decode a mercury transaction message from bech32 format
 pub fn decode_message(message: String, network: &String) -> Result<TransferMsg3> {
 
@@ -134,6 +178,103 @@ pub fn decode_message(message: String, network: &String) -> Result<TransferMsg3>
 	    	tx_backup_addr,
 	    	proof_key: proof_key,
 	    },
+		previous_txs: vec![]
+	};
+
+	Ok(transfer_msg3)
+}
+
+// Decode a mercury transaction message from bech32 format
+pub fn blinded_decode_message(message: String, network: &String) -> Result<TransferMsg3> {
+
+	let (prefix, decoded_msg) = bech32::decode(&message).unwrap();
+
+	if prefix != "mm" {
+	    return Err(CError::Generic(String::from(
+	        "Mercury transfer message incorrect prefix",
+	    )));
+	}
+
+	// compact messgae deserialisation to byte vectors
+	let decoded_bytes = Vec::<u8>::from_base32(&decoded_msg).unwrap();
+
+	//println!("decoded_bytes: {}", hex::encode(&decoded_bytes));
+
+	//bytes 0..129 encrypted t1
+	let t1_bytes = &decoded_bytes[0..125];
+	//bytes 129..162 (33 bytes) compressed proof key
+	let proof_key_bytes = &decoded_bytes[125..158];
+	//bytes 162..178 (16 bytes) statechain_id
+	let statechain_id_bytes = &decoded_bytes[158..174];
+	//bytes 178..194 (16 bytes) shared_key_id
+	let shared_key_id_bytes = &decoded_bytes[174..190];
+	//byte 194 is statechain signature length (variable)
+	let sig_len = (decoded_bytes[190] as usize) + 191;
+	//byte 195..sig_len is statechain signature
+	let sig_bytes = &decoded_bytes[191..sig_len];
+
+	// println!("sig_len: {}", sig_len);
+	// println!("sig_bytes: {}", hex::encode(sig_bytes));
+
+
+	//byte sig_len is backup tx length (variable)
+	let tx_len = (decoded_bytes[sig_len] as usize) + sig_len.clone() + 1;
+	//remaining bytes backup tx
+	let tx_bytes = &decoded_bytes[(sig_len+1)..tx_len];
+
+	// how many backup transactions are there?
+	let tx_bckps_len = &decoded_bytes[tx_len..(tx_len + 1)];
+	assert!(tx_bckps_len.len() == 1 && tx_bckps_len[0] >= 1);
+
+	let mut tx_backups_pointer = tx_len + 1;
+
+	let mut previous_txs = vec![];
+	for _ in 0..tx_bckps_len[0] {
+		let bckp_tx_len = decoded_bytes[tx_backups_pointer] as usize;
+		//println!("---\nbckp_tx_len: {}", bckp_tx_len);
+		let bckp_tx_end = tx_backups_pointer + bckp_tx_len + 1;
+		let bckp_tx_bytes = &decoded_bytes[(tx_backups_pointer + 1)..bckp_tx_end];
+		let bckp_tx = hex::encode(bckp_tx_bytes);
+		//println!("bckp_tx_bytes: {}", bckp_tx);
+		previous_txs.push(bckp_tx);
+		tx_backups_pointer = bckp_tx_end;
+    }
+
+	//println!("tx_backups_pointer: {}", tx_backups_pointer);
+
+	assert!(tx_backups_pointer == decoded_bytes.len());
+
+	// let tx_bckps_len = tx_bckps_len_pos + 1;
+	// println!("tx_bckps_len: {}", tx_bckps_len);
+
+	let proof_key = secp256k1::PublicKey::from_slice(&proof_key_bytes.clone()).unwrap();
+    let tx_backup_addr = Some(Address::p2wpkh(&to_bitcoin_public_key(proof_key), network.parse::<Network>().unwrap())?);
+
+	let mut tx_backup_psm = PrepareSignTxMsg::default();
+	tx_backup_psm.tx_hex = hex::encode(tx_bytes);
+	tx_backup_psm.shared_key_ids = vec![Uuid::from_bytes(&shared_key_id_bytes.clone()).unwrap()];
+	tx_backup_psm.proof_key = Some(hex::encode(proof_key_bytes.clone()));
+	tx_backup_psm.protocol = Protocol::Transfer;
+
+	let mut t1 = FESer::new_random();
+	t1.secret_bytes = t1_bytes.clone().to_vec();
+
+	// recreate transfer message 3
+	let transfer_msg3 = TransferMsg3 {
+	    shared_key_id: Uuid::from_bytes(&shared_key_id_bytes.clone()).unwrap(),
+	    t1: t1,
+	    statechain_sig: StateChainSig {
+		    purpose: "TRANSFER".to_string(),
+		    data: hex::encode(proof_key_bytes.clone()),
+		    sig: hex::encode(sig_bytes),
+	    },
+	    statechain_id: Uuid::from_bytes(&statechain_id_bytes.clone()).unwrap(),
+	    tx_backup_psm: tx_backup_psm,
+	    rec_se_addr: SCEAddress {
+	    	tx_backup_addr,
+	    	proof_key: proof_key,
+	    },
+		previous_txs
 	};
 
 	Ok(transfer_msg3)

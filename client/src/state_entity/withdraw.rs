@@ -13,16 +13,16 @@ extern crate shared_lib;
 use shared_lib::{
     state_chain::StateChainSig,
     structs::{PrepareSignTxMsg, Protocol, StateCoinDataAPI, WithdrawMsg1, WithdrawMsg2},
-    util::{transaction_serialise, tx_withdraw_build},
+    util::{transaction_serialise, tx_withdraw_build, transaction_deserialise, tx_withdraw_build_from_utxos},
 };
 
 use super::api::{get_statechain, get_statecoin, get_statechain_fee_info};
-use crate::error::{CError, WalletErrorType};
+use crate::{error::{CError, WalletErrorType}, state_entity::util::blindly_cosign_tx_input};
 use crate::state_entity::util::cosign_tx_input;
 use crate::utilities::requests;
 use crate::wallet::wallet::Wallet;
 
-use bitcoin::{consensus, PublicKey};
+use bitcoin::{consensus, PublicKey, OutPoint};
 use curv::elliptic::curves::traits::ECPoint;
 
 use std::str::FromStr;
@@ -32,7 +32,7 @@ use uuid::Uuid;
 pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid, tx_fee: &u64) 
     -> Result<(String, Uuid, u64)> {
     println!("running withdraw init...");
-    let (shared_key_id, address, tx_signed, amount) = withdraw_init(wallet, statechain_id, tx_fee)?;
+    let (shared_key_id, _address, tx_signed, amount) = withdraw_init(wallet, statechain_id, tx_fee)?;
     println!("running withdraw confirm...");
     let tx_id = withdraw_confirm(wallet, &shared_key_id, &tx_signed)?;
     Ok((tx_id, statechain_id.clone(), amount))
@@ -40,7 +40,7 @@ pub fn withdraw(wallet: &mut Wallet, statechain_id: &Uuid, tx_fee: &u64)
 
 pub fn batch_withdraw(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>, tx_fee: &u64) 
     -> Result<(String, Vec<Uuid>, u64)> {
-    let (shared_key_ids, address, tx_signed, amount) = batch_withdraw_init(wallet, statechain_ids, tx_fee)?;
+    let (shared_key_ids, _address, tx_signed, amount) = batch_withdraw_init(wallet, statechain_ids, tx_fee)?;
     let tx_id = batch_withdraw_confirm(wallet, &shared_key_ids, &tx_signed)?;
     Ok((tx_id, statechain_ids.clone(), amount))
 }
@@ -57,6 +57,120 @@ pub fn withdraw_confirm(wallet: &mut Wallet, shared_key_id: &Uuid,
     -> Result<String> {
     let vec_shared_key_id = vec![*shared_key_id];
     batch_withdraw_confirm(wallet, &vec_shared_key_id, tx_signed)
+}
+
+pub fn blinded_withdraw(wallet: &mut Wallet, statechain_id: &Uuid, tx_fee: &u64) 
+    -> Result<(String, Uuid, u64)> {
+    println!("running blinded withdraw init...");
+    let (shared_key_id, _address, tx_signed, amount) = blinded_withdraw_init(wallet, statechain_id, tx_fee)?;
+    println!("running blinded withdraw confirm...");
+    let tx_id = blinded_withdraw_confirm(wallet, &shared_key_id, &tx_signed)?;
+    Ok((tx_id, statechain_id.clone(), amount))
+}
+
+pub fn blinded_withdraw_init(wallet: &mut Wallet, statechain_id: &Uuid, tx_fee: &u64)
+    -> Result<(Uuid, bitcoin::Address, bitcoin::Transaction, u64)> {
+    let vec_scid = vec![*statechain_id];
+    let (shared_key_ids, address, tx, amount) = blinded_batch_withdraw_init(wallet, &vec_scid, tx_fee)?;
+    Ok((shared_key_ids[0].clone(), address, tx, amount))
+}
+
+pub fn blinded_withdraw_confirm(wallet: &mut Wallet, shared_key_id: &Uuid, 
+    tx_signed: &bitcoin::Transaction) 
+    -> Result<String> {
+    let vec_shared_key_id = vec![*shared_key_id];
+    blinded_batch_withdraw_confirm(wallet, &vec_shared_key_id, tx_signed)
+}
+
+/// Withdraw coins from state entity. Returns signed withdraw transaction, statechain_id and withdrawn amount.
+pub fn blinded_batch_withdraw_init(wallet: &mut Wallet, statechain_ids: &Vec<Uuid>, tx_fee: &u64)
+    -> Result<(Vec<Uuid>, bitcoin::Address, bitcoin::Transaction, u64)> {
+    // Generate receiving address of withdrawn funds
+    let rec_se_address = wallet.keys.get_new_address()?;
+    
+    let mut shared_key_ids=vec![];
+    let mut pks = vec![];
+    // let mut statechain_sigs = vec![];
+
+    for statechain_id in statechain_ids{
+        // first get required shared key data
+        
+        {
+            let shared_key = wallet.get_shared_key_by_statechain_id(statechain_id)?;
+            pks.push(shared_key.share.public.q.get_element());
+            shared_key_ids.push(shared_key.id.clone());
+        }
+    }
+
+    let mut utxos_amounts: Vec::<(OutPoint, u64)> = vec![];
+    let mut amounts = vec![];
+    let mut total_amount = 0;
+    let se_fee_info = get_statechain_fee_info(&wallet.client_shim)?;
+
+    for statechain_id in statechain_ids{
+        let shared_key = wallet.get_shared_key_by_statechain_id(statechain_id)?;
+
+        let tx_backup = transaction_deserialise(&shared_key.tx_backup_psm.as_ref().unwrap().tx_hex)?;
+        let utxo: OutPoint = tx_backup.input.get(0).unwrap().previous_output;
+        let amount = shared_key.value;
+
+        total_amount += amount;
+        utxos_amounts.push((utxo, amount));
+        amounts.push(amount);
+    }
+
+    // Construct withdraw tx
+    let tx_withdraw_unsigned = tx_withdraw_build_from_utxos(
+        &utxos_amounts, 
+        &rec_se_address,
+        &se_fee_info,
+        tx_fee
+    )?;
+    
+    // co-sign withdraw tx
+    let tx_w_prepare_sign_msg = PrepareSignTxMsg {
+        shared_key_ids: shared_key_ids.clone(),
+        protocol: Protocol::Withdraw,
+        tx_hex: transaction_serialise(&tx_withdraw_unsigned),
+        input_addrs: pks,
+        input_amounts: amounts,
+        proof_key: None,
+    };
+    let witness: Vec<Vec<Vec<u8>>> = blindly_cosign_tx_input(wallet, &tx_w_prepare_sign_msg)?;
+
+    let mut tx_withdraw_signed = tx_withdraw_unsigned.clone();
+    tx_withdraw_signed.input[0].witness = witness[0].clone();
+    
+    Ok((shared_key_ids, rec_se_address, tx_withdraw_signed, total_amount - se_fee_info.withdraw))
+}
+
+pub fn blinded_batch_withdraw_confirm(wallet: &mut Wallet, shared_key_ids: &Vec<Uuid>, 
+    tx_withdraw_signed: &bitcoin::Transaction) 
+    -> Result<String> {
+
+    // Broadcast transcation
+    let withdraw_txid = wallet
+        .electrumx_client
+        .instance
+        .broadcast_transaction(hex::encode(consensus::serialize(&tx_withdraw_signed.to_owned())))?;
+    debug!("Withdraw: Withdrawal tx broadcast. txid: {}", withdraw_txid);
+
+    // Mark shared keys as spent
+    for shared_key_id in shared_key_ids
+    {
+        let mut shared_key = wallet.get_shared_key_mut(&shared_key_id)?;
+        shared_key.unspent = false;
+    }
+
+    requests::postb(
+        &wallet.client_shim,
+        &format!("blinded/withdraw"),
+        &WithdrawMsg2 {
+            shared_key_ids: shared_key_ids.clone(),
+        },
+    )?;
+
+    Ok(withdraw_txid)
 }
 
 /// Withdraw coins from state entity. Returns signed withdraw transaction, statechain_id and withdrawn amount.

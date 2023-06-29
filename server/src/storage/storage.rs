@@ -130,6 +130,9 @@ pub trait Storage {
     //Returns locked until time, owner id, state chain to depth
     fn get_statechain_data_api_depth(&self,statechain_id: Uuid, depth: Option<usize>) -> Result<StateChainDataAPI>;
 
+    //Returns amount and state chain vector 
+    fn get_blinded_statechain(&self, statechain_id: Uuid) -> Result<BlindedStateChainData>;
+
     fn authorise_withdrawal(&self, user_id: Uuid, signature: StateChainSig) -> Result<()>;
 
     // /withdraw/confirm

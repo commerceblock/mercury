@@ -7,7 +7,7 @@ extern crate uuid;
 
 use client_lib::{
     daemon::{query_wallet_daemon, DaemonRequest, DaemonResponse},
-    state_entity::transfer::TransferFinalizeData,
+    state_entity::transfer::{TransferFinalizeData, BlindedTransferFinalizeData},
 };
 use shared_lib::{util::transaction_deserialise, structs::{
     PrepareSignTxMsg, StateChainDataAPI, StateEntityFeeInfoAPI, CoinValueInfo, RecoveryDataMsg
@@ -102,6 +102,31 @@ fn main() {
                 }
             }
             println!("\nUnspent tx hashes: \n{}\n", hashes.join("\n"));
+        } else if matches.is_present("blinded-deposit") {
+            if let Some(matches) = matches.subcommand_matches("blinded-deposit") {
+                let amount = u64::from_str(matches.value_of("amount").unwrap()).unwrap();
+                let (_, statechain_id, funding_txid, tx_b, _, _): (
+                    Uuid,
+                    Uuid,
+                    String,
+                    Transaction,
+                    PrepareSignTxMsg,
+                    PublicKey,
+                ) = match query_wallet_daemon(DaemonRequest::DepositBlinded(amount)).unwrap() {
+                    DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
+                    DaemonResponse::None => panic!("None value returned."),
+                };
+                println!(
+                    "\nDeposited {} satoshi's. \nState Chain ID: {}",
+                    amount, statechain_id
+                );
+                println!("\nFunding Txid: {}", funding_txid);
+                println!(
+                    "\nBackup Transaction hex: {}",
+                    hex::encode(consensus::serialize(&tx_b))
+                );
+            }
         } else if matches.is_present("deposit") {
             if let Some(matches) = matches.subcommand_matches("deposit") {
                 let amount = u64::from_str(matches.value_of("amount").unwrap()).unwrap();
@@ -142,6 +167,21 @@ fn main() {
                 );
                 println!("\nWithdraw Txid: {}", txid);
             }
+        } else if matches.is_present("blinded-withdraw") {
+            if let Some(matches) = matches.subcommand_matches("blinded-withdraw") {
+                let statechain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
+                let (txid, statechain_id, amount): (String, Uuid, u64) =
+                    match query_wallet_daemon(DaemonRequest::BlindedWithdraw(statechain_id)).unwrap() {
+                        DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                        DaemonResponse::Error(e) => panic!("{}", e.to_string()),
+                        DaemonResponse::None => panic!("None value returned."),
+                    };
+                println!(
+                    "\nWithdrawn {} satoshi's. \nFrom StateChain ID: {}",
+                    amount, statechain_id
+                );
+                println!("\nWithdraw Txid: {}", txid);
+            }
         } else if matches.is_present("transfer-sender") {
             if let Some(matches) = matches.subcommand_matches("transfer-sender") {
                 let statechain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
@@ -164,11 +204,66 @@ fn main() {
                     transfer_msg.to_string()
                 );
             }
+        } else if matches.is_present("blinded-transfer-sender") {
+            if let Some(matches) = matches.subcommand_matches("blinded-transfer-sender") {
+                let statechain_id = Uuid::from_str(matches.value_of("id").unwrap()).unwrap();
+                let receiver_addr: String = matches.value_of("addr").unwrap().to_string();
+                let transfer_msg: String = match query_wallet_daemon(
+                    DaemonRequest::BlindedTransferSender(statechain_id, receiver_addr),
+                )
+                .unwrap()
+                {
+                    DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
+                    DaemonResponse::None => panic!("None value returned."),
+                };
+                println!(
+                    "\nTransfer initiated for StateChain ID: {}.",
+                    statechain_id
+                );
+                println!(
+                    "\nTransfer message: {:?}",
+                    transfer_msg.to_string()
+                );
+            }
         } else if matches.is_present("transfer-receiver") {
             if let Some(matches) = matches.subcommand_matches("transfer-receiver") {
                 let transfer_msg: String = matches.value_of("message").unwrap().to_string();
                 let finalized_data: TransferFinalizeData =
                     match query_wallet_daemon(DaemonRequest::TransferReceiver(transfer_msg))
+                        .unwrap()
+                    {
+                        DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
+                        DaemonResponse::Error(e) => panic!("{}", e.to_string()),
+                        DaemonResponse::None => panic!("None value returned."),
+                    };
+
+                let tx = transaction_deserialise(&finalized_data.tx_backup_psm.tx_hex).unwrap();
+                println!(
+                    "\nTransfer complete for StateChain ID: {}.",
+                    finalized_data.statechain_id
+                );
+
+                println!(
+                    "\nValue: {}",
+                    tx.output[0].value
+                );
+
+                println!(
+                    "\nLocktime: {}",
+                    tx.lock_time
+                );
+
+                println!(
+                    "\nBackup Transaction hex: {}",
+                    finalized_data.tx_backup_psm.tx_hex
+                );
+            }
+        } else if matches.is_present("blinded-transfer-receiver") {
+            if let Some(matches) = matches.subcommand_matches("blinded-transfer-receiver") {
+                let transfer_msg: String = matches.value_of("message").unwrap().to_string();
+                let finalized_data: BlindedTransferFinalizeData =
+                    match query_wallet_daemon(DaemonRequest::BlindedTransferReceiver(transfer_msg))
                         .unwrap()
                     {
                         DaemonResponse::Value(val) => serde_json::from_str(&val).unwrap(),
@@ -228,6 +323,24 @@ fn main() {
                     _ => {}
                 };
                 println!("\nSwap complete from StateChain ID: {}.", statechain_id);
+            }
+        } else if matches.is_present("blinded-swap") {
+            if let Some(matches) = matches.subcommand_matches("blinded-swap") {
+                let statechain_id =
+                    Uuid::from_str(matches.value_of("state-chain-id").unwrap()).unwrap();
+                let swap_size = u64::from_str(matches.value_of("swap-size").unwrap()).unwrap();
+                let force_no_tor: bool = matches.is_present("force-no-tor");
+                match query_wallet_daemon(DaemonRequest::BlindedSwap(
+                    statechain_id,
+                    swap_size,
+                    force_no_tor,
+                ))
+                .unwrap()
+                {
+                    DaemonResponse::Error(e) => panic!("{}", e.to_string()),
+                    _ => {}
+                };
+                println!("\nBlinded Swap complete from StateChain ID: {}.", statechain_id);
             }
         }
     //

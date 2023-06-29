@@ -288,6 +288,69 @@ pub fn tx_withdraw_build(
     Ok(tx_0)
 }
 
+/// Build withdraw tx spending funding tx to:
+///     - amount-fee to receive address, and
+///     - amount 'fee' to State Entity fee address 'fee_addr'
+
+pub fn tx_withdraw_build_from_utxos(
+    utxos_amounts: &Vec::<(OutPoint, u64)>,
+    rec_se_address: &Address,
+    se_fee_info: &StateEntityFeeInfoAPI,
+    tx_fee: &u64
+) -> Result<Transaction> {
+    let mut txins = Vec::<TxIn>::new();
+
+    let amount = {
+        let mut total = 0;
+        for info in utxos_amounts {
+            total += info.1; // amount
+
+            let txin = TxIn {
+                previous_output: OutPoint {
+                    txid: info.0.txid, // utxo
+                    vout: 0,
+                },
+                sequence: 0xFFFFFFFF,
+                witness: Vec::new(),
+                script_sig: bitcoin::Script::default(),
+            };
+            
+            txins.push(txin);
+        };
+        total + se_fee_info.deposit as u64
+    };
+
+    let fee = (amount*se_fee_info.withdraw) / 10000 as u64;
+
+    if fee + tx_fee >= amount {
+        return Err(SharedLibError::FormatError(String::from(
+            "Not enough value to cover fees.",
+        )));
+    }
+
+    let mut output = vec![TxOut {
+                script_pubkey: rec_se_address.script_pubkey(),
+                value: amount - fee - tx_fee,
+    }];
+
+    if fee > 0 {
+        output.push(
+            TxOut {
+                script_pubkey: Address::from_str(&se_fee_info.address)?.script_pubkey(),
+                value: fee,
+            }
+        );
+    }
+
+    let tx_0 = Transaction {
+        version: 2,
+        lock_time: 0,
+        input: txins,
+        output
+    };
+    Ok(tx_0)
+}
+
 pub mod keygen {
     pub use bitcoin::secp256k1::{key::SecretKey, Message, PublicKey, Secp256k1};
     pub use bitcoin::util;

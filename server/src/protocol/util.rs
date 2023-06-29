@@ -640,6 +640,20 @@ pub fn get_coin_info(sc_entity: State<SCE>) -> Result<Json<CoinValueInfo>> {
 }
 
 #[openapi]
+/// # Get current statecoin (statechain tip) information for specified statechain ID
+#[get("/info/blinded/statechain/<statechain_id>", format = "json")]
+pub fn get_blinded_statechain(
+    sc_entity: State<SCE>,
+    statechain_id: String,
+) -> Result<Json<BlindedStateChainData>> {
+    sc_entity.check_rate_fast("info")?;
+    match sc_entity.get_blinded_statechain(Uuid::from_str(&statechain_id).unwrap()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
 /// # Get current statechain information for specified statechain ID
 #[get("/info/statechain/<statechain_id>", format = "json")]
 pub fn get_statechain(
@@ -744,6 +758,21 @@ pub fn get_transfer_batch_status(
 ) -> Result<Json<TransferBatchDataAPI>> {
     sc_entity.check_rate_fast("info")?;
     match sc_entity.get_transfer_batch_status(Uuid::from_str(&batch_id).unwrap()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Get batch transfer status and statecoin IDs for specified batch ID
+#[get("/blinded/info/transfer-batch/<batch_id>", format = "json")]
+pub fn get_blinded_transfer_batch_status(
+    sc_entity: State<SCE>,
+    batch_id: String,
+) -> Result<Json<TransferBatchDataAPI>> {
+    println!("[util] --- get_blinded_transfer_batch_status");
+    sc_entity.check_rate_fast("info")?;
+    match sc_entity.get_blinded_transfer_batch_status(Uuid::from_str(&batch_id).unwrap()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }
@@ -986,7 +1015,75 @@ impl SCE {
 
             debug!("TRANSFER_BATCH: attempting to finalize batch transfer - batch id: {}", batch_id);
             // Attempt to finalize transfers - will fail with Err if not all ready to be finalized
-            match self.finalize_batch(batch_id){
+            // match self.finalize_batch(batch_id){
+            match self.finalize_blinded_batch(batch_id){
+                Ok(_) => {
+                        info!(
+                        "TRANSFER_BATCH: All transfers complete in batch. Finalized. ID: {}.",
+                        batch_id
+                        );
+                        finalized = true;
+                    },
+                Err(_) => {
+                    debug!("TRANSFER_BATCH: batch transfer ongoing: {:?}", tbd);
+                    ()
+                },
+            };
+
+        }
+
+        debug!("TRANSFER_BATCH: batch transfer data: {:?}, finalized: {}", tbd, finalized);
+        // return status of transfers
+        Ok(TransferBatchDataAPI {
+            state_chains: tbd.state_chains,
+            finalized,
+        })
+    }
+
+    pub fn get_blinded_transfer_batch_status(&self, batch_id: Uuid) -> Result<TransferBatchDataAPI> {
+        let _guard = self.batch_transfer_guard.as_ref().lock()?;
+        let tbd = self.database.get_transfer_batch_data(batch_id)?;
+        debug!("TRANSFER_BATCH: data: {:?}", tbd);
+        let mut finalized = tbd.finalized;
+        if !finalized {
+            // Check batch is still within lifetime
+            debug!("TRANSFER_BATCH: checking if batch transfer has ended");
+            if transfer_batch_is_ended(tbd.start_time, self.config.batch_lifetime as i64) {
+                let mut punished_state_chains: Vec<Uuid> =
+                    self.database.get_punished_state_chains(batch_id)?;
+
+                if punished_state_chains.len() == 0 {
+                    // Punishments not yet set
+                    info!("TRANSFER_BATCH: Lifetime reached. ID: {}.", batch_id);
+                    // Set punishments for all statechains involved in batch
+                    for statechain_id in tbd.state_chains {
+                        self.state_chain_punish(statechain_id.clone())?;
+                        punished_state_chains.push(statechain_id.clone());
+
+                        // Remove TransferData involved. Ignore failed update err since Transfer data may not exist.
+                        let _ = self.database.remove_transfer_data(&statechain_id);
+
+                        info!(
+                            "TRANSFER_BATCH: Transfer data deleted. State Chain ID: {}.",
+                            statechain_id
+                        );
+                    }
+
+                    self.database
+                        .update_punished(&batch_id, punished_state_chains)?;
+
+                    info!(
+                        "TRANSFER_BATCH: Punished all state chains in failed batch. ID: {}.",
+                        batch_id
+                    );
+                }
+                return Err(SEError::TransferBatchEnded(String::from("Timeout")));
+            }
+            
+
+            debug!("TRANSFER_BATCH: attempting to finalize batch transfer - batch id: {}", batch_id);
+            // Attempt to finalize transfers - will fail with Err if not all ready to be finalized
+            match self.finalize_blinded_batch(batch_id){
                 Ok(_) => {
                         info!(
                         "TRANSFER_BATCH: All transfers complete in batch. Finalized. ID: {}.",
@@ -1217,6 +1314,18 @@ impl<T: Database + Send + Sync + 'static, D: monotree::Database + Send + Sync + 
     //fn get_root(&self, id: &i64) -> Result<Option<Root>>;
 
     //fn update_root(&self, root: &Root) -> Result<i64>;
+
+    fn get_blinded_statechain(&self, statechain_id: Uuid) -> Result<BlindedStateChainData> {
+        let state_chain = self.database.get_statechain_amount(statechain_id)?;
+        let chain = state_chain.chain.get_chain().clone();
+        let sigcount = self.database.get_statechain_sigcount(statechain_id)?;
+
+        Ok(BlindedStateChainData {
+            amount: state_chain.amount as u64,
+            chain,
+            sigcount: sigcount as u64,
+        })
+    }
 
     fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain> {
         self.database.get_statechain(statechain_id)

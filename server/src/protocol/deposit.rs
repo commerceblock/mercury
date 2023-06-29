@@ -47,6 +47,11 @@ pub trait Deposit {
     ///     - Create StateChain DB object
     ///     - Update sparse merkle tree with new StateChain entry
     fn deposit_confirm(&self, deposit_msg2: DepositMsg2) -> Result<StatechainID>;
+
+    /// API: Complete deposit protocol (blind):
+    ///     - Wait for confirmation of funding tx in blockchain
+    ///     - Create StateChain DB object
+    fn blinded_deposit_confirm(&self, deposit_msg2: BlindedDepositMsg2) -> Result<StatechainID>;
 }
 
 impl Deposit for SCE {
@@ -178,6 +183,59 @@ impl Deposit for SCE {
 
         Ok(StatechainID {id: statechain_id})
     }
+
+    fn blinded_deposit_confirm(&self, deposit_msg2: BlindedDepositMsg2) -> Result<StatechainID> {
+        // let shared_key_id = deposit_msg2.shared_key_id.clone();
+        self.check_user_auth(&deposit_msg2.shared_key_id)?;
+        let user_id = deposit_msg2.shared_key_id;
+
+        let amount = deposit_msg2.amount;
+
+        info!("DEPOSIT: Protocol confirmation initiated for user ID: {}", user_id);
+
+        let proof_key = self
+            .database
+            .get_proof_key(user_id)?;
+
+        let statechain_id: Uuid;
+
+        // check if we already have a statechain with this user ID (in case of deposit RBF)
+        match self.database.get_statechain_id(user_id.clone()) {
+            Ok(res) => {
+                statechain_id = res;
+            },
+            Err(e) => match e {
+                SEError::DBErrorWC(DBErrorType::NoDataForID, _, _) => {
+                    // Create state chain DB object
+                    statechain_id = Uuid::new_v4();
+                    let state_chain = StateChain::new(proof_key.clone());
+                    // Insert into StateChain table
+                    // self.database.create_statechain_without_amount(&statechain_id, &user_id, &state_chain)?;
+                    self.database.create_statechain(&statechain_id, &user_id, &state_chain, &amount)?;
+                },
+                _ => return Err(e),
+
+            }
+        };
+
+        // set the shared public key
+        let shared_pubkey = self.database.get_shared_pubkey(user_id.clone())?;
+        self.database.set_shared_pubkey(statechain_id.clone(), &shared_pubkey.ok_or(SEError::Generic(String::from("Shared pubkey missing")))?)?;
+
+        info!(
+            "DEPOSIT: State Chain created. ID: {} For user ID: {}",
+            statechain_id, user_id
+        );
+
+        // Update UserSession with StateChain's ID
+        self.database
+            .update_statechain_id(&user_id, &statechain_id)?;
+
+        //increment fee metric
+        DEPOSITS_COUNT.inc();
+
+        Ok(StatechainID {id: statechain_id})
+    }
 }
 
 #[openapi]
@@ -200,6 +258,20 @@ pub fn deposit_confirm(
 ) -> Result<Json<StatechainID>> {
     sc_entity.check_rate_fast("deposit_confirm")?;
     match sc_entity.deposit_confirm(deposit_msg2.into_inner()) {
+        Ok(res) => return Ok(Json(res)),
+        Err(e) => return Err(e),
+    }
+}
+
+#[openapi]
+/// # Confirm the deposit process has completed and retreive the statechain ID
+#[post("/blinded/deposit/confirm", format = "json", data = "<deposit_msg2>")]
+pub fn blinded_deposit_confirm(
+    sc_entity: State<SCE>,
+    deposit_msg2: Json<BlindedDepositMsg2>,
+) -> Result<Json<StatechainID>> {
+    sc_entity.check_rate_fast("deposit_confirm")?;
+    match sc_entity.blinded_deposit_confirm(deposit_msg2.into_inner()) {
         Ok(res) => return Ok(Json(res)),
         Err(e) => return Err(e),
     }

@@ -26,7 +26,7 @@ use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
 use shared_lib::mainstay::CommitmentInfo;
 use shared_lib::state_chain::*;
-use shared_lib::structs::{TransferMsg3,CoinValueInfo,TransferFinalizeData};
+use shared_lib::structs::{TransferMsg3,CoinValueInfo,TransferFinalizeData, EncryptedTransferMsg3, BlindedTransferFinalizeData};
 use shared_lib::Root;
 use shared_lib::util::transaction_deserialise;
 use rocket_okapi::JsonSchema;
@@ -119,6 +119,7 @@ pub enum Column {
     TransferReady,
     SharedPublic,
     Confirmed,
+    SigCount,
 
     // BackupTxs
     //Id,
@@ -318,6 +319,7 @@ impl PGDatabase {
                 transferready bool,
                 sharedpublic varchar,
                 confirmed bool NOT NULL DEFAULT false,
+                sigcount int8 NOT NULL DEFAULT 1,
                 PRIMARY KEY (id)
             );",
                 Table::StateChain.to_string(),
@@ -1174,6 +1176,56 @@ impl Database for PGDatabase {
         Ok(())
     }
 
+    fn create_statechain_without_amount(
+        &self,
+        statechain_id: &Uuid,
+        user_id: &Uuid,
+        state_chain: &StateChain,
+    ) -> Result<()> {
+        self.insert(statechain_id, Table::StateChain)?;
+        self.update(
+            statechain_id,
+            Table::StateChain,
+            vec![
+                Column::Chain,
+                Column::LockedUntil,
+                Column::OwnerId,
+            ],
+            vec![
+                &Self::ser(state_chain.to_owned())?,
+                &get_time_now(),
+                &user_id.to_owned(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn increment_statechain_sigcount(
+        &self,
+        owner_id: &Uuid
+    ) -> Result<()> {
+        let dbw = self.database_w()?;
+        let statement = dbw.prepare(&format!(
+            "UPDATE {} SET {} = {} + 1 WHERE {} = $1",
+            Table::StateChain.to_string(),
+            Column::SigCount.to_string(),
+            Column::SigCount.to_string(),
+            Column::OwnerId.to_string(),
+        ))?;
+
+        if statement.execute(&[owner_id])? == 0 {
+            return Err(SEError::DBError(UpdateFailed, owner_id.to_string()));
+        }
+
+        Ok(())
+    }
+
+    fn get_statechain_sigcount(&self, statechain_id: Uuid) -> Result<i64> {
+        let sig_count =
+            self.get_1::<i64>(statechain_id, Table::StateChain, vec![Column::SigCount])?;
+        Ok(sig_count)
+    }
+
     fn get_statechain(&self, statechain_id: Uuid) -> Result<StateChain> {
         let (_, state_chain_str) = self.get_2::<i64, String>(
             statechain_id,
@@ -1191,6 +1243,9 @@ impl Database for PGDatabase {
         state_chain: StateChain,
         new_user_id: &Uuid,
     ) -> Result<()> {
+
+        println!("[db] --- Updating statechain owner");
+
         self.update(
             statechain_id,
             Table::StateChain,
@@ -1362,6 +1417,18 @@ impl Database for PGDatabase {
         )
     }
 
+    fn update_blinded_transfer_msg(&self, transfer_msg3: &EncryptedTransferMsg3) -> Result<()> {
+        self.update(
+            &transfer_msg3.statechain_id,
+            Table::Transfer,
+            vec![Column::TransferMsg, Column::ProofKey],
+            vec![
+                &transfer_msg3.encrypted_transfer_msg3,
+                &transfer_msg3.proof_key,
+            ],
+        )
+    }
+
     fn get_transfer_msg(&self, statechain_id: &Uuid) -> Result<TransferMsg3> {
         let msg = self.get_1(
             statechain_id.to_owned(),
@@ -1369,6 +1436,15 @@ impl Database for PGDatabase {
             vec![Column::TransferMsg],
         )?;
         Self::deser(msg)
+    }
+
+    fn get_encrypted_transfer_msg(&self, statechain_id: &Uuid) -> Result<String> {
+        let msg = self.get_1(
+            statechain_id.to_owned(),
+            Table::Transfer,
+            vec![Column::TransferMsg],
+        )?;
+        Ok(msg)
     }
 
     fn get_transfer_msg_addr(&self, receive_addr: &str) -> Result<Vec<TransferMsg3>> {
@@ -1717,6 +1793,38 @@ impl Database for PGDatabase {
         })
     }
 
+    fn get_blinded_finalize_batch_data(&self, batch_id: Uuid) -> Result<BlindedTransferFinalizeBatchData> {
+        let mut finalized_data_vec = vec![];
+
+        for id in self.get_batch_transfer_statechain_ids(&batch_id)? {
+            match self.get_sc_blinded_transfer_finalize_data(&id){
+                Ok(v) => {
+                    //Check the batch id
+                    match v.batch_data {
+                        Some(ref bd) => {
+                            if bd.id == batch_id{
+                                finalized_data_vec.push(v);
+                            } else {
+                                return Err(SEError::DBError(NoDataForID,
+                                    format!("batch_id required:{}, found:{}", batch_id, bd.id)))
+                            }
+                        },
+                        None => return Err(SEError::DBError(NoDataForID,
+                                    format!("no batch data"))),
+                    }
+                },
+                Err(e) => return Err(e),
+            };
+        }
+
+        let start_time = self.get_transfer_batch_start_time(&batch_id)?;
+
+        Ok(BlindedTransferFinalizeBatchData {
+            finalized_data_vec,
+            start_time,
+        })
+    }
+
     fn update_finalize_batch_data(
         &self,
         statechain_id: &Uuid,
@@ -1730,10 +1838,30 @@ impl Database for PGDatabase {
         )
     }
 
+    fn update_blinded_finalize_batch_data(
+        &self,
+        statechain_id: &Uuid,
+        finalized_data: &BlindedTransferFinalizeData,
+    ) -> Result<()> {
+        self.update(
+            statechain_id,
+            Table::StateChain,
+            vec![Column::TransferFinalizeData],
+            vec![&Self::ser(finalized_data)?],
+        )
+    }
+
     fn get_sc_transfer_finalize_data(
         &self,
         statechain_id: &Uuid
     ) -> Result<TransferFinalizeData> {
+        let tfd = self.get_1(statechain_id.to_owned(),
+            Table::StateChain, vec![Column::TransferFinalizeData])?;
+        Self::deser(tfd)
+    } 
+
+
+    fn get_sc_blinded_transfer_finalize_data(&self, statechain_id: &Uuid) -> Result<BlindedTransferFinalizeData> {
         let tfd = self.get_1(statechain_id.to_owned(),
             Table::StateChain, vec![Column::TransferFinalizeData])?;
         Self::deser(tfd)
@@ -1853,6 +1981,49 @@ impl Database for PGDatabase {
                 &String::from("auth"),
                 &finalized_data.statechain_sig.data.to_owned(),
                 &Self::ser(transaction_deserialise(&finalized_data.new_tx_backup_hex)?)?,
+                &statechain_id,
+                &Self::ser(finalized_data.s2)?,
+            ],
+        ).map_err(|e| { 
+            guard.remove(new_user_id); 
+            let _ = self.remove(new_user_id, Table::UserSession);
+            let _ = self.remove(new_user_id, Table::Lockbox);
+            e
+         })?;
+         Ok(())
+    }
+
+    // Create new blinded UserSession to allow new owner to generate shared wallet
+    fn transfer_init_blinded_user_session(
+        &self,
+        new_user_id: &Uuid,
+        statechain_id: &Uuid,
+        finalized_data: BlindedTransferFinalizeData,
+        user_ids: Arc<Mutex<UserIDs>>
+    ) -> Result<()> {
+        let mut guard = user_ids.as_ref().lock()?;
+        guard.insert(new_user_id.clone());
+        self.insert(new_user_id, Table::UserSession).map_err(|e| { 
+            guard.remove(new_user_id); 
+            e
+         })?;
+        self.insert(new_user_id, Table::Lockbox).map_err(|e| { 
+            guard.remove(new_user_id); 
+            let _ = self.remove(new_user_id, Table::UserSession);
+            e
+         })?;
+        self.update(
+            new_user_id,
+            Table::UserSession,
+            vec![
+                Column::Authentication,
+                Column::ProofKey,
+                Column::StateChainId,
+                Column::S2,
+            ],
+            vec![
+                &String::from("auth"),
+                &finalized_data.statechain_sig.data.to_owned(),
                 &statechain_id,
                 &Self::ser(finalized_data.s2)?,
             ],

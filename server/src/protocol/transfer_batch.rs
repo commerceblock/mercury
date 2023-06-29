@@ -43,6 +43,9 @@ pub trait BatchTransfer {
     /// Finalize all transfers in a batch if all are complete and validated.
     fn finalize_batch(&self, batch_id: Uuid) -> Result<()>;
 
+    /// Finalize all transfers in a blinded batch if all are complete and validated.
+    fn finalize_blinded_batch(&self, batch_id: Uuid) -> Result<()>;
+
     /// API: Reveal a nonce for a corresponding Transfer commitment.
     fn transfer_reveal_nonce(&self, transfer_reveal_nonce: TransferRevealNonce) -> Result<()>;
 }
@@ -114,6 +117,25 @@ impl BatchTransfer for SCE {
         for finalized_data in fbd.finalized_data_vec.clone() {
             debug!("TRANSFER_FINALIZE_BATCH: doing transfer_finalize for {:?}", finalized_data);
             self.transfer_finalize(&finalized_data)?;
+        }
+
+        debug!("TRANSFER_FINALIZE_BATCH: updating database for batch ID: {}", batch_id);
+        self.database
+            .update_transfer_batch_finalized(&batch_id, &true)?;
+
+        Ok(())
+    }
+
+    fn finalize_blinded_batch(&self, batch_id: Uuid) -> Result<()> {
+        debug!("TRANSFER_FINALIZE_BATCH: ID: {}", batch_id);
+        
+        let fbd = self.database.get_blinded_finalize_batch_data(batch_id)?;
+
+        debug!("TRANSFER_FINALIZE_BATCH: data: {:?}", fbd);
+
+        for finalized_data in fbd.finalized_data_vec.clone() {
+            debug!("TRANSFER_FINALIZE_BATCH: doing transfer_finalize for {:?}", finalized_data);
+            self.blinded_transfer_finalize(&finalized_data)?;
         }
 
         debug!("TRANSFER_FINALIZE_BATCH: updating database for batch ID: {}", batch_id);

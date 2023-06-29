@@ -6,7 +6,7 @@ use super::super::Result;
 use shared_lib::structs::{
     SmtProofMsgAPI, StateChainDataAPI, StateEntityFeeInfoAPI, 
     TransferBatchDataAPI, RecoveryDataMsg, RecoveryRequest, 
-    CoinValueInfo, StateCoinDataAPI, TransferFinalizeData
+    CoinValueInfo, StateCoinDataAPI, TransferFinalizeData, BlindedStateChainData
 };
 use shared_lib::Root;
 
@@ -40,6 +40,14 @@ pub fn get_statechain(
     requests::get(client_shim, &format!("info/statechain/{}", statechain_id))
 }
 
+/// Get blinded state chain by ID
+pub fn get_blinded_statechain(
+    client_shim: &ClientShim,
+    statechain_id: &Uuid,
+) -> Result<BlindedStateChainData> {
+    requests::get(client_shim, &format!("info/blinded/statechain/{}", statechain_id))
+}
+
 /// Get state chain by ID to depth
 pub fn get_statechain_depth(
     client_shim: &ClientShim,
@@ -48,8 +56,6 @@ pub fn get_statechain_depth(
 ) -> Result<StateChainDataAPI> {
     requests::get(client_shim, &format!("info/statechain/{}/{}", statechain_id, depth))
 }
-
-
 
 /// Get statecoin (statechain tip) by statechain ID
 pub fn get_statecoin(
@@ -124,6 +130,14 @@ pub fn get_transfer_batch_status(
     batch_id: &Uuid,
 ) -> Result<TransferBatchDataAPI> {
     requests::get(client_shim, &format!("info/transfer-batch/{}", batch_id))
+}
+
+/// Get blinded transaction batch session status
+pub fn get_blinded_transfer_batch_status(
+    client_shim: &ClientShim,
+    batch_id: &Uuid,
+) -> Result<TransferBatchDataAPI> {
+    requests::get(client_shim, &format!("/blinded/info/transfer-batch/{}", batch_id))
 }
 
 /// Reset the state entity's database and in-memory data

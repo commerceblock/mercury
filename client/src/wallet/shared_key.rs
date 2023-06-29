@@ -31,6 +31,7 @@ pub struct SharedKey {
     pub smt_proof: Option<InclusionProofSMT>,
     pub unspent: bool,
     pub funding_txid: String,
+    pub previous_txs: Vec<String>, // chain of backup transactions (used in the blind version)
 }
 
 impl SharedKey {
@@ -71,6 +72,16 @@ impl SharedKey {
             root: root.clone(),
             proof: proof.clone(),
         });
+        self.funding_txid = funding_txid.clone();
+    }
+
+    // used in blind deposit where there is no InclusionProofSMT
+    pub fn add_proof_key_and_funding_txid(
+        &mut self,
+        proof_key: &String,
+        funding_txid: &String,
+    ) {
+        self.proof_key = Some(proof_key.to_owned());
         self.funding_txid = funding_txid.clone();
     }
 

@@ -33,6 +33,15 @@ subcommands:
                   required: true
                   value_name: amount
                   help: Amount in Satoshis
+        - blinded-deposit:
+            about: Blinded Deposit to State Entity
+            version: "1.0"
+            args:
+              - amount:
+                  short: a
+                  required: true
+                  value_name: amount
+                  help: Amount in Satoshis
         - withdraw:
             about: Withdraw from State Entity
             version: "1.0"
@@ -42,7 +51,30 @@ subcommands:
                   required: true
                   value_name: StateChain ID
                   help: ID of StateChain holding funds on State Entity
+        - blinded-withdraw:
+            about: Blinded Withdraw from State Entity
+            version: "1.0"
+            args:
+              - id:
+                  short: i
+                  required: true
+                  value_name: StateChain ID
+                  help: ID of StateChain holding funds on State Entity
         - transfer-sender:
+            about: Transfer StateChain - Send
+            version: "1.0"
+            args:
+              - id:
+                  short: i
+                  required: true
+                  value_name: StateChain ID
+                  help: ID of StateChain with funds on State Entity
+              - addr:
+                  short: a
+                  required: true
+                  value_name: Recipient Address
+                  help: State Entity Address for recipient
+        - blinded-transfer-sender:
             about: Transfer StateChain - Send
             version: "1.0"
             args:
@@ -65,6 +97,15 @@ subcommands:
                   required: true
                   value_name: message
                   help: Transfer message from sender
+        - blinded-transfer-receiver:
+            about: Transfer State Chain - Receive
+            version: "1.0"
+            args:
+              - message:
+                  short: m
+                  required: true
+                  value_name: message
+                  help: Transfer message from sender
         - transfer-any:
             about: Transfer any Statecoin - Send
             version: "1.0"
@@ -76,6 +117,23 @@ subcommands:
                   help: State Entity Address for recipient
         - swap:
             about: Perform Swap
+            version: "1.0"
+            args:
+              - state-chain-id:
+                  short: id
+                  required: true
+                  value_name: statechain_id
+                  help: State chain ID
+              - swap-size:
+                  short: s
+                  required: true
+                  value_name: swap_size
+                  help: Number of state chains in swap
+              - force-no-tor:
+                  short: f
+                  help: Run without changing tor identity
+        - blinded-swap:
+            about: Perform Blinded Swap
             version: "1.0"
             args:
               - state-chain-id:

@@ -23,6 +23,44 @@ use monotree::{
 use std::convert::TryInto;
 
 /// Sign a transaction input with state entity shared wallet. Return signature witness.
+pub fn blindly_cosign_tx_input(
+    wallet: &mut Wallet,
+    prepare_sign_msg: &PrepareSignTxMsg,
+) -> Result<Vec<Vec<Vec<u8>>>> {
+
+    let tx = transaction_deserialise(&prepare_sign_msg.tx_hex)?;
+
+    let mut witnesses=vec![];
+
+    for (i, shared_key_id) in prepare_sign_msg.shared_key_ids.iter().enumerate() {
+        // get sighash as message to be signed
+        let sig_hash = get_sighash(
+            &tx,
+            &i,
+            &prepare_sign_msg.input_addrs[i],
+            &prepare_sign_msg.input_amounts[i],
+            &wallet.network,
+        );
+
+        let shared_key = wallet.get_shared_key(&shared_key_id)?;
+        let mk = &shared_key.share;
+
+        // co-sign transaction
+        let witness = ecdsa::blinded_sign(
+            &wallet.client_shim,
+            BigInt::from_hex(&hex::encode(&sig_hash[..])),
+            &mk,
+            prepare_sign_msg.protocol,
+            &shared_key.id,
+        )?;
+
+        witnesses.push(witness);
+    }
+
+    Ok(witnesses)
+}
+
+/// Sign a transaction input with state entity shared wallet. Return signature witness.
 pub fn cosign_tx_input(
     wallet: &mut Wallet,
     prepare_sign_msg: &PrepareSignTxMsg,

@@ -368,6 +368,38 @@ impl OutPointDef{
     }
 }
 
+// /blinded/info/statechain return struct
+/// Statechain data
+/// This struct is returned containing the statechain of the specified statechain ID
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+#[schemars(example = "Self::example")]
+pub struct BlindedStateChainData {
+    /// The value of the statecoin (in satoshis)
+    pub amount: u64,
+    /// The statechain of owner proof keys and signatures
+    pub chain: Vec<State>,
+    /// The number of signatures generated for this statechain
+    pub sigcount: u64,
+}
+
+impl BlindedStateChainData {
+    pub fn example() -> Self{
+        Self{
+            amount: 1000000,
+            chain: vec![State::example()],
+            sigcount: 1,
+        }
+    }
+
+    pub fn get_tip(&self) -> super::Result<State> {
+        Ok(self
+            .chain
+            .last()
+            .ok_or(SharedLibError::Generic(String::from("StateChain empty")))?
+            .clone())
+    }
+}
+
 // /info/statechain return struct
 /// Statechain data
 /// This struct is returned containing the statechain of the specified statechain ID
@@ -600,6 +632,10 @@ pub struct BigIntDef(String);
 pub struct SignMessageDef(String);
 
 #[derive(JsonSchema)]
+#[schemars(remote = "party2::BlindedSignMessage")]
+pub struct BlindedSignMessageDef(String);
+
+#[derive(JsonSchema)]
 #[schemars(remote = "party_one::KeyGenFirstMsg")]
 pub struct KeyGenFirstMsgDef(String);
 
@@ -662,6 +698,14 @@ pub struct SignReply1 {
     pub msg: party_one::EphKeyGenFirstMsg,
 }
 
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct BlindedSignReply {
+    #[schemars(with = "BigIntDef")]
+    pub blinded_s: BigInt,
+    pub server_pub_key: Vec<u8>
+}
+
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct SignMsg1 {
     #[schemars(with = "UuidDef")]
@@ -686,6 +730,21 @@ pub struct SignSecondMsgRequest {
     pub party_two_sign_message: party2::SignMessage,
 }
 
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct BlindedSignMsg2 {
+    #[schemars(with = "UuidDef")]
+    pub shared_key_id: Uuid,
+    pub sign_second_msg_request: BlindedSignSecondMsgRequest,
+}
+
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct BlindedSignSecondMsgRequest {
+    pub protocol: Protocol,
+    #[schemars(with = "BlindedSignMessageDef")]
+    pub party_two_sign_message: party2::BlindedSignMessage,
+}
+
 // Deposit algorithm structs
 
 /// Client -> SE
@@ -700,6 +759,15 @@ pub struct DepositMsg1 {
 pub struct DepositMsg2 {
     #[schemars(with = "UuidDef")]
     pub shared_key_id: Uuid,
+}
+
+/// As the server does not know the transaction, the client has to send the amount
+/// Client -> SE
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+pub struct BlindedDepositMsg2 {
+    #[schemars(with = "UuidDef")]
+    pub shared_key_id: Uuid,
+    pub amount: i64,
 }
 
 #[derive(JsonSchema)]
@@ -753,6 +821,16 @@ pub struct TransferMsg3 {
     pub statechain_id: Uuid,
     pub tx_backup_psm: PrepareSignTxMsg,
     pub rec_se_addr: SCEAddress, // receivers state entity address (btc address and proof key)
+    pub previous_txs: Vec<String>, // chain of backup transactions (used in the blind version)
+}
+
+/// Sender -> Receiver
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+pub struct EncryptedTransferMsg3 {
+    #[schemars(with = "UuidDef")]
+    pub statechain_id: Uuid,
+    pub proof_key: String,
+    pub encrypted_transfer_msg3: String,
 }
 
 #[derive(JsonSchema)]
@@ -782,6 +860,21 @@ pub struct TransferMsg4 {
     #[schemars(with = "GEDef")]
     pub o2_pub: GE,
     pub tx_backup_hex: String,
+    pub batch_data: Option<BatchData>,
+}
+
+/// Receiver -> State Entity
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct BlindedTransferMsg4 {
+    #[schemars(with = "UuidDef")]
+    pub shared_key_id: Uuid,
+    #[schemars(with = "UuidDef")]
+    pub statechain_id: Uuid,
+    #[schemars(with = "FEDef")]
+    pub t2: FESer, // t2 = t1*o2_inv = o1*x1*o2_inv
+    pub statechain_sig: StateChainSig,
+    #[schemars(with = "GEDef")]
+    pub o2_pub: GE,
     pub batch_data: Option<BatchData>,
 }
 
@@ -878,6 +971,31 @@ impl TransferFinalizeData{
     }
 }
 
+/// Struct holds data when transfer is complete but not yet finalized
+#[derive(Serialize, Deserialize, Debug, Clone, JsonSchema, PartialEq)]
+#[schemars(example = "Self::example")]
+pub struct BlindedTransferFinalizeData {
+    #[schemars(with = "UuidDef")]
+    pub new_shared_key_id: Uuid,
+    #[schemars(with = "UuidDef")]
+    pub statechain_id: Uuid,
+    pub statechain_sig: StateChainSig,
+    #[schemars(with = "FEDef")]
+    pub s2: FE,
+    pub batch_data: Option<BatchData>,
+}
+
+impl BlindedTransferFinalizeData{
+    pub fn example() -> Self{
+        Self{
+            new_shared_key_id: Uuid::new_v4(), 
+            statechain_id: Uuid::new_v4(),
+            statechain_sig: StateChainSig::example(),
+            s2: FE::new_random(),
+            batch_data: None
+        }
+    }
+}
 
 /// Data present if transfer is part of an atomic batch transfer
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
@@ -1038,6 +1156,32 @@ impl SelfEncryptable for TransferMsg4 {
 }
 
 impl SelfEncryptable for &mut TransferMsg4 {
+    fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) -> crate::ecies::Result<()> {
+        (**self).decrypt(privkey)
+    }
+    fn encrypt_with_pubkey(
+        &mut self,
+        pubkey: &crate::ecies::PublicKey,
+    ) -> crate::ecies::Result<()> {
+        (**self).encrypt_with_pubkey(pubkey)
+    }
+}
+
+impl Encryptable for BlindedTransferMsg4 {}
+impl SelfEncryptable for BlindedTransferMsg4 {
+    fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) -> crate::ecies::Result<()> {
+        self.t2.decrypt(privkey)
+    }
+
+    fn encrypt_with_pubkey(
+        &mut self,
+        pubkey: &crate::ecies::PublicKey,
+    ) -> crate::ecies::Result<()> {
+        self.t2.encrypt_with_pubkey(pubkey)
+    }
+}
+
+impl SelfEncryptable for &mut BlindedTransferMsg4 {
     fn decrypt(&mut self, privkey: &crate::ecies::PrivateKey) -> crate::ecies::Result<()> {
         (**self).decrypt(privkey)
     }

@@ -41,11 +41,16 @@ pub enum DaemonRequest {
     GetStateChain(Uuid),
     GetRecoveryData(String),
     Deposit(u64),
+    DepositBlinded(u64),
     Withdraw(Uuid),
+    BlindedWithdraw(Uuid),
     TransferSender(Uuid, String),
+    BlindedTransferSender(Uuid, String),
     TransferAny(String),
     TransferReceiver(String),
+    BlindedTransferReceiver(String),
     Swap(Uuid, u64, bool),
+    BlindedSwap(Uuid, u64, bool),
 }
 
 /// Example response object
@@ -228,16 +233,30 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                     }
                     DaemonRequest::Deposit(amount) => {
                         debug!("Daemon: Deposit");
-                        let deposit_res = state_entity::deposit::deposit(&mut wallet, &amount);
+                        let deposit_res = state_entity::deposit::deposit(&mut wallet, &amount, false);
+                        wallet.save();
+                        r.send(DaemonResponse::value_to_deamon_response(deposit_res))
+                    }
+                    DaemonRequest::DepositBlinded(amount) => {
+                        debug!("Daemon: Deposit Blinded");
+                        let deposit_res = state_entity::deposit::deposit(&mut wallet, &amount, true);
                         wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(deposit_res))
                     }
                     DaemonRequest::Withdraw(statechain_id) => {
                         debug!("Daemon: Withdraw");
+
                         let deposit_res =
                             state_entity::withdraw::withdraw(&mut wallet, &statechain_id, &FEE);
                         wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(deposit_res))
+                    }
+                    DaemonRequest::BlindedWithdraw(statechain_id) => {
+                        debug!("Daemon: Blinded Withdraw");
+
+                        let withdraw_res = state_entity::withdraw::blinded_withdraw(&mut wallet, &statechain_id, &FEE);
+                        wallet.save();
+                        r.send(DaemonResponse::value_to_deamon_response(withdraw_res))
                     }
                     DaemonRequest::TransferSender(statechain_id, receiver_addr) => {
                         debug!("Daemon: TransferSender");
@@ -252,6 +271,23 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                         wallet.save();
                         r.send(DaemonResponse::value_to_deamon_response(
                             encoded_message,
+                        ))
+                    }
+                    DaemonRequest::BlindedTransferSender(statechain_id, receiver_addr) => {
+                        debug!("Daemon: Blinded TransferSender");
+                        let sce_address = encoding::decode_address(receiver_addr,&network).unwrap();
+                        let transfer_sender_resp = state_entity::transfer::blinded_transfer_sender(
+                            &mut wallet,
+                            &statechain_id,
+                            sce_address,
+                            None
+                        );
+                        let transfer_sender_resp = transfer_sender_resp.unwrap();
+                        let blinded_encoded_message = encoding::blinded_encode_message(&transfer_sender_resp);
+
+                        wallet.save();
+                        r.send(DaemonResponse::value_to_deamon_response(
+                            blinded_encoded_message,
                         ))
                     }
                     DaemonRequest::TransferAny(receiver_addr) => {
@@ -288,12 +324,40 @@ pub fn run_wallet_daemon(force_testing_mode: bool) -> Result<()> {
                             transfer_receiver_resp,
                         ))
                     }
+                    DaemonRequest::BlindedTransferReceiver(transfer_msg_bech32) => {
+                        debug!("Daemon: TransferReceiver");
+                        let mut transfer_msg = encoding::blinded_decode_message(transfer_msg_bech32,&network).unwrap();
+                        let transfer_receiver_resp = state_entity::transfer::blinded_transfer_receiver(
+                            &mut wallet,
+                            &mut transfer_msg,
+                            &None,
+                        );
+                        wallet.save();
+                        r.send(DaemonResponse::value_to_deamon_response(
+                            transfer_receiver_resp,
+                        ))
+                    }
                     DaemonRequest::Swap(statechain_id, swap_size, force_no_tor) => {
                         debug!(
                             "Daemon: Swapping {} with swap size {}",
                             statechain_id, swap_size
                         );
                         state_entity::conductor::do_swap(
+                            &mut wallet,
+                            &statechain_id,
+                            &swap_size,
+                            force_no_tor,
+                        )
+                        .unwrap();
+                        wallet.save();
+                        r.send(DaemonResponse::None)
+                    }
+                    DaemonRequest::BlindedSwap(statechain_id, swap_size, force_no_tor) => {
+                        debug!(
+                            "Daemon: Swapping {} with swap size {}",
+                            statechain_id, swap_size
+                        );
+                        state_entity::blinded_conductor::do_swap(
                             &mut wallet,
                             &statechain_id,
                             &swap_size,
