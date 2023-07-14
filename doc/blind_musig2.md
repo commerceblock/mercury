@@ -36,3 +36,29 @@ To prevent party 1 from learning of either the full public key or final signatur
 3) Party 2 computes `c = H(X||R||m)` and sends it to party 1 in order to compute `s1 = c.a1.x1 + r1`. 
 
 Party 1 never learns the final value of `(R,s1+s2)` or `m`. 
+
+## Key update
+
+In order to update the server (party 1) keyshare when a statecoin is transferred between users, the key aggregation coefficient must be set to 1 for each key. The purpose of this coefficient in the Musig2 protocol is to prevent 'rouge key attacks' where one party can choose a public key derived from both their own secret key and the inverse of the other party's public key giving them the ability to unilaterally produce a valid signature over the aggregate key. However this can be prevented (as specified in the musig2 paper) by the party producing a proof of knowledge of the private key corresponding to their supplied public key. This can be provided simply in the form of a signature, which is produced in any case by signing the statechain state in the mercury protocol. 
+
+When receiving a statecoin, in order to verify that the coin address (i.e. aggregate public key) is shared correctly between the previous owner and the server, the client must verify the following:
+
+1) Retreive the CURRENT public key (share) from the server for this coin `X1`.
+2) Retrieve the public key (share) of the sender `X2`.
+3) Verify that `X1 + X2 = P` the address of the statecoin.
+4) Verify that the sender has the private key used to generate `X2`: this is done by verifying the statechain signature over the reciver public key `X3` from `X2`. 
+
+This proves that the address `P` was generated (aggregated) with the server and can only be signed with cooperation with the server, i.e. no previous owner can hold the full key. 
+
+In order to update the key shares, the following protocl can be used:
+
+1. Server (party 1) generates a random blinding nonce `b` and sends to client (party 2).
+2. Client performs `transfer_sender` and adds their private key the nonce: `t1 = b + x2`
+3. Client sends `t1` to the reciever as part of `transfer_msg_3` (encrypted with the receiver public key `X3 = x3G`).
+4. Reciver client decrypts `t1` and then subtracts their private key `x3`: `t2 = b + x2 - x3`.
+5. Reciver client sends `t2` to the server as part of `transfer_receiver`.
+6. Server the updates the private key share `x1_2 = x1 + t2 - b = x1 + b + x2 - x3 -b = x1 + x2 - x3`
+
+So now, `x1_2 + x3` (the aggregation of the new server key share with the new client key share) is equal to `x1 + x2` (the aggregation of the old server key share with the old client key share). 
+
+7. The server deletes `x1`. 
