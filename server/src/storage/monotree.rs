@@ -6,7 +6,7 @@ use crate::PGDatabase;
 use monotree::database::{Database as MonotreeDatabase, MemCache, MemoryDB};
 use monotree::Errors;
 use std::collections::HashMap;
-use shared_lib::structs::{CoinValueInfo,TransferFinalizeData};
+use shared_lib::structs::{CoinValueInfo, PODInfo, PODStatus, TransferFinalizeData};
 use crate::server::UserIDs;
 use std::sync::{Arc, Mutex};
 
@@ -406,8 +406,11 @@ impl Database for MemoryDB {
     }
     fn set_confirmed(&self, _statechain_id: &uuid::Uuid) -> crate::Result<()> {
         unimplemented!()
-    }      
-    fn get_challenge(&self, _user_id: &uuid::Uuid) -> crate::Result<String> {
+    }
+    fn get_user_value(&self, _user_id: &uuid::Uuid) -> crate::Result<u64> {
+        unimplemented!()
+    }
+    fn get_challenge(&self, _user_id: &uuid::Uuid) -> crate::Result<Option<String>> {
         unimplemented!()
     }
     fn update_statechain_id(
@@ -714,9 +717,23 @@ impl Database for MemoryDB {
         _user_id: &uuid::Uuid,
         _auth: &String,
         _proof_key: &String,
-        _challenge: &String,
-        _user_ids: Arc<Mutex<UserIDs>>
+        _challenge: &Option<String>,
+        _user_ids: Arc<Mutex<UserIDs>>,
+        _value: &Option<u64>,
     ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn create_user_session_pod(
+        &self,
+        _user_id: &uuid::Uuid,
+        _auth: &String,
+        _proof_key: &String,
+        _user_ids: Arc<Mutex<UserIDs>>,
+        _value: &u64,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_user_session_value(&self, _user_id: uuid::Uuid) -> crate::Result<Option<u64>> {
         unimplemented!()
     }
     fn transfer_init_user_session(
@@ -793,6 +810,38 @@ impl Database for MemoryDB {
         unimplemented!()
     }
     fn get_sighash(&self, _user_id: uuid::Uuid) -> crate::Result<bitcoin::hashes::sha256d::Hash> {
+        unimplemented!()
+    }
+    fn init_pay_on_demand_info(&self, _pod_info: &PODInfo) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_pay_on_demand_info(&self, _token_id: &uuid::Uuid) -> crate::Result<PODInfo> {
+        unimplemented!()
+    }
+    fn get_pay_on_demand_status(&self, _token_id: &uuid::Uuid) -> crate::Result<PODStatus> {
+        unimplemented!()
+    }
+    fn set_pay_on_demand_status(
+        &self,
+        _token_id: &uuid::Uuid,
+        _pod_status: &PODStatus,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_pay_on_demand_confirmed(&self, _token_id: &uuid::Uuid) -> crate::Result<bool> {
+        unimplemented!()
+    }
+    fn set_pay_on_demand_confirmed(
+        &self,
+        _token_id: &uuid::Uuid,
+        _confirmed: &bool,
+    ) -> crate::Result<()> {
+        unimplemented!()
+    }
+    fn get_pay_on_demand_amount(&self, _token_id: &uuid::Uuid) -> crate::Result<u64> {
+        unimplemented!()
+    }
+    fn set_pay_on_demand_amount(&self, _token_id: &uuid::Uuid, _amount: &u64) -> crate::Result<()> {
         unimplemented!()
     }
 }

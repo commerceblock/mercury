@@ -97,6 +97,22 @@ impl Lockbox {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Clightning {
+    pub client: reqwest::blocking::Client,
+    pub endpoint: Url,
+    pub macaroon: String
+}
+
+impl Clightning {
+    pub fn new(endpoint: Url, macaroon: &str) -> Result<Clightning> {
+        let endpoint = endpoint;
+        let client = reqwest::blocking::Client::new();
+        let macaroon_str = macaroon.to_string();
+        Ok(Clightning { client, endpoint, macaroon: macaroon_str })
+    }
+}
+
 pub struct StateChainEntity<
     T: Database + Send + Sync + 'static,
     D: MonotreeDatabase + Send + Sync + 'static,
@@ -108,6 +124,7 @@ pub struct StateChainEntity<
     pub smt: Arc<Mutex<Monotree<D, Blake3>>>,
     pub scheduler: Option<Arc<Mutex<Scheduler>>>,
     pub lockbox: Option<Lockbox>,
+    pub cln: Clightning,
     pub rate_limiter_slow: Option<Arc<governor::RateLimiter<String, DashMapStateStore<String> , DefaultClock> >>,
     pub rate_limiter_fast: Option<Arc<governor::RateLimiter<String, DashMapStateStore<String> , DefaultClock> >>,
     pub rate_limiter_id: Option<Arc<governor::RateLimiter<Uuid, DashMapStateStore<Uuid> , DefaultClock> >>,
@@ -155,6 +172,8 @@ impl<
             Mode::Core => (init_lb(&config_rs), None)
         };
 
+        let cln_cli = Clightning::new(Url::parse(&config_rs.lightningd).unwrap(), &config_rs.lnmacaroon).unwrap();
+
         let rate_limiter_slow = config_rs.rate_limit_slow.map(|r| Arc::new(governor::RateLimiter::dashmap(Quota::per_second(r))));
         let rate_limiter_fast = config_rs.rate_limit_fast.map(|r| Arc::new(governor::RateLimiter::dashmap(Quota::per_second(r))));
         let rate_limiter_id = config_rs.rate_limit_id.map(|r| Arc::new(governor::RateLimiter::dashmap(Quota::per_second(r))));
@@ -167,6 +186,7 @@ impl<
             smt: Arc::new(Mutex::new(smt)),
             scheduler,
             lockbox,
+            cln: cln_cli,
             rate_limiter_slow,
             rate_limiter_fast,
             rate_limiter_id,
@@ -223,6 +243,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             ecdsa::second_message,
             ecdsa::sign_first,
             ecdsa::sign_second,
+            deposit::deposit_init_pod,
             deposit::deposit_init,
             deposit::deposit_confirm,
             transfer::transfer_sender,
@@ -244,7 +265,9 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             conductor::deregister_utxo,
             conductor::swap_first_message,
             conductor::swap_second_message,
-            conductor::get_group_info],
+            conductor::get_group_info,
+            pay_on_deposit::pod_token_init,
+            pay_on_deposit::pod_token_verify],
         Mode::Core => routes_with_openapi![
             util::get_statechain,
             util::get_statechain_depth,
@@ -264,6 +287,7 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             ecdsa::second_message,
             ecdsa::sign_first,
             ecdsa::sign_second,
+            deposit::deposit_init_pod,
             deposit::deposit_init,
             deposit::deposit_confirm,
             transfer::transfer_sender,
@@ -276,7 +300,9 @@ fn get_routes(mode: &Mode) -> std::vec::Vec<Route>{
             transfer_batch::transfer_batch_init,
             transfer_batch::transfer_reveal_nonce,
             withdraw::withdraw_init,
-            withdraw::withdraw_confirm],
+            withdraw::withdraw_confirm,
+            pay_on_deposit::pod_token_init,
+            pay_on_deposit::pod_token_verify],
         Mode::Conductor => routes_with_openapi![
             util::reset_test_dbs,
             util::reset_inram_data,
@@ -441,10 +467,15 @@ mock! {
     StateChainEntity{}
     trait Deposit {
         fn deposit_init(&self, deposit_msg1: DepositMsg1) -> deposit::Result<UserID>;
+        fn deposit_init_pod(&self, deposit_msg1: DepositMsg1POD) -> deposit::Result<PODUserID>;
         fn deposit_confirm(
             &self,
             deposit_msg2: DepositMsg2,
         ) -> deposit::Result<StatechainID>;
+        fn subtract_pod_token_amount(&self, token_id: &Uuid, 
+            deposit_amount: &u64) -> deposit::Result<u64>;
+        fn add_pod_token_amount(&self, token_id: &Uuid, 
+            amount: &u64) -> deposit::Result<u64>;
     }
     trait Ecdsa {
         fn master_key(&self, user_id: Uuid) -> ecdsa::Result<()>;

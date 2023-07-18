@@ -6,7 +6,8 @@ use super::super::Result;
 use shared_lib::structs::{
     SmtProofMsgAPI, StateChainDataAPI, StateEntityFeeInfoAPI, 
     TransferBatchDataAPI, RecoveryDataMsg, RecoveryRequest, 
-    CoinValueInfo, StateCoinDataAPI, TransferFinalizeData
+    CoinValueInfo, StateCoinDataAPI, TransferFinalizeData,
+    PODInfo, PODStatus
 };
 use shared_lib::Root;
 
@@ -134,6 +135,16 @@ pub fn reset_data(client_shim: &ClientShim) -> Result<()> {
 /// Reset the state entity's database and in-memory data
 pub fn reset_inram_data(client_shim: &ClientShim) -> Result<()> {
     requests::get(client_shim, "test/reset-inram-data")
+}
+
+/// Aquire a pay on demand token which is spent when initializing a pay on demand deposit
+pub fn pod_token_init(client_shim: &ClientShim, value: &u64) -> Result<PODInfo> {
+    requests::get(client_shim, &format!("pod/token/init/{}", value))
+}
+
+/// Get the POD token status
+pub fn pod_token_verify(client_shim: &ClientShim, token_id: &Uuid) -> Result<PODStatus> {
+    requests::get(client_shim, &format!("pod/token/verify/{}", token_id))
 }
 
 #[cfg(test)]

@@ -4,6 +4,7 @@ required_confirmation = 0
 testing_mode = true
 lockheight_init = 1000
 lh_decrement = 10
+lightningd = "http://136.244.96.105:3001"
 
 # Fees
 fee_address = "tb1qzvv6yfeg0navfkrxpqc0fjdsu9ey4qgqqsarq4,tb1qzvv6yfeg0navfkrxpqc0fjdsu9ey4qgqqsarq4"

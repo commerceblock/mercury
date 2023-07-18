@@ -26,7 +26,8 @@ use rocket_contrib::databases::r2d2;
 use rocket_contrib::databases::r2d2_postgres::{PostgresConnectionManager, TlsMode};
 use shared_lib::mainstay::CommitmentInfo;
 use shared_lib::state_chain::*;
-use shared_lib::structs::{TransferMsg3,CoinValueInfo,TransferFinalizeData};
+use shared_lib::structs::{TransferMsg3,CoinValueInfo,TransferFinalizeData,
+    PODInfo, PODStatus};
 use shared_lib::Root;
 use shared_lib::util::transaction_deserialise;
 use rocket_okapi::JsonSchema;
@@ -53,6 +54,7 @@ pub struct HDPos {
 pub enum Schema {
     StateChainEntity,
     Watcher,
+    PayOnDemand
 }
 impl Schema {
     pub fn to_string(&self) -> String {
@@ -70,11 +72,23 @@ pub enum Table {
     Root,
     BackupTxs,
     Smt,
-    Lockbox
+    Lockbox,
+    PayOnDemand,
+    UserSessionValue,
 }
 impl Table {
     pub fn to_string(&self) -> String {
-        match self {
+        match self { 
+            Table::PayOnDemand => format!(
+                "{:?}.{:?}",
+                Schema::PayOnDemand.to_string().to_lowercase(),
+                self
+            ),
+            Table::UserSessionValue => format!(
+                "{:?}.{:?}",
+                Schema::PayOnDemand.to_string().to_lowercase(),
+                self
+            ),
             Table::BackupTxs => format!(
                 "{:?}.{:?}",
                 Schema::Watcher.to_string().to_lowercase(),
@@ -89,7 +103,7 @@ impl Table {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone, Copy, PartialEq)]
 pub enum Column {
     Data,
     Complete,
@@ -161,6 +175,11 @@ pub enum Column {
     Key,
     // Value
     Lockbox,
+
+    // PayOnDemand
+    // Id
+    LightningInvoice,
+    BtcPaymentAddress
 }
 
 
@@ -240,6 +259,15 @@ impl PGDatabase {
             &[],
         )?;
 
+        let _ = self.database_w()?.execute(
+            &format!(
+                "
+            CREATE SCHEMA IF NOT EXISTS payondemand;
+            "
+            ),
+            &[],
+        )?;
+
         // Create tables if they do not already exist
         self.database_w()?.execute(
             &format!(
@@ -265,6 +293,21 @@ impl PGDatabase {
             &[],
         )?;
 
+        // Create tables if they do not already exist
+        self.database_w()?.execute(
+            &format!(
+                "
+            CREATE TABLE IF NOT EXISTS {} (
+                id uuid NOT NULL,
+                value int8,
+                PRIMARY KEY (id)
+            );",
+                Table::UserSessionValue.to_string(),
+            ),
+            &[],
+        )?;
+
+
         self.database_w()?.execute(
             &format!(
                 "
@@ -278,8 +321,22 @@ impl PGDatabase {
             &[],
         )?;
 
-
-
+        self.database_w()?.execute(
+            &format!(
+                "
+            CREATE TABLE IF NOT EXISTS {} (
+                id uuid NOT NULL,
+                lightninginvoice varchar,
+                btcpaymentaddress varchar,
+                value int8,
+                confirmed bool NOT NULL DEFAULT false,             
+                amount int8 NOT NULL DEFAULT 0,
+                PRIMARY KEY (id)
+            );",
+                Table::PayOnDemand.to_string(),
+            ),
+            &[],
+        )?;
 
         self.database_w()?.execute(
             &format!(
@@ -432,6 +489,16 @@ impl PGDatabase {
             &[],
         )?;
 
+
+        let _ = self.database_w()?.execute(
+            &format!(
+                "
+            DROP SCHEMA payondemand CASCADE;",
+            ),
+            &[],
+        )?;
+
+
         Ok(())
     }
 
@@ -440,7 +507,7 @@ impl PGDatabase {
         self.database_w()?.execute(
             &format!(
                 "
-            TRUNCATE {},{},{},{},{},{},{},{},{} RESTART IDENTITY;",
+            TRUNCATE {},{},{},{},{},{},{},{},{},{},{} RESTART IDENTITY;",
                 Table::UserSession.to_string(),
                 Table::Ecdsa.to_string(),
                 Table::StateChain.to_string(),
@@ -450,6 +517,8 @@ impl PGDatabase {
                 Table::BackupTxs.to_string(),
                 Table::Smt.to_string(),
                 Table::Lockbox.to_string(),
+                Table::PayOnDemand.to_string(),
+                Table::UserSessionValue.to_string(),
             ),
             &[],
         )?;
@@ -1077,6 +1146,11 @@ impl Database for PGDatabase {
         self.get_1::<String>(*user_id, Table::UserSession, vec![Column::Authentication])
     }
 
+    fn get_user_value(&self, user_id: &Uuid) -> Result<u64> {
+        let value = self.get_1::<i64>(*user_id, Table::UserSession, vec![Column::Value])? as u64;
+        Ok(value)
+    }
+
     fn is_confirmed(&self, statechain_id: &Uuid) -> Result<bool> {
         self.get_1::<bool>(*statechain_id, Table::StateChain, vec![Column::Confirmed])
     }
@@ -1090,8 +1164,8 @@ impl Database for PGDatabase {
         )
     }    
 
-    fn get_challenge(&self, user_id: &Uuid) -> Result<String> {
-        let challenge_str = self.get_1::<String>(*user_id, Table::UserSession, vec![Column::Challenge])?;
+    fn get_challenge(&self, user_id: &Uuid) -> Result<Option<String>> {
+        let challenge_str = self.get_1::<Option<String>>(*user_id, Table::UserSession, vec![Column::Challenge])?;
         Ok(challenge_str)
     }
 
@@ -1795,9 +1869,21 @@ impl Database for PGDatabase {
 
     // Create DB entry for newly generated ID signalling that user has passed some
     // verification. For now use ID as 'password' to interact with state entity
+    // Use pay on demand 
+    // fee_deposit = deposit fee in basis points
+    fn create_user_session_pod(&self, user_id: &Uuid, auth: &String, 
+        proof_key: &String,  user_ids: Arc<Mutex<UserIDs>>, 
+        value: &u64) -> Result<()> {
+            self.create_user_session(
+                user_id, auth, proof_key, &None, 
+                user_ids, &Some(value.clone()))
+    }
+
+    // Create DB entry for newly generated ID signalling that user has passed some
+    // verification. For now use ID as 'password' to interact with state entity
     fn create_user_session(&self, user_id: &Uuid, auth: &String, 
-        proof_key: &String, challenge: &String,
-        user_ids: Arc<Mutex<UserIDs>>) -> Result<()> {
+        proof_key: &String, challenge: &Option<String>, 
+        user_ids: Arc<Mutex<UserIDs>>, value: &Option<u64>) -> Result<()> {
         let mut guard = user_ids.as_ref().lock()?;
         guard.insert(user_id.to_owned());
         self.insert(user_id, Table::UserSession).map_err(|e| { guard.remove(user_id); e })?;
@@ -1805,20 +1891,56 @@ impl Database for PGDatabase {
             guard.remove(user_id); 
             let _ = self.remove(user_id, Table::UserSession); 
             e
-         })?;
+        })?;
+        self.insert(user_id, Table::UserSessionValue).map_err(|e| { 
+            guard.remove(user_id); 
+            let _ = self.remove(user_id, Table::UserSession); 
+            let _ = self.remove(user_id, Table::Lockbox); 
+            e
+        })?;
         self.update(
             user_id,
             Table::UserSession,
             vec![Column::Authentication, Column::ProofKey, Column::Challenge],
-            vec![&auth.clone(), &proof_key.to_owned(), &challenge.clone()],
+            vec![&auth.clone(), &proof_key.to_owned(), challenge],
         ).map_err(|e| { 
             guard.remove(user_id); 
             let _ = self.remove(user_id, Table::UserSession);
             let _ = self.remove(user_id, Table::Lockbox);
+            let _ = self.remove(user_id, Table::UserSessionValue);
             e
          })?;
-        Ok(())
+        self.update(
+            user_id,
+            Table::UserSessionValue,
+            vec![Column::Value],
+            vec![&value.map(|v| v as i64)],
+        ).map_err(|e| { 
+            guard.remove(user_id);
+            let _ = self.remove(user_id, Table::UserSession);
+            let _ = self.remove(user_id, Table::Lockbox);
+            let _ = self.remove(user_id, Table::UserSessionValue);
+            e
+        })    
     }
+
+    fn get_user_session_value(&self, user_id: Uuid) -> Result<Option<u64>> {
+        match self.get_1::<Option<i64>>(user_id, Table::UserSessionValue, vec![Column::Value]).
+            map(|x| x.map(|x| x as u64)) {
+                Ok(v) => Ok(v),
+                Err(e) => match e {
+                        SEError::DBError(ref error_type, ref _message) => match error_type {
+                            NoDataForID => Ok(None),
+                            _ => Err(e),
+                        },
+                        SEError::DBErrorWC(ref error_type, ref _message, ref _column) => match error_type {
+                            NoDataForID => Ok(None),
+                            _ => Err(e),
+                        },
+                        _ => Err(e)
+                }
+        }
+    } 
 
     // Create new UserSession to allow new owner to generate shared wallet
     fn transfer_init_user_session(
@@ -1926,4 +2048,91 @@ impl Database for PGDatabase {
             vec![&Self::ser(tx)?],
         )
     }
+
+    fn init_pay_on_demand_info(&self, token: &PODInfo) -> Result<()> {
+        self.insert(&token.token_id, Table::PayOnDemand)?;
+        self.update(
+            &token.token_id,
+            Table::PayOnDemand,
+            vec![Column::LightningInvoice, Column::BtcPaymentAddress, Column::Value],
+            vec![&Self::ser(&token.lightning_invoice)?, &Self::ser(&token.btc_payment_address)?, &(token.value as i64)],
+        )
+    }
+
+    fn get_pay_on_demand_info(&self, token_id: &Uuid) -> Result<PODInfo> {
+          let (lightning_invoice, btc_payment_address, value) =
+            self.get_3::<String, String, i64>(
+                token_id.to_owned(),
+                Table::PayOnDemand,
+                vec![
+                    Column::LightningInvoice,
+                    Column::BtcPaymentAddress,
+                    Column::Value,
+                ],
+            )?;
+
+            Ok(PODInfo{
+                        token_id: token_id.to_owned(),
+                        lightning_invoice: Self::deser(lightning_invoice)?,
+                        btc_payment_address: Self::deser(btc_payment_address)?,
+                        value: value as u64})
+    }
+
+    fn get_pay_on_demand_status(&self, token_id: &Uuid) -> Result<PODStatus> {
+        let (confirmed, amount) =
+            self.get_2::<bool, i64>(
+                token_id.to_owned(),
+                Table::PayOnDemand,
+                vec![
+                    Column::Confirmed,
+                    Column::Amount
+                ],
+            )?;
+        Ok(PODStatus{confirmed, amount: amount as u64})
+    }
+
+    fn set_pay_on_demand_status(&self, token_id: &Uuid, pod_status: &PODStatus) -> Result<()> {
+        self.update(
+            &token_id,
+            Table::PayOnDemand,
+            vec![Column::Confirmed, Column::Amount],
+            vec![&pod_status.confirmed, &(pod_status.amount as i64)],
+        )
+    }
+
+    fn get_pay_on_demand_confirmed(&self, token_id: &Uuid) -> Result<bool> {
+            self.get_1::<bool>(
+                token_id.to_owned(),
+                Table::PayOnDemand,
+                vec![Column::Confirmed],
+            )
+    }
+
+    fn set_pay_on_demand_confirmed(&self, token_id: &Uuid, confirmed: &bool) -> Result<()> {
+        self.update(
+            &token_id,
+            Table::PayOnDemand,
+            vec![Column::Confirmed],
+            vec![confirmed],
+        )
+    }
+
+    fn get_pay_on_demand_amount(&self, token_id: &Uuid) -> Result<u64> {
+        let amount = self.get_1::<i64>(
+            token_id.to_owned(),
+            Table::PayOnDemand,
+            vec![Column::Amount],
+        )? as u64;
+        Ok(amount)
+    }
+
+    fn set_pay_on_demand_amount(&self, token_id: &Uuid, amount: &u64) -> Result<()> {
+        self.update(
+            &token_id,
+            Table::PayOnDemand,
+            vec![Column::Amount],
+            vec![&(*amount as i64)],
+        )
+    }
+
 }
