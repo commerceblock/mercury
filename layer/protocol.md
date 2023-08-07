@@ -59,10 +59,15 @@ Owner 1 computes `sig2_2 = r2_2 + c2.o1` and `sig_2 = sig1_2 + sig2_2`. The full
 6. Owner 1 then computes `t1 = o1 + x1` and encrypts it with the Owner 2 public key (from the address): `Enc(t1,O2)`
 7. Owner 1 then concatinates the `Tx0` outpoint with the Owner 2 public key (`O2`) and signs it with their key `o1` to generate `SC_sig_1`. 
 8. Owner 1 then sends Owner 2 a message containing five objects:
+   
 	a. All `K` (here `K = 2`) signed backup transactions (`Txi i=1,...,K`): `Tx1` and `Tx2`
-	b. For each backup transaction signature (`bi`,`R2_i i=1,...,K`): `b1`,`b2`,`R2_1` and `R2_2`. 
+
+	b. For each backup transaction signature (`bi`,`R2_i i=1,...,K`): `b1`,`b2`,`R2_1` and `R2_2`.
+
 	c. `SC_sig_1`
+
 	d. `Enc(t2,O2)`
+
 	e. `statechain_id`
 
 > At this point the Owner 1 has sent all the information required to complete the transfer to Owner 2 and is no longer involved in the protocol. Owner 2 then verifies the correctness and validity of the objects. 
@@ -71,12 +76,17 @@ Owner 1 computes `sig2_2 = r2_2 + c2.o1` and `sig_2 = sig1_2 + sig2_2`. The full
 
 1. Owner 2 verifies that the latest backup transaction pays to their key `O2` and that the input (`Tx0`) is unspent. 
 2. Owner 2 takes the list of previous `K` backup transactions (`Txi i=1,...,K`) and for each one `i` verifies:
-	a. The signature is valid. 
-	b. The `nLocktimes` are decremented correctly (i.e. the latest `TxK` has the lowest). 
-	c. Retreives `ci`, and commitments `SHA256(R2_i)` and `SHA256(bi)` from the SE. 
-	d. Verifies the commitments to `R2_i` and `bi` and verfies that `ci = bi + SHA256(P||R_i||mi)` (where `mi` is the sighash of `Txi`). 
-3. Owner 2 queries SE for 1) The total number of signatures generated for `statechain_id`: `N` and 2) Current SE public key: `S1`. 
-4. Owner 2 then verifies that `K = N` and then `O1 + S1 = P`
+
+	a. The signature is valid.
+
+	b. The `nLocktimes` are decremented correctly (i.e. the latest `TxK` has the lowest).
+
+	c. Retreives `ci`, and commitments `SHA256(R2_i)` and `SHA256(bi)` from the SE.
+
+	d. Verifies the commitments to `R2_i` and `bi` and verfies that `ci = bi + SHA256(P||R_i||mi)` (where `mi` is the sighash of `Txi`).
+
+4. Owner 2 queries SE for 1) The total number of signatures generated for `statechain_id`: `N` and 2) Current SE public key: `S1`. 
+5. Owner 2 then verifies that `K = N` and then `O1 + S1 = P`
 
 The SE key share update then proceeds as follows:
 
