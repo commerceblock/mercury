@@ -1,6 +1,6 @@
 # Mercury layer WASM client specification
 
-The Mercury layer functions as a client/server paradigm. The Mercury client, developed in Rust and compiled to WebAssembly, offers a module for those seeking integration with Mercury. This client communicates with both the Mercury server and the Electrum server using HTTP, facilitated through the Tor network.
+The Mercury layer operates as a client/server application. The Mercury client is a rust application (compiled to web-assmeby) that connects to the *mercury server* and Electrum server via http (over the Tor network). 
 
 ### WASM framework structure
 
@@ -140,6 +140,7 @@ Get SC address
 **request:** 
 ```
 {
+    wallet_name: String,   // wallet name
     index: u64 // address index, 0 is new address
 }
 ```
@@ -157,6 +158,11 @@ Get SC address
 Get number of SC address
 
 **request:** 
+```
+{
+    wallet_name: String,   // wallet name
+}
+```
 
 *response*
 ```
@@ -207,11 +213,16 @@ Check token balance and status
 Get activity log
 
 **request:** 
+```
+{
+    wallet_name: String,   // wallet name
+}
+```
 
 *response*
 ```
 {
-    activity_log: {}
+    activity_log: [{}] // list of activity log objects 
 }
 ```
 
@@ -222,6 +233,7 @@ Get list of statecoins
 **request:** 
 ```
 {
+    wallet_name: String,   // wallet name 
     available: bool // all statecoins objects or only available coins
 }
 ```
@@ -240,6 +252,7 @@ Get statecoin object
 **request:** 
 ```
 {
+    wallet_name: String,   // wallet name
     statechain_id: String // statecoin ID
 }
 ```
@@ -258,6 +271,7 @@ Get statecoin object
 **request:** 
 ```
 {
+    wallet_name: String,   // wallet name
     locktime: u64 // current blockheight
 }
 ```
@@ -265,10 +279,52 @@ Get statecoin object
 *response*
 ```
 {
-    statcoins: [{}]
+    statcoins: [{}] // list of statecoin objects
 }
 ```
 
+#### checkExpiredCoins
+
+Check status of expired coins and broadcast if required (and broadcast CPFP)
+
+**request:**
+```
+{
+    wallet_name: String,   // wallet name
+}
+```
+
+*response*
+```
+{
+    broadcast: [{}] // list of expired statecoins broadcast
+    confirmed: [{}] // list of expired statecoins confirmed
+    mempool: [{}] // list of expired statecoins in mempool
+    taken: [{}] // list of expired statecoins double-spent
+}
+```
+
+#### setCPFP
+
+Set CPFP tx
+
+**request:** 
+```
+{
+    wallet_name: String,   // wallet name
+    statechain_id: String
+    user_id: String
+    fee_rate: u32 // CPFP fee rate
+    address: String // pay to address
+}
+```
+
+*response*
+```
+{
+    cpfp_tx: String // CPFP tx hex
+}
+```
 
 #### depositInit
 
@@ -279,6 +335,7 @@ This generates a shared key taproot address
 **request:** 
 ```
 {
+    wallet_name: String,   // wallet name
     amount: u64 // coin value
     token_id: String // token ID
 }
@@ -308,6 +365,8 @@ Check if a coin has been deposited
 ```
 {
     confirmations: u32 // number of confirmations (0 in mempool, -1 not seen)
+    txid: String // Deposit txid hex
+    vout: // Deposit tx vout
 }
 ```
 
@@ -318,6 +377,7 @@ Finalize deposit
 **request:** 
 ```
 {
+    wallet_name: String,   // wallet name
     statechain_id: String
     user_id: String
 }
@@ -326,6 +386,166 @@ Finalize deposit
 *response*
 ```
 {
-    backup_tx
+    backup_tx: String // backup tx hex
+    locktime: u32 // blockheight of coin expiry
 }
 ```
+
+#### transferSender
+
+Initiate transfer of the coin to a new owner
+
+**request:** 
+```
+{
+    wallet_name: String,   // wallet name
+    statechain_id: String
+    user_id: String
+    receiver_address: String // reciver SC address
+}
+```
+
+*response*
+```
+{
+    transfer_msg: {} // transfer message object
+}
+```
+
+#### transferReceiver
+
+Initiate transfer of the coin to a new owner
+
+**request:** 
+```
+{
+    wallet_name: String,   // wallet name
+    statechain_id: String
+    user_id: String
+    receiver_address: String // reciver SC address
+}
+```
+
+*response*
+```
+{
+    transfer_msg: {} // transfer message object
+}
+```
+
+#### withdrawInit
+
+Initiate the withdrawal of a statecoin
+
+**request:** 
+```
+{
+    wallet_name: String,   // wallet name
+    statechain_id: String
+    user_id: String
+    withdraw_address: String // reciver bitcoin address
+    fee_rate: u32
+}
+```
+
+*response*
+```
+{
+    withdraw_tx: String // signed withdraw tx hex
+    txid: String // withdraw txid
+}
+```
+
+#### withdrawCheck
+
+Check if a coin has been withdrawn
+
+**request:** 
+```
+{
+    txid: String // withdraw txid
+}
+```
+
+*response*
+```
+{
+    confirmations: u32 // number of confirmations (0 in mempool, -1 not seen)
+}
+```
+
+#### withdrawConfirm
+
+Finalize withdrawal
+
+**request:** 
+```
+{
+    wallet_name: String,   // wallet name
+    statechain_id: String
+    user_id: String
+}
+```
+
+*response*
+```
+OK
+```
+
+#### swapGroups
+
+Get swap group status and remaining time
+
+**request:** 
+
+
+*response*
+```
+{
+    groups: [{}],   // list of group object
+    time: u32 // time in seconds until next epoch
+}
+```
+
+#### doSwap
+
+Register coin for swap
+
+**request:** 
+```
+{
+    wallet_name: String,   // wallet name
+    statechain_id: String
+    user_id: String
+}
+```
+
+*response*
+```
+{
+    time: u32 // time in seconds until next epoch
+}
+```
+
+#### swapStatus
+
+Check on a coin swap status
+
+**request:** 
+```
+{
+    wallet_name: String,   // wallet name
+    statechain_id: String
+    user_id: String
+}
+```
+
+*response*
+```
+{
+    phase: u32 // swap phase number
+    phase_desc: String // swap phase description
+    new_statechain_id: String // if complete, new statechain_id
+}
+```
+
