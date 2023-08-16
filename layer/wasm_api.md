@@ -1,6 +1,6 @@
 # Mercury layer WASM client specification
 
-The Mercury layer operates as a client/server application. The Mercury client is a rust application (compiled to web-assmeby) that connects to the *mercury server* and Electrum server via http (over the Tor network). 
+The Mercury layer functions as a client/server paradigm. The Mercury client, developed in Rust and compiled to WebAssembly, offers a module for those seeking integration with Mercury. This client communicates with both the Mercury server and the Electrum server using HTTP, facilitated through the Tor network.
 
 ### WASM framework structure
 
