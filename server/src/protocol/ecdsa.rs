@@ -108,13 +108,6 @@ impl Ecdsa for SCE {
             };
         };
 
-        //It there is a pay on deposit fee, there should be a user session value present.
-        if (self.config.fee_deposit > 0) {
-            if db.get_user_session_value(user_id)?.is_none() {
-                return Err(SEError::Generic(String::from("User session value missing")))
-            }
-        }
-
         let kg_first_msg;
         let lockbox_url: Option<Url> = match self.get_lockbox_url(&user_id)?{
             Some(l) => Some(l.0),
