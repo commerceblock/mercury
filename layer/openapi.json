@@ -1,0 +1,2109 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "mercury server",
+    "version": "0.5.0"
+  },
+  "paths": {
+    "/deposit/confirm": {
+      "post": {
+        "summary": "Confirm the deposit process has completed and retreive the statechain ID",
+        "operationId": "deposit_deposit_confirm",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepositMsg2"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatechainID"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/deposit/init/pod": {
+      "post": {
+        "summary": "Pay On Deposit: Initiate a statechain deposit and generate a shared key ID, statechain ID and server public key share",
+        "operationId": "deposit_deposit_init_pod",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepositMsg1POD"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepositInitResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/sign/first": {
+      "post": {
+        "summary": "First round of the signing protocol: ephemeral commitments and generation",
+        "operationId": "sign_first",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignMsg1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignReply1"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/sign/second": {
+      "post": {
+        "summary": "Second round of the signing protocol: partial signature on challenge",
+        "operationId": "sign_second",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignMsg2"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/info/coins": {
+      "get": {
+        "summary": "Get the current statecoin amount histogram",
+        "operationId": "util_get_coin_info",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoinValueInfo"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/info/fee": {
+      "get": {
+        "summary": "Get statechain entity operating information",
+        "operationId": "util_get_fees",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StateEntityFeeInfoAPI"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/info/owner/{statechain_id}": {
+      "get": {
+        "summary": "Get current statechain information for specified statechain ID",
+        "operationId": "util_get_owner_id",
+        "parameters": [
+          {
+            "name": "statechain_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerID"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/info/rookeylist": {
+      "get": {
+        "summary": "Get the published list of SE public keys",
+        "operationId": "util_get_key_list",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyList",
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/info/sc-transfer-finalize-data/{statechain_id}": {
+      "get": {
+        "summary": "Get transfer finalize data for specified statechain ID",
+        "operationId": "util_get_sc_transfer_finalize_data",
+        "parameters": [
+          {
+            "name": "statechain_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferFinalizeData"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/info/statechain/{statechain_id}": {
+      "get": {
+        "summary": "Get current statechain information for specified statechain ID",
+        "operationId": "util_get_statechain",
+        "parameters": [
+          {
+            "name": "statechain_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StateChainDataAPI"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/info/statecoin/{statechain_id}": {
+      "get": {
+        "summary": "Get current statecoin (statechain tip) information for specified statechain ID",
+        "operationId": "util_get_statecoin",
+        "parameters": [
+          {
+            "name": "statechain_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StateCoinDataAPI"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/info/transfer-batch/{batch_id}": {
+      "get": {
+        "summary": "Get batch transfer status and statecoin IDs for specified batch ID",
+        "operationId": "util_get_transfer_batch_status",
+        "parameters": [
+          {
+            "name": "batch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferBatchDataAPI"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/pod/token/init/{value}": {
+      "get": {
+        "summary": "Initialize a pay-on-demand token",
+        "operationId": "pay_on_deposit_pod_token_init",
+        "parameters": [
+          {
+            "name": "value",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PODInfo"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/pod/token/verify/{pod_token_id}": {
+      "get": {
+        "summary": "Verify confirmed and spent status of pod token",
+        "operationId": "pay_on_deposit_pod_token_verify",
+        "parameters": [
+          {
+            "name": "pod_token_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PODStatus"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/swap/blinded-spend-signature": {
+      "post": {
+        "summary": "Get blinded spend token required for second message",
+        "operationId": "conductor_get_blinded_spend_signature",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BSTMsg"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlindedSpendSignature"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/swap/deregister-utxo": {
+      "post": {
+        "description": "Remove coin from awaiting in swap pool",
+        "operationId": "conductor_deregister_utxo",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatechainID"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/swap/first": {
+      "post": {
+        "summary": "Phase 1 of coinswap: Participants sign SwapToken and provide a statechain address and e_prime for blind spend token.",
+        "operationId": "conductor_swap_first_message",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwapMsg1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/swap/groupinfo": {
+      "get": {
+        "summary": "Get information on current group registrations",
+        "operationId": "conductor_get_group_info",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/GroupStatus"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/swap/info": {
+      "post": {
+        "summary": "Get information a specified swap ID",
+        "operationId": "conductor_get_swap_info",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwapID"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwapInfo",
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/swap/poll/swap": {
+      "post": {
+        "summary": "Poll conductor for the status of a specified swap ID",
+        "operationId": "conductor_poll_swap",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwapID"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwapStatus",
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/swap/poll/utxo": {
+      "post": {
+        "summary": "Poll conductor for the status of a specified registered statecoin ID",
+        "operationId": "conductor_poll_utxo",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatechainID"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwapID"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/swap/register-utxo": {
+      "post": {
+        "summary": "Phase 0 of coinswap: Notify conductor of desire to take part in a swap with signature to prove ownership of statecoin.",
+        "operationId": "conductor_register_utxo",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterUtxo"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/swap/second": {
+      "post": {
+        "summary": "Phase 2 of coinswap: Participants provide blind spend token and recieve address.",
+        "operationId": "conductor_swap_second_message",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwapMsg2"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SCEAddress"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/transfer/batch/init": {
+      "post": {
+        "summary": "Initiate the batch transfer protocol: provide statechain signatures",
+        "operationId": "transfer_batch_transfer_batch_init",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferBatchInitMsg"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/transfer/batch/reveal": {
+      "post": {
+        "summary": "Complete Batch transfer: reveal transfer nonce",
+        "operationId": "transfer_batch_transfer_reveal_nonce",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferRevealNonce"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/transfer/get_msg": {
+      "post": {
+        "summary": "Get stored transfer message (TransferMsg3)",
+        "operationId": "transfer_transfer_get_msg",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatechainID"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferMsg3"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/transfer/get_msg_addr/{receive_addr}": {
+      "get": {
+        "summary": "Get stored transfer message (TransferMsg3)",
+        "operationId": "transfer_transfer_get_msg_addr",
+        "parameters": [
+          {
+            "name": "receive_addr",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TransferMsg3"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/transfer/keyupdate_complete": {
+      "post": {
+        "summary": "Transfer completing by receiver: key share update and deletion",
+        "operationId": "transfer_keyupdate_complete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KUFinalize"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/transfer/receiver": {
+      "post": {
+        "summary": "Transfer completing by receiver: retreival of signature verification key information and key share update",
+        "operationId": "transfer_transfer_receiver",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferMsg4"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferMsg5"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/transfer/sender": {
+      "post": {
+        "summary": "Transfer initiation by sender: get x1 transfer nonce and authorise reciver auth key",
+        "operationId": "transfer_transfer_sender",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferMsg1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferMsg2"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/transfer/update_msg": {
+      "post": {
+        "summary": "Update stored transfer message (TransferMsg3)",
+        "operationId": "transfer_transfer_update_msg",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferMsg3"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    },
+    "/withdraw/confirm": {
+      "post": {
+        "summary": "Complete the withdrawal process: confirm withdrawal transaction",
+        "operationId": "withdraw_withdraw_confirm",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WithdrawMsg"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "# [500 Internal Server Error](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500)\nThis response is given when the server has an internal error that it could not recover from.\n\nIf you get this response please report this as an issue at github.com/commerceblock/mercury."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Address": {
+        "type": "string"
+      },
+      "BSTMsg": {
+        "type": "object",
+        "required": [
+          "statechain_id",
+          "swap_id"
+        ],
+        "properties": {
+          "statechain_id": {
+            "type": "string"
+          },
+          "swap_id": {
+            "type": "string"
+          }
+        }
+      },
+      "BSTSenderData": {
+        "description": "Blind Spend Token data for each Swap. (priv, pub) keypair, k and R' value for signing and verification.",
+        "type": "object",
+        "required": [
+          "k",
+          "q",
+          "r_prime",
+          "x"
+        ],
+        "properties": {
+          "k": {
+            "$ref": "#/components/schemas/FE"
+          },
+          "q": {
+            "$ref": "#/components/schemas/GE"
+          },
+          "r_prime": {
+            "$ref": "#/components/schemas/GE"
+          },
+          "x": {
+            "$ref": "#/components/schemas/FE"
+          }
+        }
+      },
+      "BatchData": {
+        "description": "Data present if transfer is part of an atomic batch transfer",
+        "type": "object",
+        "required": [
+          "commitment",
+          "id"
+        ],
+        "properties": {
+          "commitment": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
+      "BlindedSpendSignature": {
+        "description": "blind spend signature",
+        "type": "object",
+        "required": [
+          "s_prime"
+        ],
+        "properties": {
+          "s_prime": {
+            "$ref": "#/components/schemas/FE"
+          }
+        }
+      },
+      "BlindedSpendToken": {
+        "description": "(s,r) blind spend token",
+        "type": "object",
+        "required": [
+          "m",
+          "r",
+          "s"
+        ],
+        "properties": {
+          "m": {
+            "type": "string"
+          },
+          "r": {
+            "$ref": "#/components/schemas/GE"
+          },
+          "s": {
+            "$ref": "#/components/schemas/FE"
+          }
+        }
+      },
+      "CoinValueInfo": {
+        "description": "List of current statecoin amounts and the number of each",
+        "type": "object",
+        "required": [
+          "values"
+        ],
+        "properties": {
+          "values": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 1.0
+            }
+          }
+        }
+      },
+      "DepositMsg1POD": {
+        "description": "Client -> SE",
+        "type": "object",
+        "required": [
+          "amount",
+          "auth_key",
+          "token_id"
+        ],
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          },
+          "auth_key": {
+            "type": "string"
+          },
+          "token_id": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
+      "DepositMsg2": {
+        "description": "Client -> SE",
+        "type": "object",
+        "required": [
+          "shared_key_id"
+        ],
+        "properties": {
+          "shared_key_id": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
+      "FE": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        }
+      },
+      "FESer": {
+        "type": "object",
+        "required": [
+          "secret_bytes"
+        ],
+        "properties": {
+          "secret_bytes": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            }
+          }
+        }
+      },
+      "GE": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        }
+      },
+      "GroupStatus": {
+        "description": "Swap group status data",
+        "type": "object",
+        "required": [
+          "number",
+          "time"
+        ],
+        "properties": {
+          "number": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          },
+          "time": {
+            "type": "string",
+            "format": "partial-date-time"
+          }
+        },
+        "example": "2:1691151686"
+      },
+      "Invoice": {
+        "type": "object",
+        "required": [
+          "bolt11",
+          "expires_at",
+          "payment_hash"
+        ],
+        "properties": {
+          "bolt11": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          },
+          "payment_hash": {
+            "type": "string"
+          }
+        }
+      },
+      "KUFinalize": {
+        "type": "object",
+        "required": [
+          "shared_key_id",
+          "statechain_id",
+          "auth_sig"
+        ],
+        "properties": {
+          "shared_key_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "statechain_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "auth_sig":{ 
+            "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
+      "OwnerID": {
+        "description": "State Entity -> Receiver",
+        "type": "object",
+        "required": [
+          "shared_key_id"
+        ],
+        "properties": {
+          "shared_key_id": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
+      "PK": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        }
+      },
+      "PODInfo": {
+        "type": "object",
+        "required": [
+          "btc_payment_address",
+          "lightning_invoice",
+          "token_id",
+          "value"
+        ],
+        "properties": {
+          "btc_payment_address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "lightning_invoice": {
+            "$ref": "#/components/schemas/Invoice"
+          },
+          "token_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "value": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          }
+        }
+      },
+      "PODStatus": {
+        "type": "object",
+        "required": [
+          "amount",
+          "confirmed"
+        ],
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          },
+          "confirmed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DepositInitResponse": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "statechain_id",
+          "se_pubkey"
+        ],
+        "properties": {
+          "user_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "statechain_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "se_pubkey": {
+            "description": "Server public key share",
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "Protocol": {
+        "description": "State Entity protocols",
+        "type": "string",
+        "enum": [
+          "Deposit",
+          "Transfer",
+          "Withdraw"
+        ]
+      },
+      "PublicKey": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        }
+      },
+      "RecoveryDataMsg": {
+        "description": "Struct with recovery information for specified proof key",
+        "type": "object",
+        "required": [
+          "proof_key",
+          "shared_key_data",
+          "shared_key_id",
+          "statechain_id"
+        ],
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0,
+            "nullable": true
+          },
+          "proof_key": {
+            "type": "string"
+          },
+          "shared_key_data": {
+            "type": "string"
+          },
+          "shared_key_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "statechain_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "tx_hex": {
+            "type": "string",
+            "nullable": true
+          },
+          "withdrawing": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/WithdrawingData"
+              }
+            ],
+            "nullable": true
+          }
+        },
+        "example": {
+          "amount": 0,
+          "proof_key": "03b2483ab9bea9843bd9bfb941e8c86c1308e77aa95fccd0e63c2874c0e3ead3f5",
+          "shared_key_data": "",
+          "shared_key_id": "d0e43718-08f5-4e54-b1d1-98d55deea4ae",
+          "statechain_id": "d11ce1c9-6e91-4b21-a960-fa83e2f23c55",
+          "tx_hex": "02000000000101ca878085da49c33eb9816c10e4056424e5e062689ea547ea91bb3aa840a3c5fb0000000000ffffffff02307500000000000016001412cc36c9533290c02f0c78f992df6e6ddfe50c8c0064f50500000000160014658fd2dc72e58168f3656fb632d63be54f80fbe4024730440220457cf52873ae5854859a7d48b39cb57eba880ea4011806e5058da7619f4c0fab02206303326f06bbebf7170b679ba787c856dec4b6462109bf66e1cb8dc087be7ebf012102a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe00000000",
+          "withdrawing": null
+        }
+      },
+      "RegisterUtxo": {
+        "description": "Owner -> Conductor",
+        "type": "object",
+        "required": [
+          "signature",
+          "statechain_id",
+          "swap_size",
+          "wallet_version"
+        ],
+        "properties": {
+          "signature": {
+            "$ref": "#/components/schemas/AuthSig"
+          },
+          "statechain_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "swap_size": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          },
+          "wallet_version": {
+            "type": "string"
+          }
+        }
+      },
+      "KeyList": {
+        "type": "object",
+        "properties": {
+          "pubkeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        }
+      },
+      "S1PubKey": {
+        "description": "SE public key share for encryption",
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          }
+        }
+      },
+      "SCEAddress": {
+        "description": "Address generated for State Entity transfer protocol",
+        "type": "object",
+        "required": [
+          "proof_key",
+          "tx_backup_addr"
+        ],
+        "properties": {
+          "proof_key": {
+            "$ref": "#/components/schemas/PublicKey"
+          },
+          "tx_backup_addr": {
+            "$ref": "#/components/schemas/Address"
+          }
+        }
+      },
+      "SignMessage": {
+        "type": "string"
+      },
+      "SignMsg1": {
+        "description": "User commitments for signing",
+        "type": "object",
+        "required": [
+          "r2_commitment",
+          "blind_commitment",
+          "statechain_id",
+          "user_id",
+          "auth_sig"
+        ],
+        "properties": {
+          "r2_commitment": {
+            "type": "string"
+          },
+          "blind_commitment": {
+            "type": "string"
+          },
+          "statechain_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "auth_sig": {
+            "type": "string"
+          }
+        }
+      },
+      "SignMsg2": {
+        "type": "object",
+        "required": [
+          "statechain_id",
+          "challenge",
+          "user_id",
+          "auth_sig"          
+        ],
+        "properties": {
+          "shared_key_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "challenge": {
+            "type": "string"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "auth_sig": {
+            "type": "string"
+          }
+        }
+      },
+      "SignReply1": {
+        "type": "object",
+        "required": [
+          "r1_public"
+        ],
+        "properties": {
+          "r1_public": {
+            "type": "string"
+          }
+        }
+      },
+      "Signature": {
+        "type": "string"
+      },
+      "SmtProofMsgAPI": {
+        "type": "object",
+        "required": [
+          "funding_txid",
+          "root"
+        ],
+        "properties": {
+          "funding_txid": {
+            "type": "string"
+          },
+          "root": {
+            "$ref": "#/components/schemas/Root"
+          }
+        }
+      },
+      "State": {
+        "description": "State update object State to change statecoin ownership to new owner",
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "description": "The new owner proof public key (if transfer) or address (if withdrawal)",
+            "type": "string"
+          },
+          "next_state": {
+            "description": "Current owner signature representing passing of ownership",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AuthSig"
+              }
+            ],
+            "nullable": true
+          }
+        },
+        "example": {
+          "data": "037f8d5dfb3c8f99b1641d200e808dd0b6c52f53b04e972c2e61ab901133902ebd",
+          "next_state": {
+            "data": "037f8d5dfb3c8f99b1641d200e808dd0b6c52f53b04e972c2e61ab901133902ebd",
+            "purpose": "TRANSFER",
+            "sig": "3045022100abe02f0d1918aca36b634eb1af8a4e0714f3f699fb425de65cc661e538da3f2002200a538a22df665a95adb739ff6bb592b152dba5613602c453c58adf70858f05f6"
+          }
+        }
+      },
+      "StateChainDataAPI": {
+        "description": "Statechain data This struct is returned containing the statechain of the specified statechain ID",
+        "type": "object",
+        "required": [
+          "amount",
+          "chain"
+        ],
+        "properties": {
+          "amount": {
+            "description": "The value of the statecoin (in satoshis)",
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          },
+          "chain": {
+            "description": "The statechain of owner proof keys and signatures",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/State"
+            }
+          }
+        }
+      },
+      "AuthSig": {
+        "description": "Signature object Data necessary to create ownership transfer signatures",
+        "type": "object",
+        "required": [
+          "data",
+          "purpose",
+          "sig"
+        ],
+        "properties": {
+          "data": {
+            "description": "The new owner auth public key (if transfer)",
+            "type": "string"
+          },
+          "purpose": {
+            "description": "Purpose: \"TRANSFER\", \"TRANSFER-BATCH\" or \"WITHDRAW\"",
+            "type": "string"
+          },
+          "sig": {
+            "description": "Current owner signature.",
+            "type": "string"
+          }
+        },
+        "example": {
+          "data": "037f8d5dfb3c8f99b1641d200e808dd0b6c52f53b04e972c2e61ab901133902ebd",
+          "purpose": "TRANSFER",
+          "sig": "3045022100abe02f0d1918aca36b634eb1af8a4e0714f3f699fb425de65cc661e538da3f2002200a538a22df665a95adb739ff6bb592b152dba5613602c453c58adf70858f05f6"
+        }
+      },
+      "StateCoinDataAPI": {
+        "description": "Statechain tip data This struct is returned containing the statecoin (statechain tip) of the specified statechain ID",
+        "type": "object",
+        "required": [
+          "amount",
+          "confirmed",
+          "locktime",
+          "statecoin",
+          "utxo"
+        ],
+        "properties": {
+          "amount": {
+            "description": "The value of the statecoin (in satoshis)",
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          },
+          "confirmed": {
+            "description": "The coin confirmation status",
+            "type": "boolean"
+          },
+          "locktime": {
+            "description": "The current owner nLocktime",
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "statecoin": {
+            "description": "The tip of the statechain of owner proof keys and signatures",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/State"
+              }
+            ]
+          },
+          "utxo": {
+            "description": "The statecoin UTXO OutPoint",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OutPoint"
+              }
+            ]
+          }
+        },
+        "example": {
+          "amount": 1000000,
+          "confirmed": true,
+          "locktime": 712903,
+          "statecoin": {
+            "data": "037f8d5dfb3c8f99b1641d200e808dd0b6c52f53b04e972c2e61ab901133902ebd",
+            "next_state": {
+              "data": "037f8d5dfb3c8f99b1641d200e808dd0b6c52f53b04e972c2e61ab901133902ebd",
+              "purpose": "TRANSFER",
+              "sig": "3045022100abe02f0d1918aca36b634eb1af8a4e0714f3f699fb425de65cc661e538da3f2002200a538a22df665a95adb739ff6bb592b152dba5613602c453c58adf70858f05f6"
+            }
+          },
+          "utxo": "0000000000000000000000000000000000000000000000000000000000000000:4294967295"
+        }
+      },
+      "StateEntityFeeInfoAPI": {
+        "description": "Statechain entity operating information This struct is returned containing information on operating requirements of the statechain entity which must be conformed with in the protocol.",
+        "type": "object",
+        "required": [
+          "address",
+          "backup_fee_rate",
+          "deposit",
+          "initlock",
+          "interval",
+          "wallet_message",
+          "wallet_version",
+          "withdraw"
+        ],
+        "properties": {
+          "address": {
+            "description": "The Bitcoin address that the SE fee must be paid to",
+            "type": "string"
+          },
+          "backup_fee_rate": {
+            "description": "Current backup tx fee rate",
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          },
+          "deposit": {
+            "description": "The deposit fee, which is specified as a proportion of the deposit amount in basis points",
+            "type": "integer",
+            "format": "int64"
+          },
+          "initlock": {
+            "description": "The initial nLocktime from the current blockheight for the first backup",
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "interval": {
+            "description": "The decementing nLocktime (block height) interval enforced for backup transactions",
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "wallet_message": {
+            "description": "Message to display to all wallet users on startup",
+            "type": "string"
+          },
+          "wallet_version": {
+            "description": "The minumum wallet version required",
+            "type": "string"
+          },
+          "withdraw": {
+            "description": "The withdrawal fee, which is specified as a proportion of the deposit amount in basis points",
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          }
+        },
+        "example": {
+          "address": "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+          "backup_fee_rate": 1,
+          "deposit": 0,
+          "initlock": 14400,
+          "interval": 144,
+          "wallet_message": "Warning",
+          "wallet_version": "0.4.65",
+          "withdraw": 300
+        }
+      },
+      "StatechainID": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
+      "SwapID": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
+      "SwapInfo": {
+        "type": "object",
+        "required": [
+          "bst_sender_data",
+          "status",
+          "swap_token"
+        ],
+        "properties": {
+          "bst_sender_data": {
+            "$ref": "#/components/schemas/BSTSenderData"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SwapStatus"
+          },
+          "swap_token": {
+            "$ref": "#/components/schemas/SwapToken"
+          }
+        }
+      },
+      "SwapMsg1": {
+        "description": "Owner -> Conductor",
+        "type": "object",
+        "required": [
+          "address",
+          "bst_e_prime",
+          "statechain_id",
+          "swap_id",
+          "swap_token_sig",
+          "transfer_batch_sig"
+        ],
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/SCEAddress"
+          },
+          "bst_e_prime": {
+            "$ref": "#/components/schemas/FE"
+          },
+          "statechain_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "swap_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "swap_token_sig": {
+            "$ref": "#/components/schemas/Signature"
+          },
+          "transfer_batch_sig": {
+            "$ref": "#/components/schemas/AuthSig"
+          }
+        }
+      },
+      "SwapMsg2": {
+        "description": "Owner -> Conductor",
+        "type": "object",
+        "required": [
+          "blinded_spend_token",
+          "swap_id"
+        ],
+        "properties": {
+          "blinded_spend_token": {
+            "$ref": "#/components/schemas/BlindedSpendToken"
+          },
+          "swap_id": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
+      "SwapStatus": {
+        "type": "string",
+        "enum": [
+          "Phase1",
+          "Phase2",
+          "Phase3",
+          "Phase4",
+          "End"
+        ]
+      },
+      "SwapToken": {
+        "description": "Struct defines a Swap. This is signed by each participant as agreement to take part in the swap.",
+        "type": "object",
+        "required": [
+          "amount",
+          "id",
+          "statechain_ids",
+          "time_out"
+        ],
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          },
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "statechain_ids": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "time_out": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          }
+        }
+      },
+      "TransferBatchDataAPI": {
+        "description": "/info/transfer-batch return struct",
+        "type": "object",
+        "required": [
+          "finalized",
+          "state_chains"
+        ],
+        "properties": {
+          "finalized": {
+            "type": "boolean"
+          },
+          "state_chains": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
+      "TransferBatchInitMsg": {
+        "description": "Conductor -> StateEntity",
+        "type": "object",
+        "required": [
+          "id",
+          "signatures"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "signatures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuthSig"
+            }
+          }
+        }
+      },
+      "TransferFinalizeData": {
+        "description": "Struct holds data when transfer is complete but not yet finalized",
+        "type": "object",
+        "required": [
+          "new_shared_key_id",
+          "new_tx_backup_hex",
+          "s2",
+          "statechain_id",
+          "statechain_sig"
+        ],
+        "properties": {
+          "batch_data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BatchData"
+              }
+            ],
+            "nullable": true
+          },
+          "new_shared_key_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "new_tx_backup_hex": {
+            "type": "string"
+          },
+          "s2": {
+            "$ref": "#/components/schemas/FE"
+          },
+          "statechain_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "statechain_sig": {
+            "$ref": "#/components/schemas/AuthSig"
+          }
+        },
+        "example": {
+          "batch_data": null,
+          "new_shared_key_id": "8853bbb8-c6f2-4b0d-b7f1-4648d38d8d5b",
+          "new_tx_backup_hex": "02000000000101ca878085da49c33eb9816c10e4056424e5e062689ea547ea91bb3aa840a3c5fb0000000000ffffffff02307500000000000016001412cc36c9533290c02f0c78f992df6e6ddfe50c8c0064f50500000000160014658fd2dc72e58168f3656fb632d63be54f80fbe4024730440220457cf52873ae5854859a7d48b39cb57eba880ea4011806e5058da7619f4c0fab02206303326f06bbebf7170b679ba787c856dec4b6462109bf66e1cb8dc087be7ebf012102a95498bdde2c8c4078f01840b3bc8f4ae5bb1a90b880a621f50ce221bce3ddbe00000000",
+          "s2": "572b4094b5a6da640829f7923bc55324e123604f6d2b5f6d20b3483cd89ce828",
+          "statechain_id": "81810e33-b23c-4fa5-b36b-60bc14b0787e",
+          "statechain_sig": {
+            "data": "037f8d5dfb3c8f99b1641d200e808dd0b6c52f53b04e972c2e61ab901133902ebd",
+            "purpose": "TRANSFER",
+            "sig": "3045022100abe02f0d1918aca36b634eb1af8a4e0714f3f699fb425de65cc661e538da3f2002200a538a22df665a95adb739ff6bb592b152dba5613602c453c58adf70858f05f6"
+          }
+        }
+      },
+      "TransferMsg1": {
+        "description": "Sender -> SE",
+        "type": "object",
+        "required": [
+          "batch_id",
+          "shared_key_id",
+          "auth_sig"
+        ],
+        "properties": {
+          "batch_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "shared_key_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "auth_sig": {
+            "$ref": "#/components/schemas/AuthSig"
+          }
+        }
+      },
+      "TransferMsg2": {
+        "description": "SE -> Sender",
+        "type": "object",
+        "required": [
+          "x1"
+        ],
+        "properties": {
+          "x1": {
+            "$ref": "#/components/schemas/FESer"
+          }
+        }
+      },
+      "TransferMsg3": {
+        "description": "Sender -> Receiver",
+        "type": "object",
+        "required": [
+          "rec_auth_key",
+          "transfer_data"
+        ],
+        "properties": {
+          "rec_auth_key": {
+            "type": "string"
+          },
+          "transfer_data": {
+            "type": "string"
+          }
+        }
+      },
+      "TransferMsg4": {
+        "description": "Receiver -> State Entity",
+        "type": "object",
+        "required": [
+          "user_id",
+          "statechain_id",
+          "auth_sig",
+          "t2"
+        ],
+        "properties": {
+          "batch_data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BatchData"
+              }
+            ],
+            "nullable": true
+          },
+          "shared_key_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "statechain_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "statechain_sig": {
+            "$ref": "#/components/schemas/AuthSig"
+          },
+          "t2": {
+            "$ref": "#/components/schemas/FE"
+          }
+        }
+      },
+      "TransferMsg5": {
+        "description": "State Entity -> Receiver",
+        "type": "object",
+        "required": [
+          "new_shared_key_id",
+          "s2_pub",
+          "signature_count",
+          "blind_commits",
+          "r2_commits"
+        ],
+        "properties": {
+          "new_shared_key_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "s2_pub": {
+            "$ref": "#/components/schemas/GE"
+          },
+          "blind_commits": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "r2_commits": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "TransferRevealNonce": {
+        "description": "User -> State Entity",
+        "type": "object",
+        "required": [
+          "batch_id",
+          "hash",
+          "nonce",
+          "statechain_id"
+        ],
+        "properties": {
+          "batch_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "nonce": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "maxItems": 32,
+            "minItems": 32
+          },
+          "statechain_id": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
+      "UserID": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "challenge": {
+            "type": "string",
+            "nullable": true
+          },
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        }
+      },
+      "Uuid": {
+        "type": "string"
+      },
+      "WithdrawMsg": {
+        "description": "Owner -> State Entity",
+        "type": "object",
+        "required": [
+          "shared_key_id",
+          "statechain_id",
+          "auth_sig"
+        ],
+        "properties": {
+          "shared_key_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "statechain_id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "auth_sig": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuthSig"
+            }
+          }
+        }
+      }
+    }
+  }
+}
