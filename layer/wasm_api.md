@@ -12,14 +12,29 @@ response['error'] : json response error field
 
 ## Wallet functions
 
-#### setEndpoints
+#### setMercEndpoint
 
-Set the mercury server and electrum server endpoints
+Set the mercury server and electrum server endpoints and test
 
 **request:**
 ```
 {
     merc_server: String, // Tor address of mercury server
+}
+```
+
+*response*
+```
+Status::Ok
+```
+
+#### setElectrumEndpoint
+
+Set the mercury server and electrum server endpoints and test
+
+**request:**
+```
+{
     electrum_server: String,    // Tor address of electrum server
     electrum_type: String,   // electrum server type
 }
