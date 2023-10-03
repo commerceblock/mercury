@@ -80,6 +80,10 @@ impl Deposit for SCE {
             )));
         };
 
+        return Err(SEError::Generic(String::from(
+                "Deposit function disabled",
+            )));        
+        
         // Generate shared wallet ID (user ID)
         let user_id = Uuid::new_v4();
 
