@@ -54,16 +54,6 @@ pub trait Deposit {
     ///     - Update sparse merkle tree with new StateChain entry
     fn deposit_confirm(&self, deposit_msg2: DepositMsg2) -> Result<StatechainID>;
 
-
-    // Check that the POD token is confirmed and has enough value to cover the deposit fee
-    // Subtract the depsoit fee from the token and return the amount that was subtracted
-    fn subtract_pod_token_amount(&self, token_id: &Uuid, 
-        deposit_amount: &u64) -> Result<u64>;
-
-     // Check that the POD token is confirmed 
-    // Add the amount to the token and return the new token value
-    fn add_pod_token_amount(&self, token_id: &Uuid, 
-        amount: &u64) -> Result<u64>;
 }
 
 impl Deposit for SCE {
