@@ -46,16 +46,29 @@ pub struct UuidDef(String);
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct Invoice{
-    pub payment_hash: String,
-    pub expires_at: u64,
-    pub bolt11: String
+    pub id: String,
+    pub pr: String,
+    pub checkoutUrl: String,
+    pub onChainAddr: String,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct ReqInvoice{
-    pub amount: u64,
-    pub label: String,
-    pub description: String
+    pub title: String,
+    pub description: String,
+    pub amount: String,
+    pub unit: String,
+    pub redirectAfterPaid: String,
+    pub email: String,
+    pub emailLanguage: String,
+    pub onChain: bool,
+    pub delay: u64,
+    pub extra: Extra,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
+pub struct Extra{
+    pub tag: String,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
@@ -88,16 +101,15 @@ pub struct RTLQuery{
 pub struct PODInfo {
     #[schemars(with = "UuidDef")]
     pub token_id: Uuid,
-    pub lightning_invoice: Invoice,
+    pub lightning_invoice: String,
     #[schemars(with = "AddressDef")]
     pub btc_payment_address: String,
-    pub value: u64
+    pub processor_id: String,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct PODStatus {
     pub confirmed: bool,
-    pub amount: u64
 }
 
 impl PartialEq<bool> for PODStatus {

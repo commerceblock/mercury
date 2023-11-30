@@ -2054,20 +2054,19 @@ impl Database for PGDatabase {
         self.update(
             &token.token_id,
             Table::PayOnDemand,
-            vec![Column::LightningInvoice, Column::BtcPaymentAddress, Column::Value],
-            vec![&Self::ser(&token.lightning_invoice)?, &Self::ser(&token.btc_payment_address)?, &(token.value as i64)],
+            vec![Column::LightningInvoice, Column::BtcPaymentAddress],
+            vec![&Self::ser(&token.lightning_invoice)?, &Self::ser(&token.processor_id)?],
         )
     }
 
     fn get_pay_on_demand_info(&self, token_id: &Uuid) -> Result<PODInfo> {
-          let (lightning_invoice, btc_payment_address, value) =
-            self.get_3::<String, String, i64>(
+          let (lightning_invoice, btc_payment_address) =
+            self.get_2::<String, String>(
                 token_id.to_owned(),
                 Table::PayOnDemand,
                 vec![
                     Column::LightningInvoice,
                     Column::BtcPaymentAddress,
-                    Column::Value,
                 ],
             )?;
 
@@ -2075,28 +2074,27 @@ impl Database for PGDatabase {
                         token_id: token_id.to_owned(),
                         lightning_invoice: Self::deser(lightning_invoice)?,
                         btc_payment_address: Self::deser(btc_payment_address)?,
-                        value: value as u64})
+                        processor_id: Self::deser(btc_payment_address)?})
     }
 
     fn get_pay_on_demand_status(&self, token_id: &Uuid) -> Result<PODStatus> {
-        let (confirmed, amount) =
-            self.get_2::<bool, i64>(
+        let (confirmed) =
+            self.get_1::<bool>(
                 token_id.to_owned(),
                 Table::PayOnDemand,
                 vec![
                     Column::Confirmed,
-                    Column::Amount
                 ],
             )?;
-        Ok(PODStatus{confirmed, amount: amount as u64})
+        Ok(PODStatus{confirmed})
     }
 
     fn set_pay_on_demand_status(&self, token_id: &Uuid, pod_status: &PODStatus) -> Result<()> {
         self.update(
             &token_id,
             Table::PayOnDemand,
-            vec![Column::Confirmed, Column::Amount],
-            vec![&pod_status.confirmed, &(pod_status.amount as i64)],
+            vec![Column::Confirmed],
+            vec![&pod_status.confirmed],
         )
     }
 
@@ -2114,24 +2112,6 @@ impl Database for PGDatabase {
             Table::PayOnDemand,
             vec![Column::Confirmed],
             vec![confirmed],
-        )
-    }
-
-    fn get_pay_on_demand_amount(&self, token_id: &Uuid) -> Result<u64> {
-        let amount = self.get_1::<i64>(
-            token_id.to_owned(),
-            Table::PayOnDemand,
-            vec![Column::Amount],
-        )? as u64;
-        Ok(amount)
-    }
-
-    fn set_pay_on_demand_amount(&self, token_id: &Uuid, amount: &u64) -> Result<()> {
-        self.update(
-            &token_id,
-            Table::PayOnDemand,
-            vec![Column::Amount],
-            vec![&(*amount as i64)],
         )
     }
 

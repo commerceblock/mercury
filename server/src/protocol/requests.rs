@@ -85,7 +85,7 @@ where
 
     info!("CLN macaroon {:?}", macaroon);
 
-    let msg = client.post(url.join(path)?.as_str()).header("macaroon", macaroon).header("encodingtype","hex").json(&body);
+    let msg = client.post(url.join(path)?.as_str()).header("Api-Key", macaroon).header("encodingtype","hex").json(&body);
 
     info!("CLN msg {:?}", msg);   
 
@@ -135,7 +135,7 @@ where
 
     let mut b = client
         .get(&format!("{}{}", url, path))
-        .header("macaroon", macaroon)
+        .header("Api-Key", macaroon)
         .header("encodingtype","hex");
 
     // catch reqwest errors
