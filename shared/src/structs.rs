@@ -73,11 +73,10 @@ pub struct Extra{
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct RTLInvoice{
-    pub payment_hash: String,
-    pub expires_at: u64,
-    pub bolt11: String,
-    pub payment_secret: String,
-    pub warning_capacity: String
+    pub id: String,
+    pub pr: String,
+    pub checkoutUrl: String,
+    pub onChainAddr: String,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
@@ -110,24 +109,6 @@ pub struct PODInfo {
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct PODStatus {
     pub confirmed: bool,
-}
-
-impl PartialEq<bool> for PODStatus {
-    fn eq(&self, other: &bool) -> bool {
-        (self.confirmed && self.amount > 0) == *other
-    }
-}
-
-impl PartialEq<Self> for PODStatus {
-    fn eq(&self, other: &Self) -> bool {
-        (self.confirmed == other.confirmed) && (self.amount == other.amount)
-    }
-}
-
-impl PODStatus {
-    pub fn empty(&self) -> bool {
-        self.amount == 0
-    }
 }
 
 // structs for ids

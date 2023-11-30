@@ -313,8 +313,6 @@ pub trait Database {
     fn set_pay_on_demand_status(&self, token_id: &Uuid, pod_status: &PODStatus) -> Result<()>;
     fn get_pay_on_demand_confirmed(&self, token_id: &Uuid) -> Result<bool>;
     fn set_pay_on_demand_confirmed(&self, token_id: &Uuid, confirmed: &bool) -> Result<()>;
-    fn get_pay_on_demand_amount(&self, token_id: &Uuid) -> Result<u64>;
-    fn set_pay_on_demand_amount(&self, token_id: &Uuid, amount: &u64) -> Result<()>;
 }
 
 pub mod structs {

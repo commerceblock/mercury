@@ -58,12 +58,12 @@ pub trait POD {
     fn get_lightning_invoice(
         &self,
         pod_token_id: &Uuid,
-        value: &u64,
     ) -> Result<Invoice>;
 
     fn query_lightning_payment(
         &self,
         id: &Uuid,
+        processor_id: &String,
     ) -> Result<bool>;
 
 }
@@ -76,12 +76,12 @@ impl POD for SCE {
         let invoice: Invoice = self
             .get_lightning_invoice(&token_id)?
             .into();
-        info!("Invoice {:?}", lightning_invoice);
+        info!("Invoice {:?}", invoice);
         let btc_payment_address = "null".to_string();
         let pod_info = PODInfo {
             token_id,
             lightning_invoice: invoice.pr,
-            btc_payment_address; invoice.onChainAddr,
+            btc_payment_address: invoice.onChainAddr,
             processor_id: invoice.id,
         };
         info!("POD info {:?}", pod_info);        
@@ -183,7 +183,7 @@ impl POD for SCE {
 
 #[openapi]
 /// # Initialize a pay-on-demand token
-#[get("/pod/token/init/<value>", format = "json")]
+#[get("/pod/token/init", format = "json")]
 pub fn pod_token_init(sc_entity: State<SCE>) -> Result<Json<PODInfo>> {
     sc_entity.check_rate_slow("pod_token_init")?;
     let token_id = Uuid::new_v4();
