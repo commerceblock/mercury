@@ -838,10 +838,4 @@ impl Database for MemoryDB {
     ) -> crate::Result<()> {
         unimplemented!()
     }
-    fn get_pay_on_demand_amount(&self, _token_id: &uuid::Uuid) -> crate::Result<u64> {
-        unimplemented!()
-    }
-    fn set_pay_on_demand_amount(&self, _token_id: &uuid::Uuid, _amount: &u64) -> crate::Result<()> {
-        unimplemented!()
-    }
 }

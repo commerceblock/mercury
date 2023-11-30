@@ -117,47 +117,7 @@ impl Deposit for SCE {
     }
 
     // Check that the POD token is confirmed and has enough value to cover the deposit fee
-    // Subtract the depsoit fee from the token and return the amount that was subtracted
-    fn subtract_pod_token_amount(&self, token_id: &Uuid, 
-        deposit_amount: &u64) -> Result<u64> {
-        if deposit_amount == &0 {
-            return Err(SEError::Generic(format!("Invalid deposit amount: {}", deposit_amount)));
-        }
-        let fee_deposit = &self.config.fee_deposit;
-        let status = self.database.get_pay_on_demand_status(token_id)?;
-        if !status.confirmed {
-            return Err(SEError::Generic(String::from(
-                "Token payment not received",
-            )));
-        } 
-        let fee = (deposit_amount * *fee_deposit as u64) / 10000 as u64;
-        match &status.amount < &fee {
-            true => Err(SEError::Generic(String::from(
-                "Insufficent token credit to make deposit",
-                ))),
-            false => {
-                let new_token_amount: u64 = status.amount - fee;
-                self.database.set_pay_on_demand_amount(token_id, &new_token_amount)?;
-                Ok(fee)
-            }
-        }
-    }
 
-    // Check that the POD token is confirmed 
-    // Add the amount to the token and return the new token value
-    fn add_pod_token_amount(&self, token_id: &Uuid, 
-        amount: &u64) -> Result<u64> {
-        let status = self.database.get_pay_on_demand_status(token_id)?;
-        if !status.confirmed {
-            return Err(SEError::Generic(String::from(
-                "Token payment not received",
-            )));
-        } 
-
-        let new_token_amount: u64 = status.amount + amount;
-        self.database.set_pay_on_demand_amount(token_id, &new_token_amount)?;
-        Ok(new_token_amount)        
-    }
 
     fn deposit_init_pod(&self, deposit_msg1: DepositMsg1POD) -> Result<PODUserID> {
         // Check proof key is valid public key
@@ -166,9 +126,6 @@ impl Deposit for SCE {
                 "Proof key not in correct format.",
             )));
         };
-
-        let fee = self.subtract_pod_token_amount(
-            &deposit_msg1.token_id, &deposit_msg1.amount)?;
 
         // Generate shared wallet ID (user ID)
         let user_id = Uuid::new_v4();
@@ -199,8 +156,6 @@ impl Deposit for SCE {
             },
             Err(e) => {
                 //Create user session failed - restore POD token amount
-                self.add_pod_token_amount(&deposit_msg1.token_id, &fee).
-                    map_err(|ea| SEError::Generic(format!("{} - add_pod_token_amount called due to create_user_session_pod error: {}", &ea, &e)))?;
                     Err(e)
             }
         }

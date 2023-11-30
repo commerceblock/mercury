@@ -117,7 +117,7 @@ impl POD for SCE {
         if (!pod_status.confirmed) {
             let pod_info = &self.database.get_pay_on_demand_info(token_id)?;
 
-            if self.query_lightning_payment(&token_id, pod_info.processor_id)? {
+            if self.query_lightning_payment(&token_id, &pod_info.processor_id)? {
                 pod_status = confirm_payment(&pod_info, database)?
             }
 
