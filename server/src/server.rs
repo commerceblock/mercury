@@ -472,10 +472,6 @@ mock! {
             &self,
             deposit_msg2: DepositMsg2,
         ) -> deposit::Result<StatechainID>;
-        fn subtract_pod_token_amount(&self, token_id: &Uuid, 
-            deposit_amount: &u64) -> deposit::Result<u64>;
-        fn add_pod_token_amount(&self, token_id: &Uuid, 
-            amount: &u64) -> deposit::Result<u64>;
     }
     trait Ecdsa {
         fn master_key(&self, user_id: Uuid) -> ecdsa::Result<()>;
