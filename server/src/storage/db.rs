@@ -2073,8 +2073,8 @@ impl Database for PGDatabase {
             Ok(PODInfo{
                         token_id: token_id.to_owned(),
                         lightning_invoice: Self::deser(lightning_invoice)?,
-                        btc_payment_address: Self::deser(btc_payment_address)?,
-                        processor_id: Self::deser(btc_payment_address)?})
+                        btc_payment_address: Self::deser(btc_payment_address.clone())?,
+                        processor_id: Self::deser(btc_payment_address.clone())?})
     }
 
     fn get_pay_on_demand_status(&self, token_id: &Uuid) -> Result<PODStatus> {
