@@ -172,7 +172,7 @@ impl<
             Mode::Core => (init_lb(&config_rs), None)
         };
 
-        let cln_cli = Clightning::new(Url::parse(&config_rs.lightningd).unwrap(), &config_rs.apikey).unwrap();
+        let cln_cli = Clightning::new(Url::parse(&config_rs.lightningd).unwrap(), &config_rs.lnmacaroon).unwrap();
 
         let rate_limiter_slow = config_rs.rate_limit_slow.map(|r| Arc::new(governor::RateLimiter::dashmap(Quota::per_second(r))));
         let rate_limiter_fast = config_rs.rate_limit_fast.map(|r| Arc::new(governor::RateLimiter::dashmap(Quota::per_second(r))));
