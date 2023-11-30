@@ -93,7 +93,31 @@ pub struct RTLData{
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 pub struct RTLQuery{
-    pub invoices: Vec<RTLData>,
+    pub createdAt: String,
+    pub delay: u64,
+    pub pr: String,
+    pub amount: u64,
+    pub btcAmount: String,
+    pub unit: String,
+    pub isPaid: bool,
+    pub updatePrice: bool,
+    pub isHodled: bool,
+    pub isInit: bool,
+    pub isFixedSatPrice: bool,
+    pub deleteExpiredInvoice: bool,
+    pub isExpired: bool,
+    pub paymentMethod: String,
+    pub paidAt: String,
+    pub title: String,
+    pub hash: String,
+    pub fiatAmount: f64,
+    pub fiatUnit: String,
+    pub onChainAddr: String,
+    pub minConfirmations: u64,
+    pub confirmations: u64,
+    pub txId: String,
+    pub isPending: bool,
+    pub extra: Extra,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]

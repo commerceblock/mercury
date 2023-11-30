@@ -170,9 +170,9 @@ impl POD for SCE {
 
         let cln_url: Url = self.cln.endpoint.clone();
         let macaroon = &self.cln.macaroon;
-        let path: String = "v1/invoice/listInvoices?label=".to_string() + processor_id;
+        let path: String = "checkout/".to_string() + processor_id;
         let invoice_list: RTLQuery = get_cln(&cln_url, &path, &macaroon)?;
-        if(invoice_list.invoices[0].status == "paid") {
+        if(invoice_list.isPaid) {
             return Ok(true)
         } else {
             return Ok(false)
